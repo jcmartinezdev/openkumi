@@ -4,7 +4,7 @@ import type { Bot } from '@openbot/shared'
 import { Icon } from './Icon'
 import { api } from './store'
 
-export function Dialog({ title, close, wide, children }: { title: string; close: () => void; wide?: boolean; children: React.ReactNode }) {
+export function Dialog({ title, close, wide, full, children }: { title: string; close: () => void; wide?: boolean; full?: boolean; children: React.ReactNode }) {
   const dialog = useRef<HTMLDivElement>(null)
   const latestClose = useRef(close)
   latestClose.current = close
@@ -35,7 +35,7 @@ export function Dialog({ title, close, wide, children }: { title: string; close:
   }, [])
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-      <div className={`dialog ${wide ? 'wide' : ''}`} ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`dialog ${wide ? 'wide' : ''} ${full ? 'full' : ''}`} ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-label={title}>
         <div className="dialog-head">
           <h2>{title}</h2>
           <button className="icon" onClick={close} title="Close" aria-label="Close"><Icon name="x" /></button>

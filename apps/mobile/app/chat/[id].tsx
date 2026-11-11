@@ -2,51 +2,69 @@
 // its reply as it is written, and a place to answer.
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { ActionSheetIOS, ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import Markdown from 'react-native-markdown-display'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Item } from '@openbot/shared'
 import { describe } from '@openbot/client/steps'
 import { api, loadThread, mainThread, recentSubagents, useStore } from '@openbot/client/store'
+import { Markdown, copy } from '../../src/Markdown'
+import { PageView } from '../../src/PageView'
 import { type Theme, useTheme } from '../../src/theme'
 
 /** What one line of the chat shows. Tool results and the bot's private reasoning are left out on a phone. */
-type Row = { key: string; kind: 'user' | 'bot' | 'step' | 'notice'; text: string; error?: boolean }
+type Row =
+  | { key: string; kind: 'user' | 'bot' | 'notice'; text: string; error?: boolean }
+  /** What the bot did between two messages, folded into one line. */
+  | { key: string; kind: 'steps'; steps: string[] }
+  | { key: string; kind: 'page'; title: string; html: string; height: number }
 
 function rows(items: Item[]): Row[] {
-  return items.flatMap((item): Row[] => {
+  const failed = new Set(items.flatMap(({ data: d }) => (d.type === 'function_call_output' && d.output.startsWith('Error:') ? [d.call_id] : [])))
+  const out: Row[] = []
+  const step = (key: string, text: string) => {
+    const last = out.at(-1)
+    if (last?.kind === 'steps') last.steps.push(text)
+    else out.push({ key, kind: 'steps', steps: [text] })
+  }
+  for (const item of items) {
     const d = item.data
     const key = String(item.id)
-    if (d.type === 'message') return d.role === 'assistant' ? [{ key, kind: 'bot', text: d.text }] : [{ key, kind: d.source === 'user' ? 'user' : 'notice', text: d.source === 'user' ? d.text : `From ${d.source === 'parent' ? 'the chat above' : 'a subagent'}: ${d.text}` }]
-    if (d.type === 'function_call') return [{ key, kind: 'step', text: describe(d) }]
-    if (d.type === 'web_search_call') return [{ key, kind: 'step', text: 'Search the web' }]
-    if (d.type === 'notice') return [{ key, kind: 'notice', text: d.text, error: d.level === 'error' }]
-    if (d.type === 'summary') return [{ key, kind: 'notice', text: 'The conversation has grown long: the bot now works from a summary of its older part.' }]
-    return []
+    if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : { key, kind: d.source === 'user' ? 'user' : 'notice', text: d.source === 'user' ? d.text : `From ${d.source === 'parent' ? 'the chat above' : 'a subagent'}: ${d.text}` })
+    // A page stands for the call that showed it; the call is only listed when it failed.
+    else if (d.type === 'function_call' && (d.name !== 'show_page' || failed.has(d.call_id))) step(key, describe(d))
+    else if (d.type === 'web_search_call') step(key, 'Search the web')
+    else if (d.type === 'page') out.push({ key, kind: 'page', title: d.title, html: d.html, height: d.height })
+    else if (d.type === 'notice') out.push({ key, kind: 'notice', text: d.text, error: d.level === 'error' })
+    else if (d.type === 'summary') out.push({ key, kind: 'notice', text: 'The conversation has grown long: the bot now works from a summary of its older part.' })
+  }
+  return out
+}
+
+/** Long press on a message: copy it. */
+const offerCopy = (text: string) =>
+  ActionSheetIOS.showActionSheetWithOptions({ options: ['Copy', 'Cancel'], cancelButtonIndex: 1 }, (choice) => {
+    if (choice === 0) void copy(text)
   })
+
+function Steps({ steps, theme }: { steps: string[]; theme: Theme }) {
+  const [open, setOpen] = useState(false)
+  if (steps.length === 1) return <Text style={[styles.step, { color: theme.muted }]} numberOfLines={1}>· {steps[0]}</Text>
+  return (
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen(!open)}>
+      <Text style={[styles.step, { color: theme.muted }]} numberOfLines={1}>
+        · {steps.length} steps{open ? '' : ` — ${steps.at(-1)}`} <Text style={{ color: theme.faint }}>{open ? '⌃' : '⌄'}</Text>
+      </Text>
+      {open && steps.map((text, i) => <Text key={i} style={[styles.step, styles.inner, { color: theme.muted, borderLeftColor: theme.border }]} numberOfLines={2}>{text}</Text>)}
+    </Pressable>
+  )
 }
 
 const Line = memo(function Line({ row, theme }: { row: Row; theme: Theme }) {
-  if (row.kind === 'user') return <View style={[styles.user, { backgroundColor: theme.bubble }]}><Text selectable style={{ color: theme.text, fontSize: 16, lineHeight: 22 }}>{row.text}</Text></View>
-  if (row.kind === 'bot') return <View style={styles.bot}><Markdown style={markdown(theme)}>{row.text}</Markdown></View>
-  if (row.kind === 'step') return <Text style={[styles.step, { color: theme.muted }]} numberOfLines={1}>· {row.text}</Text>
+  if (row.kind === 'user') return <Pressable onLongPress={() => offerCopy(row.text)} style={[styles.user, { backgroundColor: theme.bubble }]}><Text style={{ color: theme.text, fontSize: 16, lineHeight: 22 }}>{row.text}</Text></Pressable>
+  if (row.kind === 'bot') return <Pressable onLongPress={() => offerCopy(row.text)} style={styles.bot}><Markdown text={row.text} /></Pressable>
+  if (row.kind === 'steps') return <Steps steps={row.steps} theme={theme} />
+  if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
   return <Text style={[styles.notice, { color: row.error ? theme.err : theme.faint }]}>{row.text}</Text>
-})
-
-const markdown = (theme: Theme) => ({
-  body: { color: theme.text, fontSize: 16, lineHeight: 23 },
-  paragraph: { marginTop: 0, marginBottom: 10 },
-  heading1: { fontSize: 20, fontWeight: '600' as const, marginTop: 10, marginBottom: 6 },
-  heading2: { fontSize: 18, fontWeight: '600' as const, marginTop: 10, marginBottom: 6 },
-  heading3: { fontSize: 16, fontWeight: '600' as const, marginTop: 8, marginBottom: 4 },
-  code_inline: { backgroundColor: theme.bubble, color: theme.text, fontSize: 14 },
-  code_block: { backgroundColor: theme.side, borderColor: theme.border, color: theme.text, fontSize: 13, borderRadius: 10, padding: 10 },
-  fence: { backgroundColor: theme.side, borderColor: theme.border, color: theme.text, fontSize: 13, borderRadius: 10, padding: 10 },
-  blockquote: { backgroundColor: 'transparent', borderLeftColor: theme.border, color: theme.muted },
-  link: { color: theme.text, textDecorationLine: 'underline' as const },
-  hr: { backgroundColor: theme.border },
-  table: { borderColor: theme.border },
-  tr: { borderColor: theme.border },
 })
 
 export default function Chat() {
@@ -103,7 +121,7 @@ export default function Chat() {
 
   const tail = (
     <View style={{ paddingBottom: 12 }}>
-      {!!partial?.text && <View style={styles.bot}><Markdown style={markdown(theme)}>{partial.text}</Markdown></View>}
+      {!!partial?.text && <View style={styles.bot}><Markdown text={partial.text} live /></View>}
       {running && !partial?.text && <View style={styles.working}><ActivityIndicator size="small" color={theme.muted} /><Text style={{ color: theme.muted, fontSize: 14 }}>Working</Text></View>}
       {subagents.length > 0 && (
         <View style={styles.chips}>
@@ -191,6 +209,7 @@ const styles = StyleSheet.create({
   user: { alignSelf: 'flex-end', maxWidth: '86%', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18, marginVertical: 6 },
   bot: { marginVertical: 4 },
   step: { fontSize: 13.5, paddingVertical: 3 },
+  inner: { marginLeft: 4, paddingLeft: 10, borderLeftWidth: StyleSheet.hairlineWidth },
   notice: { fontSize: 13, lineHeight: 18, paddingVertical: 6 },
   working: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 6 },

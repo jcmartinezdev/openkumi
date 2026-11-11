@@ -14,6 +14,14 @@ function live(items: Item[]): { summary: Summary | null; items: Item[] } {
   return { summary, items: items.filter((i) => i.data.type !== 'summary' && i.id > (summary?.upTo ?? 0)) }
 }
 
+function parse(json: string): Record<string, unknown> {
+  try {
+    return JSON.parse(json) ?? {}
+  } catch {
+    return {}
+  }
+}
+
 const asMessage = (summary: Summary): ItemData => ({
   type: 'message',
   role: 'user',
@@ -32,8 +40,11 @@ export function prepare(all: Item[]): ItemData[] {
   const recent = new Set([...outputs.keys()].slice(-12))
   const out: ItemData[] = summary ? [asMessage(summary)] : []
   for (const { data } of items) {
-    if (data.type === 'notice' || data.type === 'function_call_output') continue
-    out.push(data)
+    if (data.type === 'notice' || data.type === 'page' || data.type === 'function_call_output') continue
+    // A page the bot showed a while ago is not sent again in full: it is in the conversation, and can be read there.
+    if (data.type === 'function_call' && data.name === 'show_page' && !recent.has(data.call_id) && data.arguments.length > 3000) {
+      out.push({ ...data, arguments: JSON.stringify({ title: parse(data.arguments).title, html: '[shown earlier; left out here]' }) })
+    } else out.push(data)
     if (data.type !== 'function_call') continue
     const result = outputs.get(data.call_id) as Extract<ItemData, { type: 'function_call_output' }> | undefined
     if (!result) out.push({ type: 'function_call_output', call_id: data.call_id, output: '[interrupted before it finished]' })

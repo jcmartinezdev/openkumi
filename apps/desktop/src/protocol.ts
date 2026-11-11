@@ -1,15 +1,23 @@
 // The window's pages come from the app itself, under an address of its own (openbot://app/), not
 // from any server. Installed, they are the built interface's files; while developing, each request
 // is passed on to the Vite server so that changes show at once.
+//
+// Pages that bots show in a conversation (show_page) are handed out under another address of
+// their own (openbot://page/), so that they are a different site from the app: their scripts run,
+// but they cannot reach the app, its access codes or anything else in the window.
+import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { net, protocol } from 'electron'
+import { PAGE_POLICY } from '@openbot/client/page'
 import { DEV_URL, WEB } from './paths.ts'
 
 const SCHEME = DEV_URL ? 'openbot-dev' : 'openbot'
 /** The only origin the app's pages have. The server lets pages from here, and no others, read its answers. */
 export const APP_ORIGIN = `${SCHEME}://app`
 export const APP_URL = `${APP_ORIGIN}/`
+/** Where the window finds the pages it was given (see keepPage). */
+export const PAGE_ORIGIN = `${SCHEME}://page`
 
 // Has to be said before the app is ready. `codeCache` lets the compiled interface be kept between
 // starts; not while developing, when the code behind an address keeps changing.
@@ -27,7 +35,8 @@ const POLICY = [
   "connect-src 'self' http: https: ws: wss:",
   "worker-src 'self' blob:",
   "object-src 'none'",
-  "frame-src 'none'",
+  // Pages shown in a conversation, and nothing else: a page that tries to go elsewhere in its frame gets nowhere.
+  `frame-src ${PAGE_ORIGIN}`,
   "base-uri 'none'",
   "form-action 'none'",
 ].join('; ')
@@ -85,7 +94,30 @@ async function passOn(request: Request): Promise<Response> {
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers: answered })
 }
 
+/** The pages the window has asked to show, newest last. Each is named by what is in it. */
+const pages = new Map<string, string>()
+
+/** Keeps a page for the window to show in a frame, and gives its address. */
+export function keepPage(html: string): string {
+  const id = crypto.createHash('sha256').update(html).digest('hex').slice(0, 32)
+  pages.delete(id)
+  pages.set(id, html)
+  // A frame loads its page once, so only the ones shown lately need to be kept.
+  for (const old of pages.keys()) {
+    if (pages.size <= 100) break
+    pages.delete(old)
+  }
+  return `${PAGE_ORIGIN}/${id}`
+}
+
+function page(request: Request): Response {
+  const html = pages.get(new URL(request.url).pathname.slice(1))
+  if (html === undefined || request.method !== 'GET') return new Response(null, { status: 404 })
+  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_POLICY, 'Cache-Control': 'no-store' } })
+}
+
 /** Starts answering the window's requests for its own pages. Called once the app is ready. */
 export function serveInterface() {
-  protocol.handle(SCHEME, DEV_URL ? passOn : asset)
+  const app = DEV_URL ? passOn : asset
+  protocol.handle(SCHEME, (request) => (new URL(request.url).host === 'page' ? page(request) : app(request)))
 }

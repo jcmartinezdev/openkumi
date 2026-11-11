@@ -340,6 +340,33 @@ test('file tools stay inside the workspace', async () => {
   assert.ok(!fs.existsSync(botPath('workspace', 'memory', 'contacts.md')))
 })
 
+test('pages: a bot shows a chart in its conversation, with pictures from its workspace put into it', async () => {
+  fs.mkdirSync(botPath('workspace', 'files'), { recursive: true })
+  fs.writeFileSync(botPath('workspace', 'files', 'dot.png'), Buffer.from('89504e470d0a1a0a', 'hex'))
+  const html = '<div style="height:240px"><img src="files/dot.png"><img src="https://example.com/a.png"><img src="files/gone.png"></div>'
+  const id = await fresh()
+  const items = await say(id, `!tool show_page ${JSON.stringify({ title: 'Spending', html, height: 260 })}`)
+  const page = items.find((d) => d.type === 'page')
+  assert.equal(page.title, 'Spending')
+  assert.equal(page.height, 260)
+  assert.match(page.html, /src="data:image\/png;base64,iVBORw0KGgo="/, 'a picture from the workspace is put into the page')
+  assert.match(page.html, /src="https:\/\/example\.com\/a\.png"/, 'a picture on the web is left as it is')
+  const output = items.findLast((d) => d.type === 'function_call_output').output
+  assert.match(output, /^Shown “Spending” to the user/)
+  assert.match(output, /could not be put in.*files\/gone\.png/)
+  // The page is for the owner: it is shown between the call and its result, and never sent to the model.
+  assert.deepEqual(items.map((d) => d.type).slice(1, 4), ['function_call', 'page', 'function_call_output'])
+  assert.doesNotMatch(lastText(await say(id, '!sent')), /^page$/m)
+
+  // What cannot work is refused, with what to do instead.
+  assert.match(await tool('show_page', { title: 'Tall', html: '<div style="min-height:100vh">x</div>' }), /^Error: The page uses vh units/)
+  assert.match(await tool('show_page', { title: 'Empty', html: '  ' }), /^Error: Give the page as html/)
+  assert.match(await tool('show_page', { title: 'Away', path: '../bot.md' }), /^Error:/)
+  fs.writeFileSync(botPath('workspace', 'files', 'report.html'), '<h1>Report</h1>')
+  assert.match(await tool('show_page', { title: 'Report', path: 'files/report.html' }), /^Shown “Report”/)
+  assert.match(await told(), /show_page/, 'the bot is told it can show pages')
+})
+
 test('a bot rewrites its own instructions, and the owner can see and undo it', async () => {
   assert.doesNotMatch(await told(), /Always answer in French/)
   assert.equal(

@@ -258,11 +258,70 @@ a.row { text-decoration: none; }
 .md a { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 .md a:hover { text-decoration-color: currentColor; }
 .md blockquote { border-left: 2px solid var(--border-strong); padding-left: 12px; color: var(--muted); }
-.md table { border-collapse: collapse; display: block; overflow-x: auto; font-size: 13px; }
-.md th, .md td { border-bottom: 1px solid var(--border); padding: 6px 12px 6px 0; text-align: left; }
-.md th { font-weight: 600; }
+/* Tables scroll sideways on their own instead of squeezing their columns. */
+.md .table-wrap { margin: 0 0 12px; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+.md table { border-collapse: collapse; width: 100%; margin: 0; font-size: 13px; }
+.md th, .md td { border-bottom: 1px solid var(--border); padding: 7px 12px; text-align: left; vertical-align: top; }
+.md th[align='right'], .md td[align='right'] { text-align: right; }
+.md th[align='center'], .md td[align='center'] { text-align: center; }
+.md tr:last-child > td { border-bottom: none; }
+.md th { font-weight: 600; background: var(--side); white-space: nowrap; }
+.md td { font-variant-numeric: tabular-nums; }
+.md li:has(> input[type='checkbox']) { list-style: none; margin-left: -20px; }
+.md li > input[type='checkbox'] { display: inline-block; width: auto; height: auto; margin: 0 7px 0 0; padding: 0; border: none; vertical-align: -2px; accent-color: var(--primary); }
 .md hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 .md img { max-width: 100%; border-radius: 8px; }
+
+/* Code: its language and a button to copy it above it. The colours are CODE_COLORS in
+   @openbot/client/highlight, which the phone uses too; light-dark() follows the app's theme. */
+.code-block { margin: 0 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--side); overflow: hidden; }
+.md > .code-block:last-child { margin-bottom: 0; }
+.code-head { display: flex; align-items: center; gap: 2px; height: 32px; padding: 0 4px 0 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--faint); }
+.code-lang { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code-head button.pill.link { height: 22px; padding: 0 8px; font-size: 12px; color: var(--muted); }
+.code-head button.pill.link:hover { color: var(--text); }
+button.icon.small { width: 26px; height: 26px; border-radius: 6px; }
+.md .code-block pre { margin: 0; border: none; border-radius: 0; background: none; padding: 12px 14px; }
+.md .code-block code { font-size: 12.5px; }
+.hljs-keyword, .hljs-doctag, .hljs-template-tag { color: light-dark(#cf222e, #ff7b72); }
+.hljs-string, .hljs-regexp, .hljs-char, .hljs-meta-string { color: light-dark(#0a3069, #a5d6ff); }
+.hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet, .hljs-link { color: light-dark(#0550ae, #79c0ff); }
+.hljs-comment, .hljs-quote { color: light-dark(#6e7781, #8b8b94); font-style: italic; }
+.hljs-title, .hljs-section { color: light-dark(#8250df, #d2a8ff); }
+.hljs-type, .hljs-built_in, .hljs-variable, .hljs-template-variable { color: light-dark(#953800, #ffa657); }
+.hljs-attr, .hljs-attribute, .hljs-property, .hljs-meta, .hljs-selector-id, .hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo { color: light-dark(#0550ae, #79c0ff); }
+.hljs-tag, .hljs-name, .hljs-selector-tag, .hljs-addition { color: light-dark(#116329, #7ee787); }
+.hljs-deletion { color: light-dark(#82071e, #ffa198); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+
+/* Diagrams from ```mermaid blocks, and formulas. */
+.diagram-body { display: flex; justify-content: center; padding: 16px; overflow-x: auto; background: var(--bg); }
+.diagram-body svg { max-width: 100%; height: auto; }
+.diagram-body.waiting { align-items: center; min-height: 120px; }
+.dialog.full .diagram-full { flex: 1; min-height: 0; overflow: auto; padding: 8px 20px 20px; }
+.diagram-full svg { display: block; width: 100%; max-width: none !important; height: auto; }
+.formula { margin: 0 0 12px; padding: 2px 0; overflow-x: auto; overflow-y: hidden; }
+.md > .formula:last-child { margin-bottom: 0; }
+.formula .katex-display { margin: 0; }
+.md .katex { font-size: 1.08em; }
+
+/* A page a bot showed (show_page). The page keeps an 8px margin of its own, so the frame reaches
+   8px past the column on each side and the page's content lines up with the text. */
+.page { position: relative; margin: 0; }
+.page-frame { margin: 0 -8px; }
+.page-frame iframe, .page-full iframe { display: block; width: 100%; height: 100%; border: none; }
+.page-actions { position: absolute; top: 4px; right: -4px; display: flex; gap: 4px; opacity: 0; transition: opacity 0.12s; }
+.page:hover .page-actions, .page-actions:focus-within { opacity: 1; }
+@media (hover: none) { .page-actions { opacity: 1; } }
+.page-actions button.icon { width: 28px; height: 28px; background: var(--raised); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); }
+.page-more { margin-top: 4px; font-size: 12px; color: var(--faint); }
+.dialog.full { display: flex; flex-direction: column; width: min(1240px, 100%); height: min(92dvh, 1000px); max-height: none; overflow: hidden; }
+.page-full { flex: 1; min-height: 0; padding: 0 12px 12px; }
+
+/* Under a reply: copy it. Shown on hover, so replies read as text. */
+.msg-actions { display: flex; gap: 2px; height: 26px; margin: 6px 0 -10px -6px; opacity: 0; transition: opacity 0.12s; }
+.msg.assistant:hover .msg-actions, .msg-actions:focus-within { opacity: 1; }
 
 /* Activity log: tool calls and thoughts as quiet one-line steps. */
 .activity { display: flex; flex-direction: column; gap: 1px; font-size: 13px; color: var(--muted); }
@@ -276,6 +335,8 @@ summary.step-head:hover { background: var(--hover); color: var(--text); }
 summary.step-head:hover > .ic:last-child, details[open] > summary.step-head > .ic:last-child { opacity: 0.7; }
 details[open] > summary.step-head > .ic:last-child { transform: rotate(90deg); }
 .step-body { margin: 2px 0 8px 6px; padding: 2px 0 2px 15px; border-left: 1px solid var(--border); display: grid; gap: 8px; }
+/* A long run of steps, folded into one line once it is over. */
+.steps-body { display: flex; flex-direction: column; gap: 1px; margin: 2px 0 6px 6px; padding-left: 15px; border-left: 1px solid var(--border); }
 .step-body pre { margin: 0; font: 12px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow-y: auto; color: var(--muted); }
 .working { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; min-height: 28px; }
 

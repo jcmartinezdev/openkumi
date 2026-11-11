@@ -3,7 +3,7 @@
 // always installed for one bot, never for all of them.
 import { useEffect, useState } from 'react'
 import type { Bot, ConnectionStatus, Plugin } from '@openbot/shared'
-import { Markdown } from './Chat'
+import { Markdown } from './Markdown'
 import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { Field, Page, Row, Section, onServer } from './settingsUi'

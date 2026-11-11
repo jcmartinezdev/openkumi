@@ -235,8 +235,8 @@ test('a reply is drawn as it is written, and a bot’s browser is drawn and driv
   await win.locator('.composer textarea').fill(`Here it is:\n\n${paragraphs.join('\n\n')}`)
   await win.keyboard.press('Meta+Enter')
   await win.waitForFunction(() => document.querySelectorAll('.msg.assistant .md-piece').length > 6)
-  // Once it is finished it is drawn as one, exactly as it will be the next time the chat is opened.
-  await win.waitForFunction(() => document.querySelectorAll('.msg.assistant h2').length === 24 && !document.querySelector('.md-piece'), null, { timeout: 30_000 })
+  // Once it is finished it is drawn from what was kept, exactly as it will be the next time the chat is opened.
+  await win.waitForFunction(() => document.querySelectorAll('.msg.assistant[data-item] h2').length === 24, null, { timeout: 30_000 })
   assert.match(await win.locator('.msg.assistant').last().innerText(), /^Echo:[\s\S]*until part 24 is done\.$/)
 
   // The bot's browser: its pictures go from the server to the worker and onto the canvas.
@@ -259,6 +259,75 @@ test('a reply is drawn as it is written, and a bot’s browser is drawn and driv
   // And what is done to the canvas reaches the page.
   await win.locator('.view canvas').click()
   await until(async () => (await state()).browsers[bot.id]?.tabs.every((t) => t.url === 'about:blank'), 15_000)
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('replies are drawn with code in colour, diagrams, formulas and tables, and a page a bot shows runs in a frame that cannot reach the app', async () => {
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  // Links the app opens are noted instead of going to the computer's browser.
+  await app.evaluate(({ shell }) => {
+    globalThis.opened = []
+    shell.openExternal = async (url) => void globalThis.opened.push(url)
+  })
+  const send = async (text) => {
+    await win.locator('.composer textarea').fill(text)
+    await win.keyboard.press('Meta+Enter')
+  }
+
+  // The scripted model answers with what it was sent.
+  await send(['Look:', '```ts\nconst answer: number = 42\n```', '```mermaid\ngraph TD\n  A[Ask] --> B[Answer]\n```', 'So $E = mc^2$, and it costs $5 or $10.', '$$\n\\int_0^1 x\\,dx\n$$', '| Name | Value |\n|---|---|\n| a | 1 |'].join('\n\n'))
+  const reply = win.locator('.msg.assistant[data-item]').last()
+  await reply.locator('.diagram-body svg').waitFor({ timeout: 30_000 })
+  assert.equal(await reply.locator('.code-block .hljs-keyword').first().innerText(), 'const')
+  assert.equal(await reply.locator('.code-lang').first().innerText(), 'TypeScript')
+  assert.match(await reply.locator('.diagram-body svg').innerHTML(), /Answer/)
+  assert.equal(await reply.locator('.katex').count(), 2, 'one formula in the text, one on its own')
+  assert.equal(await reply.locator('.katex-display').count(), 1)
+  assert.match(await reply.innerText(), /it costs \$5 or \$10\./, 'prices are not formulas')
+  assert.equal(await reply.locator('.table-wrap td').first().innerText(), 'a')
+  await reply.getByRole('button', { name: 'Copy code' }).first().click()
+  await until(async () => (await app.evaluate(({ clipboard }) => clipboard.readText())) === 'const answer: number = 42', 5000)
+
+  // A long run of steps is folded into one line once it is over.
+  await send('!steps 5')
+  const folded = win.locator('.activity details.steps').last()
+  await folded.waitFor({ timeout: 30_000 })
+  assert.match(await folded.locator(':scope > summary').innerText(), /^5 steps/)
+  assert.equal(await folded.locator('.steps-body .step').count(), 5)
+
+  // A page: it takes the app's colours, is fitted to its height, and its links open in the browser.
+  const html = `<div id="c" style="height:180px"></div><a id="out" href="https://example.com/more">More</a><script>
+    c.textContent = getComputedStyle(document.documentElement).getPropertyValue('--chart-1').trim()
+    fetch('https://example.com/data').then(() => (document.title = 'sent'), () => (document.title = 'refused'))</script>`
+  await send(`!tool show_page ${JSON.stringify({ title: 'Sales', html, height: 100 })}`)
+  const frame = win.locator('.page iframe')
+  await frame.waitFor({ timeout: 30_000 })
+  assert.match(await frame.getAttribute('src'), /^openbot:\/\/page\/[0-9a-f]{32}#theme=(light|dark)$/)
+  const inside = win.frameLocator('.page iframe')
+  assert.match(await inside.locator('#c').innerText(), /^#(3987e5|2a78d6)$/)
+  await until(async () => (await win.locator('.page-frame').evaluate((el) => el.offsetHeight)) > 200, 10_000)
+  // The page stands for the call that showed it, which is not listed as a step.
+  assert.equal(await win.locator('.activity', { hasText: 'show_page' }).count(), 0)
+  // The reply after it is written out first, so the page has stopped moving.
+  await win.locator('.msg.assistant[data-item]', { hasText: 'Tool result: Shown “Sales”' }).waitFor()
+  await inside.locator('#out').click()
+  await until(async () => (await app.evaluate(() => globalThis.opened)).includes('https://example.com/more'), 5000)
+
+  // It is a site of its own: it cannot reach the app, what the app is given, or the network.
+  const page = win.frames().find((f) => f.url().startsWith('openbot://page/'))
+  assert.equal(await page.evaluate(() => { try { return String(!!parent.document) } catch { return 'blocked' } }), 'blocked')
+  assert.equal(await page.evaluate(() => typeof window.openbotDesktop), 'undefined')
+  await until(async () => (await page.title()) === 'refused', 5000)
+  // Nor can it open anything without a click in it, or go to another site in its frame.
+  await win.locator('.composer textarea').focus()
+  await page.evaluate(() => setTimeout(() => parent.postMessage({ openbot: 'open', url: 'https://example.com/unasked' }, '*'), 50))
+  await page.evaluate(() => void (location.href = 'https://example.com/elsewhere'))
+  await new Promise((resolve) => setTimeout(resolve, 1500))
+  assert.deepEqual(await app.evaluate(() => globalThis.opened), ['https://example.com/more'])
+  assert.doesNotMatch(page.url(), /example\.com/)
 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)

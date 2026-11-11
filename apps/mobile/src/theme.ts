@@ -6,3 +6,6 @@ const light = { bg: '#ffffff', side: '#f7f7f8', card: '#ffffff', raised: '#fffff
 export type Theme = typeof dark
 
 export const useTheme = (): Theme => (useColorScheme() === 'light' ? light : dark)
+
+/** Light or dark, for what is drawn in a web view (pages, diagrams, formulas). */
+export const useAppearance = (): 'light' | 'dark' => (useColorScheme() === 'light' ? 'light' : 'dark')

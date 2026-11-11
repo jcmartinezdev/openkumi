@@ -7,6 +7,7 @@ import { PORT } from './config.ts'
 import { settings } from './settings.ts'
 import { connectionTools } from './connections.ts'
 import * as db from './db.ts'
+import { PAGE_GUIDE, makePage } from './pages.ts'
 import * as ws from './workspace.ts'
 
 export interface ToolContext {
@@ -425,6 +426,26 @@ const browserTools: Tool[] = [
   },
 ]
 
+const pageTool: Tool = {
+  name: 'show_page',
+  description: PAGE_GUIDE,
+  parameters: params(
+    {
+      title: str('A short name for the page, e.g. "Spending by month"'),
+      html: str('The page: a whole HTML document, or just its body'),
+      path: str('Instead of html: an .html file in your workspace'),
+      height: { type: 'number', description: 'Roughly how tall the page is in px at 720px wide (it is measured when shown)' },
+    },
+    ['title'],
+  ),
+  run: (a, ctx) => {
+    const page = makePage(ctx.bot.id, a)
+    db.addItem(ctx.thread.id, { type: 'page', title: page.title, html: page.html, height: page.height })
+    const missing = page.missing.length ? `\nThese pictures could not be put in (not in your workspace, or too large): ${page.missing.join(', ')}` : ''
+    return `Shown “${page.title}” to the user, above your reply. Do not repeat in words what it shows.${missing}`
+  },
+}
+
 const webTools: Tool[] = [
   {
     name: 'web_fetch',
@@ -466,7 +487,7 @@ const webTools: Tool[] = [
 export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; notes: string[] }> {
   const canSpawn = agent.depthOf(thread) < settings().maxDepth
   const connected = await connectionTools(thread.botId)
-  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...browserTools, ...webTools]
+  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...browserTools, ...webTools, pageTool]
   return { tools: [...own, ...connected.tools], notes: connected.notes }
 }
 

@@ -11,8 +11,8 @@ import type { ModelEvent, ModelRequest, Provider } from './types.ts'
 
 /**
  * Scripted offline provider for tests and UI development (enabled with OPENBOT_MOCK=1).
- * "!tool <name> <json>" calls a tool, "!slow" takes a few seconds, "!system", "!tools" and "!sent"
- * report what the model was sent, anything else is echoed. Asked for a summary, it gives the
+ * "!tool <name> <json>" calls a tool, "!steps <n>" calls one n times in a row, "!slow" takes a few
+ * seconds, "!system", "!tools" and "!sent" report what the model was sent, anything else is echoed. Asked for a summary, it gives the
  * start of everything the user said in what it was to summarise.
  */
 const mock: Provider = {
@@ -26,8 +26,16 @@ const mock: Provider = {
         req.signal.addEventListener('abort', () => (clearTimeout(t), reject(req.signal.reason)), { once: true })
       })
     const last = req.items.at(-1)
+    const asked = req.items.findLastIndex((i) => i.type === 'message' && i.role === 'user')
+    const steps = /^!steps (\d+)$/.exec((req.items[asked] as { text?: string } | undefined)?.text ?? '')
     let reply: string
-    if (last?.type === 'function_call_output') {
+    if (steps && req.items.slice(asked).filter((i) => i.type === 'function_call').length < Number(steps[1])) {
+      await sleep(20)
+      yield { type: 'item', item: { type: 'function_call', name: 'list_files', arguments: '{}', call_id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` } }
+      return
+    } else if (steps) {
+      reply = `Done in ${steps[1]} steps.`
+    } else if (last?.type === 'function_call_output') {
       reply = `Tool result: ${last.output.slice(0, 600)}`
     } else {
       const ask = req.items.findLast((i) => i.type === 'message' && i.role === 'user')

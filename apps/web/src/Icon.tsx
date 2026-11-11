@@ -108,6 +108,9 @@ const PATHS: Record<string, ReactNode> = {
       <circle cx="12" cy="12" r="3" />
     </>
   ),
+  expand: <path d="M15 4h5v5M9 20H4v-5M20 4l-6 6M4 20l6-6" />,
+  code: <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />,
+  steps: <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />,
 }
 
 export function Icon({ name, size = 16 }: { name: keyof typeof PATHS; size?: number }) {

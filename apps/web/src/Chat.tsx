@@ -1,46 +1,14 @@
-import DOMPurify from 'dompurify'
-import { Lexer, marked } from 'marked'
-import { type ReactNode, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Bot, Effort, Item, ItemData, Thread } from '@openbot/shared'
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { Bot, Item, ItemData, Thread } from '@openbot/shared'
 import { History, day } from './History'
 import { Icon } from './Icon'
+import { CopyButton, Markdown } from './Markdown'
 import { ModelPicker } from './ModelPicker'
+import { PageFrame } from './PageFrame'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
 import { describe, parse, site } from '@openbot/client/steps'
 import { api, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, recentSubagents, rootOf, useStore } from './store'
-
-DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-  if (node.tagName === 'A') {
-    node.setAttribute('target', '_blank')
-    node.setAttribute('rel', 'noopener noreferrer')
-  }
-})
-
-const MARKDOWN = { gfm: true, breaks: true }
-const toHtml = (text: string) => DOMPurify.sanitize(marked.parse(text, MARKDOWN) as string)
-
-/** `live` is for text that is still being written: see LiveMarkdown. */
-export const Markdown = memo(function Markdown({ text, live }: { text: string; live?: boolean }) {
-  const html = useMemo(() => (live ? '' : toHtml(text)), [text, live])
-  return live ? <LiveMarkdown text={text} /> : <div className="md" dangerouslySetInnerHTML={{ __html: html }} />
-})
-
-/**
- * A reply as it is being written. It only ever grows at the end, so it is drawn piece by piece
- * (a paragraph, a list, a block of code…): the pieces already written stay exactly as they are on
- * the page, and only the last one is worked out again as more text arrives. A long reply then
- * costs the same to keep up with at its end as at its start.
- */
-function LiveMarkdown({ text }: { text: string }) {
-  const pieces = useMemo(() => new Lexer(MARKDOWN).blockTokens(text).map((token) => token.raw).filter((raw) => raw.trim()), [text])
-  return <div className="md">{pieces.map((raw, i) => <Piece key={i} raw={raw} />)}</div>
-}
-
-const Piece = memo(function Piece({ raw }: { raw: string }) {
-  const html = useMemo(() => toHtml(raw), [raw])
-  return <div className="md-piece" dangerouslySetInnerHTML={{ __html: html }} />
-})
 
 type Call = Extract<ItemData, { type: 'function_call' }>
 
@@ -129,6 +97,33 @@ function SubagentReport({ text }: { text: string }) {
 
 const isStep = (d: ItemData) => d.type === 'function_call' || d.type === 'web_search_call' || (d.type === 'reasoning' && !!d.summary)
 
+const duration = (ms: number) => {
+  const s = Math.round(ms / 1000)
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+}
+
+/**
+ * What the bot did between two messages. A long run of steps is folded into one line once it is
+ * over ("12 steps · 1m 04s"), so the conversation reads as what was said; the run that is under
+ * way stays open.
+ */
+function Activity({ steps, took, live }: { steps: ReactNode[]; took: number; live: boolean }) {
+  const open = usePrefs().expandSteps
+  if (live || steps.length <= 3) return <div className="activity">{steps}</div>
+  return (
+    <div className="activity">
+      <details className="step steps" open={open || undefined}>
+        <summary className="step-head">
+          <Icon name="steps" size={14} />
+          <span className="step-label">{steps.length} steps{took >= 1000 ? ` · ${duration(took)}` : ''}</span>
+          <Icon name="chevron" size={12} />
+        </summary>
+        <div className="steps-body">{steps}</div>
+      </details>
+    </div>
+  )
+}
+
 function Items({ items, running, openFile }: { items: Item[]; running: boolean; openFile: OpenFile }) {
   const outputs = useMemo(() => {
     const map = new Map<string, string>()
@@ -139,16 +134,27 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
   // Where the bot's own view of a long conversation begins: before it, it has a summary.
   const summary = useMemo(() => items.findLast((i) => i.data.type === 'summary')?.data as Extract<ItemData, { type: 'summary' }> | undefined, [items])
 
+  // When each call came back, so a run of steps can say how long it took.
+  const ended = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const { data, createdAt } of items) if (data.type === 'function_call_output') map.set(data.call_id, createdAt)
+    return map
+  }, [items])
+
   // Consecutive tool calls and thoughts collapse into one quiet activity log between messages.
   const blocks: ReactNode[] = []
   let steps: ReactNode[] = []
-  const flush = (key: number) => {
-    if (steps.length) blocks.push(<div key={`a${key}`} className="activity">{steps}</div>)
+  let began = 0
+  let last = 0
+  const flush = (key: number, live = false) => {
+    if (steps.length) blocks.push(<Activity key={`a${key}`} steps={steps} took={last - began} live={live} />)
     steps = []
   }
   let marked = false
-  for (const { id, data } of items) {
+  for (const { id, data, createdAt } of items) {
     if (data.type === 'function_call_output' || data.type === 'summary') continue
+    // A page stands for the call that showed it; the call is only listed when it failed.
+    if (data.type === 'function_call' && data.name === 'show_page' && !outputs.get(data.call_id)?.startsWith('Error:')) continue
     if (summary && !marked && id > summary.upTo) {
       marked = true
       flush(-id)
@@ -160,6 +166,8 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
       )
     }
     if (isStep(data)) {
+      if (!steps.length) began = createdAt
+      last = Math.max(createdAt, data.type === 'function_call' ? (ended.get(data.call_id) ?? createdAt) : createdAt)
       if (data.type === 'function_call') steps.push(<ToolStep key={id} call={data} output={outputs.get(data.call_id)} running={running} openFile={openFile} />)
       else if (data.type === 'reasoning') steps.push(<Step key={id} icon="thought" label="Thought"><Markdown text={data.summary} /></Step>)
       else if (data.type === 'web_search_call') {
@@ -170,15 +178,24 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
     }
     flush(id)
     if (data.type === 'message') {
-      if (data.role === 'assistant') blocks.push(<div key={id} data-item={id} className="msg assistant"><Markdown text={data.text} /></div>)
+      if (data.role === 'assistant') {
+        blocks.push(
+          <div key={id} data-item={id} className="msg assistant">
+            <Markdown text={data.text} />
+            <div className="msg-actions"><CopyButton text={data.text} label="Copy reply" /></div>
+          </div>,
+        )
+      }
       else if (data.source === 'subagent') blocks.push(<div key={id} data-item={id}><SubagentReport text={data.text} /></div>)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
       else blocks.push(<div key={id} data-item={id} className="msg user">{data.text}</div>)
     } else if (data.type === 'notice') {
       blocks.push(<div key={id} className={`notice ${data.level}`}>{data.text}</div>)
+    } else if (data.type === 'page') {
+      blocks.push(<div key={id} data-item={id}><PageFrame title={data.title} html={data.html} height={data.height} /></div>)
     }
   }
-  flush(-1)
+  flush(-1, running)
   return <>{blocks}</>
 }
 

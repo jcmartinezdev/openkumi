@@ -66,4 +66,9 @@ export interface DesktopBridge {
   /** Rename a remote environment, or turn it on or off. */
   update(id: string, patch: { name?: string; enabled?: boolean }): Promise<void>
   remove(id: string): Promise<void>
+  /**
+   * Gives the address of a page to show in a frame (a page a bot showed, wrapped for drawing).
+   * The address is a site of its own, so the page cannot reach the window.
+   */
+  showPage(html: string): Promise<string>
 }

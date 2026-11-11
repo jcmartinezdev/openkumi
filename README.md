@@ -30,6 +30,10 @@ that stays logged in.
 - **Plugins.** Ready-made abilities you install for one bot at a time: Gmail, Google Calendar,
   Google Drive, Notion and Linear to start with. Each has a page that says what it does; installing
   gives that bot the skill and the connection it needs.
+- **Replies you can look at.** Replies are drawn with code in colour (with a copy button), tables
+  that scroll sideways, ```` ```mermaid ```` diagrams and formulas. A bot can also show a page in
+  the conversation (a chart, a dashboard, a timeline), drawn in the app's light or dark colours,
+  on the computer and on the phone.
 - **Bots that make bots.** Create bots in the app, or just ask in chat.
 
 ## Run it
@@ -255,6 +259,29 @@ A conversation that never ends cannot be sent to a model whole for ever:
 None of this deletes anything. You still see every message, and the bot has `search_history` and
 `read_history` to look up what is no longer in front of it.
 
+### Replies and pages
+
+Replies are GitHub Markdown, drawn the same way in the desktop app and on the phone: code in
+colour with its language and a copy button, tables that scroll sideways instead of squeezing,
+diagrams from ```` ```mermaid ```` blocks (with their code a tap away), and formulas, written as
+`$…$` within a line or as `$$…$$` on lines of their own. A dollar sign followed by a space or a
+digit is a price, not a formula. A long run of steps between two messages is folded into one line
+once it is over ("12 steps · 1m 04s").
+
+When a picture says more than words, a bot calls `show_page` with a self-contained HTML page: a
+chart, a dashboard, a timeline, a mockup. It appears in the conversation where the bot's reply is,
+fitted to its height, and opens full size. The page is written against the app's colours as CSS
+variables (`--foreground`, `--card`, `--chart-1` to `--chart-8`, chosen to stay apart for
+colour-blind readers, and so on), so it follows light and dark mode. Pictures from the bot's
+workspace are put into the page, so it keeps working when the files change. An ```` ```html ````
+block in a reply can be previewed the same way.
+
+A page runs in a frame that is a site of its own (`openbot://page/` on the computer, a separate web
+view on the phone). Its scripts run, and it may load scripts, styles, fonts and pictures from the
+web (a chart library from a CDN), but it cannot reach the app or its keys, fetch or send anything,
+or go to another site. Links in it open in your browser when you click them, and only then. On the
+phone, Mermaid and KaTeX are loaded from jsDelivr when a diagram or formula is drawn.
+
 ### Plugins
 
 A plugin is a folder in `apps/server/plugins/<id>`:
@@ -285,6 +312,7 @@ and the three share the client. Notion and Linear need no setup: install, then s
 | Subagents | `spawn_subagent`, `wait_subagents`, `list_subagents`, `read_subagent`, `message_subagent`, `cancel_subagent` |
 | Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval` |
 | Web | `web_fetch`, plus the provider's built-in web search |
+| The conversation | `show_page` |
 | Connections | every tool of each MCP server switched on for the bot, named `mcp__<connection>__<tool>` |
 
 There is no shell tool. Skills are instructions: a skill that ships scripts can be read, but its
@@ -358,7 +386,9 @@ and from its own format.
   network could copy it. Use it only on networks you trust, and remove a computer you no longer
   use. There are no user accounts: anyone with access to your OS user account can use it.
 - The app's window only ever loads the app's own page, and that page runs scripts only from the
-  app's own files. Links, and sign-in pages for connections, open in your browser.
+  app's own files. Links, and sign-in pages for connections, open in your browser. Pages that
+  bots show run in frames that are sites of their own and cannot reach the app (see *Replies and
+  pages*).
 - A bot's browser holds real logins. Web pages can contain text written to manipulate an AI
   ("prompt injection"). Bots are instructed to treat page content as data and to confirm before
   purchases, sending messages or deleting things, but that is a mitigation, not a guarantee. Give a

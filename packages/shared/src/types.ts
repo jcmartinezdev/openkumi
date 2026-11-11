@@ -148,6 +148,11 @@ export type ItemData =
   | { type: 'function_call_output'; call_id: string; output: string }
   | { type: 'web_search_call'; action: unknown; status?: string }
   | { type: 'notice'; level: 'info' | 'error'; text: string }
+  /**
+   * A page the bot showed with show_page (a chart, a dashboard, a diagram), drawn in the
+   * conversation. Self-contained HTML; `height` is the bot's guess, until the page is measured.
+   */
+  | { type: 'page'; title: string; html: string; height: number }
   /** Stands in, for the model, for every item of the thread up to and including item `upTo`. */
   | { type: 'summary'; text: string; upTo: number }
 

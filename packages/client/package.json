@@ -9,13 +9,17 @@
     "./store": "./src/store.ts",
     "./connection": "./src/connection.ts",
     "./pair": "./src/pair.ts",
-    "./steps": "./src/steps.ts"
+    "./steps": "./src/steps.ts",
+    "./highlight": "./src/highlight.ts",
+    "./markdown": "./src/markdown.ts",
+    "./page": "./src/page.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@noble/hashes": "^2.0.0"
+    "@noble/hashes": "^2.0.0",
+    "highlight.js": "^11.12.0"
   },
   "peerDependencies": {
     "react": ">=19"

@@ -11,7 +11,7 @@ import { pair, parseAddress } from '@openbot/client/pair'
 import { config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
 import { ASSUME_YES, HIDDEN, PRELOAD } from './paths.ts'
-import { APP_URL, serveInterface } from './protocol.ts'
+import { APP_URL, keepPage, serveInterface } from './protocol.ts'
 
 let win: BrowserWindow | null = null
 
@@ -132,6 +132,10 @@ answer('desktop:retry', () => retryLocal())
 answer('desktop:add', (input) => add(input))
 answer('desktop:update', (id, patch) => update(String(id), patch))
 answer('desktop:remove', (id) => remove(String(id)))
+answer('desktop:page', (html) => {
+  if (typeof html !== 'string' || html.length > 8_000_000) throw new Error('Not a page.')
+  return keepPage(html)
+})
 
 // ---- the window
 
@@ -170,8 +174,10 @@ function createWindow() {
     outside(url)
     return { action: 'deny' }
   })
-  // Copying to the clipboard is all the interface asks for.
-  pages.session.setPermissionRequestHandler((contents, permission, allow) => allow(contents === pages && permission === 'clipboard-sanitized-write'))
+  // Copying to the clipboard is all the interface asks for. Pages in it get nothing.
+  pages.session.setPermissionRequestHandler((contents, permission, allow, details) =>
+    allow(contents === pages && permission === 'clipboard-sanitized-write' && 'requestingUrl' in details && details.requestingUrl.startsWith(APP_URL)),
+  )
   void created.loadURL(APP_URL)
 }
 

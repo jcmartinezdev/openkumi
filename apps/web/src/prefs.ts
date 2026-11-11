@@ -72,6 +72,22 @@ export function setPrefs(patch: Partial<Prefs>) {
 
 export const getPrefs = () => prefs
 
+const systemDark = matchMedia('(prefers-color-scheme: dark)')
+
+/** Whether the app is drawn light or dark right now, for what cannot follow the stylesheet (pages, diagrams). */
+export const appearance = (): 'light' | 'dark' => (prefs.theme === 'system' ? (systemDark.matches ? 'dark' : 'light') : prefs.theme)
+
+export function useAppearance(): 'light' | 'dark' {
+  return useSyncExternalStore((fn) => {
+    subscribers.add(fn)
+    systemDark.addEventListener('change', fn)
+    return () => {
+      subscribers.delete(fn)
+      systemDark.removeEventListener('change', fn)
+    }
+  }, appearance)
+}
+
 export function usePrefs(): Prefs {
   return useSyncExternalStore(
     (fn) => {

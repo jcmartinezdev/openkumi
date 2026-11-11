@@ -30,6 +30,7 @@ const bridge: DesktopBridge | null = initial && {
   add: (input) => ipcRenderer.invoke('desktop:add', input),
   update: (id, patch) => ipcRenderer.invoke('desktop:update', id, patch),
   remove: (id) => ipcRenderer.invoke('desktop:remove', id),
+  showPage: (html) => ipcRenderer.invoke('desktop:page', html),
 }
 
 if (bridge) contextBridge.exposeInMainWorld('openbotDesktop', bridge)
