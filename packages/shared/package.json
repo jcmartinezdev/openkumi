@@ -1,0 +1,12 @@
+{
+  "name": "@openbot/shared",
+  "version": "0.1.0",
+  "description": "The types the Open Bot server, interface and desktop app agree on.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/types.ts",
+    "./desktop": "./src/desktop.ts"
+  }
+}

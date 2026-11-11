@@ -1,0 +1,28 @@
+{
+  "name": "@openbot/desktop",
+  "version": "0.1.0",
+  "description": "The Open Bot desktop app.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "Open Bot contributors",
+  "productName": "Open Bot",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "electron .",
+    "dev": "node scripts/dev.mjs",
+    "dist": "node scripts/dist.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "@openbot/server": "*",
+    "@openbot/shared": "*",
+    "@openbot/web": "*",
+    "electron": "^45.3.0",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.0",
+    "playwright-core": "^1.50.0"
+  }
+}

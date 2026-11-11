@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+// Stands in for the `claude` program in tests: same command line and output format, scripted replies.
+// "!tool <name> <json>" calls a tool at the address it was given, "!system" and "!args" report what
+// it was started with, "!slow" takes a while, anything else is echoed with the turn number.
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
+const args = process.argv.slice(2)
+const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
+const print = (obj) => process.stdout.write(JSON.stringify(obj) + '\n')
+
+if (args[0] === 'auth' && args[1] === 'status') {
+  print({ loggedIn: true, authMethod: 'claude.ai', email: 'test@example.com', subscriptionType: 'pro' })
+  process.exit(0)
+}
+
+let prompt = ''
+for await (const chunk of process.stdin) prompt += chunk
+
+// The turn count lives in a file, like a real session, so a resumed conversation carries on from it.
+const session = flag('--resume') ?? crypto.randomUUID()
+const file = path.join(os.tmpdir(), `openbot-fake-claude-${session}.json`)
+const turn = (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).turn : 0) + 1
+if (flag('--resume') && turn === 1) {
+  print({ type: 'result', subtype: 'error_during_execution', is_error: true, result: `No conversation found with session ID: ${session}` })
+  process.exit(1)
+}
+fs.writeFileSync(file, JSON.stringify({ turn }))
+print({ type: 'system', subtype: 'init', session_id: session })
+
+let reply
+const call = prompt.match(/^!tool (\w+)\s*([\s\S]*)$/)
+if (call) {
+  const url = JSON.parse(flag('--mcp-config')).mcpServers.openbot.url
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: call[1], arguments: JSON.parse(call[2] || '{}') } }),
+  })
+  reply = `Tool result: ${(await res.json()).result.content[0].text.slice(0, 600)}`
+} else if (prompt === '!system') {
+  reply = flag('--system-prompt')
+} else if (prompt === '!args') {
+  reply = JSON.stringify({ tools: flag('--tools'), allowed: flag('--allowedTools'), model: flag('--model') ?? null, flags: args.filter((a) => a.startsWith('--')) })
+} else {
+  if (prompt.startsWith('!slow')) await new Promise((r) => setTimeout(r, 8000))
+  reply = `Echo (turn ${turn}): ${prompt}`
+}
+
+print({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: reply } } })
+// A thought and the text arrive as two events for the same message, as they do from the real program.
+print({ type: 'assistant', uuid: crypto.randomUUID(), message: { id: 'msg_1', content: [{ type: 'thinking', thinking: '' }] } })
+print({ type: 'assistant', uuid: crypto.randomUUID(), message: { id: 'msg_1', content: [{ type: 'text', text: reply }] } })
+print({ type: 'result', subtype: 'success', is_error: false, result: reply })

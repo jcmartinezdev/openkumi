@@ -1,0 +1,31 @@
+{
+  "name": "open-bot",
+  "version": "0.1.0",
+  "description": "Open-source, local-first AI bots with subagents and a persistent browser per bot.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "Open Bot contributors",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @openbot/desktop",
+    "build": "npm run build -w @openbot/web -w @openbot/desktop",
+    "start": "npm run build && npm run start -w @openbot/desktop",
+    "server": "npm run start -w @openbot/server",
+    "pair": "npm run pair --silent -w @openbot/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test -w @openbot/server && npm run test -w @openbot/desktop",
+    "dist": "npm run build && npm run dist -w @openbot/desktop",
+    "dist:dir": "npm run build && npm run dist -w @openbot/desktop -- --dir"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

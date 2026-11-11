@@ -1,0 +1,24 @@
+{
+  "name": "@openbot/server",
+  "version": "0.1.0",
+  "description": "The Open Bot server: runs the bots, their browsers and their files. It has no interface of its own.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node src/index.ts",
+    "pair": "node src/pair.ts",
+    "dev": "node --watch-path=src src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "playwright-core": "^1.50.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@openbot/shared": "*",
+    "@types/ws": "^8.5.0"
+  }
+}
