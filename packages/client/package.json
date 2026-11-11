@@ -12,7 +12,9 @@
     "./steps": "./src/steps.ts",
     "./highlight": "./src/highlight.ts",
     "./markdown": "./src/markdown.ts",
-    "./page": "./src/page.ts"
+    "./page": "./src/page.ts",
+    "./models": "./src/models.ts",
+    "./marks": "./src/marks.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

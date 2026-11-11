@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Bot, Connection, ConnectionStatus, Effort, FileEntry, HistoryEntry, Skill } from '@openbot/shared'
 import { Icon } from './Icon'
-import { EFFORT_LABEL, effortsOf, useModels } from './models'
+import { EFFORT_LABEL, effortsOf, useModels } from '@openbot/client/models'
 import { ago } from './Sidebar'
 import { Field, Page, Pick, Row, Section, Switch, onServer } from './settingsUi'
 import { api, download, openSettings, refreshSkills, request, useStore } from './store'

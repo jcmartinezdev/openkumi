@@ -571,10 +571,13 @@ test('the model picker offers every provider and its models, and picking one mov
   // The model a provider uses by itself leads its list and says so.
   assert.equal(await win.locator('.model-row', { has: win.locator('.model-tag', { hasText: 'Default' }) }).locator('.model-name').innerText(), 'grok-test')
   await win.locator('.model-row', { hasText: 'grok-test-fast' }).click()
-  await win.locator('.model-pop').waitFor({ state: 'detached' })
   await until(async () => (await assistant()).provider === 'grok', 10_000)
   assert.equal((await assistant()).model, 'grok-test-fast')
   await win.locator('.model-button', { hasText: 'grok-test-fast' }).waitFor()
+  // A click leaves the picker open, with the reasoning levels of the model just picked under it.
+  await win.locator('.model-row[aria-selected=true]', { hasText: 'grok-test-fast' }).locator('+ .model-reasoning').waitFor()
+  await win.keyboard.press('Escape')
+  await win.locator('.model-pop').waitFor({ state: 'detached' })
 
   // Typing searches the models of every provider at once, earlier ones too; Enter takes the one that is lit.
   await open()
@@ -590,9 +593,9 @@ test('the model picker offers every provider and its models, and picking one mov
   await win.keyboard.press('Meta+Enter')
   await win.locator('.msg.assistant', { hasText: /Echo \(turn 1\): This conversation was already under way\.[\s\S]*The newest message:\s+hello/ }).waitFor({ timeout: 20_000 })
 
-  // Beside the models are the reasoning levels the bot's model takes. Picking one is kept, and shown on the button.
+  // Under the bot's model are the reasoning levels it takes. Picking one is kept, and shown on the button.
   await open()
-  assert.deepEqual(await win.locator('.model-effort [role=radio]').allInnerTexts(), ['Auto', 'Low', 'Medium', 'High', 'Extra High', 'Max'])
+  assert.deepEqual(await win.locator('.model-row[aria-selected=true] + .model-reasoning [role=radio]').allInnerTexts(), ['Auto', 'Low', 'Medium', 'High', 'Extra High', 'Max'])
   await win.getByRole('radio', { name: 'Extra High' }).click()
   await until(async () => (await assistant()).effort === 'xhigh', 10_000)
   await win.locator('.model-button', { hasText: 'Extra High' }).waitFor()
@@ -604,6 +607,7 @@ test('the model picker offers every provider and its models, and picking one mov
   await win.locator('.model-row', { hasText: 'Claude Sonnet 8' }).click()
   await until(async () => (await assistant()).model === 'claude-sonnet-8', 10_000)
   assert.equal((await assistant()).effort, '')
+  await win.keyboard.press('Escape')
   // Command with a number takes the model in that place: the first is the provider's default.
   await open()
   await win.keyboard.press('Meta+1')

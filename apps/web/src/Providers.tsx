@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import type { ProviderInfo, Settings } from '@openbot/shared'
 import { Icon } from './Icon'
-import { loadModels, useModelLists } from './models'
+import { loadModels, useModelLists } from '@openbot/client/models'
 import { ProviderIcon } from './ProviderIcon'
 import { Field, Row, Switch, useSetting } from './settingsUi'
 import { api, useStore } from './store'

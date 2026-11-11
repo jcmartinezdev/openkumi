@@ -1,8 +1,9 @@
 // The models each provider offers, as the environment reports them: their names, what they are
 // for and the reasoning levels they take. Asked for once per provider and kept, so the model
-// picker opens with what is already known and fills in the rest.
+// pickers open with what is already known and fill in the rest. Shared by the desktop app's model
+// picker and the phone's model sheet, so both offer the same choices by the same rules.
 import { useEffect, useSyncExternalStore } from 'react'
-import type { Effort, ModelInfo } from '@openbot/shared'
+import type { Bot, Effort, ModelInfo, ProviderInfo } from '@openbot/shared'
 import { api, onEnvironmentChange } from './store'
 
 const known = new Map<string, ModelInfo[]>()
@@ -47,3 +48,27 @@ export function useModels(provider: string, connected: boolean | undefined): Mod
 export const EFFORT_LABEL: Record<Exclude<Effort, ''>, string> = { minimal: 'Minimal', low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra High', max: 'Max' }
 /** The reasoning levels to offer for a model: its own when the provider says, else the three most models take. */
 export const effortsOf = (model: ModelInfo | undefined): Exclude<Effort, ''>[] => model?.efforts ?? ['low', 'medium', 'high']
+
+/** One model a bot can be put on, as a picker offers it. */
+export interface Choice {
+  provider: ProviderInfo
+  info: ModelInfo
+  /** What is stored for the bot: empty for the provider's own default, so the bot follows it if it changes. */
+  model: string
+  isDefault: boolean
+  /** "<provider>:<model>", as favorites are kept. */
+  key: string
+}
+
+/** A provider's models as choices. Its first model is its default. */
+export function choicesOf(provider: ProviderInfo, models: ModelInfo[], bot: Bot): Choice[] {
+  // A model the bot was given that the provider no longer lists is still its model, and is shown.
+  const lost = bot.provider === provider.id && bot.model && !models.some((m) => m.id === bot.model) ? [{ id: bot.model, name: bot.model }] : []
+  return [...models, ...lost].map((info, i) => ({ provider, info, model: i === 0 ? '' : info.id, isDefault: i === 0, key: `${provider.id}:${i === 0 ? '' : info.id}` }))
+}
+
+/** What to save to put a bot on this model. A reasoning level the new model does not take is not carried over to it. */
+export function switchTo(bot: Bot, choice: Choice): Partial<Bot> {
+  const keeps = !bot.effort || effortsOf(choice.info).includes(bot.effort)
+  return { provider: choice.provider.id, model: choice.model, ...(keeps ? {} : { effort: '' }) }
+}

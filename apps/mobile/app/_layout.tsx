@@ -27,6 +27,8 @@ export default function Layout() {
         <Stack.Screen name="scan" options={{ title: 'Scan the code', presentation: 'modal' }} />
         <Stack.Screen name="chat/[id]" options={{ title: '' }} />
         <Stack.Screen name="browser/[botId]" options={{ title: 'Browser' }} />
+        {/* A sheet over the chat that stops halfway, and goes up the whole way when pulled or scrolled. */}
+        <Stack.Screen name="model/[botId]" options={{ presentation: 'formSheet', headerShown: false, sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, contentStyle: { backgroundColor: theme.card } }} />
       </Stack>
     </>
   )

@@ -1,13 +1,15 @@
 // A bot's conversation (or the thread of one of its subagents): what was said, what the bot did,
 // its reply as it is written, and a place to answer.
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Item } from '@openbot/shared'
 import { describe } from '@openbot/client/steps'
 import { api, loadThread, mainThread, recentSubagents, useStore } from '@openbot/client/store'
+import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
+import { ModelChip } from '../../src/ModelChip'
 import { PageSheet, PageView, Sheet } from '../../src/PageView'
 import { type Theme, useTheme } from '../../src/theme'
 
@@ -69,6 +71,17 @@ function CopyReply({ text, theme }: { text: string; theme: Theme }) {
   )
 }
 
+/** Whether the keyboard is up, so what sits above it can drop the room it keeps for the home indicator. */
+function useKeyboardUp() {
+  const [up, setUp] = useState(false)
+  useEffect(() => {
+    const shown = Keyboard.addListener('keyboardWillShow', () => setUp(true))
+    const hidden = Keyboard.addListener('keyboardWillHide', () => setUp(false))
+    return () => (shown.remove(), hidden.remove())
+  }, [])
+  return up
+}
+
 const Line = memo(function Line({ row, theme }: { row: Row; theme: Theme }) {
   if (row.kind === 'user') return <Pressable onLongPress={() => offerCopy(row.text)} style={[styles.user, { backgroundColor: theme.bubble }]}><Text style={{ color: theme.text, fontSize: 16, lineHeight: 22 }}>{row.text}</Text></Pressable>
   if (row.kind === 'bot') return <View style={styles.bot}><Markdown text={row.text} /><CopyReply text={row.text} theme={theme} /></View>
@@ -95,6 +108,7 @@ export default function Chat() {
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
   const list = useRef<FlatList<Row>>(null)
+  const keyboard = useKeyboardUp()
   /** Whether the newest line is in view; if it is, the view follows what is written. */
   const following = useRef(true)
 
@@ -211,25 +225,32 @@ export default function Chat() {
           </ScrollView>
         </Sheet>
       )}
-      <View style={[styles.composer, { borderTopColor: theme.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
-        <TextInput
-          accessibilityLabel="Message"
-          style={[styles.input, { color: theme.text, backgroundColor: theme.side, borderColor: theme.border }]}
-          value={text}
-          onChangeText={setText}
-          placeholder={bot ? `Message ${bot.name}` : 'Message'}
-          placeholderTextColor={theme.faint}
-          multiline
-        />
-        {running ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Stop" style={[styles.send, { backgroundColor: theme.bubble }]} onPress={() => api('POST', `/api/threads/${thread!.id}/stop`).catch((e) => setError(e.message))}>
-            <View style={{ width: 12, height: 12, borderRadius: 2, backgroundColor: theme.text }} />
-          </Pressable>
-        ) : (
-          <Pressable accessibilityRole="button" accessibilityLabel="Send" disabled={sending || !text.trim()} style={[styles.send, { backgroundColor: theme.primary, opacity: sending || !text.trim() ? 0.4 : 1 }]} onPress={send}>
-            <Text style={{ color: theme.onPrimary, fontSize: 18, fontWeight: '700' }}>↑</Text>
-          </Pressable>
-        )}
+      {/* A card with the message on top and, under it, what the bot runs on and the send button. Above the keyboard it sits close to it. */}
+      <View style={[styles.dock, { paddingBottom: keyboard ? 8 : Math.max(insets.bottom, 10) }]}>
+        <View style={[styles.composer, { backgroundColor: theme.raised, borderColor: theme.border }]}>
+          <TextInput
+            accessibilityLabel="Message"
+            style={[styles.input, { color: theme.text }]}
+            value={text}
+            onChangeText={setText}
+            placeholder={thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
+            placeholderTextColor={theme.faint}
+            multiline
+          />
+          <View style={styles.bar}>
+            {bot && <ModelChip bot={bot} onPress={() => (Keyboard.dismiss(), router.push({ pathname: '/model/[botId]', params: { botId: bot.id } }))} />}
+            <View style={{ flex: 1 }} />
+            {running ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Stop" style={[styles.send, { backgroundColor: theme.bubble }]} onPress={() => api('POST', `/api/threads/${thread!.id}/stop`).catch((e) => setError(e.message))}>
+                <View style={{ width: 12, height: 12, borderRadius: 2.5, backgroundColor: theme.text }} />
+              </Pressable>
+            ) : (
+              <Pressable accessibilityRole="button" accessibilityLabel="Send" disabled={sending || !text.trim()} style={[styles.send, { backgroundColor: theme.primary, opacity: sending || !text.trim() ? 0.35 : 1 }]} onPress={send}>
+                <Glyph name="up" size={19} color={theme.onPrimary} weight={2.4} />
+              </Pressable>
+            )}
+          </View>
+        </View>
       </View>
     </KeyboardAvoidingView>
   )
@@ -246,7 +267,9 @@ const styles = StyleSheet.create({
   working: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 6 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%', height: 32, paddingHorizontal: 12, borderWidth: 1, borderRadius: 16 },
-  composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 12, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth },
-  input: { flex: 1, minHeight: 42, maxHeight: 140, borderWidth: 1, borderRadius: 21, paddingHorizontal: 15, paddingTop: 10, paddingBottom: 10, fontSize: 16 },
-  send: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' },
+  dock: { paddingHorizontal: 10, paddingTop: 6 },
+  composer: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 26 },
+  input: { minHeight: 44, maxHeight: 160, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 4, fontSize: 17, lineHeight: 22 },
+  bar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 8, paddingRight: 8, paddingBottom: 8 },
+  send: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
 })

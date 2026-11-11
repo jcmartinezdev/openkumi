@@ -18,6 +18,8 @@
   --run: #f5b54a;
   --err: #f87171;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  /* The picked part of a segmented control on a raised surface, lighter than its track. */
+  --segment: #36363c;
   --card: #121214;
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
   --pane-width: 46%;
@@ -46,6 +48,7 @@
     --run: #d97706;
     --err: #dc2626;
     --shadow: 0 16px 48px rgba(0, 0, 0, 0.14);
+    --segment: #ffffff;
     --card: #ffffff;
     color-scheme: light;
   }
@@ -70,6 +73,7 @@
   --run: #d97706;
   --err: #dc2626;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.14);
+  --segment: #ffffff;
   --card: #ffffff;
   color-scheme: light;
   }
@@ -753,7 +757,7 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .pair-qr { display: flex; align-items: center; gap: 16px; padding: 4px 0; }
 .qr { width: 148px; height: 148px; flex: none; border-radius: 8px; }
 
-/* ---- the model picker: providers down the side, their models in the middle, reasoning on the right */
+/* ---- the model picker: providers down the side, their models beside them, the reasoning of the bot's model under it */
 :root { --accent: #4c82f7; }
 /* The popup sits above the whole composer, lined up with its left edge. */
 .composer { position: relative; }
@@ -766,7 +770,7 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .model-button > svg:last-child { flex: none; transform: rotate(90deg); opacity: 0.7; }
 .provider-icon { flex: none; }
 .model-pop {
-  position: absolute; left: -1px; bottom: calc(100% + 8px); z-index: 20; display: flex; flex-direction: column; width: min(600px, calc(100vw - 32px)); height: min(410px, 64vh);
+  position: absolute; left: -1px; bottom: calc(100% + 8px); z-index: 20; display: flex; flex-direction: column; width: min(580px, calc(100vw - 32px)); height: min(460px, 66vh);
   border: 1px solid var(--border-strong); border-radius: 14px; background: var(--raised); box-shadow: var(--shadow); overflow: hidden; animation: fade 0.1s;
 }
 .model-cols { flex: 1; min-height: 0; display: flex; }
@@ -785,10 +789,14 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .model-search:focus-within { border-bottom-color: var(--accent); }
 .model-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: none; background: none; font-size: 15px; }
 .model-list { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 0; margin: 0 -6px; }
-.model-row { display: flex; align-items: center; gap: 10px; height: 38px; padding: 0 8px; border-radius: 8px; font-size: 14.5px; cursor: pointer; }
+.model-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 8px; border-radius: 8px; font-size: 14.5px; cursor: pointer; }
 .model-row.active { background: var(--hover); }
-.model-row > svg:not(.provider-icon) { flex: none; color: var(--muted); }
+.model-row > svg:not(.provider-icon) { flex: none; color: var(--text); }
+.model-row[aria-selected='true'] .model-name { font-weight: 600; }
+.model-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.model-line { min-width: 0; display: flex; align-items: center; gap: 8px; }
 .model-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--faint); }
 .model-tag, .model-of { flex: none; font-size: 12px; color: var(--faint); white-space: nowrap; }
 .model-row kbd { flex: none; min-width: 32px; height: 23px; padding: 0 6px; display: grid; place-items: center; border-radius: 6px; background: var(--hover); color: var(--muted); font: 500 12px/1 system-ui, sans-serif; letter-spacing: 0.02em; }
 .model-star { flex: none; width: 26px; height: 26px; color: var(--faint); opacity: 0; }
@@ -798,21 +806,16 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .model-more { height: 34px; margin: 2px 0 0 4px; padding: 0 6px; border: none; background: none; font-size: 14px; color: var(--muted); }
 .model-more:hover { color: var(--text); background: none; }
 .model-empty { display: grid; gap: 10px; justify-items: start; padding: 14px 8px; font-size: 13.5px; color: var(--muted); }
-.model-effort { flex: none; width: 190px; display: flex; flex-direction: column; gap: 2px; padding: 4px 12px 8px; border-left: 1px solid var(--border); overflow-y: auto; }
-.model-effort-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 44px; margin-bottom: 8px; padding: 0 4px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--muted); }
-.model-effort-head .faint { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.model-effort > button { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex: none; height: 36px; padding: 0 8px; border: none; border-radius: 8px; background: none; font-size: 14.5px; font-weight: 400; text-align: left; }
-.model-effort > button:hover { background: var(--hover); }
-.model-effort > button .faint { margin-left: auto; font-size: 12.5px; }
-.model-effort > button svg { margin-left: auto; color: var(--muted); }
-.model-effort > button .faint + svg { margin-left: 0; }
-.model-effort > p { padding: 4px; font-size: 13px; }
+/* Lined up with the model's name, under it, on one line whatever the number of levels. */
+.model-reasoning { display: grid; gap: 6px; padding: 0 8px 10px 36px; }
+.model-reasoning-head { font-size: 12px; color: var(--faint); }
+.model-reasoning .segmented { display: flex; justify-self: stretch; }
+.model-reasoning .segmented button { flex: 1; min-width: 0; padding: 0 6px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.model-reasoning .segmented button.active, .model-reasoning .segmented button.active:hover { background: var(--segment); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18); }
+p.model-reasoning { margin: 0; font-size: 12.5px; }
 .model-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 46px; padding: 0 10px 0 16px; border-top: 1px solid var(--border); }
 .model-foot-status { min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .model-foot button { flex: none; height: 30px; font-size: 12.5px; color: var(--muted); }
-@media (max-width: 620px) {
-  .model-effort { width: 140px; }
-}
 .prov-models li.older { color: var(--faint); }
 
 /* ---- providers: the list down the left, the one picked beside it */
