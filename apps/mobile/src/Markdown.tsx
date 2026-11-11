@@ -1,13 +1,13 @@
 // Replies as they are drawn on the phone: Markdown, with code in the same colours as on the
 // computer (and a button to copy it), tables that scroll sideways, and ```mermaid diagrams and
 // formulas drawn in a web view.
-import { memo, useMemo, useState } from 'react'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { type ReactNode, createContext, memo, useContext, useMemo, useRef, useState } from 'react'
+import { Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, View } from 'react-native'
 import MarkdownDisplay, { type ASTNode, type RenderRules } from 'react-native-markdown-display'
 import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
 import { CODE_COLORS, highlightRuns, languageName } from '@openbot/client/highlight'
-import { fenceMath } from '@openbot/client/markdown'
+import { fenceMath, workspaceLink } from '@openbot/client/markdown'
 import { DIAGRAM_THEME } from '@openbot/client/page'
 import { WebBlock } from './PageView'
 import { type Theme, useAppearance, useTheme } from './theme'
@@ -36,6 +36,33 @@ function CopyButton({ text, theme }: { text: string; theme: Theme }) {
   )
 }
 
+/**
+ * Content wider than the screen (a table, a line of code), scrolled sideways on its own. It flashes
+ * its scroll bar once when there is more to see.
+ */
+function SideScroll({ children, style, contentContainerStyle }: { children: ReactNode; style?: object; contentContainerStyle?: object }) {
+  const view = useRef<ScrollViewInstance>(null)
+  const size = useRef({ frame: 0, content: 0, shown: false })
+  const check = () => {
+    const s = size.current
+    if (s.shown || !s.frame || s.content <= s.frame + 1) return
+    s.shown = true
+    view.current?.flashScrollIndicators()
+  }
+  return (
+    <ScrollView
+      ref={view}
+      horizontal
+      style={style}
+      contentContainerStyle={contentContainerStyle}
+      onLayout={(e) => ((size.current.frame = e.nativeEvent.layout.width), check())}
+      onContentSizeChange={(width) => ((size.current.content = width), check())}
+    >
+      {children}
+    </ScrollView>
+  )
+}
+
 const Code = memo(function Code({ lang, code, theme, appearance, plain }: { lang: string; code: string; theme: Theme; appearance: Appearance; plain?: boolean }) {
   const runs = useMemo(() => (plain ? null : highlightRuns(code, lang)), [code, lang, plain])
   const colors = CODE_COLORS[appearance]
@@ -45,11 +72,11 @@ const Code = memo(function Code({ lang, code, theme, appearance, plain }: { lang
         <Text style={{ flex: 1, color: theme.faint, fontSize: 12 }} numberOfLines={1}>{languageName(lang)}</Text>
         <CopyButton text={code} theme={theme} />
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeBody}>
+      <SideScroll contentContainerStyle={styles.codeBody}>
         <Text selectable style={[styles.codeText, { color: theme.text }]}>
           {runs ? runs.map((run, i) => (run.kind ? <Text key={i} style={{ color: colors[run.kind], fontStyle: run.kind === 'comment' ? 'italic' : 'normal' }}>{run.text}</Text> : run.text)) : code}
         </Text>
-      </ScrollView>
+      </SideScroll>
     </View>
   )
 })
@@ -85,9 +112,9 @@ function Diagram({ code, theme, appearance }: { code: string; theme: Theme; appe
         <CopyButton text={code} theme={theme} />
       </View>
       {source ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.codeBody}>
+        <SideScroll contentContainerStyle={styles.codeBody}>
           <Text selectable style={[styles.codeText, { color: theme.text }]}>{code}</Text>
-        </ScrollView>
+        </SideScroll>
       ) : (
         <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
           <WebBlock html={html} height={200} />
@@ -120,7 +147,7 @@ function rules(theme: Theme, appearance: Appearance, live: boolean): RenderRules
     const width = table ? columnWidths(table)[node.index] : undefined
     return (
       <View key={node.key} style={[styles.cell, { width, borderColor: theme.border }, head && { backgroundColor: theme.side }]}>
-        {head ? <Text style={{ color: theme.text, fontWeight: '600', fontSize: 14 }}>{children}</Text> : children}
+        {head ? <Text style={{ color: theme.text, fontWeight: '600', fontSize: 15 }}>{children}</Text> : children}
       </View>
     )
   }
@@ -137,9 +164,9 @@ function rules(theme: Theme, appearance: Appearance, live: boolean): RenderRules
     fence,
     code_block: (node) => <Code key={node.key} lang="" code={(node.content ?? '').replace(/\n$/, '')} theme={theme} appearance={appearance} plain />,
     table: (node, children) => (
-      <ScrollView key={node.key} horizontal showsHorizontalScrollIndicator={false} style={styles.tableScroll}>
+      <SideScroll key={node.key} style={styles.tableScroll}>
         <View style={[styles.table, { borderColor: theme.border }]}>{children}</View>
-      </ScrollView>
+      </SideScroll>
     ),
     tr: (node, children) => <View key={node.key} style={styles.row}>{children}</View>,
     th: (node, children, parents) => cell(node, children, parents, true),
@@ -150,6 +177,9 @@ function rules(theme: Theme, appearance: Appearance, live: boolean): RenderRules
 const look = (theme: Theme) =>
   StyleSheet.create({
     body: { color: theme.text, fontSize: 16, lineHeight: 23 },
+    // Text in a table is a little smaller, so more of it fits across.
+    th: { fontSize: 15, lineHeight: 21 },
+    td: { fontSize: 15, lineHeight: 21 },
     paragraph: { marginTop: 0, marginBottom: 10 },
     heading1: { fontSize: 20, fontWeight: '600', marginTop: 10, marginBottom: 6 },
     heading2: { fontSize: 18, fontWeight: '600', marginTop: 10, marginBottom: 6 },
@@ -162,13 +192,27 @@ const look = (theme: Theme) =>
     ordered_list_icon: { color: theme.muted },
   })
 
+/**
+ * Opens a file of the bot's workspace that a reply links to ("files/report.html"). Given by the
+ * conversation the reply is in.
+ */
+export const FileLinks = createContext<((path: string) => void) | null>(null)
+
 /** `live` is for a reply that is still being written. */
 export const Markdown = memo(function Markdown({ text, live = false }: { text: string; live?: boolean }) {
   const theme = useTheme()
   const appearance = useAppearance()
   const style = useMemo(() => look(theme), [theme])
   const drawn = useMemo(() => rules(theme, appearance, live), [theme, appearance, live])
-  return <MarkdownDisplay style={style} rules={drawn}>{fenceMath(text)}</MarkdownDisplay>
+  const openFile = useContext(FileLinks)
+  // A link to one of the bot's files opens it here; any other link opens in Safari.
+  const press = (url: string) => {
+    const path = openFile ? workspaceLink(url) : null
+    if (!path) return true
+    openFile!(path)
+    return false
+  }
+  return <MarkdownDisplay style={style} rules={drawn} onLinkPress={press}>{fenceMath(text)}</MarkdownDisplay>
 })
 
 const styles = StyleSheet.create({

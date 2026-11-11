@@ -22,6 +22,7 @@ export const PAGE_GUIDE = [
   'The page is self-contained: put the data and the <style> and <script> in it. It may load scripts, styles and fonts from https addresses ' +
     '(such as a chart library from https://cdn.jsdelivr.net/npm/, with an exact version), but it cannot fetch or send anything itself.',
   'Pictures from your workspace can be named by path (<img src="files/photo.jpg">); they are put into the page.',
+  'A page saved as a file is not shown to the user until you show it here with its path.',
   'Layout: the page is as wide as the conversation (about 720px on a computer, 360px on a phone) and sits on its background. ' +
     'Leave html and body without a background, border, outer padding or a heading that repeats the title. Use fluid widths. ' +
     'A box with a background of its own gets padding: 16px and border-radius: var(--radius). Give charts a fixed height in px. ' +

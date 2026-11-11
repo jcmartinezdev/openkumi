@@ -72,13 +72,18 @@ export function PageFrame({ title, html, height }: { title: string; html: string
           <Icon name="expand" size={15} />
         </button>
       </div>
-      {full && (
-        <Dialog title={title} close={() => setFull(false)} full>
-          <div className="page-full">
-            <Frame html={html} title={title} fit={false} />
-          </div>
-        </Dialog>
-      )}
+      {full && <PageViewer title={title} html={html} close={() => setFull(false)} />}
     </figure>
+  )
+}
+
+/** A page at full size, over the app: one in the conversation, or a page a bot saved as a file. */
+export function PageViewer({ title, html, close }: { title: string; html: string; close: () => void }) {
+  return (
+    <Dialog title={title} close={close} full>
+      <div className="page-full">
+        <Frame html={html} title={title} fit={false} />
+      </div>
+    </Dialog>
   )
 }

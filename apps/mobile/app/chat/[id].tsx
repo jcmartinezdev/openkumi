@@ -1,14 +1,14 @@
 // A bot's conversation (or the thread of one of its subagents): what was said, what the bot did,
 // its reply as it is written, and a place to answer.
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { ActionSheetIOS, ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Item } from '@openbot/shared'
 import { describe } from '@openbot/client/steps'
 import { api, loadThread, mainThread, recentSubagents, useStore } from '@openbot/client/store'
-import { Markdown, copy } from '../../src/Markdown'
-import { PageView } from '../../src/PageView'
+import { FileLinks, Markdown, copy } from '../../src/Markdown'
+import { PageSheet, PageView, Sheet } from '../../src/PageView'
 import { type Theme, useTheme } from '../../src/theme'
 
 /** What one line of the chat shows. Tool results and the bot's private reasoning are left out on a phone. */
@@ -40,7 +40,7 @@ function rows(items: Item[]): Row[] {
   return out
 }
 
-/** Long press on a message: copy it. */
+/** Long press on one of the user's messages: copy it. */
 const offerCopy = (text: string) =>
   ActionSheetIOS.showActionSheetWithOptions({ options: ['Copy', 'Cancel'], cancelButtonIndex: 1 }, (choice) => {
     if (choice === 0) void copy(text)
@@ -59,9 +59,19 @@ function Steps({ steps, theme }: { steps: string[]; theme: Theme }) {
   )
 }
 
+/** Under a reply: copy it. A reply is not pressable itself, which would stop its tables and code from scrolling sideways. */
+function CopyReply({ text, theme }: { text: string; theme: Theme }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Copy reply" hitSlop={10} style={styles.copy} onPress={() => copy(text).then(() => (setCopied(true), setTimeout(() => setCopied(false), 1500)))}>
+      <Text style={{ color: theme.faint, fontSize: 13 }}>{copied ? 'Copied' : 'Copy'}</Text>
+    </Pressable>
+  )
+}
+
 const Line = memo(function Line({ row, theme }: { row: Row; theme: Theme }) {
   if (row.kind === 'user') return <Pressable onLongPress={() => offerCopy(row.text)} style={[styles.user, { backgroundColor: theme.bubble }]}><Text style={{ color: theme.text, fontSize: 16, lineHeight: 22 }}>{row.text}</Text></Pressable>
-  if (row.kind === 'bot') return <Pressable onLongPress={() => offerCopy(row.text)} style={styles.bot}><Markdown text={row.text} /></Pressable>
+  if (row.kind === 'bot') return <View style={styles.bot}><Markdown text={row.text} /><CopyReply text={row.text} theme={theme} /></View>
   if (row.kind === 'steps') return <Steps steps={row.steps} theme={theme} />
   if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
   return <Text style={[styles.notice, { color: row.error ? theme.err : theme.faint }]}>{row.text}</Text>
@@ -96,6 +106,17 @@ export default function Chat() {
   const shown = useMemo(() => rows(items ?? []), [items])
   const running = thread?.status === 'running'
   const subagents = thread ? recentSubagents(threads, thread) : []
+
+  // A reply's link to one of the bot's files: a page opens as one, Markdown and other text are shown as they are.
+  const [file, setFile] = useState<{ path: string; content: string } | null>(null)
+  const openFile = (path: string) => {
+    if (!bot) return
+    api<{ content: string; binary: boolean }>('GET', `/api/bots/${bot.id}/file?path=${encodeURIComponent(path)}`).then(
+      (found) => (found.binary ? Alert.alert(path, 'This file can be opened in Open Bot on the computer, under the bot’s files.') : setFile({ path, content: found.content })),
+      (e) => Alert.alert(path, (e as Error).message),
+    )
+  }
+  const fileName = file?.path.split('/').pop() ?? ''
   const parent = thread?.parentId ? threads.find((t) => t.id === thread.parentId) : undefined
 
   const send = async () => {
@@ -164,6 +185,7 @@ export default function Chat() {
       ) : !items ? (
         <View style={styles.empty}><ActivityIndicator color={theme.muted} /></View>
       ) : (
+        <FileLinks.Provider value={openFile}>
         <FlatList
           ref={list}
           data={shown}
@@ -179,6 +201,15 @@ export default function Chat() {
           // The keyboard coming up makes the list shorter; the newest line stays in view.
           onLayout={() => following.current && list.current?.scrollToEnd({ animated: false })}
         />
+        </FileLinks.Provider>
+      )}
+      {file && /\.html?$/i.test(file.path) && <PageSheet title={fileName} html={file.content} close={() => setFile(null)} />}
+      {file && !/\.html?$/i.test(file.path) && (
+        <Sheet title={fileName} visible close={() => setFile(null)}>
+          <ScrollView contentContainerStyle={{ padding: 16 }}>
+            {/\.(md|markdown)$/i.test(file.path) ? <Markdown text={file.content} /> : <Text selectable style={{ color: theme.text, fontFamily: 'Menlo', fontSize: 13, lineHeight: 19 }}>{file.content}</Text>}
+          </ScrollView>
+        </Sheet>
       )}
       <View style={[styles.composer, { borderTopColor: theme.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         <TextInput
@@ -208,6 +239,7 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
   user: { alignSelf: 'flex-end', maxWidth: '86%', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18, marginVertical: 6 },
   bot: { marginVertical: 4 },
+  copy: { alignSelf: 'flex-start', paddingVertical: 2, marginTop: -4 },
   step: { fontSize: 13.5, paddingVertical: 3 },
   inner: { marginLeft: 4, paddingLeft: 10, borderLeftWidth: StyleSheet.hairlineWidth },
   notice: { fontSize: 13, lineHeight: 18, paddingVertical: 6 },

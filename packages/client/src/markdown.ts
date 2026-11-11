@@ -42,3 +42,22 @@ export function fenceMath(text: string): string {
   }
   return out.join('\n')
 }
+
+/**
+ * The file in the bot's workspace that a link in a reply points at ("files/report.html", or the
+ * same written as a whole path on the computer), or null for a link to anywhere else.
+ */
+export function workspaceLink(href: string): string | null {
+  let link = href.trim()
+  try {
+    link = decodeURI(link)
+  } catch {
+    // Left as it is.
+  }
+  link = link.replace(/^file:\/\//i, '').split(/[?#]/)[0]
+  if (!link || /^[a-z][a-z0-9+.-]*:/i.test(link) || link.startsWith('//')) return null
+  // A whole path into the bot's folder, as Codex and Claude Code sometimes write them.
+  const inside = /\/workspace\/(.+)$/.exec(link)
+  const path = (inside ? inside[1] : link).replace(/^(\.\/|\/)+/, '')
+  return path && !path.split('/').includes('..') ? path : null
+}

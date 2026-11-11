@@ -4,9 +4,9 @@ import DOMPurify from 'dompurify'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { Lexer, Marked, type TokenizerAndRendererExtension, type Tokens } from 'marked'
-import { memo, useEffect, useMemo, useState } from 'react'
+import { createContext, memo, useContext, useEffect, useMemo, useState } from 'react'
 import { highlight, languageName, languageOf } from '@openbot/client/highlight'
-import { fenceMath } from '@openbot/client/markdown'
+import { fenceMath, workspaceLink } from '@openbot/client/markdown'
 import { DIAGRAM_THEME } from '@openbot/client/page'
 import { Icon } from './Icon'
 import { Dialog } from './Modals'
@@ -51,6 +51,12 @@ const toHtml = (text: string) =>
     .replace(/<\/table>/g, '</table></div>')
 
 /**
+ * Opens a file of the bot's workspace that a reply links to ("files/report.html"). Given by the
+ * conversation the reply is in; elsewhere such links lead nowhere.
+ */
+export const FileLinks = createContext<((path: string) => void) | null>(null)
+
+/**
  * Text as it is drawn, block by block (a paragraph, a list, a code block…). While a reply is
  * still being written (`live`), the blocks already written stay exactly as they are on the page
  * and only the last one is worked out again as more text arrives, so a long reply costs the same
@@ -58,8 +64,18 @@ const toHtml = (text: string) =>
  */
 export const Markdown = memo(function Markdown({ text, live }: { text: string; live?: boolean }) {
   const blocks = useMemo(() => new Lexer(MARKDOWN).blockTokens(fenceMath(text.replace(/\r\n?/g, '\n'))).filter((token) => token.type !== 'space'), [text])
+  const openFile = useContext(FileLinks)
   return (
-    <div className="md">
+    <div
+      className="md"
+      onClick={(e) => {
+        const link = (e.target as Element).closest?.('a[href]')
+        const path = link && openFile ? workspaceLink(link.getAttribute('href') ?? '') : null
+        if (!path) return
+        e.preventDefault()
+        openFile!(path)
+      }}
+    >
       {blocks.map((token, i) =>
         token.type === 'code' ? (
           <CodeBlock key={i} lang={(token as Tokens.Code).lang ?? ''} code={(token as Tokens.Code).text} done={!live || i < blocks.length - 1} />

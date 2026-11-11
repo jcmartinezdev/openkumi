@@ -291,6 +291,19 @@ test('replies are drawn with code in colour, diagrams, formulas and tables, and 
   await reply.getByRole('button', { name: 'Copy code' }).first().click()
   await until(async () => (await app.evaluate(({ clipboard }) => clipboard.readText())) === 'const answer: number = 42', 5000)
 
+  // A link to a page the bot saved opens it full size, in the same kind of frame; a link to any other of its files opens it in Files.
+  await send('!tool write_file ' + JSON.stringify({ path: 'files/board.html', content: '<p id="saved">Saved page</p>' }))
+  await send('See [the board](files/board.html) and [the notes](memory/notes.md).')
+  const links = win.locator('.msg.assistant[data-item]').last()
+  await links.getByRole('link', { name: 'the board' }).click()
+  await win.frameLocator('.dialog.full iframe').locator('#saved').waitFor({ timeout: 10_000 })
+  assert.equal(await win.locator('.dialog.full .dialog-head h2').innerText(), 'board.html')
+  await win.keyboard.press('Escape')
+  await links.getByRole('link', { name: 'the notes' }).click()
+  await until(async () => /\/settings\/bots\/[^/]+\/files\/memory\/notes\.md$/.test(decodeURIComponent(await win.evaluate(() => location.hash))), 5000)
+  await win.evaluate(() => history.back())
+  await win.locator('.composer textarea').waitFor()
+
   // A long run of steps is folded into one line once it is over.
   await send('!steps 5')
   const folded = win.locator('.activity details.steps').last()

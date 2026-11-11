@@ -2,9 +2,9 @@ import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import type { Bot, Item, ItemData, Thread } from '@openbot/shared'
 import { History, day } from './History'
 import { Icon } from './Icon'
-import { CopyButton, Markdown } from './Markdown'
+import { CopyButton, FileLinks, Markdown } from './Markdown'
 import { ModelPicker } from './ModelPicker'
-import { PageFrame } from './PageFrame'
+import { PageFrame, PageViewer } from './PageFrame'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
 import { describe, parse, site } from '@openbot/client/steps'
@@ -348,6 +348,17 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
   const resume = () => api('POST', `/api/threads/${thread!.id}/resume`).then(() => navigate(bot.id), (e) => setError(e.message))
   const earlier = threads.some((t) => t.botId === bot.id && !t.parentId && t.archivedAt)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const openFile = (path: string) => openSettings('bots', bot.id, 'files', ...path.split('/'))
+
+  // A reply's link to a page the bot saved opens that page; a link to any other of its files opens it in Files.
+  const [saved, setSaved] = useState<{ title: string; html: string } | null>(null)
+  const openLink = (path: string) => {
+    if (!/\.html?$/i.test(path)) return openFile(path)
+    api<{ content: string; binary: boolean }>('GET', `/api/bots/${bot.id}/file?path=${encodeURIComponent(path)}`).then(
+      (file) => (file.binary ? openFile(path) : setSaved({ title: path.split('/').pop()!, html: file.content })),
+      (e) => setError(e.message),
+    )
+  }
   // Where "back" leads: from a subagent to whoever started it, from an earlier conversation to the current one.
   const back = parent ? { to: parent, label: `Back to ${parent.kind === 'subagent' ? parent.title : 'the conversation'}` } : archived ? { to: null, label: 'Back to the current conversation' } : null
 
@@ -386,6 +397,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
         }}
       >
+        <FileLinks.Provider value={openLink}>
         <div className="column">
           {main && (!thread || items?.length === 0) && (
             <div className="empty">
@@ -409,7 +421,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               )}
             </div>
           )}
-          {items && <Items items={items} running={running} openFile={(file) => openSettings('bots', bot.id, 'files', ...file.split('/'))} />}
+          {items && <Items items={items} running={running} openFile={openFile} />}
           {partial?.reasoning && (
             <div className="activity">
               <details className="step">
@@ -422,7 +434,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
           {running && !partial?.text && !partial?.reasoning && <div className="working"><span className="spinner" /> Working</div>}
           {error && <div className="notice error">{error}</div>}
         </div>
+        </FileLinks.Provider>
       </div>
+      {saved && <PageViewer title={saved.title} html={saved.html} close={() => setSaved(null)} />}
 
       <footer>
         <div className="column">

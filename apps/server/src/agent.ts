@@ -41,7 +41,8 @@ function instructions(bot: Bot, thread: Thread, connectionNotes: string[]): stri
     'Be direct and useful. Answer in Markdown. Use your tools when they help instead of guessing; ' +
       'say plainly when something failed or could not be verified.',
     'Your replies are drawn as GitHub Markdown, with tables, ```mermaid diagrams, and formulas as $…$ or on lines of their own as $$…$$. ' +
-      'When figures, a comparison or a structure are clearer as a picture (a chart, a dashboard, a timeline), show one with show_page.',
+      'When figures, a comparison or a structure are clearer as a picture (a chart, a dashboard, a timeline), show one with show_page. ' +
+      'A file you save is not shown to the user by itself: when you make a page as a file, also show it with show_page and its path.',
     'You have your own web browser with a persistent profile: logins and cookies are remembered between sessions and ' +
       'are not shared with other bots. The user can watch and take over the browser in the app, so if a site needs a ' +
       'login, a CAPTCHA or two-factor code, ask the user to do that step in the Browser panel and then continue. ' +
