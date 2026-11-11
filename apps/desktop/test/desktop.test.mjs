@@ -548,6 +548,86 @@ test('a bot has one conversation: starting fresh sets it aside, and earlier ones
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('scheduled tasks: made on their page, run, and each run opened from beneath its task', async () => {
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  win.on('dialog', (dialog) => dialog.accept())
+  const helper = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Helper', provider: 'mock' })
+  const here = () => win.evaluate(() => location.hash)
+  const shot = (name) => process.env.OPENBOT_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENBOT_TEST_SHOTS, `${name}.png`) })
+
+  // They have a place of their own in the sidebar, which says who may do what.
+  await win.locator('.sidebar .tasks-link').click()
+  await win.locator('.heading', { hasText: 'Scheduled tasks' }).waitFor()
+  assert.match(await win.locator('.set-intro').first().innerText(), /🤖 Assistant, your first bot, is the main assistant/)
+  await win.locator('.set-row', { hasText: 'No scheduled tasks yet' }).waitFor()
+
+  // A new task: a bot, a prompt, and a time on chosen days.
+  await win.getByRole('button', { name: 'New task' }).click()
+  await win.getByLabel('Bot', { exact: true }).selectOption(helper.id)
+  await win.getByLabel('Name', { exact: true }).fill('Morning brief')
+  await win.getByLabel('Prompt', { exact: true }).fill('Say good morning')
+  await win.getByLabel('Time', { exact: true }).fill('07:30')
+  for (const day of ['Monday', 'Wednesday', 'Friday']) await win.getByRole('button', { name: day, exact: true }).click()
+  await shot('task-new')
+  await win.getByRole('button', { name: 'Create task' }).click()
+  const card = win.locator('.task-card', { hasText: 'Morning brief' })
+  await card.waitFor()
+  assert.match(await card.locator('.task-head').innerText(), /Mon, Wed, Fri at 07:30 · Helper · made by you\s+Next /)
+  const [task] = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/tasks')
+  assert.deepEqual([task.botId, task.createdBy, task.schedule], [helper.id, 'user', { type: 'daily', time: '07:30', days: [1, 3, 5] }])
+
+  // Run now: the run is listed beneath its task, and opens as a thread that leads back to the task.
+  await card.getByRole('button', { name: 'Run Morning brief now' }).click()
+  const run = card.locator('.task-run').first()
+  await until(async () => /Done/.test(await run.innerText().catch(() => '')), 20_000)
+  await shot('task-list')
+  await run.click()
+  await win.locator('.msg.task', { hasText: 'Say good morning' }).waitFor()
+  await win.locator('.msg.assistant', { hasText: 'Echo: Say good morning' }).waitFor()
+  assert.match(await win.locator('.heading').innerText(), /^Morning brief\nScheduled run · .+ · Helper$/)
+  // Its bot shows it too, as it does a subagent.
+  await win.locator('.sidebar .row.sub', { hasText: 'Morning brief' }).waitFor()
+  await shot('task-run')
+  await win.getByRole('button', { name: 'Back to the scheduled task' }).click()
+  await until(async () => (await here()) === `#/tasks/${task.id}`, 10_000)
+  await win.locator('.set-section', { hasText: 'Runs' }).locator('.task-run', { hasText: 'Done' }).waitFor()
+  await shot('task-page')
+
+  // What came of it reached Helper's conversation, where it opens the run.
+  await win.locator('.sidebar .row.bot', { hasText: 'Helper' }).click()
+  const report = win.locator('.activity', { hasText: 'Scheduled task “Morning brief” ran' })
+  await report.waitFor({ timeout: 20_000 })
+  await shot('task-report')
+  await report.getByRole('button', { name: 'Open' }).click()
+  await win.locator('.msg.task', { hasText: 'Say good morning' }).waitFor()
+
+  // Renaming it keeps its next run; switching it off from the list pauses it.
+  await win.evaluate((id) => (location.hash = `/tasks/${id}`), task.id)
+  await win.getByLabel('Name', { exact: true }).fill('Morning hello')
+  await win.getByRole('button', { name: 'Save', exact: true }).click()
+  await win.getByRole('button', { name: 'Saved', exact: true }).waitFor()
+  const [renamed] = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/tasks')
+  assert.deepEqual([renamed.title, renamed.nextRunAt], ['Morning hello', task.nextRunAt])
+  await win.getByRole('button', { name: 'All scheduled tasks' }).click()
+  await win.getByRole('switch', { name: 'Morning hello is on' }).click()
+  await win.locator('.task-card', { hasText: 'Paused' }).waitFor()
+
+  // Deleting it leaves its runs where they are.
+  await win.locator('.task-open', { hasText: 'Morning hello' }).click()
+  await win.getByRole('button', { name: 'Delete', exact: true }).click()
+  await win.locator('.set-row', { hasText: 'No scheduled tasks yet' }).waitFor()
+  assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).threads.filter((t) => t.taskId === task.id).length, 1)
+
+  // The main assistant is marked among the bots.
+  await win.evaluate(() => (location.hash = '/settings/bots'))
+  await win.locator('.set-link', { hasText: 'Assistant' }).locator('.pill', { hasText: 'Main assistant' }).waitFor()
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('the model picker offers every provider and its models, and picking one moves the bot to it', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()

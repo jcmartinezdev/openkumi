@@ -19,6 +19,7 @@ import * as db from './db.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
 import { listSkills, setSkill } from './skills.ts'
+import * as tasks from './tasks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
 import * as ws from './workspace.ts'
 
@@ -129,6 +130,7 @@ const route = (method: string, pattern: string, handler: Handler, raw = false) =
 
 const needBot = (id: string) => getBot(id) ?? fail(404, 'No such bot')
 const needThread = (id: string) => db.getThread(id) ?? fail(404, 'No such thread')
+const needTask = (id: string) => db.getTask(id) ?? fail(404, 'No such task')
 function fail(status: number, message: string): never {
   throw new HttpError(status, message)
 }
@@ -136,6 +138,7 @@ function fail(status: number, message: string): never {
 route('GET', '/api/state', (): AppState => ({
   bots: listBots(),
   threads: db.listThreads(),
+  tasks: db.listTasks(),
   providers: providerInfos(),
   browsers: browserStates(),
   skills: listSkills(),
@@ -145,7 +148,7 @@ route('GET', '/api/state', (): AppState => ({
   home: HOME_LABEL,
   settings: settings(),
   defaults: DEFAULTS,
-  about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN },
+  about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: tasks.TIME_ZONE },
 }))
 
 // ---- settings for the whole app
@@ -187,6 +190,7 @@ route('DELETE', '/api/bots/:id', async ([id]) => {
   // Its plugins go first, so nothing they brought is left behind for no bot.
   for (const plugin of installedPlugins(id)) await removePlugin(id, plugin)
   await mcp.closeBotConnections(id)
+  tasks.forgetBot(id)
   db.deleteBotThreads(id)
   deleteBot(id)
   emit({ type: 'plugins', plugins: listPlugins() })
@@ -298,6 +302,21 @@ route('POST', '/api/bots/:id/messages', ([id], body) => {
 route('POST', '/api/bots/:id/fresh', ([id]) => unless(() => agent.startFresh(needBot(id).id)))
 route('GET', '/api/bots/:id/search', ([id], _, { url }) => ({ matches: db.searchMessages(needBot(id).id, url.searchParams.get('q') ?? '') }))
 route('POST', '/api/threads/:id/resume', ([id]) => unless(() => agent.resume(needThread(id))))
+
+// ---- scheduled tasks: the owner may make, change, run and delete any of them
+// What the owner asked for that cannot be done (a time that has passed, a name left empty) is theirs to put right.
+const checked = <T>(act: () => T): T => {
+  try {
+    return act()
+  } catch (e: any) {
+    fail(400, e.message)
+  }
+}
+route('GET', '/api/tasks', () => db.listTasks())
+route('POST', '/api/tasks', (_, body) => checked(() => tasks.createTask(body, 'user')))
+route('PATCH', '/api/tasks/:id', ([id], body) => checked(() => tasks.updateTask(needTask(id), body)))
+route('DELETE', '/api/tasks/:id', ([id]) => tasks.deleteTask(needTask(id)))
+route('POST', '/api/tasks/:id/run', ([id]) => unless(() => tasks.runNow(needTask(id))))
 
 // ---- threads
 route('GET', '/api/threads/:id', ([id]) => ({

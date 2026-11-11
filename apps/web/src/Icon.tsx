@@ -31,6 +31,13 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   bolt: <path d="M13 3 4 14h7l-1 7 9-11h-7l1-7z" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.500 2" />
+    </>
+  ),
+  play: <path d="M8 5.500v13l10-6.500z" />,
   agents: (
     <>
       <circle cx="6" cy="6" r="2.500" />

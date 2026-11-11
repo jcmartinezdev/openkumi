@@ -614,6 +614,26 @@ a.set-link:hover { background: var(--hover); }
 .set-menu-items button { justify-content: flex-start; height: 30px; border: none; font-weight: 400; }
 .picker.environment { max-width: 130px; margin-left: 6px; }
 
+/* ---- scheduled tasks: shown in the conversation's place, built from the settings' rows */
+
+.tasks-body { grid-row: scroll / foot; grid-column: 1 / -1; min-height: 0; display: flex; flex-direction: column; }
+.task-card .task-head .set-row-main { flex-direction: row; align-items: center; gap: 12px; }
+.task-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.task-open:hover h3 { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.task-head .set-control { flex: none; }
+.task-head .err { margin-top: 8px; font-size: 12px; }
+a.task-run { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 16px 6px 60px; font-size: 13px; color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums; }
+.set-group > a.task-run:first-child { padding-left: 16px; }
+a.task-run:hover { background: var(--hover); color: var(--text); }
+a.task-run .ic:last-child { color: var(--faint); }
+a.task-more { color: var(--faint); font-size: 12px; }
+.set-input.time { width: 120px; }
+.days { display: flex; gap: 4px; }
+button.day { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 12px; font-weight: 500; }
+button.day.on, button.day.on:hover:not(:disabled) { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+.task-actions { display: flex; align-items: center; gap: 8px; margin-top: -14px; padding: 0 4px; }
+.row.tasks-link { margin-bottom: 0; }
+
 /* ---- narrow screens */
 
 .scrim { display: none; }

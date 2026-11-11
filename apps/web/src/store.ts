@@ -53,7 +53,8 @@ export function watch(key: string, canvas: HTMLCanvasElement, onSize: (size: Pag
 }
 
 // ---- routing: #/<botId> for a bot's conversation, #/<botId>/<threadId>[/<itemId>] for a subagent's
-// thread or an earlier conversation (and a message in it), #/settings/<page>/… for the settings
+// thread or an earlier conversation (and a message in it), #/tasks[/<taskId> or /new] for the
+// scheduled tasks, #/settings/<page>/… for the settings
 
 export interface Route {
   botId: string
@@ -62,12 +63,20 @@ export interface Route {
   itemId: number
   /** The path inside the settings (page, then whatever that page takes), or null when a chat is showing. */
   settings: string[] | null
+  /** The scheduled tasks are showing: [] for all of them, or [task id] or ['new']. Null otherwise. */
+  tasks: string[] | null
 }
 
 function parseHash(): Route {
   const parts = location.hash.replace(/^#\/?/, '').split('/').map((p) => decodeURIComponent(p))
-  if (parts[0] === 'settings') return { botId: '', threadId: '', itemId: 0, settings: parts.slice(1).filter(Boolean) }
-  return { botId: parts[0] ?? '', threadId: parts[1] ?? '', itemId: Number(parts[2]) || 0, settings: null }
+  if (parts[0] === 'settings') return { botId: '', threadId: '', itemId: 0, settings: parts.slice(1).filter(Boolean), tasks: null }
+  if (parts[0] === 'tasks') return { botId: '', threadId: '', itemId: 0, settings: null, tasks: parts.slice(1, 2).filter(Boolean) }
+  return { botId: parts[0] ?? '', threadId: parts[1] ?? '', itemId: Number(parts[2]) || 0, settings: null, tasks: null }
+}
+
+/** The scheduled tasks, or one of them ('new' for a task being made). */
+export function openTasks(taskId = '') {
+  location.hash = `/tasks${taskId ? `/${encodeURIComponent(taskId)}` : ''}`
 }
 
 export function navigate(botId: string, threadId = '', itemId = 0) {

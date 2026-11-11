@@ -14,7 +14,8 @@
     "./markdown": "./src/markdown.ts",
     "./page": "./src/page.ts",
     "./models": "./src/models.ts",
-    "./marks": "./src/marks.ts"
+    "./marks": "./src/marks.ts",
+    "./tasks": "./src/tasks.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

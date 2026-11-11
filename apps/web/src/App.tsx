@@ -9,6 +9,7 @@ import { NewBot } from './Modals'
 import { usePrefs } from './prefs'
 import { SettingsView } from './Settings'
 import { Sidebar } from './Sidebar'
+import { Tasks } from './Tasks'
 import { type Route, mainThread, navigate, openSettings, useRoute, useStore } from './store'
 
 export type Modal = { kind: 'new-bot' } | null
@@ -59,8 +60,8 @@ export function App() {
   // Land on the first bot when the URL names nothing that exists.
   useEffect(() => {
     // Not while the settings are showing: they may have been opened directly, with no chat underneath yet.
-    if (loaded && !current.settings && !bot && bots.length) navigate(bots[0].id)
-  }, [loaded, bot, bots, current.settings])
+    if (loaded && !current.settings && !route.tasks && !bot && bots.length) navigate(bots[0].id)
+  }, [loaded, bot, bots, current.settings, route.tasks])
 
   // Reveal a bot's browser the moment that bot starts using it.
   const previous = useRef<typeof browsers | null>(null)
@@ -79,7 +80,7 @@ export function App() {
   // accepting the access code, in which case nothing on screen would work any more.
   if (!loaded || refused) return <Gate />
 
-  const showPane = !!bot && !!paneOpen[bot.id]
+  const showPane = !!bot && !route.tasks && !!paneOpen[bot.id]
   const setPane = (botId: string, open: boolean) => setPaneOpen((all) => ({ ...all, [botId]: open }))
   const toggleBrowser = () => {
     if (!bot) return
@@ -89,13 +90,15 @@ export function App() {
 
   return (
     <div className="app">
-      <Sidebar bot={bot} thread={thread} openModal={(m) => (setNavOpen(false), setModal(m))} open={navOpen} close={() => setNavOpen(false)} />
+      <Sidebar bot={route.tasks ? undefined : bot} thread={route.tasks ? undefined : thread} tasksOpen={!!route.tasks} openModal={(m) => (setNavOpen(false), setModal(m))} open={navOpen} close={() => setNavOpen(false)} />
       {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
       <main
         className={`chat ${showPane ? 'with-pane' : ''}`}
         style={showPane && paneWidth ? ({ '--pane-width': `${paneWidth}px` } as React.CSSProperties) : undefined}
       >
-        {bot ? (
+        {route.tasks ? (
+          <Tasks path={route.tasks} openNav={() => setNavOpen(true)} />
+        ) : bot ? (
           <>
             <Chat
               // A bot's own conversation is one view, whichever thread holds it at the moment.

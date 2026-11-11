@@ -109,7 +109,7 @@ export const SUMMARISE =
 /** The conversation as plain text for the summary. Tool results are left out: the replies already say what they led to. */
 function digest(items: Item[]): string {
   return items.flatMap(({ data }) => {
-    if (data.type === 'message') return [`${data.role === 'assistant' ? 'Bot' : data.source === 'user' ? 'User' : 'Subagent report'}: ${data.text.slice(0, 6000)}`]
+    if (data.type === 'message') return [`${data.role === 'assistant' ? 'Bot' : data.source === 'user' ? 'User' : data.source === 'task' ? 'Scheduled task report' : 'Subagent report'}: ${data.text.slice(0, 6000)}`]
     if (data.type === 'function_call') return [`(the bot used ${data.name} ${data.arguments.slice(0, 160)})`]
     return []
   }).join('\n\n')

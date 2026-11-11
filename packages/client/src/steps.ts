@@ -32,6 +32,10 @@ export function describe(call: { name: string; arguments: string }): string {
     case 'message_subagent': return 'Message a subagent'
     case 'cancel_subagent': return 'Stop a subagent'
     case 'browser_upload': return `Attach ${a.path ?? 'a file'}`
+    case 'list_scheduled_tasks': return 'Check scheduled tasks'
+    case 'schedule_task': return `Schedule “${a.title ?? ''}”`
+    case 'update_scheduled_task': return a.paused === true ? 'Pause a scheduled task' : a.paused === false ? 'Resume a scheduled task' : 'Change a scheduled task'
+    case 'delete_scheduled_task': return 'Delete a scheduled task'
     case 'create_bot': return `Create bot “${a.name ?? ''}”`
     case 'list_bots': return 'List bots'
     case 'list_files': return `Look in ${a.path || 'its folder'}`

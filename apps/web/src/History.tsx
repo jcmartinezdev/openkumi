@@ -87,7 +87,7 @@ export function History({ bot, open, setOpen }: { bot: Bot; open: boolean; setOp
                   return (
                     <button key={m.itemId} className="earlier-row" onClick={() => go(m.threadId, m.itemId)}>
                       <span className="earlier-meta">
-                        <strong>{m.from === 'user' ? 'You' : m.from === 'bot' ? bot.name : 'A subagent'}</strong>
+                        <strong>{m.from === 'user' ? 'You' : m.from === 'bot' ? bot.name : m.from === 'task' ? 'A scheduled task' : 'A subagent'}</strong>
                         <span>{day(m.createdAt)}{thread?.archivedAt ? ' · earlier conversation' : ''}</span>
                       </span>
                       <span className="earlier-snippet"><Marked text={m.snippet} words={words} /></span>

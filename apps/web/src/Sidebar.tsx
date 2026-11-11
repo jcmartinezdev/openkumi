@@ -21,6 +21,8 @@ export function ago(time: number): string {
 interface Props {
   bot?: Bot
   thread?: Thread
+  /** The scheduled tasks are showing. */
+  tasksOpen: boolean
   openModal: (m: Modal) => void
   /** Drawer state on narrow screens. */
   open: boolean
@@ -28,10 +30,12 @@ interface Props {
 }
 
 /** The bots, one row each: a bot has a single conversation, so there is nothing to pick beneath it. */
-export function Sidebar({ bot, thread, openModal, open, close }: Props) {
+export function Sidebar({ bot, thread, tasksOpen, openModal, open, close }: Props) {
   const bots = useStore((s) => s.bots)
   const threads = useStore((s) => s.threads)
   const providers = useStore((s) => s.providers)
+  const taskCount = useStore((s) => s.tasks.filter((t) => t.enabled).length)
+  const runsGoing = threads.some((t) => t.kind === 'task' && t.status === 'running')
   const root = thread && rootOf(threads, thread)
   // A subagent may run as another bot; the conversation it belongs to decides which bot is current.
   const currentBotId = root?.botId ?? bot?.id
@@ -90,7 +94,7 @@ export function Sidebar({ bot, thread, openModal, open, close }: Props) {
                   aria-current={t.id === thread?.id ? 'page' : undefined}
                   onClick={close}
                 >
-                  <Icon name="agents" size={13} />
+                  <Icon name={t.kind === 'task' ? 'clock' : 'agents'} size={13} />
                   <span className="grow title">{t.title}</span>
                   <span className="meta"><StatusDot thread={t} /></span>
                 </a>
@@ -99,6 +103,11 @@ export function Sidebar({ bot, thread, openModal, open, close }: Props) {
           )
         })}
       </div>
+      <a className={`row settings tasks-link ${tasksOpen ? 'active' : ''}`} href="#/tasks" aria-current={tasksOpen ? 'page' : undefined} onClick={close}>
+        <Icon name="clock" />
+        <span className="grow">Scheduled tasks</span>
+        <span className="meta">{runsGoing ? <span className="spinner" aria-label="A task is running" /> : taskCount > 0 && <span className="time">{taskCount}</span>}</span>
+      </a>
       <button className="row settings" onClick={() => (close(), openSettings(connected ? 'general' : 'providers'))}>
         <Icon name="sliders" />
         <span className="grow">Settings</span>

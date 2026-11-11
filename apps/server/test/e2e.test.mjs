@@ -759,6 +759,131 @@ test('subagent: wait_subagents blocks and returns the report without a duplicate
   assert.ok(!(await settle(id)).some((d) => d.source === 'subagent'))
 })
 
+test('scheduled tasks: one the owner makes runs in the background beneath the conversation, and the bot passes the result on', async () => {
+  const id = await fresh()
+  const task = await api('POST', '/api/tasks', { botId: bot.id, title: 'Ping', prompt: 'say pong', schedule: { type: 'once', at: Date.now() + 1200 } })
+  assert.equal(task.createdBy, 'user')
+  assert.ok(task.nextRunAt > Date.now() && task.enabled)
+  assert.ok((await api('GET', '/api/state')).tasks.some((t) => t.id === task.id), 'the app is given the tasks with everything else')
+
+  // The run is a thread of its own under the conversation; only its result comes into the conversation.
+  const report = await until(async () => (await settle(id)).find((d) => d.source === 'task'))
+  assert.match(report.text, /^<scheduled_task_result>\nScheduled task "Ping" \(task: task_\S+, run: t_\S+\) — completed\nEcho: say pong\n<\/scheduled_task_result>$/)
+  assert.match(lastText(await settle(id)), /^Echo: <scheduled_task_result>/, 'the bot took a turn to tell the user')
+  const { threads, tasks } = await api('GET', '/api/state')
+  const run = threads.find((t) => t.taskId === task.id)
+  assert.deepEqual([run.kind, run.parentId, run.title, run.reported], ['task', id, 'Ping', true])
+  const first = (await api('GET', `/api/threads/${run.id}`)).items[0].data
+  assert.deepEqual([first.source, first.text], ['schedule', 'say pong'])
+  const done = tasks.find((t) => t.id === task.id)
+  assert.deepEqual([done.lastStatus, done.lastThreadId, done.nextRunAt], ['completed', run.id, null], 'a task that runs once does not run again')
+
+  // A run is not one of the bot's subagents.
+  assert.equal(lastText(await say(id, '!tool list_subagents {}')), 'Tool result: You have not spawned any subagents.')
+  await api('DELETE', `/api/tasks/${task.id}`)
+})
+
+test('scheduled tasks: run by hand, paused and resumed, checked, and quiet when there is nothing to report', async () => {
+  const id = await fresh()
+  const hourly = await api('POST', '/api/tasks', { botId: bot.id, title: 'Watch', prompt: '!say Nothing to report.', schedule: { type: 'interval', minutes: 60 } })
+  assert.ok(Math.abs(hourly.nextRunAt - (Date.now() + 3_600_000)) < 5000)
+
+  // Run now leaves the next run where it was. A run with nothing to say is not passed on.
+  const started = await api('POST', `/api/tasks/${hourly.id}/run`)
+  assert.equal(started.lastStatus, 'running')
+  assert.equal(started.nextRunAt, hourly.nextRunAt)
+  await until(async () => (await api('GET', '/api/state')).tasks.find((t) => t.id === hourly.id).lastStatus === 'completed')
+  await new Promise((r) => setTimeout(r, 300))
+  assert.ok(!(await settle(id)).some((d) => d.source === 'task'), 'nothing to report, so the conversation is left alone')
+
+  const paused = await api('PATCH', `/api/tasks/${hourly.id}`, { enabled: false })
+  assert.deepEqual([paused.enabled, paused.nextRunAt], [false, null])
+  const resumed = await api('PATCH', `/api/tasks/${hourly.id}`, { enabled: true, schedule: { type: 'daily', time: '7:05', days: [1, 2, 3, 4, 5] } })
+  assert.deepEqual(resumed.schedule, { type: 'daily', time: '07:05', days: [1, 2, 3, 4, 5] })
+  const next = new Date(resumed.nextRunAt)
+  assert.deepEqual([next.getHours(), next.getMinutes()], [7, 5])
+  assert.ok(next.getDay() >= 1 && next.getDay() <= 5)
+
+  const refused = async (body) => (await fetch(`${BASE}/api/tasks`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() }, body: JSON.stringify({ botId: bot.id, title: 'X', prompt: 'x', ...body }) })).status
+  assert.equal(await refused({ schedule: { type: 'once', at: Date.now() - 60_000 } }), 400, 'a time that has passed')
+  assert.equal(await refused({ schedule: { type: 'interval', minutes: 1 } }), 400, 'too often')
+  assert.equal(await refused({ schedule: { type: 'daily', time: '25:00' } }), 400)
+  assert.equal(await refused({ title: ' ', schedule: { type: 'interval', minutes: 30 } }), 400)
+  assert.equal(await refused({ botId: 'nobody', schedule: { type: 'interval', minutes: 30 } }), 400)
+
+  await api('DELETE', `/api/tasks/${hourly.id}`)
+  assert.ok(!(await api('GET', '/api/tasks')).some((t) => t.id === hourly.id))
+})
+
+test('scheduled tasks: bots schedule for themselves, and only the main assistant schedules for others or touches what it did not make', async () => {
+  const main = (await api('GET', '/api/state')).bots[0]
+  assert.equal(main.name, 'Assistant', 'the first bot is the main assistant')
+  await api('PATCH', `/api/bots/${main.id}`, { provider: 'mock' })
+  const other = await api('POST', '/api/bots', { name: 'Other', provider: 'mock' })
+  const tasks = async () => (await api('GET', '/api/tasks'))
+  const list = async (botId) => JSON.parse((await tool('list_scheduled_tasks', {}, botId)).replace(/^Tool result: /, ''))
+
+  const made = await tool('schedule_task', { title: 'Water plants', prompt: 'Remind the user to water the plants.', time: '08:00', days: ['mon', 'fri'] })
+  assert.match(made, /^Scheduled\. It is now \w{3} \d{4}-\d\d-\d\d \d\d:\d\d \(.+\)\./)
+  const own = (await tasks()).find((t) => t.title === 'Water plants')
+  assert.deepEqual([own.botId, own.createdBy, own.schedule], [bot.id, bot.id, { type: 'daily', time: '08:00', days: [1, 5] }])
+  assert.match(await tool('schedule_task', { title: 'X', prompt: 'x', in_minutes: 5, bot_id: main.id }), /^Error: Only the main assistant, Assistant, can schedule tasks for other bots/)
+  assert.match(await tool('schedule_task', { title: 'X', prompt: 'x', in_minutes: 5, every_minutes: 30 }), /^Error: Give only one of/)
+  assert.match(await tool('schedule_task', { title: 'X', prompt: 'x' }), /^Error: Say when the task runs/)
+
+  // One the owner made for this bot: it can see it, and cannot change it.
+  const owners = await api('POST', '/api/tasks', { botId: bot.id, title: 'Owner’s', prompt: 'x', schedule: { type: 'interval', minutes: 30 } })
+  const seen = await list(bot.id)
+  assert.match(seen.now, /\(.+\)$/)
+  assert.deepEqual(seen.tasks.map((t) => [t.title, t.made_by, t.you_can_change_it]), [['Water plants', 'you', true], ['Owner’s', 'the user', false]])
+  assert.match(await tool('update_scheduled_task', { id: owners.id, paused: true }), /^Error: You did not make the task "Owner’s" \(the user did\), so you cannot change or delete it\. Only the main assistant, Assistant, can\./)
+  assert.match(await tool('delete_scheduled_task', { id: owners.id }), /^Error: You did not make/)
+  // Another bot does not see them at all.
+  assert.deepEqual((await list(other.id)).tasks, [])
+  assert.match(await tool('delete_scheduled_task', { id: own.id }, other.id), /^Error: You have no scheduled task with id/)
+
+  // What it made, it changes and deletes.
+  assert.match(await tool('update_scheduled_task', { id: own.id, paused: true, every_minutes: 120 }), /"schedule": "every 2 hours",\n "paused": true/)
+  assert.equal(await tool('delete_scheduled_task', { id: own.id }), 'Deleted the task "Water plants".')
+
+  // The main assistant sees everything, changes what the owner made, and schedules for other bots.
+  assert.ok((await list(main.id)).tasks.some((t) => t.id === owners.id && t.you_can_change_it))
+  assert.match(await tool('update_scheduled_task', { id: owners.id, title: 'Renamed' }, main.id), /^Changed\./)
+  assert.match(await tool('schedule_task', { title: 'For Tester', prompt: 'x', at: '2099-01-01 09:30', bot_id: bot.id }, main.id), /"bot": "Tester \(tester\)",\n "made_by": "you"/)
+  const forTester = (await tasks()).find((t) => t.title === 'For Tester')
+  assert.deepEqual([forTester.botId, forTester.createdBy, new Date(forTester.nextRunAt).getHours()], [bot.id, main.id, 9])
+  // Tester sees it, as it is the one doing it, and cannot delete it.
+  assert.ok((await list(bot.id)).tasks.some((t) => t.id === forTester.id && t.made_by === 'Assistant' && !t.you_can_change_it))
+  assert.match(await tool('delete_scheduled_task', { id: forTester.id }), /^Error: You did not make/)
+
+  // Each bot is told what it may do.
+  assert.match(await told('!system', main.id), /You are the main assistant, so you can also schedule tasks for the other bots/)
+  assert.match(await told(), /You can change and delete only the tasks you made\./)
+
+  // A bot that is deleted takes the tasks it does with it.
+  await api('POST', '/api/tasks', { botId: other.id, title: 'Doomed', prompt: 'x', schedule: { type: 'interval', minutes: 30 } })
+  await api('DELETE', `/api/bots/${other.id}`)
+  assert.ok(!(await tasks()).some((t) => t.title === 'Doomed'))
+  for (const t of await tasks()) await api('DELETE', `/api/tasks/${t.id}`)
+})
+
+test('scheduled tasks: a run is told who set it up, and one a bot wrote is not the user’s go-ahead', async () => {
+  const id = await fresh()
+  await say(id, `!tool schedule_task ${JSON.stringify({ title: 'Self', prompt: '!system', in_minutes: 0.02 })}`)
+  const task = (await api('GET', '/api/tasks')).find((t) => t.title === 'Self')
+  const run = await until(async () => {
+    const t = (await api('GET', '/api/state')).threads.find((t) => t.taskId === task.id)
+    return t && t.status !== 'running' && (await api('GET', `/api/threads/${t.id}`)).items.length > 1 && t
+  })
+  const prompt = lastText(await settle(run.id))
+  assert.match(prompt, /# You are running a scheduled task\nThis thread is one run of the scheduled task "Self", which you scheduled\./)
+  assert.match(prompt, /written by a bot, not by the user, so it is not their go-ahead/)
+  // What it came to is passed on, and the bot answers it before it is done.
+  await until(async () => (await settle(id)).some((d) => d.source === 'task'))
+  await settle(id)
+  await api('DELETE', `/api/tasks/${task.id}`)
+})
+
 test('stop cancels a running thread and its subagents', async () => {
   const id = await fresh()
   await say(id, '!tool spawn_subagent {"name":"Doomed","task":"!slow"}')

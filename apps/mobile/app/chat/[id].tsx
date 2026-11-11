@@ -21,6 +21,9 @@ type Row =
   | { key: string; kind: 'steps'; steps: string[] }
   | { key: string; kind: 'page'; title: string; html: string; height: number }
 
+/** Who a message the user did not write is from. */
+const FROM = { parent: 'From the chat above', subagent: 'From a subagent', schedule: 'Scheduled task', task: 'From a scheduled task' }
+
 function rows(items: Item[]): Row[] {
   const failed = new Set(items.flatMap(({ data: d }) => (d.type === 'function_call_output' && d.output.startsWith('Error:') ? [d.call_id] : [])))
   const out: Row[] = []
@@ -32,7 +35,7 @@ function rows(items: Item[]): Row[] {
   for (const item of items) {
     const d = item.data
     const key = String(item.id)
-    if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : { key, kind: d.source === 'user' ? 'user' : 'notice', text: d.source === 'user' ? d.text : `From ${d.source === 'parent' ? 'the chat above' : 'a subagent'}: ${d.text}` })
+    if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text } : { key, kind: 'notice', text: `${FROM[d.source]}: ${d.text}` })
     // A page stands for the call that showed it; the call is only listed when it failed.
     else if (d.type === 'function_call' && (d.name !== 'show_page' || failed.has(d.call_id))) step(key, describe(d))
     else if (d.type === 'web_search_call') step(key, 'Search the web')
@@ -200,7 +203,7 @@ export default function Chat() {
           data={shown}
           keyExtractor={(row) => row.key}
           renderItem={({ item }) => <Line row={item} theme={theme} />}
-          ListHeaderComponent={parent ? <Text style={[styles.notice, { color: theme.faint }]}>{parent.parentId ? `A subagent of “${parent.title}”` : 'A subagent of this bot’s conversation'}</Text> : undefined}
+          ListHeaderComponent={parent ? <Text style={[styles.notice, { color: theme.faint }]}>{thread?.kind === 'task' ? 'A run of a scheduled task' : parent.parentId ? `A subagent of “${parent.title}”` : 'A subagent of this bot’s conversation'}</Text> : undefined}
           ListFooterComponent={tail}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}
           keyboardDismissMode="interactive"

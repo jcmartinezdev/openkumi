@@ -108,8 +108,8 @@ function newId(name: string): string {
   if (!slug) return `bot-${crypto.randomBytes(4).toString('hex')}`
   for (let n = 1; ; n++) {
     const id = n === 1 ? slug : `${slug}-${n}`
-    // "settings" is a page of the app, so no bot may have that address.
-    if (id !== 'settings' && !fs.existsSync(botDir(id))) return id
+    // "settings" and "tasks" are pages of the app, so no bot may have those addresses.
+    if (id !== 'settings' && id !== 'tasks' && !fs.existsSync(botDir(id))) return id
   }
 }
 

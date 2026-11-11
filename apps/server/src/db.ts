@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { HistoryMatch, Item, ItemData, Thread } from '@openbot/shared'
+import type { HistoryMatch, Item, ItemData, ScheduledTask, Thread } from '@openbot/shared'
 import { HOME, emit } from './config.ts'
 
 const db = new DatabaseSync(path.join(HOME, 'openbot.db'))
@@ -18,6 +18,11 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS items_thread ON items (thread_id, id);
   CREATE INDEX IF NOT EXISTS threads_parent ON threads (parent_id);
+  CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, title TEXT NOT NULL, prompt TEXT NOT NULL, schedule TEXT NOT NULL,
+    enabled INTEGER NOT NULL, created_by TEXT NOT NULL, next_run_at INTEGER, last_run_at INTEGER,
+    last_status TEXT, last_error TEXT, last_thread_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  );
 `)
 
 const hasColumn = (name: string) => !!db.prepare(`SELECT 1 FROM pragma_table_info('threads') WHERE name = ?`).get(name)
@@ -39,8 +44,12 @@ if (!hasColumn('archived_at')) {
   `)
 }
 
+// A run of a scheduled task works in a thread of its own, which knows which task it is for.
+if (!hasColumn('task_id')) db.exec('ALTER TABLE threads ADD COLUMN task_id TEXT')
+
 // Nothing survives a restart mid-run, so no thread can still be running.
 db.exec(`UPDATE threads SET status = 'idle' WHERE status = 'running'`)
+db.exec(`UPDATE tasks SET last_status = 'stopped' WHERE last_status = 'running'`)
 
 /** What a conversation is called until its first message names it. */
 export const UNTITLED = 'New chat'
@@ -54,6 +63,7 @@ function toThread(r: any): Thread {
     parentId: r.parent_id,
     title: r.title,
     kind: r.kind,
+    taskId: r.task_id ?? null,
     archivedAt: r.archived_at ?? null,
     status: r.status,
     model: r.model,
@@ -108,6 +118,7 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     parentId: null,
     title: UNTITLED,
     kind: 'chat',
+    taskId: null,
     archivedAt: null,
     status: 'idle',
     model: null,
@@ -117,9 +128,9 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     ...init,
   }
   db.prepare(
-    `INSERT INTO threads (id, bot_id, parent_id, title, kind, status, model, reported, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(t.id, t.botId, t.parentId, t.title, t.kind, t.status, t.model, t.reported ? 1 : 0, t.createdAt, t.updatedAt)
+    `INSERT INTO threads (id, bot_id, parent_id, title, kind, task_id, status, model, reported, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(t.id, t.botId, t.parentId, t.title, t.kind, t.taskId, t.status, t.model, t.reported ? 1 : 0, t.createdAt, t.updatedAt)
   emit({ type: 'thread.upsert', thread: t })
   return t
 }
@@ -216,7 +227,7 @@ export function searchMessages(botId: string, query: string, limit = 30): Histor
     return {
       threadId: item.threadId,
       itemId: item.id,
-      from: data.role === 'assistant' ? 'bot' : data.source === 'user' ? 'user' : 'subagent',
+      from: data.role === 'assistant' ? 'bot' : data.source === 'user' ? 'user' : data.source === 'task' ? 'task' : 'subagent',
       snippet,
       createdAt: item.createdAt,
     }
@@ -231,6 +242,70 @@ export function addItem(threadId: string, data: ItemData): Item {
   const item: Item = { id: Number(r.lastInsertRowid), threadId, data, createdAt }
   emit({ type: 'item.add', item })
   return item
+}
+
+// ---- scheduled tasks (the rules for them are in tasks.ts)
+
+function toTask(r: any): ScheduledTask {
+  return {
+    id: r.id,
+    botId: r.bot_id,
+    title: r.title,
+    prompt: r.prompt,
+    schedule: JSON.parse(r.schedule),
+    enabled: !!r.enabled,
+    createdBy: r.created_by,
+    nextRunAt: r.next_run_at,
+    lastRunAt: r.last_run_at,
+    lastStatus: r.last_status,
+    lastError: r.last_error,
+    lastThreadId: r.last_thread_id,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }
+}
+
+export const newTaskId = () => newId('task')
+
+export function listTasks(): ScheduledTask[] {
+  return db.prepare('SELECT * FROM tasks ORDER BY created_at').all().map(toTask)
+}
+
+export function getTask(id: string): ScheduledTask | undefined {
+  const r = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id)
+  return r && toTask(r)
+}
+
+/** Writes a task as it is given, new or changed. */
+export function saveTask(task: ScheduledTask): ScheduledTask {
+  const t = { ...task, updatedAt: Date.now() }
+  db.prepare(
+    `INSERT OR REPLACE INTO tasks (id, bot_id, title, prompt, schedule, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(t.id, t.botId, t.title, t.prompt, JSON.stringify(t.schedule), t.enabled ? 1 : 0, t.createdBy, t.nextRunAt, t.lastRunAt, t.lastStatus, t.lastError, t.lastThreadId, t.createdAt, t.updatedAt)
+  emit({ type: 'task.upsert', task: t })
+  return t
+}
+
+export function deleteTask(id: string) {
+  db.prepare('DELETE FROM tasks WHERE id = ?').run(id)
+  emit({ type: 'task.delete', id })
+}
+
+/** The tasks that are due by `time`, soonest first. */
+export function dueTasks(time: number): ScheduledTask[] {
+  return db.prepare('SELECT * FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(time).map(toTask)
+}
+
+/** The runs of a task, newest first. */
+export function runsOf(taskId: string): Thread[] {
+  return db.prepare('SELECT * FROM threads WHERE task_id = ? ORDER BY created_at DESC').all(taskId).map(toThread)
+}
+
+/** When the next task is due, or null when none is. */
+export function nextDue(): number | null {
+  const r = db.prepare('SELECT MIN(next_run_at) AS at FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL').get() as { at: number | null }
+  return r.at
 }
 
 export function closeDb() {

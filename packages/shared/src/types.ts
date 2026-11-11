@@ -125,23 +125,31 @@ export type ThreadStatus = 'idle' | 'running' | 'error'
 export interface Thread {
   id: string
   botId: string
-  /** Set for subagent threads: the thread that spawned this one. */
+  /** Set for subagent threads and scheduled runs: the thread they belong under. */
   parentId: string | null
   title: string
-  kind: 'chat' | 'subagent'
+  /** 'task' is one run of a scheduled task, beneath the bot's conversation. */
+  kind: 'chat' | 'subagent' | 'task'
+  /** For a run of a scheduled task: which task. */
+  taskId: string | null
   /** When the owner started fresh and left this conversation behind; null for the current one. Archived ones are read-only. */
   archivedAt: number | null
   status: ThreadStatus
   /** Model override for this thread (subagents may run on a different model). */
   model: string | null
-  /** Subagents only: whether the latest result has been delivered to the parent. */
+  /** Subagents and scheduled runs: whether the latest result has been delivered. */
   reported: boolean
   createdAt: number
   updatedAt: number
 }
 
 export type ItemData =
-  | { type: 'message'; role: 'user'; text: string; source: 'user' | 'parent' | 'subagent' }
+  /**
+   * Who a user-role message is from: the owner; the thread above, handing a subagent its task; a
+   * subagent reporting back; a scheduled task handing a run its prompt ('schedule'); or a scheduled
+   * run reporting back to the bot's conversation ('task').
+   */
+  | { type: 'message'; role: 'user'; text: string; source: 'user' | 'parent' | 'subagent' | 'schedule' | 'task' }
   | { type: 'message'; role: 'assistant'; text: string }
   | { type: 'reasoning'; summary: string; encrypted?: string | null; model?: string }
   | { type: 'function_call'; name: string; arguments: string; call_id: string }
@@ -163,12 +171,49 @@ export interface Item {
   createdAt: number
 }
 
+/**
+ * When a scheduled task runs. Times of day are in the time zone of the computer running Open Bot.
+ * 'daily' runs at `time` ("HH:MM") on the days of the week in `days` (0 is Sunday), every day when it is empty.
+ */
+export type Schedule =
+  | { type: 'once'; at: number }
+  | { type: 'daily'; time: string; days: number[] }
+  | { type: 'interval'; minutes: number }
+
+/**
+ * A prompt a bot is given at set times. Each run happens in the background, in a thread of its own
+ * beneath the bot's conversation, and what came of it is passed to the conversation for the bot to
+ * tell the user. The owner makes tasks in Settings; bots make them with their tools.
+ */
+export interface ScheduledTask {
+  id: string
+  /** The bot that does the task. */
+  botId: string
+  title: string
+  prompt: string
+  schedule: Schedule
+  /** Paused when false. */
+  enabled: boolean
+  /** Who made it: 'user' for the owner, or the id of the bot that scheduled it. */
+  createdBy: string
+  /** When it runs next. Null when it is paused, or will not run again. */
+  nextRunAt: number | null
+  lastRunAt: number | null
+  /** How the last run went. 'missed' when the computer was off or asleep at the time it was due. */
+  lastStatus: 'running' | 'completed' | 'failed' | 'stopped' | 'missed' | null
+  lastError: string | null
+  /** The thread of the last run. */
+  lastThreadId: string | null
+  createdAt: number
+  updatedAt: number
+}
+
 /** A message found by searching a bot's conversations, the current one and the archived ones. */
 export interface HistoryMatch {
   threadId: string
   itemId: number
-  /** Who said it: the owner, the bot, or a subagent reporting back. */
-  from: 'user' | 'bot' | 'subagent'
+  /** Who said it: the owner, the bot, a subagent reporting back, or a scheduled task's run reporting back. */
+  from: 'user' | 'bot' | 'subagent' | 'task'
   /** The part of the message around the first word that matched. */
   snippet: string
   createdAt: number
@@ -217,6 +262,8 @@ export interface About {
   port: number
   /** Started with --lan, so the network setting cannot be switched off from the app. */
   lanForced: boolean
+  /** The time zone scheduled tasks keep to, such as "Europe/Berlin". */
+  timeZone: string
 }
 
 export interface ProviderInfo {
@@ -259,6 +306,8 @@ export type ServerEvent =
   | { type: 'bot.delete'; id: string }
   | { type: 'thread.upsert'; thread: Thread }
   | { type: 'thread.delete'; id: string }
+  | { type: 'task.upsert'; task: ScheduledTask }
+  | { type: 'task.delete'; id: string }
   | { type: 'item.add'; item: Item }
   | { type: 'stream.delta'; threadId: string; kind: 'text' | 'reasoning'; delta: string }
   | { type: 'providers'; providers: ProviderInfo[] }
@@ -292,6 +341,7 @@ export type ClientEvent =
 export interface AppState {
   bots: Bot[]
   threads: Thread[]
+  tasks: ScheduledTask[]
   providers: ProviderInfo[]
   browsers: Record<string, BrowserState>
   skills: Skill[]

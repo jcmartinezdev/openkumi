@@ -12,7 +12,8 @@ import type { ModelEvent, ModelRequest, Provider } from './types.ts'
 /**
  * Scripted offline provider for tests and UI development (enabled with OPENBOT_MOCK=1).
  * "!tool <name> <json>" calls a tool, "!steps <n>" calls one n times in a row, "!slow" takes a few
- * seconds, "!system", "!tools" and "!sent" report what the model was sent, anything else is echoed. Asked for a summary, it gives the
+ * seconds, "!say <text>" replies with exactly that text, "!system", "!tools" and "!sent" report what
+ * the model was sent, anything else is echoed. Asked for a summary, it gives the
  * start of everything the user said in what it was to summarise.
  */
 const mock: Provider = {
@@ -57,7 +58,7 @@ const mock: Provider = {
       }
       if (text.startsWith('!slow')) await sleep(4000)
       const said = () => text.split('\n').filter((line) => /^(User|Summary): /.test(line)).map((line) => line.replace(/^Summary: /, '').slice(0, 40))
-      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : `Echo: ${text}`
+      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : text.startsWith('!say ') ? text.slice(5) : `Echo: ${text}`
     }
     for (const word of reply.split(/(?<=\s)/)) {
       await sleep(5)

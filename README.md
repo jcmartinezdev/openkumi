@@ -224,7 +224,7 @@ screens only read and write these files, so you can also edit them by hand.
       browser-profile/       its Chrome profile: cookies, logins
       mcp/<name>.json        its account with each connection
       history.git/           the record of every change to the workspace
-  openbot.db                 conversations and messages
+  openbot.db                 conversations, messages and scheduled tasks
   settings.json              app-wide settings that differ from the defaults
   auth.json                  API keys, the access code, and what plugins were set up with (owner-readable only)
   clients.json               the computers paired with this one (owner-readable only)
@@ -258,6 +258,35 @@ A conversation that never ends cannot be sent to a model whole for ever:
 
 None of this deletes anything. You still see every message, and the bot has `search_history` and
 `read_history` to look up what is no longer in front of it.
+
+### Scheduled tasks
+
+A scheduled task gives a bot a prompt at set times: once, at a time of day (every day or on
+chosen days), or every so often (every 5 minutes at most). **Scheduled tasks**, at the bottom of
+the sidebar, lists every task with its latest runs beneath it, and is where you make, change,
+pause, run and delete them. Bots make them too, with their tools.
+
+Each run is a thread of its own beneath the bot's conversation, like a subagent's. It sees nothing
+of the conversation, so a task's prompt has to stand on its own. When it is done, what it came to
+arrives in the conversation and the bot tells you about it there; a run that ends with exactly
+"Nothing to report." is not passed on, for tasks that only matter when something happened. A run
+opens like any conversation, from beneath its task, from under the bot in the sidebar while it is
+recent, or from its result in the conversation. The latest 50 runs of each task are kept.
+
+Who may do what:
+
+- You can make, change and delete any task.
+- A bot schedules tasks only for itself. It sees the tasks it does and the ones it made, and
+  changes or deletes only the ones it made.
+- The **main assistant**, the first bot (marked in **Settings → Bots**), schedules tasks for every
+  bot, and sees, changes and deletes every task.
+- A run is told who set the task up. One a bot wrote is not taken as your go-ahead: a purchase,
+  a message to send or something to delete is left for you, and said so in its result.
+
+Times of day keep to the time zone of the computer running Open Bot, also across a change of the
+clocks. When that computer was asleep or off, a run at a time of day that is more than ten minutes
+late is marked as missed and the next one is awaited; a task that runs once, or every so often,
+runs as soon as it can.
 
 ### Replies and pages
 
@@ -310,6 +339,7 @@ and the three share the client. Notion and Linear need no setup: install, then s
 | Files | `list_files`, `read_file`, `write_file`, `edit_file`, `search_files`, `move_file`, `delete_file` |
 | Its conversation | `search_history`, `read_history` |
 | Subagents | `spawn_subagent`, `wait_subagents`, `list_subagents`, `read_subagent`, `message_subagent`, `cancel_subagent` |
+| Scheduled tasks | `list_scheduled_tasks`, `schedule_task`, `update_scheduled_task`, `delete_scheduled_task` |
 | Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval` |
 | Web | `web_fetch`, plus the provider's built-in web search |
 | The conversation | `show_page` |
@@ -406,7 +436,7 @@ and from its own format.
 
 ## Not built yet
 
-Image attachments, scheduled runs, running commands in a sandbox (and with it, skills that ship
+Image attachments, running commands in a sandbox (and with it, skills that ship
 scripts), and native Anthropic/Gemini providers.
 
 ## License

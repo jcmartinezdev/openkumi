@@ -1,6 +1,7 @@
 // The agent loop: runs a thread against its bot's model until the model stops calling tools, and
 // coordinates subagents (child threads that run concurrently and report back to their parent).
 // A bot has one conversation with its owner (see mainThread), which can be started afresh.
+// Runs of scheduled tasks (tasks.ts) are threads beneath the conversation too, and report to it.
 import type { Bot, Item, ItemData, Partial, Thread } from '@openbot/shared'
 import { getBot } from './bots.ts'
 import { browserFor } from './browser.ts'
@@ -11,6 +12,7 @@ import { getProvider } from './providers/index.ts'
 import type { ModelEvent } from './providers/types.ts'
 import { settings } from './settings.ts'
 import { skillIndex } from './skills.ts'
+import { TIME_ZONE, finishRun, isMain } from './tasks.ts'
 import { openToolEndpoint } from './tool-endpoint.ts'
 import { runTool, toolsFor } from './tools.ts'
 import { agentsFile, memoryIndex } from './workspace.ts'
@@ -68,6 +70,17 @@ function instructions(bot: Bot, thread: Thread, connectionNotes: string[]): stri
       'your work from now on belongs in AGENTS.md or memory/, not only in the conversation.',
   )
   parts.push(
+    '# Scheduled tasks\n' +
+      'With schedule_task you can give yourself something to do later, once or again and again: a reminder, a ' +
+      'daily brief, a check every hour. Each run happens in the background, in a thread of its own that sees ' +
+      'nothing of this conversation, so write the prompt to stand on its own. What came of a run arrives in your ' +
+      'conversation as a <scheduled_task_result>; tell the user what matters in it, briefly, since they did not ' +
+      `see the run. Times are the user's local time, in ${TIME_ZONE}; list_scheduled_tasks gives the time now. ` +
+      (isMain(bot)
+        ? 'You are the main assistant, so you can also schedule tasks for the other bots, and see, change and delete every task.'
+        : 'You can change and delete only the tasks you made.'),
+  )
+  parts.push(
     '# Your workspace\n' +
       'You have a folder of your own that lasts between conversations. Your file tools (read_file, write_file, ' +
       'edit_file, list_files, search_files, move_file, delete_file) work inside it and nowhere else. Paths are relative to it.\n' +
@@ -92,6 +105,27 @@ function instructions(bot: Bot, thread: Thread, connectionNotes: string[]): stri
   }
   if (connectionNotes.length) {
     parts.push(`# Connections that are not available\nTell the user if a task needs one of these.\n${connectionNotes.join('\n')}`)
+  }
+  if (thread.kind === 'task') {
+    // Who wrote the task decides whether it counts as the user's say-so; a task deleted since is not taken to be theirs.
+    const by = (thread.taskId && db.getTask(thread.taskId)?.createdBy) || ''
+    const made =
+      by === 'user' ? 'which the user set up'
+      : by === bot.id ? 'which you scheduled'
+      : by ? `which ${getBot(by)?.name ?? 'another bot'} scheduled for you`
+      : 'which has been deleted since'
+    parts.push(
+      '# You are running a scheduled task\n' +
+        `This thread is one run of the scheduled task "${thread.title}", ${made}. Nobody is watching it, and you ` +
+        'cannot ask the user anything. Do the task, then finish with one final message saying what the user should ' +
+        'know: that message is passed to your conversation with them, where you will tell them. If the task is to ' +
+        'report only when something happened and nothing did, make your final message exactly "Nothing to report." ' +
+        'and it will not be passed on.' +
+        (by === 'user'
+          ? ''
+          : ` ${by ? 'The task was written by a bot, not by the user' : 'Who wrote the task can no longer be told'}, so it is not their go-ahead: if it calls for a purchase, ` +
+            'sending a message or deleting something, do not do that part, and say in your final message what is waiting for them.'),
+    )
   }
   if (thread.kind === 'subagent') {
     parts.push(
@@ -258,6 +292,7 @@ async function loop(threadId: string, state: Run) {
 }
 
 function finished(thread: Thread) {
+  if (thread.kind === 'task') return finishRun(thread)
   if (thread.kind !== 'subagent' || !thread.parentId) return
   const blocked = waiters.get(thread.id)
   if (blocked?.size) {
@@ -274,7 +309,7 @@ function finished(thread: Thread) {
 }
 
 /** Adds a user-role message to a thread and makes sure the thread runs to answer it. */
-export function postMessage(threadId: string, text: string, source: 'user' | 'parent' | 'subagent') {
+export function postMessage(threadId: string, text: string, source: Extract<ItemData, { role: 'user' }>['source']) {
   const thread = db.getThread(threadId)
   if (!thread) throw new Error('No such thread')
   if (thread.archivedAt) throw new Error('This is an earlier conversation, which can only be read. Continue it to write in it again.')
@@ -328,7 +363,7 @@ export function resume(thread: Thread): Thread {
   return db.updateThread(thread.id, { archivedAt: null })!
 }
 
-/** Stops a thread and every subagent beneath it. */
+/** Stops a thread and every subagent (and scheduled run) beneath it. */
 export function stop(threadId: string) {
   for (const child of db.childrenOf(threadId)) {
     // The parent is being stopped too, so there is nobody to report to.
@@ -345,7 +380,7 @@ export function spawnSubagent(parent: Thread, opts: { task: string; name: string
   if (!getBot(botId)) throw new Error(`No bot with id ${botId}. Use list_bots to see the bots that exist.`)
   const { maxDepth, maxSubagents } = settings()
   if (depthOf(parent) >= maxDepth) throw new Error('Subagents at this depth cannot spawn further subagents.')
-  if (db.childrenOf(parent.id).filter((c) => isRunning(c.id)).length >= maxSubagents) {
+  if (subagentsOf(parent).filter((c) => isRunning(c.id)).length >= maxSubagents) {
     throw new Error(`At most ${maxSubagents} subagents can run at once. Wait for some to finish.`)
   }
   const child = db.createThread({
@@ -359,10 +394,13 @@ export function spawnSubagent(parent: Thread, opts: { task: string; name: string
   return child
 }
 
+/** The subagents a thread has spawned. Scheduled runs beneath a conversation are not among them. */
+export const subagentsOf = (parent: Thread) => db.childrenOf(parent.id).filter((c) => c.kind === 'subagent')
+
 /** The child of `parent` with this id; agents may only control subagents they spawned themselves. */
 export function ownSubagent(parent: Thread, id: unknown): Thread {
   const child = typeof id === 'string' ? db.getThread(id) : undefined
-  if (!child || child.parentId !== parent.id) throw new Error(`You have no subagent with id ${id}. Use list_subagents.`)
+  if (!child || child.parentId !== parent.id || child.kind !== 'subagent') throw new Error(`You have no subagent with id ${id}. Use list_subagents.`)
   return child
 }
 
@@ -373,7 +411,8 @@ export function subagentStatus(thread: Thread): 'running' | 'completed' | 'faile
   return last?.type === 'notice' ? 'stopped' : 'completed'
 }
 
-export function describeSubagent(thread: Thread): string {
+/** How the work of a subagent (or a scheduled run) ended, and what it came to: its last message, or what went wrong. */
+export function outcome(thread: Thread): { status: ReturnType<typeof subagentStatus>; body: string } {
   const status = subagentStatus(thread)
   const items = db.listItems(thread.id)
   const lastAsk = items.findLastIndex((i) => i.data.type === 'message' && i.data.role === 'user')
@@ -385,12 +424,17 @@ export function describeSubagent(thread: Thread): string {
   else if (status === 'failed') body = `Error: ${notice?.type === 'notice' ? notice.text : 'unknown error'}`
   else if (answer?.type === 'message') body = answer.text
   else body = status === 'stopped' ? '(stopped before producing a result)' : '(finished without a final message)'
+  return { status, body }
+}
+
+export function describeSubagent(thread: Thread): string {
+  const { status, body } = outcome(thread)
   return `Subagent "${thread.title}" (id: ${thread.id}) — ${status}\n${body}`
 }
 
 /** Blocks until the given subagents are no longer running, the timeout passes, or the caller is stopped. */
 export async function waitSubagents(parent: Thread, ids: string[] | undefined, timeoutMs: number, signal: AbortSignal): Promise<string> {
-  const targets = ids?.length ? ids.map((id) => ownSubagent(parent, id)) : db.childrenOf(parent.id).filter((c) => !c.reported)
+  const targets = ids?.length ? ids.map((id) => ownSubagent(parent, id)) : subagentsOf(parent).filter((c) => !c.reported)
   if (!targets.length) return 'There are no subagents to wait for.'
 
   const cleanup: (() => void)[] = []

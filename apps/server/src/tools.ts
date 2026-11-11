@@ -8,6 +8,7 @@ import { settings } from './settings.ts'
 import { connectionTools } from './connections.ts'
 import * as db from './db.ts'
 import { PAGE_GUIDE, makePage } from './pages.ts'
+import * as tasks from './tasks.ts'
 import * as ws from './workspace.ts'
 
 export interface ToolContext {
@@ -172,7 +173,8 @@ const fileTools: Tool[] = [
 ]
 
 const when = (time: number) => new Date(time).toISOString().slice(0, 16).replace('T', ' ')
-const speaker = (data: Extract<ItemData, { type: 'message' }>) => (data.role === 'assistant' ? 'you' : data.source === 'user' ? 'user' : 'subagent report')
+const speaker = (data: Extract<ItemData, { type: 'message' }>) =>
+  data.role === 'assistant' ? 'you' : data.source === 'user' ? 'user' : data.source === 'task' ? 'scheduled task report' : 'subagent report'
 
 /** The bot's own conversation, as far back as it goes: what is no longer in front of the model can be looked up here. */
 const historyTools: Tool[] = [
@@ -186,7 +188,8 @@ const historyTools: Tool[] = [
     run: (a, ctx) => {
       const matches = db.searchMessages(ctx.bot.id, String(a.query ?? ''), 20)
       if (!matches.length) return 'Nothing was found. Try fewer or different words.'
-      return matches.map((m) => `[${m.itemId}] ${when(m.createdAt)} UTC, ${m.from === 'bot' ? 'you' : m.from === 'user' ? 'user' : 'subagent report'}: ${m.snippet}`).join('\n')
+      const from = { bot: 'you', user: 'user', subagent: 'subagent report', task: 'scheduled task report' }
+      return matches.map((m) => `[${m.itemId}] ${when(m.createdAt)} UTC, ${from[m.from]}: ${m.snippet}`).join('\n')
     },
   },
   {
@@ -254,7 +257,7 @@ const subagentTools: Tool[] = [
     description: 'List the subagents you have spawned in this conversation and their status.',
     parameters: params({}),
     run: (_, ctx) => {
-      const children = db.childrenOf(ctx.thread.id)
+      const children = agent.subagentsOf(ctx.thread)
       if (!children.length) return 'You have not spawned any subagents.'
       return JSON.stringify(children.map((c) => ({ id: c.id, name: c.title, status: agent.subagentStatus(c) })), null, 1)
     },
@@ -295,6 +298,74 @@ const subagentTools: Tool[] = [
       agent.stop(child.id)
       return 'Stopped.'
     },
+  },
+]
+
+// When a task runs: exactly one of these, which makes the four kinds of schedule a bot can ask for.
+const runsAt = {
+  at: str('Run once, at this local date and time, e.g. "2026-11-14 09:30"'),
+  in_minutes: { type: 'number', description: 'Run once, this many minutes from now' },
+  time: str('Run at this local time of day, "HH:MM" in 24-hour time: every day, or on the given days'),
+  days: {
+    type: 'array',
+    items: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] },
+    description: 'With time: the days of the week to run on. Omit for every day.',
+  },
+  // tasks.ts may not have loaded yet when this does (they reach each other through agent.ts), so its MIN_INTERVAL is written out.
+  every_minutes: { type: 'number', description: 'Run again and again, this many minutes apart (at least 5)' },
+}
+
+/** Scheduled tasks. Who may do what is decided in tasks.ts, not here. */
+const taskTools: Tool[] = [
+  {
+    name: 'list_scheduled_tasks',
+    description:
+      'List the scheduled tasks you can see: the ones you do and the ones you made (the main assistant sees every ' +
+      'task). Also gives the date and time now.',
+    parameters: params({}),
+    run: (_, ctx) => tasks.listAs(ctx.bot),
+  },
+  {
+    name: 'schedule_task',
+    description:
+      'Schedule a task: a prompt you will be given at a set time, or again and again. Each run happens in the ' +
+      'background, in a thread of its own that sees nothing of this conversation, so the prompt must be ' +
+      'self-contained; what came of it is passed to your conversation with the user. Give exactly one of at, ' +
+      'in_minutes, time (with days if not every day) or every_minutes. Times are the user\'s local time.',
+    parameters: params(
+      {
+        title: str('A short name, e.g. "Morning news brief"'),
+        prompt: str('Complete, self-contained instructions for each run, including what to report'),
+        ...runsAt,
+        bot_id: str('The main assistant only: the bot that does the task, if not you'),
+      },
+      ['title', 'prompt'],
+    ),
+    run: (a, ctx) => tasks.scheduleAs(ctx.bot, a),
+  },
+  {
+    name: 'update_scheduled_task',
+    description:
+      'Change a scheduled task you made (the main assistant can change any task): its name, its prompt or when it ' +
+      'runs, or pause or resume it. Giving one of at, in_minutes, time or every_minutes replaces its schedule.',
+    parameters: params(
+      {
+        id: str('The task id, from list_scheduled_tasks'),
+        title: str('A new name'),
+        prompt: str('New instructions for each run'),
+        paused: { type: 'boolean', description: 'true pauses the task, false resumes it' },
+        ...runsAt,
+        bot_id: str('The main assistant only: move the task to this bot'),
+      },
+      ['id'],
+    ),
+    run: (a, ctx) => tasks.updateAs(ctx.bot, a),
+  },
+  {
+    name: 'delete_scheduled_task',
+    description: 'Delete a scheduled task you made (the main assistant can delete any task).',
+    parameters: params({ id: str('The task id, from list_scheduled_tasks') }, ['id']),
+    run: (a, ctx) => tasks.deleteAs(ctx.bot, a.id),
   },
 ]
 
@@ -487,7 +558,7 @@ const webTools: Tool[] = [
 export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; notes: string[] }> {
   const canSpawn = agent.depthOf(thread) < settings().maxDepth
   const connected = await connectionTools(thread.botId)
-  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...browserTools, ...webTools, pageTool]
+  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...taskTools, ...browserTools, ...webTools, pageTool]
   return { tools: [...own, ...connected.tools], notes: connected.notes }
 }
 
