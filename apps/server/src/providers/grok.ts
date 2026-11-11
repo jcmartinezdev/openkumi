@@ -4,15 +4,16 @@
 // bot can do exactly what it could do on Open Bot's own loop and nothing more.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { ProviderInfo } from '@openbot/shared'
-import { type Exit, capture, cleanEnv, findBinary, lastError, lines } from './cli.ts'
+import os from 'node:os'
+import type { ModelInfo, ProviderInfo } from '@openbot/shared'
+import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
-import type { ModelEvent, Provider, TurnRequest } from './types.ts'
+import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
 const bin = () => findBinary('grok', 'OPENBOT_GROK_BIN', settings().grokPath)
 const base = { id: 'grok', name: 'Grok', kind: 'cli' as const }
 let info: ProviderInfo = { ...base, connected: false, detail: 'Checking…' }
-let models = ['default']
+let models: ModelInfo[] = [{ id: 'default', name: 'Default' }]
 
 async function refresh() {
   const program = bin()
@@ -24,13 +25,45 @@ async function refresh() {
     return
   }
   // "grok models" says who is signed in, then lists the models: "  * grok-4.7 (default)", "  - grok-4.6".
+  const version = await versionOf(program)
   const { stdout } = await capture(program, ['models'])
   const listed = [...stdout.matchAll(/^\s*[*-]\s+(\S+)/gm)].map((m) => m[1])
-  if (listed.length) models = ['default', ...listed]
+  if (listed.length) {
+    const known = described()
+    const one = (id: string): ModelInfo => known.get(id) ?? { id, name: id }
+    // The one it uses by default leads the list, under that role, and is not listed a second time.
+    const usual = stdout.match(/^Default model:\s*(\S+)/m)?.[1]
+    models = [usual ? { ...one(usual), id: 'default' } : { id: 'default', name: 'Default' }, ...listed.filter((id) => id !== usual).map(one)]
+  }
   const account = stdout.match(/logged in with ([^.\n]+(?:\.[a-z]+)?)/i)?.[1]
   info = account || process.env.XAI_API_KEY
-    ? { ...base, connected: true, detail: account ? `Signed in with ${account}` : 'Using an xAI API key', path: program }
-    : { ...base, connected: false, detail: 'Installed, not signed in', hint: 'Run “grok login” in a terminal on this computer.', path: program }
+    ? { ...base, connected: true, detail: account ? `Signed in with ${account}` : 'Using an xAI API key', path: program, version }
+    : { ...base, connected: false, detail: 'Installed, not signed in', hint: 'Run “grok login” in a terminal on this computer.', path: program, version }
+}
+
+/** What Grok's own list of models says about each: its name, and the reasoning levels it takes. */
+function described(): Map<string, ModelInfo> {
+  const found = new Map<string, ModelInfo>()
+  try {
+    const file = path.join(process.env.GROK_HOME ?? path.join(os.homedir(), '.grok'), 'models_cache.json')
+    const kept = JSON.parse(fs.readFileSync(file, 'utf8')).models
+    for (const entry of Object.values<any>(kept ?? {})) {
+      const info = entry?.info
+      if (!info?.id || info.hidden) continue
+      const levels: { value?: string; default?: boolean }[] = Array.isArray(info.reasoning_efforts) ? info.reasoning_efforts : []
+      const takes = efforts(levels.map((l) => l.value))
+      found.set(info.id, {
+        id: info.id,
+        name: info.name || info.id,
+        ...(info.description ? { description: info.description } : {}),
+        efforts: takes,
+        ...(takes.length ? { defaultEffort: efforts([levels.find((l) => l.default)?.value])[0] } : {}),
+      })
+    }
+  } catch {
+    // Without the list the models are known by their ids alone.
+  }
+  return found
 }
 
 // Grok only takes an MCP server from a settings file in the folder it is started in, and only once

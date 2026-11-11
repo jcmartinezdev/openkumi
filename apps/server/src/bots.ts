@@ -15,7 +15,7 @@ import { enabledSkills } from './skills.ts'
 import { scaffold } from './workspace.ts'
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
-const EFFORTS = ['', 'low', 'medium', 'high']
+const EFFORTS = ['', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 /** What a bot runs on when nothing says, and nothing is connected to choose from. */
 const FALLBACK = 'codex'
 const file = (id: string) => path.join(botDir(id), 'bot.md')

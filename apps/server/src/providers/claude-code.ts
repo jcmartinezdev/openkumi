@@ -2,14 +2,98 @@
 // turn; it is signed in with the user's own account, runs the model-and-tools loop itself, and
 // reaches the bot's tools over MCP. All of its built-in tools are switched off, so the bot can do
 // exactly what it could do on Open Bot's own loop and nothing more.
-import type { ProviderInfo } from '@openbot/shared'
-import { type Exit, capture, cleanEnv, findBinary, lastError, lines } from './cli.ts'
+import { spawn } from 'node:child_process'
+import os from 'node:os'
+import readline from 'node:readline'
+import type { ModelInfo, ProviderInfo } from '@openbot/shared'
+import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
-import type { ModelEvent, Provider, TurnRequest } from './types.ts'
+import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
 const bin = () => findBinary('claude', 'OPENBOT_CLAUDE_BIN', settings().claudePath)
 const base = { id: 'claude-code', name: 'Claude Code', kind: 'cli' as const }
 let info: ProviderInfo = { ...base, connected: false, detail: 'Checking…' }
+
+/** What is offered when the program cannot be asked: the names that always point at the current model of each kind. */
+const USUAL: ModelInfo[] = [
+  { id: 'default', name: 'Default' },
+  { id: 'opus', name: 'Claude Opus' },
+  { id: 'sonnet', name: 'Claude Sonnet' },
+  { id: 'haiku', name: 'Claude Haiku' },
+]
+let models = USUAL
+let askedAt = 0
+/** The question to the program that is under way, if one is. */
+let asking: Promise<void> | null = null
+
+/** One model as Claude Code describes it to its own apps. */
+interface Offered {
+  value: string
+  resolvedModel?: string
+  displayName?: string
+  description?: string
+  supportedEffortLevels?: string[]
+}
+
+/**
+ * Asks the program which models it offers, the way its own apps do: it is started as for a
+ * conversation and sent a question about itself in place of a message. Nothing goes to a model.
+ */
+function askModels(program: string): Promise<ModelInfo[] | null> {
+  return new Promise((resolve) => {
+    const proc = spawn(program, ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--setting-sources', ''], {
+      cwd: os.tmpdir(),
+      env: cleanEnv({ DISABLE_AUTOUPDATER: '1' }),
+      stdio: ['pipe', 'pipe', 'ignore'],
+    })
+    let answered = false
+    const answer = (found: ModelInfo[] | null) => {
+      if (answered) return
+      answered = true
+      clearTimeout(late)
+      proc.kill('SIGTERM')
+      resolve(found)
+    }
+    const late = setTimeout(() => answer(null), 20_000)
+    proc.on('error', () => answer(null))
+    proc.on('close', () => answer(null))
+    proc.stdin.on('error', () => {})
+    readline.createInterface({ input: proc.stdout }).on('line', (line) => {
+      try {
+        const event = JSON.parse(line)
+        if (event.type === 'control_response') answer(named(event.response?.response?.models))
+      } catch {
+        // Not a line of its protocol.
+      }
+    })
+    proc.stdin.write(JSON.stringify({ type: 'control_request', request_id: 'models', request: { subtype: 'initialize' } }) + '\n')
+  })
+}
+
+/** Turns the program's own list into Open Bot's: one entry per model, the default first, earlier models marked. */
+function named(offered: unknown): ModelInfo[] | null {
+  if (!Array.isArray(offered) || !offered.length) return null
+  const list = offered as Offered[]
+  const one = (m: Offered, id = m.value): ModelInfo => {
+    const levels = efforts(m.supportedEffortLevels ?? [])
+    return { id, name: `Claude ${m.displayName ?? m.value}`, ...(m.description ? { description: m.description } : {}), efforts: levels }
+  }
+  // "default" is a role, not a model: it is shown as the model it stands for.
+  const usual = list.find((m) => m.value === 'default')
+  const stands = usual && list.find((m) => m !== usual && m.resolvedModel === usual.resolvedModel)
+  const out: ModelInfo[] = [usual ? (stands ? one(stands, 'default') : { ...one(usual), name: 'Default' }) : { id: 'default', name: 'Default' }]
+  const seen = new Set([usual?.resolvedModel])
+  /** Opus, Sonnet, Haiku…: a second model of a kind is an earlier one. */
+  const kinds = new Set([stands?.displayName?.split(' ')[0]])
+  for (const m of list) {
+    if (m === usual || seen.has(m.resolvedModel ?? m.value)) continue
+    seen.add(m.resolvedModel ?? m.value)
+    const kind = (m.displayName ?? m.value).split(' ')[0]
+    out.push({ ...one(m), ...(kinds.has(kind) ? { older: true } : {}) })
+    kinds.add(kind)
+  }
+  return out
+}
 
 async function refresh() {
   const program = bin()
@@ -20,17 +104,25 @@ async function refresh() {
       : { ...base, connected: false, detail: 'Not installed', hint: 'Install Claude Code on this computer, then run “claude” in a terminal and sign in.' }
     return
   }
+  const version = await versionOf(program)
   const { stdout } = await capture(program, ['auth', 'status'])
   let status: Record<string, any> = {}
   try {
     status = JSON.parse(stdout)
   } catch {}
   if (!status.loggedIn) {
-    info = { ...base, connected: false, detail: 'Installed, not signed in', hint: 'Run “claude” in a terminal on this computer and sign in.', path: program }
+    info = { ...base, connected: false, detail: 'Installed, not signed in', hint: 'Run “claude” in a terminal on this computer and sign in.', path: program, version }
     return
   }
   const plan = status.subscriptionType ? `${String(status.subscriptionType).replace(/^./, (c) => c.toUpperCase())} plan` : 'API key'
-  info = { ...base, connected: true, detail: [status.email, plan].filter(Boolean).join(' · '), path: program }
+  // Asking for the models starts the program, so it is not done on every look: the list changes rarely.
+  if (Date.now() - askedAt > 10 * 60_000) {
+    askedAt = Date.now()
+    asking = askModels(program)
+      .then((found) => void (models = found ?? models))
+      .finally(() => (asking = null))
+  }
+  info = { ...base, connected: true, detail: [status.email, plan].filter(Boolean).join(' · '), path: program, version }
 }
 
 async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
@@ -101,8 +193,8 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
 export const claudeCode: Provider = {
   id: base.id,
   info: () => info,
-  // Aliases that always point at the current model of each family.
-  models: async () => ['default', 'fable', 'opus', 'sonnet', 'haiku'],
+  // Whoever asks while the program is being asked waits for its answer rather than getting the stand-in list.
+  models: async () => (await asking, models),
   turn,
   refresh,
 }

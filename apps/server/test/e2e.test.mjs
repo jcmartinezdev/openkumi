@@ -47,17 +47,18 @@ async function settle(threadId, timeoutMs = 30_000) {
 }
 
 const lastText = (items) => items.findLast((d) => d.type === 'message' && d.role === 'assistant')?.text
-const newThread = async (botId = bot.id) => (await api('POST', `/api/bots/${botId}/threads`)).id
+/** Starts a bot's conversation afresh and gives its id, so that a test begins with nothing said. */
+const fresh = async (botId = bot.id) => (await api('POST', `/api/bots/${botId}/fresh`)).id
 const botPath = (...parts) => path.join(home, 'bots', bot.id, ...parts)
 
 /** Calls one tool through the scripted model and returns what the tool gave back. */
 async function tool(name, args, botId = bot.id) {
-  const items = await say(await newThread(botId), `!tool ${name} ${JSON.stringify(args)}`)
+  const items = await say(await fresh(botId), `!tool ${name} ${JSON.stringify(args)}`)
   return items.findLast((d) => d.type === 'function_call_output').output
 }
 
 /** What the model is told (its system prompt) or offered (its tool names) for a bot right now. */
-const told = async (what = '!system', botId = bot.id) => lastText(await say(await newThread(botId), what))
+const told = async (what = '!system', botId = bot.id) => lastText(await say(await fresh(botId), what))
 
 async function until(check, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs
@@ -163,16 +164,126 @@ test('every request needs the access code, also from this computer, and there ar
   assert.equal(await opens(`ws://127.0.0.1:${PORT}/ws?token=${token}`), true)
 })
 
-test('chat: streams a reply and titles the thread', async () => {
-  const id = await newThread()
+test('chat: streams a reply, and the conversation is named after what it began with', async () => {
+  const id = await fresh()
   const items = await say(id, 'hello there')
   assert.equal(lastText(items), 'Echo: hello there')
   const { thread } = await api('GET', `/api/threads/${id}`)
   assert.equal(thread.title, 'hello there')
 })
 
+test('a bot has one conversation: messages go to it, starting fresh sets it aside, and an earlier one can be continued', async () => {
+  const one = await api('POST', '/api/bots', { name: 'Single', provider: 'mock' })
+  const conversations = async () => (await api('GET', '/api/state')).threads.filter((t) => t.botId === one.id && !t.parentId)
+  assert.deepEqual(await conversations(), [], 'nothing is kept until something is said')
+
+  // Whatever is sent to the bot lands in the same conversation.
+  const first = await api('POST', `/api/bots/${one.id}/messages`, { text: 'the code word is heron' })
+  await settle(first.id)
+  assert.equal((await api('POST', `/api/bots/${one.id}/messages`, { text: 'second message' })).id, first.id)
+  assert.deepEqual((await settle(first.id)).filter((d) => d.type === 'message').map((d) => d.text), ['the code word is heron', 'Echo: the code word is heron', 'second message', 'Echo: second message'])
+  assert.deepEqual((await conversations()).map((t) => [t.id, t.archivedAt, t.title]), [[first.id, null, 'the code word is heron']])
+
+  // Starting fresh sets it aside, to be read only, and begins an empty one. Doing so again changes nothing more.
+  const next = await api('POST', `/api/bots/${one.id}/fresh`)
+  assert.notEqual(next.id, first.id)
+  assert.equal((await api('POST', `/api/bots/${one.id}/fresh`)).id, next.id)
+  const [old, current] = await conversations()
+  assert.ok(old.id === first.id && old.archivedAt > 0 && current.id === next.id && current.archivedAt === null)
+  await assert.rejects(api('POST', `/api/threads/${first.id}/messages`, { text: 'hello?' }), /earlier conversation, which can only be read/)
+  assert.equal(lastText(await say(next.id, '!sent')), 'user: !sent', 'the bot starts with nothing in front of it')
+
+  // It cannot be set aside while the bot is at work in it.
+  await api('POST', `/api/bots/${one.id}/messages`, { text: '!slow' })
+  await assert.rejects(api('POST', `/api/bots/${one.id}/fresh`), /still working/)
+  await assert.rejects(api('POST', `/api/threads/${first.id}/resume`), /still working/)
+  await api('POST', `/api/threads/${next.id}/stop`)
+  await settle(next.id)
+
+  // Continuing the earlier one swaps the two, and the bot has it in front of it again.
+  const resumed = await api('POST', `/api/threads/${first.id}/resume`)
+  assert.deepEqual([resumed.id, resumed.archivedAt], [first.id, null])
+  assert.deepEqual((await conversations()).map((t) => [t.id, t.archivedAt === null]), [[first.id, true], [next.id, false]])
+  assert.match(lastText(await say(first.id, '!sent')), /^user: the code word is heron\nassistant: Echo: the code word is heron\n/)
+  assert.equal((await api('POST', `/api/bots/${one.id}/messages`, { text: 'back again' })).id, first.id)
+  await settle(first.id)
+})
+
+test('what is said while the bot is working is answered when it is done', async () => {
+  const id = await fresh()
+  await api('POST', `/api/threads/${id}/messages`, { text: '!slow first' })
+  await new Promise((r) => setTimeout(r, 200))
+  await api('POST', `/api/threads/${id}/messages`, { text: 'second' })
+  assert.deepEqual((await settle(id)).filter((d) => d.type === 'message').map((d) => d.text), ['!slow first', 'second', 'Echo: !slow first', 'Echo: second'])
+})
+
+test('history: the owner and the bot find what was said earlier, also in conversations that were set aside', async () => {
+  const one = await api('POST', '/api/bots', { name: 'Rememberer', provider: 'mock' })
+  const other = await api('POST', '/api/bots', { name: 'Stranger', provider: 'mock' })
+  const first = await api('POST', `/api/bots/${one.id}/messages`, { text: 'The dentist appointment is on 14 March at 9:30.' })
+  await settle(first.id)
+  await say(await fresh(one.id), 'Unrelated: 100% of the plants need water.')
+  const search = async (words, botId = one.id) => (await api('GET', `/api/bots/${botId}/search?q=${encodeURIComponent(words)}`)).matches
+
+  // Every word has to be there, in any order and in capitals or not; the newest match comes first.
+  const matches = await search('MARCH dentist')
+  assert.deepEqual(matches.map((m) => [m.threadId, m.from]), [[first.id, 'bot'], [first.id, 'user']])
+  assert.equal(matches[1].snippet, 'The dentist appointment is on 14 March at 9:30.')
+  assert.deepEqual(await search('dentist plants'), [])
+  // Signs that mean something to the database are looked for as they are written.
+  assert.equal((await search('100%')).length, 2)
+  assert.equal((await search('1_0%')).length, 0)
+  assert.deepEqual(await search(''), [])
+  assert.deepEqual(await search('dentist', other.id), [], 'another bot\'s conversations are not searched')
+
+  // The bot has the same reach through its tools, from a conversation in which none of it was said.
+  const found = await tool('search_history', { query: 'dentist' }, one.id)
+  const line = found.match(/^\[(\d+)\] \d{4}-\d\d-\d\d \d\d:\d\d UTC, user: The dentist appointment is on 14 March at 9:30\.$/m)
+  assert.ok(line, found)
+  const read = await tool('read_history', { id: Number(line[1]), before: 0, after: 1 }, one.id)
+  assert.match(read, /^\[\d+\] [^\n]+ UTC, user:\nThe dentist appointment is on 14 March at 9:30\.\n\n\[\d+\] [^\n]+ UTC, you:\nEcho: The dentist appointment is on 14 March at 9:30\.$/)
+  assert.match(await tool('read_history', { id: Number(line[1]) }, other.id), /^Error: There is no message with id \d+ in your conversation/)
+  assert.match(await told('!system', one.id), /# Your conversation\nYou have one ongoing conversation with the user/)
+})
+
+test('a long conversation is shortened for the model: a summary stands in for its older part, and nothing is deleted', async () => {
+  const one = await api('POST', '/api/bots', { name: 'Talker', provider: 'mock' })
+  const { defaults } = await api('GET', '/api/state')
+  // As low as the limit goes, which leaves about a thousand tokens for the conversation itself.
+  await api('PATCH', '/api/settings', { historyLimit: 1 })
+  try {
+    const { id } = await api('POST', `/api/bots/${one.id}/messages`, { text: 'The code word is heron.' })
+    await settle(id)
+    // Each of these, with its echo, is about nine hundred tokens.
+    for (const n of [1, 2, 3]) await say(id, `${n} ${'lorem ipsum '.repeat(150)}`)
+    const items = await settle(id)
+    const summaries = items.filter((d) => d.type === 'summary')
+    assert.equal(summaries.length, 2, 'once when the second long message did not fit, and again for the third')
+    // The second summary is made from the first one and what was said since.
+    assert.match(summaries[1].text, /^Summary: User: The code word is heron\. \/ User: 1 [^/]*\/ User: 2 lorem ipsum/)
+
+    // The model is sent the summary and what came after it, not the whole conversation.
+    const sent = lastText(await say(id, '!sent')).split('\n')
+    assert.match(sent[0], /^user: \[The earlier part of this conversation is no longer shown to you\. A summary of it:\] Summary: User: The code word is heron\./)
+    assert.deepEqual(sent.slice(1).map((l) => l.slice(0, 24)), ['user: 3 lorem ipsum lore', 'assistant: Echo: 3 lorem', 'user: !sent'])
+
+    // Everything that was said is still there, to be read and to be found.
+    assert.equal(items.filter((d) => d.type === 'message').length, 8)
+    assert.equal((await api('GET', `/api/bots/${one.id}/search?q=heron`)).matches.at(-1).snippet, 'The code word is heron.')
+
+    // An engine that takes the conversation over is given the summary and what came after it.
+    await api('PATCH', `/api/bots/${one.id}`, { provider: 'claude-code' })
+    const moved = lastText(await say(id, 'what was the code word?'))
+    assert.match(moved, /^Echo \(turn 1\): This conversation was already under way\.\s+A summary of its earlier part:\s+Summary: User: The code word is heron\./)
+    assert.match(moved, /What was said most recently:\s+User: 3 lorem ipsum[\s\S]*Look them up with search_history when they matter\.[\s\S]*The newest message:\s+what was the code word\?$/)
+    assert.ok(!moved.includes('User: 1 lorem'))
+  } finally {
+    await api('PATCH', '/api/settings', { historyLimit: defaults.historyLimit })
+  }
+})
+
 test('bots can be created from chat', async () => {
-  const id = await newThread()
+  const id = await fresh()
   const items = await say(id, '!tool create_bot {"name":"Researcher","instructions":"Dig deep.","emoji":"🔎"}')
   assert.match(lastText(items), /Created bot/)
   const { bots } = await api('GET', '/api/state')
@@ -451,11 +562,21 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
     [providers['claude-code'], providers.codex, providers.grok].map((p) => [p.kind, p.connected, p.detail]),
     [['cli', true, 'test@example.com · Pro plan'], ['cli', true, 'Signed in with ChatGPT'], ['cli', true, 'Signed in with grok.com']],
   )
-  assert.deepEqual(await api('GET', '/api/providers/grok/models'), ['default', 'grok-test', 'grok-test-fast'])
+  // Each engine says which models it offers, by the names and versions it gives them itself. The
+  // one it uses by default leads the list; an earlier model of a kind that has a newer one is marked.
+  const offered = async (id) => (await api('GET', `/api/providers/${id}/models`)).map((m) => [m.id, m.name, ...(m.older ? ['older'] : [])])
+  assert.deepEqual(await offered('grok'), [['default', 'grok-test'], ['grok-test-fast', 'grok-test-fast']])
+  assert.deepEqual(await offered('claude-code'), [['default', 'Claude Opus 9'], ['sonnet', 'Claude Sonnet 9'], ['haiku', 'Claude Haiku 9'], ['claude-sonnet-8', 'Claude Sonnet 8', 'older']])
+  // ...and how hard each can be asked to think.
+  const claude = await api('GET', '/api/providers/claude-code/models')
+  assert.deepEqual(claude.map((m) => m.efforts), [['low', 'medium', 'high', 'xhigh', 'max'], ['low', 'medium', 'high', 'xhigh', 'max'], [], ['low', 'medium', 'high']])
+  assert.equal(claude[0].description, 'For complex work')
+  // Each says which version of its program is installed, and where.
+  assert.deepEqual([providers['claude-code'], providers.codex, providers.grok].map((p) => [p.version, path.basename(p.path)]), [['2.0.0', 'fake-claude.mjs'], ['0.9.0', 'fake-codex.mjs'], ['1.2.3', 'fake-grok.mjs']])
 
   for (const engine of ['claude-code', 'codex', 'grok']) {
     const runner = await api('POST', '/api/bots', { name: `On ${engine}`, provider: engine, purpose: 'Likes brevity.' })
-    const id = await newThread(runner.id)
+    const id = await fresh(runner.id)
     const reply = async (text) => lastText(await say(id, text))
 
     // The engine keeps the conversation: the second turn continues the first one's session.
@@ -493,7 +614,7 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
 
 test('engines: a thread can move to another engine, and the tool address only works during a turn', async () => {
   const runner = await api('POST', '/api/bots', { name: 'Mover', provider: 'claude-code' })
-  const id = await newThread(runner.id)
+  const id = await fresh(runner.id)
   assert.equal(lastText(await say(id, 'the code word is heron')), 'Echo (turn 1): the code word is heron')
 
   // The new engine has no record of the conversation, so it is given what was said so far.
@@ -530,6 +651,13 @@ test('local models: a model server on this computer is found and runs a bot, wit
     const request = JSON.parse(body)
     asked.push(request)
     const last = request.messages.at(-1)
+    // Like a model with a small window, it refuses a conversation that is too long for it.
+    const length = request.messages.slice(1).reduce((sum, m) => sum + (m.content?.length ?? 0), 0)
+    if (length > 6000) return void res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: "This model's maximum context length is 1500 tokens." } }))
+    if (request.messages[0].content.startsWith('You are given the earlier part of a conversation')) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      return void res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: 'They spoke of herons.' } }] })}\n\ndata: [DONE]\n\n`)
+    }
     const delta = last.role === 'tool'
       ? { content: `The tool said: ${last.content}` }
       : last.content.startsWith('save')
@@ -550,16 +678,24 @@ test('local models: a model server on this computer is found and runs a bot, wit
     await api('PATCH', '/api/settings', { localUrl: `http://127.0.0.1:${fake.address().port}/v1/` })
     await until(async () => (await local()).connected)
     assert.deepEqual([(await local()).kind, (await local()).detail], ['local', `127.0.0.1:${fake.address().port} · 1 model`])
-    assert.deepEqual(await api('GET', '/api/providers/local/models'), ['tiny-local'])
+    assert.deepEqual(await api('GET', '/api/providers/local/models'), [{ id: 'tiny-local', name: 'tiny-local' }])
 
     const runner = await api('POST', '/api/bots', { name: 'Local runner', provider: 'local', model: 'tiny-local' })
-    const id = await newThread(runner.id)
+    const id = await fresh(runner.id)
     assert.equal(lastText(await say(id, 'hello')), 'Local echo: hello')
     // The model is given the bot's tools, and what it calls is carried out here.
     assert.equal(lastText(await say(id, 'save a note')), 'The tool said: Saved memory/local.md.')
     assert.equal(fs.readFileSync(path.join(home, 'bots', runner.id, 'workspace', 'memory', 'local.md'), 'utf8'), 'kept here')
     assert.deepEqual([asked[0].model, asked[0].messages[0].role, asked[0].tools.some((t) => t.function.name === 'write_file')], ['tiny-local', 'system', true])
     assert.equal(asked.every((request) => !request.headers), true)
+
+    // When the model refuses the conversation for its length, the older part is summarised and it is asked again.
+    const long = await fresh(runner.id)
+    for (const n of [1, 2]) await say(long, `${n} ${'heron '.repeat(250)}`)
+    const items = await say(long, 'and now?')
+    assert.equal(lastText(items), 'Local echo: and now?')
+    assert.deepEqual(items.filter((d) => d.type === 'summary').map((d) => d.text), ['They spoke of herons.'])
+    assert.ok(!items.some((d) => d.type === 'notice'), 'the refusal is not shown as a failure')
   } finally {
     await api('PATCH', '/api/settings', { localUrl: '' })
     fake.close()
@@ -567,7 +703,7 @@ test('local models: a model server on this computer is found and runs a bot, wit
 })
 
 test('subagent: result is pushed to the parent when it finishes', async () => {
-  const id = await newThread()
+  const id = await fresh()
   await say(id, '!tool spawn_subagent {"name":"Worker","task":"say hi"}')
   // The parent finished its turn; the subagent's completion must wake it up again.
   const deadline = Date.now() + 10_000
@@ -587,7 +723,7 @@ test('subagent: result is pushed to the parent when it finishes', async () => {
 })
 
 test('subagent: wait_subagents blocks and returns the report without a duplicate notification', async () => {
-  const id = await newThread()
+  const id = await fresh()
   await api('POST', `/api/threads/${id}/messages`, { text: '!tool spawn_subagent {"name":"Slow","task":"!slow work"}' })
   await new Promise((r) => setTimeout(r, 300))
   const items = await say(id, '!tool wait_subagents {}')
@@ -597,7 +733,7 @@ test('subagent: wait_subagents blocks and returns the report without a duplicate
 })
 
 test('stop cancels a running thread and its subagents', async () => {
-  const id = await newThread()
+  const id = await fresh()
   await say(id, '!tool spawn_subagent {"name":"Doomed","task":"!slow"}')
   await api('POST', `/api/threads/${id}/messages`, { text: '!slow' })
   await new Promise((r) => setTimeout(r, 200))
@@ -613,7 +749,7 @@ test('stop cancels a running thread and its subagents', async () => {
 test('browser: navigate, snapshot refs, type and click', async () => {
   const html = `<title>Form</title><h1>Sign up</h1><input placeholder="Your name" id="n">
     <button onclick="document.title='Hi '+document.getElementById('n').value">Greet</button>`
-  const id = await newThread()
+  const id = await fresh()
   const url = 'data:text/html,' + encodeURIComponent(html)
   let items = await say(id, `!tool browser_navigate ${JSON.stringify({ url })}`, 60_000)
   const snap = items.findLast((d) => d.type === 'function_call_output').output
@@ -674,7 +810,7 @@ test('settings: changes are checked, kept in settings.json, and take effect', as
   // A provider that is switched off is marked so, and a bot set to it says why it cannot answer.
   await api('PATCH', '/api/settings', { disabledProviders: ['mock'] })
   assert.equal((await api('GET', '/api/state')).providers.find((p) => p.id === 'mock').enabled, false)
-  assert.deepEqual((await say(await newThread(made.id), 'hello')).at(-1), { type: 'notice', level: 'error', text: 'Mock (offline testing) is switched off in Settings.' })
+  assert.deepEqual((await say(await fresh(made.id), 'hello')).at(-1), { type: 'notice', level: 'error', text: 'Mock (offline testing) is switched off in Settings.' })
 
   // A bot's own instructions are cut off at the size set here.
   await api('PATCH', '/api/settings', { disabledProviders: [], instructionsLimit: 2000 })
@@ -752,7 +888,7 @@ test('access: another computer is let in by pairing, with a key of its own that 
   assert.equal((await api('GET', '/api/state')).bots.length > 0, true, 'and this computer is still served')
 })
 
-test('all chats can be deleted, leaving the bots as they are', async () => {
+test('all conversations can be deleted, leaving the bots as they are', async () => {
   const before = await api('GET', '/api/state')
   assert.ok(before.threads.length > 0)
   await api('DELETE', '/api/threads')

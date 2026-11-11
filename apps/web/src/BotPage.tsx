@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Bot, Connection, ConnectionStatus, Effort, FileEntry, HistoryEntry, Skill } from '@openbot/shared'
 import { Icon } from './Icon'
-import { useModels } from './models'
+import { EFFORT_LABEL, effortsOf, useModels } from './models'
 import { ago } from './Sidebar'
 import { Field, Page, Pick, Row, Section, Switch, onServer } from './settingsUi'
 import { api, download, openSettings, refreshSkills, request, useStore } from './store'
@@ -65,10 +65,19 @@ function General({ bot }: { bot: Bot }) {
   // What the bot could run on: everything that is ready, plus what it runs on now.
   const choices = providers.filter((p) => (p.connected && p.enabled !== false) || p.id === bot.provider)
   // The first model is the provider's default, stored as "" so the bot follows it if it changes.
-  const modelOptions = [['', models[0] ? `Default (${models[0]})` : 'Default'] as const, ...[...new Set([...models.slice(1), ...(bot.model ? [bot.model] : [])])].map((m) => [m, m] as const)]
+  const modelOptions = [
+    ['', models[0] && models[0].name !== 'Default' ? `${models[0].name} (default)` : 'Default'] as const,
+    ...models.slice(1).map((m) => [m.id, m.name] as const),
+    // A model the bot was given that the provider no longer lists is still its model.
+    ...(bot.model && !models.some((m) => m.id === bot.model) ? [[bot.model, bot.model] as const] : []),
+  ]
+  // The levels the bot's model takes, plus the one it has now if that is not among them.
+  const model = models.find((m) => m.id === bot.model) ?? models[0]
+  const levels = [...new Set([...effortsOf(model), ...(bot.effort ? [bot.effort] : [])])] as Exclude<Effort, ''>[]
+  const effortOptions = [['', model?.defaultEffort ? `Auto (${EFFORT_LABEL[model.defaultEffort]})` : 'Auto'] as const, ...levels.map((level) => [level, EFFORT_LABEL[level]] as const)]
 
   const remove = async () => {
-    if (!confirm(`Delete ${bot.name}? Its chats, files, memory and saved logins are removed permanently.`)) return
+    if (!confirm(`Delete ${bot.name}? Its conversations, files, memory and saved logins are removed permanently.`)) return
     // The page goes back to the list of bots by itself once this bot is gone.
     await run(() => api('DELETE', `/api/bots/${bot.id}`))
   }
@@ -104,7 +113,7 @@ function General({ bot }: { bot: Bot }) {
         <Row
           title="Reasoning effort"
           description="How long the model may think before it answers."
-          control={<Pick<Effort> label="Reasoning effort" value={bot.effort} options={[['', 'Auto'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High']]} onChange={(effort) => save({ effort })} />}
+          control={<Pick<Effort> label="Reasoning effort" value={bot.effort} options={effortOptions} onChange={(effort) => save({ effort })} />}
         />
         <Row title="Web search" description="Use the model’s built-in search." control={<Switch label="Web search" checked={bot.webSearch} onChange={(webSearch) => save({ webSearch })} />} />
       </Section>
@@ -131,7 +140,7 @@ function General({ bot }: { bot: Bot }) {
       </Section>
 
       <Section title="Danger zone">
-        <Row title="Delete this bot" description="Removes its chats, files, memory and saved logins. This cannot be undone." control={<button className="danger" onClick={remove}>Delete bot</button>} />
+        <Row title="Delete this bot" description="Removes its conversations, files, memory and saved logins. This cannot be undone." control={<button className="danger" onClick={remove}>Delete bot</button>} />
       </Section>
     </Page>
   )

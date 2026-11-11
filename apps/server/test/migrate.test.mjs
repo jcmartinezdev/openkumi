@@ -87,3 +87,48 @@ test('bots stored in the database become folders, keeping their id, logins and c
     fs.rmSync(home, { recursive: true, force: true })
   }
 })
+
+test('a bot that had several chats keeps the one used last as its conversation, and the others as earlier ones', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-migrate-'))
+  try {
+    const db = new DatabaseSync(path.join(home, 'openbot.db'))
+    db.exec(`
+      CREATE TABLE bots (
+        id TEXT PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, instructions TEXT NOT NULL,
+        provider TEXT NOT NULL, model TEXT NOT NULL, effort TEXT NOT NULL, web_search INTEGER NOT NULL,
+        headless INTEGER NOT NULL, memory TEXT NOT NULL, created_at INTEGER NOT NULL
+      );
+      CREATE TABLE threads (
+        id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, parent_id TEXT, title TEXT NOT NULL, kind TEXT NOT NULL,
+        status TEXT NOT NULL, model TEXT, reported INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL);
+      INSERT INTO bots VALUES ('b_1', 'Helper', '🦊', '', 'mock', 'mock-1', '', 0, 1, '', 1700000000000);
+      INSERT INTO bots VALUES ('b_2', 'Quiet', '🤖', '', 'mock', 'mock-1', '', 0, 1, '', 1700000000000);
+      INSERT INTO threads VALUES ('t_old', 'b_1', NULL, 'The oldest', 'chat', 'idle', NULL, 0, 1700000000001, 1700000000010);
+      INSERT INTO threads VALUES ('t_last', 'b_1', NULL, 'Used last', 'chat', 'idle', NULL, 0, 1700000000002, 1700000000090);
+      INSERT INTO threads VALUES ('t_mid', 'b_1', NULL, 'In between', 'chat', 'idle', NULL, 0, 1700000000003, 1700000000050);
+      INSERT INTO threads VALUES ('t_sub', 'b_1', 't_old', 'A subagent', 'subagent', 'idle', NULL, 1, 1700000000004, 1700000000005);
+      INSERT INTO threads VALUES ('t_only', 'b_2', NULL, 'Its only chat', 'chat', 'idle', NULL, 0, 1700000000006, 1700000000007);
+      INSERT INTO items (thread_id, data, created_at) VALUES ('t_old', '{"type":"message","role":"user","text":"an old question about herons","source":"user"}', 1700000000001);
+    `)
+    db.close()
+
+    for (const run of [1, 2]) {
+      await withServer(home, async (get) => {
+        const { threads } = await get('/api/state')
+        assert.deepEqual(
+          threads.map((t) => [t.id, t.archivedAt]),
+          [['t_old', 1700000000010], ['t_last', null], ['t_mid', 1700000000050], ['t_sub', null], ['t_only', null]],
+          `start ${run}`,
+        )
+        // Nothing was deleted: what was said in an archived chat is still read and found.
+        assert.equal((await get('/api/threads/t_old')).items[0].data.text, 'an old question about herons')
+        assert.deepEqual((await get('/api/bots/b_1/search?q=herons')).matches.map((m) => m.threadId), ['t_old'])
+      })
+    }
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})

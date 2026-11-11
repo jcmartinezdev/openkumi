@@ -26,6 +26,10 @@ const env = {
   OPENBOT_HOME: `${tmp}/local-home`,
   OPENBOT_PORT: String(LOCAL_PORT),
   OPENBOT_MOCK: '1',
+  // Scripted stand-ins for the Claude Code, Codex and Grok programs, so the tests do not depend on what is installed here.
+  OPENBOT_CLAUDE_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-claude.mjs'),
+  OPENBOT_CODEX_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-codex.mjs'),
+  OPENBOT_GROK_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-grok.mjs'),
 }
 delete env.ELECTRON_RUN_AS_NODE
 delete env.OPENBOT_DEV_URL
@@ -74,7 +78,8 @@ before(async () => {
 
 after(async () => {
   await app?.close().catch(() => {})
-  fs.rmSync(tmp, { recursive: true, force: true })
+  // The app may still be writing its last files as it quits.
+  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 })
 
 test('the local environment can be turned on and off, and remote environments added and opened, without the window reloading', async () => {
@@ -388,6 +393,170 @@ test('plugins: browse them, open one, and install it for one bot', async () => {
   await win.locator('.plugin-card', { hasText: 'Installed for 1 bot' }).click()
   await win.locator('.set-row', { hasText: 'Second bot' }).getByRole('button', { name: 'Remove' }).click()
   await win.locator('.set-section', { hasText: 'Installed for' }).waitFor({ state: 'detached' })
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('a bot has one conversation: starting fresh sets it aside, and earlier ones are searched, read and continued', async () => {
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  const solo = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Solo', provider: 'mock' })
+  const here = () => win.evaluate(() => location.hash)
+  const say = async (text) => {
+    await win.locator('.composer textarea').fill(text)
+    await win.keyboard.press('Meta+Enter')
+    await win.locator('.msg.assistant', { hasText: `Echo: ${text}` }).waitFor({ timeout: 20_000 })
+  }
+
+  // The sidebar is the bots, one row each; a bot's address is its conversation.
+  await win.locator('.sidebar .row.bot', { hasText: 'Solo' }).click()
+  await win.locator('.empty h1', { hasText: 'Solo' }).waitFor()
+  await say('The code word is heron.')
+  await say('And the bird is a crane.')
+  assert.equal(await here(), `#/${solo.id}`)
+  assert.equal(await win.locator('.sidebar .row.thread').count(), 0)
+  assert.equal(await win.locator('.heading').innerText(), 'Solo')
+
+  // Starting fresh empties the view; what was said is kept among the earlier conversations.
+  await win.getByRole('button', { name: 'Start fresh' }).click()
+  await win.locator('.empty h1', { hasText: 'Solo' }).waitFor()
+  assert.equal(await win.locator('.msg').count(), 0)
+  assert.equal(await win.getByRole('button', { name: 'Start fresh' }).isDisabled(), true, 'an empty conversation is already a fresh one')
+  await say('A new beginning.')
+  await win.getByRole('button', { name: 'Earlier conversations' }).first().click()
+  assert.deepEqual(await win.locator('.earlier-row .earlier-title').allInnerTexts(), ['The code word is heron.'])
+
+  // Searching goes through everything that was said, in the current conversation and the earlier ones.
+  await win.getByLabel('Search conversations').fill('crane bird')
+  await win.locator('.earlier-row mark').first().waitFor()
+  assert.deepEqual(await win.locator('.earlier-row .earlier-meta strong').allInnerTexts(), ['Solo', 'You'])
+  assert.deepEqual(await win.locator('.earlier-row').last().locator('mark').allInnerTexts(), ['bird', 'crane'])
+  // A match opens the conversation it is in, with the message in view. An earlier conversation is only read.
+  await win.locator('.earlier-row').last().click()
+  await win.locator('.msg.user.found', { hasText: 'And the bird is a crane.' }).waitFor()
+  assert.match(await here(), new RegExp(`^#/${solo.id}/t_[\\w-]+/\\d+$`))
+  assert.match(await win.locator('.heading').innerText(), /^The code word is heron\.\s+Earlier conversation · /)
+  assert.equal(await win.locator('.composer').count(), 0)
+
+  // Continuing it puts it in place of the current one, which is set aside in turn.
+  await win.getByRole('button', { name: 'Continue this one' }).click()
+  await win.locator('.composer textarea').waitFor()
+  await until(async () => (await here()) === `#/${solo.id}`, 10_000)
+  await win.locator('.msg.user', { hasText: 'The code word is heron.' }).waitFor()
+  await win.getByRole('button', { name: 'Earlier conversations' }).first().click()
+  assert.deepEqual(await win.locator('.earlier-row .earlier-title').allInnerTexts(), ['A new beginning.'])
+  await win.keyboard.press('Escape')
+  await win.locator('.earlier-pop').waitFor({ state: 'detached' })
+
+  // A subagent at work is shown under its bot and above the composer, and leads back to the conversation.
+  await win.locator('.composer textarea').fill('!tool spawn_subagent {"name":"Scout","task":"!slow look around"}')
+  await win.keyboard.press('Meta+Enter')
+  await win.locator('.subagents .chip', { hasText: 'Scout' }).waitFor({ timeout: 20_000 })
+  await win.locator('.sidebar .row.sub', { hasText: 'Scout' }).click()
+  await win.locator('.msg.task', { hasText: '!slow look around' }).waitFor()
+  assert.equal(await win.locator('.heading').innerText(), 'Scout\nSolo')
+  await win.getByRole('button', { name: 'Back to the conversation' }).click()
+  await until(async () => (await here()) === `#/${solo.id}`, 10_000)
+  // Its report arrives in the conversation when it is done.
+  await win.locator('.activity', { hasText: 'Subagent “Scout” completed' }).waitFor({ timeout: 20_000 })
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('the model picker offers every provider and its models, and picking one moves the bot to it', async () => {
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  const assistant = async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Assistant')
+  const open = async () => {
+    await win.getByRole('button', { name: 'Model', exact: true }).click()
+    await win.locator('.model-pop').waitFor()
+  }
+  const rows = () => win.locator('.model-row .model-name').allInnerTexts()
+
+  // Every provider the environment has is down the side, connected or not.
+  await open()
+  const tabs = await win.locator('.model-rail [role=tab]').evaluateAll((all) => all.map((tab) => tab.getAttribute('aria-label')))
+  assert.deepEqual(tabs, ['Favorites', 'Codex', 'Claude Code', 'Grok', 'Local models', 'OpenAI-compatible API', 'Mock (offline testing)'])
+
+  // Each one shows the models it reports itself, by name. Picking one of another provider moves the bot there.
+  await win.getByRole('tab', { name: 'Grok' }).click()
+  await win.locator('.model-row', { hasText: 'grok-test-fast' }).waitFor()
+  assert.deepEqual(await rows(), ['grok-test', 'grok-test-fast'])
+  // The model a provider uses by itself leads its list and says so.
+  assert.equal(await win.locator('.model-row', { has: win.locator('.model-tag', { hasText: 'Default' }) }).locator('.model-name').innerText(), 'grok-test')
+  await win.locator('.model-row', { hasText: 'grok-test-fast' }).click()
+  await win.locator('.model-pop').waitFor({ state: 'detached' })
+  await until(async () => (await assistant()).provider === 'grok', 10_000)
+  assert.equal((await assistant()).model, 'grok-test-fast')
+  await win.locator('.model-button', { hasText: 'grok-test-fast' }).waitFor()
+
+  // Typing searches the models of every provider at once, earlier ones too; Enter takes the one that is lit.
+  await open()
+  await win.getByLabel('Search models').fill('sonn')
+  await win.locator('.model-row').first().waitFor()
+  assert.deepEqual([await rows(), await win.locator('.model-row .model-of').allInnerTexts()], [['Claude Sonnet 9', 'Claude Sonnet 8'], ['Claude Code', 'Claude Code']])
+  await win.keyboard.press('Enter')
+  await until(async () => (await assistant()).provider === 'claude-code', 10_000)
+  assert.equal((await assistant()).model, 'sonnet')
+  await win.locator('.model-button', { hasText: 'Claude Sonnet 9' }).waitFor()
+  // ...and the bot really runs there now, in the same conversation, which the new engine is told about.
+  await win.locator('.composer textarea').fill('hello')
+  await win.keyboard.press('Meta+Enter')
+  await win.locator('.msg.assistant', { hasText: /Echo \(turn 1\): This conversation was already under way\.[\s\S]*The newest message:\s+hello/ }).waitFor({ timeout: 20_000 })
+
+  // Beside the models are the reasoning levels the bot's model takes. Picking one is kept, and shown on the button.
+  await open()
+  assert.deepEqual(await win.locator('.model-effort [role=radio]').allInnerTexts(), ['Auto', 'Low', 'Medium', 'High', 'Extra High', 'Max'])
+  await win.getByRole('radio', { name: 'Extra High' }).click()
+  await until(async () => (await assistant()).effort === 'xhigh', 10_000)
+  await win.locator('.model-button', { hasText: 'Extra High' }).waitFor()
+  // Earlier models are folded away until asked for.
+  assert.deepEqual(await rows(), ['Claude Opus 9', 'Claude Sonnet 9', 'Claude Haiku 9'])
+  await win.getByRole('button', { name: 'Show more' }).click()
+  assert.deepEqual(await rows(), ['Claude Opus 9', 'Claude Sonnet 9', 'Claude Haiku 9', 'Claude Sonnet 8'])
+  // A model that does not take the level the bot has is given the choice back.
+  await win.locator('.model-row', { hasText: 'Claude Sonnet 8' }).click()
+  await until(async () => (await assistant()).model === 'claude-sonnet-8', 10_000)
+  assert.equal((await assistant()).effort, '')
+  // Command with a number takes the model in that place: the first is the provider's default.
+  await open()
+  await win.keyboard.press('Meta+1')
+  await until(async () => (await assistant()).model === '', 10_000)
+  await win.locator('.model-button', { hasText: 'Claude Opus 9' }).waitFor()
+
+  // A model can be starred to keep it at hand.
+  await open()
+  await win.getByRole('tab', { name: 'Grok' }).click()
+  await win.locator('.model-row', { hasText: 'grok-test-fast' }).hover()
+  await win.getByRole('button', { name: 'Add grok-test-fast to favorites' }).click()
+  await win.getByRole('tab', { name: 'Favorites' }).click()
+  assert.deepEqual([await rows(), await win.locator('.model-row .model-of').allInnerTexts()], [['grok-test-fast'], ['Grok']])
+
+  // A provider that is not connected says what to do about it.
+  await win.getByRole('tab', { name: 'Local models' }).click()
+  assert.match(await win.locator('.model-empty').innerText(), /Install Ollama/)
+  await win.getByRole('button', { name: 'Open provider settings' }).click()
+  await win.locator('#provider-local').waitFor()
+
+  // The providers page: all of them down the left with their version and how they stand...
+  await win.locator('.prov-item .prov-version').first().waitFor()
+  const listed = (await win.locator('.prov-item-text').allInnerTexts()).map((text) => text.replace(/\s*\n\s*/g, ' | '))
+  assert.deepEqual(listed.slice(0, 4), ['Codex | v0.9.0 | Signed in · ChatGPT', 'Claude Code | v2.0.0 | Signed in · test@example.com · Pro plan', 'Grok | v1.2.3 | Signed in · grok.com', 'Local models | Not running'])
+  // ...and the one that is picked beside the list, with the models it reports and the bots on it.
+  await win.locator('.prov-item a', { hasText: 'Claude Code' }).click()
+  await win.locator('.prov-head h3', { hasText: 'Claude Code' }).waitFor()
+  await win.locator('.prov-models li').first().waitFor()
+  assert.deepEqual((await win.locator('.prov-models li').allInnerTexts()).map((text) => text.split('\n')[0]), ['Claude Opus 9', 'Claude Sonnet 9', 'Claude Haiku 9', 'Claude Sonnet 8'])
+  assert.deepEqual((await win.locator('.prov-bots a').allInnerTexts()).map((text) => text.split('\n').pop()), ['Assistant'])
+  assert.match(await win.locator('.prov-detail .set-row').innerText(), /Program path[\s\S]*Using .*fake-claude\.mjs/)
+  // The switch in the list takes a provider away from the bots altogether.
+  await win.getByRole('switch', { name: 'Use Grok for bots' }).click()
+  await until(async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).settings.disabledProviders.includes('grok'), 10_000)
+  await win.locator('#provider-grok .prov-standing', { hasText: 'Switched off' }).waitFor()
 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)

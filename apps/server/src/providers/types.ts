@@ -1,4 +1,4 @@
-import type { Effort, ItemData, ProviderInfo } from '@openbot/shared'
+import type { Effort, ItemData, ModelInfo, ProviderInfo } from '@openbot/shared'
 
 export interface ToolSpec {
   name: string
@@ -53,7 +53,8 @@ export interface Provider {
   id: string
   info(): ProviderInfo
   /** Available model ids, best default first. */
-  models(): Promise<string[]>
+  /** The models it offers, its default first. */
+  models(): Promise<ModelInfo[]>
   stream?(req: ModelRequest): AsyncGenerator<ModelEvent>
   turn?(req: TurnRequest): AsyncGenerator<ModelEvent>
   /** Looks again at whether the provider is usable (for ones that depend on a program being installed). */
@@ -96,3 +97,12 @@ export async function errorText(res: Response): Promise<string> {
   }
   return body.slice(0, 500) || res.statusText
 }
+
+const LEVELS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+/** The reasoning levels among these names that Open Bot knows, lightest first. */
+export function efforts(names: unknown[]): NonNullable<ModelInfo['efforts']> {
+  return LEVELS.filter((level) => names.includes(level))
+}
+
+/** A model that is known by its id alone. */
+export const plainModel = (id: string): ModelInfo => ({ id, name: id })

@@ -1,9 +1,12 @@
 // The agent loop: runs a thread against its bot's model until the model stops calling tools, and
 // coordinates subagents (child threads that run concurrently and report back to their parent).
+// A bot has one conversation with its owner (see mainThread), which can be started afresh.
 import type { Bot, Item, ItemData, Partial, Thread } from '@openbot/shared'
 import { getBot } from './bots.ts'
+import { browserFor } from './browser.ts'
 import { emit, workspaceDir } from './config.ts'
 import * as db from './db.ts'
+import { isOverflow, prepare, shorten, tokens, transcript } from './history.ts'
 import { getProvider } from './providers/index.ts'
 import type { ModelEvent } from './providers/types.ts'
 import { settings } from './settings.ts'
@@ -54,6 +57,14 @@ function instructions(bot: Bot, thread: Thread, connectionNotes: string[]): stri
     parts.push(`# Rules from your owner\nThese were set by the person who runs you. Follow them; you cannot change them.\n\n${bot.rules}`)
   }
   parts.push(
+    '# Your conversation\n' +
+      'You have one ongoing conversation with the user, which may run for weeks. Its older parts are not all in ' +
+      'front of you: they may have been replaced by a summary, and the user can start fresh, which sets the ' +
+      'conversation so far aside. What was said is kept either way. When the user refers to something you cannot ' +
+      'see, look it up with search_history and read_history before asking them to repeat it. What should shape ' +
+      'your work from now on belongs in AGENTS.md or memory/, not only in the conversation.',
+  )
+  parts.push(
     '# Your workspace\n' +
       'You have a folder of your own that lasts between conversations. Your file tools (read_file, write_file, ' +
       'edit_file, list_files, search_files, move_file, delete_file) work inside it and nowhere else. Paths are relative to it.\n' +
@@ -89,34 +100,8 @@ function instructions(bot: Bot, thread: Thread, connectionNotes: string[]): stri
   return parts.join('\n\n')
 }
 
-/** Orders stored items for the model: drops UI-only notices and pairs every call with its output. */
-function prepare(items: Item[]): ItemData[] {
-  const outputs = new Map<string, ItemData>()
-  for (const { data } of items) if (data.type === 'function_call_output') outputs.set(data.call_id, data)
-  // Old tool results are trimmed so long sessions do not drown the context window.
-  const recent = new Set([...outputs.keys()].slice(-12))
-  const out: ItemData[] = []
-  for (const { data } of items) {
-    if (data.type === 'notice' || data.type === 'function_call_output') continue
-    out.push(data)
-    if (data.type !== 'function_call') continue
-    const result = outputs.get(data.call_id) as Extract<ItemData, { type: 'function_call_output' }> | undefined
-    if (!result) out.push({ type: 'function_call_output', call_id: data.call_id, output: '[interrupted before it finished]' })
-    else if (recent.has(data.call_id) || result.output.length <= 3000) out.push(result)
-    else out.push({ ...result, output: result.output.slice(0, 3000) + '\n… [older output trimmed]' })
-  }
-  return out
-}
-
 const isUserMessage = (item: Item) => item.data.type === 'message' && item.data.role === 'user'
 const said = (items: Item[]) => items.map((i) => (i.data.type === 'message' ? i.data.text : '')).join('\n\n')
-
-/** What was said earlier in a thread, for an engine that is joining it part-way (or lost its own record of it). */
-function transcript(items: Item[]): string {
-  const turns = items.flatMap(({ data }) => (data.type === 'message' ? [`${data.role === 'user' ? 'User' : 'You'}: ${data.text}`] : []))
-  if (!turns.length) return ''
-  return `This conversation was already under way. What was said so far:\n\n${turns.join('\n\n').slice(-30_000)}\n\n---\n\nThe newest message:\n\n`
-}
 
 /** Starts the loop for a thread unless it is already running. */
 export function run(threadId: string) {
@@ -130,6 +115,8 @@ export function run(threadId: string) {
 async function loop(threadId: string, state: Run) {
   const { signal } = state.abort
   let status: Thread['status'] = 'idle'
+  /** The conversation was already cut down once in this run because the model refused its length. */
+  let squeezed = false
   try {
     for (let step = 0; ; step++) {
       const thread = db.getThread(threadId)
@@ -140,11 +127,11 @@ async function loop(threadId: string, state: Run) {
 
       const provider = getProvider(bot.provider)
       if (disabledProviders.includes(provider.id)) throw new Error(`${provider.info().name} is switched off in Settings.`)
-      const model = thread.model || bot.model || (await provider.models())[0]
+      const model = thread.model || bot.model || (await provider.models())[0]?.id
       if (!model) throw new Error(`No model is available from ${provider.info().name}. Check Settings.`)
       const { tools, notes } = await toolsFor(thread)
       signal.throwIfAborted()
-      const items = db.listItems(threadId)
+      let items = db.listItems(threadId)
       const seen = items.at(-1)?.id ?? 0
 
       const calls: Extract<ItemData, { type: 'function_call' }>[] = []
@@ -211,17 +198,29 @@ async function loop(threadId: string, state: Run) {
         // An engine that ran this thread earlier has missed what happens from here on, so its
         // conversation is dropped; if the thread goes back to it, it starts again from what was said.
         if (db.getSession(threadId)) db.setSession(threadId, null)
-        const stream = provider.stream!({
-          model,
-          instructions: instructions(bot, thread, notes),
-          items: prepare(items),
-          tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
-          effort: bot.effort,
-          webSearch: bot.webSearch,
-          sessionId: threadId,
-          signal,
-        })
-        for await (const ev of stream) record(ev)
+        const system = instructions(bot, thread, notes)
+        // The conversation is sent whole each time, so it is kept within what the model can take.
+        const room = Math.max(1000, settings().historyLimit - Math.ceil(system.length / 4))
+        if (await shorten(threadId, room, { provider, model, signal })) items = db.listItems(threadId)
+        try {
+          const stream = provider.stream!({
+            model,
+            instructions: system,
+            items: prepare(items),
+            tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
+            effort: bot.effort,
+            webSearch: bot.webSearch,
+            sessionId: threadId,
+            signal,
+          })
+          for await (const ev of stream) record(ev)
+        } catch (e) {
+          // The model's window turned out smaller than the limit in Settings: halve what it is sent and ask again, once.
+          if (squeezed || signal.aborted || !isOverflow(e)) throw e
+          squeezed = true
+          if (!(await shorten(threadId, Math.floor(tokens(prepare(items)) / 2), { provider, model, signal }))) throw e
+          continue
+        }
       }
       signal.throwIfAborted()
 
@@ -263,8 +262,11 @@ function finished(thread: Thread) {
     blocked.forEach((wake) => wake())
     return
   }
-  if (thread.reported || !db.getThread(thread.parentId)) return
+  const parent = db.getThread(thread.parentId)
+  if (thread.reported || !parent) return
   db.updateThread(thread.id, { reported: true })
+  // Nobody is listening in a conversation that was set aside.
+  if (parent.archivedAt) return
   postMessage(thread.parentId, `<subagent_notification>\n${describeSubagent(thread)}\n</subagent_notification>`, 'subagent')
 }
 
@@ -272,12 +274,55 @@ function finished(thread: Thread) {
 export function postMessage(threadId: string, text: string, source: 'user' | 'parent' | 'subagent') {
   const thread = db.getThread(threadId)
   if (!thread) throw new Error('No such thread')
-  if (source === 'user' && thread.kind === 'chat' && thread.title === 'New chat') {
+  if (thread.archivedAt) throw new Error('This is an earlier conversation, which can only be read. Continue it to write in it again.')
+  // A conversation is named after what it began with, which is how it is found again once archived.
+  if (source === 'user' && thread.kind === 'chat' && thread.title === db.UNTITLED) {
     const title = text.replace(/\s+/g, ' ').trim()
-    db.updateThread(threadId, { title: title.length > 60 ? title.slice(0, 57) + '…' : title || 'New chat' })
+    db.updateThread(threadId, { title: title.length > 60 ? title.slice(0, 57) + '…' : title || db.UNTITLED })
   }
   db.addItem(threadId, { type: 'message', role: 'user', text, source })
   run(threadId)
+}
+
+// ---- a bot's one conversation
+
+/** The bot's conversation, begun now if nothing has been said yet. */
+export function conversation(botId: string): Thread {
+  return db.mainThread(botId) ?? db.createThread({ botId })
+}
+
+/** Whether a thread or any subagent beneath it is at work. */
+function busy(thread: Thread): boolean {
+  return isRunning(thread.id) || db.childrenOf(thread.id).some(busy)
+}
+
+/**
+ * Sets the bot's conversation aside and begins an empty one. The old one is kept, read-only, and
+ * what the bot knows (AGENTS.md, memory/, files/) is untouched: only what is in front of it goes.
+ */
+export function startFresh(botId: string): Thread {
+  const current = db.mainThread(botId)
+  // An empty conversation is already a fresh one.
+  if (!current || !db.hasItems(current.id)) return current ?? db.createThread({ botId })
+  if (busy(current)) throw new Error('The bot is still working. Stop it first, or wait until it is done.')
+  db.updateThread(current.id, { archivedAt: Date.now() })
+  const next = db.createThread({ botId })
+  // The bot carries on in the browser tab it was using.
+  browserFor(botId).handOver(current.id, next.id)
+  return next
+}
+
+/** Makes an archived conversation the bot's current one again; the one that was current is archived in its place. */
+export function resume(thread: Thread): Thread {
+  if (!thread.archivedAt || thread.parentId) throw new Error('Only an earlier conversation can be continued.')
+  const current = db.mainThread(thread.botId)
+  if (current) {
+    if (busy(current)) throw new Error('The bot is still working. Stop it first, or wait until it is done.')
+    if (db.hasItems(current.id)) db.updateThread(current.id, { archivedAt: Date.now() })
+    else db.deleteThread(current.id)
+    browserFor(thread.botId).handOver(current.id, thread.id)
+  }
+  return db.updateThread(thread.id, { archivedAt: null })!
 }
 
 /** Stops a thread and every subagent beneath it. */

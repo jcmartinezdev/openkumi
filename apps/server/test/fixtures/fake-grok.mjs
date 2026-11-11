@@ -11,6 +11,11 @@ const args = process.argv.slice(2)
 const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
 const print = (obj) => process.stdout.write(JSON.stringify(obj) + '\n')
 
+if (args[0] === '--version') {
+  console.log('grok 1.2.3 (abc) [stable]')
+  process.exit(0)
+}
+
 if (args[0] === 'models') {
   console.log('You are logged in with grok.com.\n\nDefault model: grok-test\n\nAvailable models:\n  * grok-test (default)\n  - grok-test-fast')
   process.exit(0)

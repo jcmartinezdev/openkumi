@@ -3,7 +3,7 @@
 import crypto from 'node:crypto'
 import type { ItemData } from '@openbot/shared'
 import { readSecrets } from '../config.ts'
-import { type ModelEvent, type ModelRequest, type Provider, errorText, sse } from './types.ts'
+import { type ModelEvent, type ModelRequest, type Provider, errorText, plainModel, sse } from './types.ts'
 
 export interface Config {
   baseUrl: string
@@ -122,7 +122,7 @@ export const openaiCompat: Provider = {
 
   async models() {
     const c = config()
-    return (c && (await modelsAt(c))) || []
+    return ((c && (await modelsAt(c))) || []).map(plainModel)
   },
 
   stream(req: ModelRequest) {

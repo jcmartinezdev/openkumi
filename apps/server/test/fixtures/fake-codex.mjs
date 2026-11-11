@@ -8,6 +8,11 @@ import path from 'node:path'
 const args = process.argv.slice(2)
 const print = (obj) => process.stdout.write(JSON.stringify(obj) + '\n')
 
+if (args[0] === '--version') {
+  console.log('codex-cli 0.9.0')
+  process.exit(0)
+}
+
 if (args[0] === 'login' && args[1] === 'status') {
   console.log('Logged in using ChatGPT')
   process.exit(0)

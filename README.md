@@ -2,7 +2,7 @@
 
 Open-source, local-first AI bots, as a desktop app. Bots run on your own computer, or on another
 computer of yours that the app connects to. Each bot is a folder with its own instructions,
-memory, files, skills and connections, plus its own chats, subagents and a private web browser
+memory, files, skills and connections, plus its own conversation, subagents and a private web browser
 that stays logged in.
 
 - **Bring the subscription you already have.** Bots run on Codex (your ChatGPT plan), Claude Code
@@ -12,6 +12,10 @@ that stays logged in.
 - **Or no subscription at all.** Local models through Ollama or LM Studio are found by themselves
   when the program is running. Other models plug in through any OpenAI-compatible endpoint
   (OpenAI API, OpenRouter).
+- **One conversation per bot.** A bot is someone you talk to, not a list of chats: whatever you
+  say lands in the same conversation, and the bot can look up anything said in it, however long
+  ago. Start fresh when you want an empty page; the conversation so far is kept, to read, search
+  or continue.
 - **Subagents.** A bot can split work into parallel subagents, each in its own thread. Watch them
   live, open one to read or message it, or stop it. Results flow back to the parent automatically.
 - **A browser per bot.** Every bot gets its own Chrome profile. Sign in to a site once in the
@@ -154,7 +158,8 @@ apps/
       tool-endpoint.ts serves a bot's tools to an engine over MCP for the length of one turn
       settings.ts      app-wide settings, kept in settings.json
       http.ts          the API and the stream of events. No pages
-      db.ts            SQLite (chats and messages)
+      history.ts       what a model is shown of a long conversation: trimming, and the summary of its older part
+      db.ts            SQLite (conversations and messages)
     skills/            the skills that ship with Open Bot
   web/               the interface (React, Vite). Built into the desktop app; nothing serves it
     src/
@@ -167,7 +172,7 @@ apps/
       environments.ts  the list of environments and their access codes
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app
-  mobile/            the iPhone app (Expo, React Native): pairing, chats, a bot's browser
+  mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser
 packages/
   shared/            the types every app agrees on
   client/            what every app needs to talk to a server: the connection, the state
@@ -215,7 +220,7 @@ screens only read and write these files, so you can also edit them by hand.
       browser-profile/       its Chrome profile: cookies, logins
       mcp/<name>.json        its account with each connection
       history.git/           the record of every change to the workspace
-  openbot.db                 chats and messages
+  openbot.db                 conversations and messages
   settings.json              app-wide settings that differ from the defaults
   auth.json                  API keys, the access code, and what plugins were set up with (owner-readable only)
   clients.json               the computers paired with this one (owner-readable only)
@@ -226,6 +231,29 @@ sit outside its workspace, so it cannot grant itself anything. **What a bot know
 rewrites `AGENTS.md` and `memory/` freely. Each change is a commit in a git history kept in
 `private/history.git`, labelled with who made it (the bot or you), and the Files tab can show and
 undo it. (`git --git-dir=…/private/history.git --work-tree=…/workspace log` reads it by hand.)
+
+### One conversation per bot
+
+A bot has a single conversation with you. It begins with the first message and goes on from
+there; subagents work in threads of their own beneath it and report back into it. **Start fresh**,
+in the conversation's header, sets the conversation so far aside and begins an empty one. What the
+bot knows is untouched, because that lives in its folder and not in the conversation. Earlier
+conversations are kept: the clock button beside it lists them and searches everything that was
+said, and any of them can be continued in place of the current one.
+
+A conversation that never ends cannot be sent to a model whole for ever:
+
+- On an engine, the program keeps the conversation and shortens it by itself.
+- On Open Bot's own loop (local models, OpenAI-compatible APIs), once the conversation passes
+  **Settings → Advanced → Length of a conversation**, the model is asked to summarise the older
+  part, and from then on it is sent that summary and what came after it. A model that refuses a
+  conversation as too long before the limit is reached gets the same treatment at once, and is
+  asked again.
+- A bot that is moved to another engine is told what was said most recently, with the summary if
+  there is one.
+
+None of this deletes anything. You still see every message, and the bot has `search_history` and
+`read_history` to look up what is no longer in front of it.
 
 ### Plugins
 
@@ -253,6 +281,7 @@ and the three share the client. Notion and Linear need no setup: install, then s
 | --- | --- |
 | Bots | `list_bots`, `create_bot` |
 | Files | `list_files`, `read_file`, `write_file`, `edit_file`, `search_files`, `move_file`, `delete_file` |
+| Its conversation | `search_history`, `read_history` |
 | Subagents | `spawn_subagent`, `wait_subagents`, `list_subagents`, `read_subagent`, `message_subagent`, `cancel_subagent` |
 | Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval` |
 | Web | `web_fetch`, plus the provider's built-in web search |
@@ -347,9 +376,8 @@ and from its own format.
 
 ## Not built yet
 
-Conversation compaction for very long chats on Open Bot's own loop, image attachments, scheduled
-runs, running commands in a sandbox (and with it, skills that ship scripts), and native
-Anthropic/Gemini providers.
+Image attachments, scheduled runs, running commands in a sandbox (and with it, skills that ship
+scripts), and native Anthropic/Gemini providers.
 
 ## License
 

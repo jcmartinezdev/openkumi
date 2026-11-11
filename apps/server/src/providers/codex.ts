@@ -5,10 +5,10 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { ProviderInfo } from '@openbot/shared'
-import { type Exit, capture, cleanEnv, findBinary, lastError, lines } from './cli.ts'
+import type { ModelInfo, ProviderInfo } from '@openbot/shared'
+import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
-import type { ModelEvent, Provider, TurnRequest } from './types.ts'
+import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
 const bin = () => findBinary('codex', 'OPENBOT_CODEX_BIN', settings().codexPath)
 const base = { id: 'codex', name: 'Codex', kind: 'cli' as const }
@@ -23,13 +23,14 @@ async function refresh() {
       : { ...base, connected: false, detail: 'Not installed', hint: 'Install the Codex CLI on this computer, then run “codex login” in a terminal.' }
     return
   }
+  const version = await versionOf(program)
   const { code, stdout, stderr } = await capture(program, ['login', 'status'])
   const said = (stdout + stderr).trim().split('\n')[0] ?? ''
   if (code !== 0 || /not logged in/i.test(said)) {
-    info = { ...base, connected: false, detail: 'Installed, not signed in', hint: 'Run “codex login” in a terminal on this computer.', path: program }
+    info = { ...base, connected: false, detail: 'Installed, not signed in', hint: 'Run “codex login” in a terminal on this computer.', path: program, version }
     return
   }
-  info = { ...base, connected: true, detail: said.replace(/^Logged in using /i, 'Signed in with ') || 'Signed in', path: program }
+  info = { ...base, connected: true, detail: said.replace(/^Logged in using /i, 'Signed in with ') || 'Signed in', path: program, version }
 }
 
 /** Everything in Codex that runs commands, touches files, drives apps or starts its own agents. */
@@ -102,14 +103,41 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
 }
 
 /** The models Codex itself offers, from the list it keeps in its own folder. Empty when it has none yet. */
-function listed(): string[] {
+/** One model as Codex keeps it in its own list of models. */
+interface Listed {
+  slug?: string
+  display_name?: string
+  description?: string
+  visibility?: string
+  priority?: number
+  default_reasoning_level?: string
+  supported_reasoning_levels?: { effort?: string }[]
+}
+
+/** The models Codex offers, as its own list has them: named, described, with the reasoning levels each takes. */
+function listed(): ModelInfo[] {
   try {
     const file = path.join(process.env.CODEX_HOME ?? path.join(os.homedir(), '.codex'), 'models_cache.json')
-    const models: { slug?: string; visibility?: string; priority?: number }[] = JSON.parse(fs.readFileSync(file, 'utf8')).models ?? []
+    const models: Listed[] = JSON.parse(fs.readFileSync(file, 'utf8')).models ?? []
+    /** The kinds already listed ("sol", "terra"…): a later model of a kind is an earlier generation of it. */
+    const kinds = new Set<string>()
     return models
       .filter((m) => m.slug && m.visibility !== 'hide')
       .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
-      .map((m) => m.slug!)
+      .map((m) => {
+        const kind = m.slug!.split('-').pop()!
+        const older = kinds.has(kind)
+        kinds.add(kind)
+        const levels = efforts((m.supported_reasoning_levels ?? []).map((l) => l.effort))
+        return {
+          id: m.slug!,
+          name: m.display_name || m.slug!,
+          ...(m.description ? { description: m.description } : {}),
+          efforts: levels,
+          ...(levels.length ? { defaultEffort: efforts([m.default_reasoning_level])[0] } : {}),
+          ...(older ? { older } : {}),
+        }
+      })
   } catch {
     return []
   }
@@ -118,7 +146,11 @@ function listed(): string[] {
 export const codex: Provider = {
   id: base.id,
   info: () => info,
-  models: async () => ['default', ...listed()],
+  // Left to itself, Codex runs the first model of its list: that one leads here, as the default.
+  models: async () => {
+    const [usual, ...rest] = listed()
+    return usual ? [{ ...usual, id: 'default' }, ...rest] : [{ id: 'default', name: 'Default' }]
+  },
   turn,
   refresh,
 }

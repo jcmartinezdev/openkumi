@@ -1,5 +1,6 @@
 import type { ProviderInfo } from '@openbot/shared'
 import { emit } from '../config.ts'
+import { SUMMARISE } from '../history.ts'
 import { onSettingsChange, settings } from '../settings.ts'
 import { claudeCode } from './claude-code.ts'
 import { codex } from './codex.ts'
@@ -10,13 +11,14 @@ import type { ModelEvent, ModelRequest, Provider } from './types.ts'
 
 /**
  * Scripted offline provider for tests and UI development (enabled with OPENBOT_MOCK=1).
- * "!tool <name> <json>" calls a tool, "!slow" takes a few seconds, "!system" and "!tools" report
- * what the model was sent, anything else is echoed.
+ * "!tool <name> <json>" calls a tool, "!slow" takes a few seconds, "!system", "!tools" and "!sent"
+ * report what the model was sent, anything else is echoed. Asked for a summary, it gives the
+ * start of everything the user said in what it was to summarise.
  */
 const mock: Provider = {
   id: 'mock',
   info: () => ({ id: 'mock', name: 'Mock (offline testing)', kind: 'apikey', connected: true, detail: 'Scripted replies' }),
-  models: async () => ['mock-1'],
+  models: async () => [{ id: 'mock-1', name: 'Mock 1', description: 'Scripted replies.' }],
   async *stream(req: ModelRequest): AsyncGenerator<ModelEvent> {
     const sleep = (ms: number) =>
       new Promise<void>((resolve, reject) => {
@@ -40,8 +42,14 @@ const mock: Provider = {
         yield { type: 'item', item: { type: 'message', role: 'assistant', text: text === '!system' ? req.instructions : req.tools.map((t) => t.name).join(' ') } }
         return
       }
+      if (text === '!sent') {
+        const lines = req.items.map((i) => (i.type === 'message' ? `${i.role}: ${i.text.replace(/\s+/g, ' ').slice(0, 160)}` : i.type))
+        yield { type: 'item', item: { type: 'message', role: 'assistant', text: lines.join('\n') } }
+        return
+      }
       if (text.startsWith('!slow')) await sleep(4000)
-      reply = `Echo: ${text}`
+      const said = () => text.split('\n').filter((line) => /^(User|Summary): /.test(line)).map((line) => line.replace(/^Summary: /, '').slice(0, 40))
+      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : `Echo: ${text}`
     }
     for (const word of reply.split(/(?<=\s)/)) {
       await sleep(5)

@@ -52,23 +52,26 @@ export function watch(key: string, canvas: HTMLCanvasElement, onSize: (size: Pag
   }
 }
 
-// ---- routing: #/<botId>/<threadId> for a chat, #/settings/<page>/… for the settings
+// ---- routing: #/<botId> for a bot's conversation, #/<botId>/<threadId>[/<itemId>] for a subagent's
+// thread or an earlier conversation (and a message in it), #/settings/<page>/… for the settings
 
 export interface Route {
   botId: string
   threadId: string
+  /** A message to bring into view, when one was asked for. */
+  itemId: number
   /** The path inside the settings (page, then whatever that page takes), or null when a chat is showing. */
   settings: string[] | null
 }
 
 function parseHash(): Route {
   const parts = location.hash.replace(/^#\/?/, '').split('/').map((p) => decodeURIComponent(p))
-  if (parts[0] === 'settings') return { botId: '', threadId: '', settings: parts.slice(1).filter(Boolean) }
-  return { botId: parts[0] ?? '', threadId: parts[1] ?? '', settings: null }
+  if (parts[0] === 'settings') return { botId: '', threadId: '', itemId: 0, settings: parts.slice(1).filter(Boolean) }
+  return { botId: parts[0] ?? '', threadId: parts[1] ?? '', itemId: Number(parts[2]) || 0, settings: null }
 }
 
-export function navigate(botId: string, threadId = '') {
-  location.hash = `/${botId}${threadId ? `/${threadId}` : ''}`
+export function navigate(botId: string, threadId = '', itemId = 0) {
+  location.hash = `/${botId}${threadId ? `/${threadId}${itemId ? `/${itemId}` : ''}` : ''}`
 }
 
 /** Where the settings were opened from, to go back to when they are closed. */

@@ -1,12 +1,13 @@
-// One chat with a bot: what was said, what the bot did, its reply as it is written, and a place to answer.
+// A bot's conversation (or the thread of one of its subagents): what was said, what the bot did,
+// its reply as it is written, and a place to answer.
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import Markdown from 'react-native-markdown-display'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Item, Thread } from '@openbot/shared'
+import type { Item } from '@openbot/shared'
 import { describe } from '@openbot/client/steps'
-import { api, loadThread, useStore } from '@openbot/client/store'
+import { api, loadThread, mainThread, recentSubagents, useStore } from '@openbot/client/store'
 import { type Theme, useTheme } from '../../src/theme'
 
 /** What one line of the chat shows. Tool results and the bot's private reasoning are left out on a phone. */
@@ -20,6 +21,7 @@ function rows(items: Item[]): Row[] {
     if (d.type === 'function_call') return [{ key, kind: 'step', text: describe(d) }]
     if (d.type === 'web_search_call') return [{ key, kind: 'step', text: 'Search the web' }]
     if (d.type === 'notice') return [{ key, kind: 'notice', text: d.text, error: d.level === 'error' }]
+    if (d.type === 'summary') return [{ key, kind: 'notice', text: 'The conversation has grown long: the bot now works from a summary of its older part.' }]
     return []
   })
 }
@@ -52,10 +54,11 @@ export default function Chat() {
   const router = useRouter()
   const insets = useSafeAreaInsets()
   const { id } = useLocalSearchParams<{ id: string }>()
-  // "new:<bot>" is a chat that does not exist until its first message is sent.
-  const newFor = id.startsWith('new:') ? id.slice(4) : null
-  const thread = useStore((s) => (newFor ? undefined : s.threads.find((t) => t.id === id)))
-  const bot = useStore((s) => s.bots.find((b) => b.id === (newFor ?? thread?.botId)))
+  // "bot:<bot>" is that bot's conversation, which does not exist until its first message is sent
+  // and is another thread after its owner starts fresh. Anything else is a thread, such as a subagent's.
+  const forBot = id.startsWith('bot:') ? id.slice(4) : null
+  const thread = useStore((s) => (forBot ? mainThread(s.threads, forBot) : s.threads.find((t) => t.id === id)))
+  const bot = useStore((s) => s.bots.find((b) => b.id === (forBot ?? thread?.botId)))
   const items = useStore((s) => (thread ? s.items[thread.id] : undefined))
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
   const connected = useStore((s) => s.connected)
@@ -74,7 +77,7 @@ export default function Chat() {
 
   const shown = useMemo(() => rows(items ?? []), [items])
   const running = thread?.status === 'running'
-  const subagents = thread ? threads.filter((t) => t.parentId === thread.id) : []
+  const subagents = thread ? recentSubagents(threads, thread) : []
   const parent = thread?.parentId ? threads.find((t) => t.id === thread.parentId) : undefined
 
   const send = async () => {
@@ -83,16 +86,20 @@ export default function Chat() {
     setError('')
     setSending(true)
     try {
-      const target = thread?.id ?? (await api<Thread>('POST', `/api/bots/${bot.id}/threads`)).id
-      await api('POST', `/api/threads/${target}/messages`, { text: message })
+      await api('POST', forBot ? `/api/bots/${forBot}/messages` : `/api/threads/${thread!.id}/messages`, { text: message })
       setText('')
       following.current = true
-      if (!thread) router.setParams({ id: target })
     } catch (e) {
       setError((e as Error).message)
     }
     setSending(false)
   }
+
+  // Sets the conversation so far aside (it is kept, and found again in the app on the computer) and begins an empty one.
+  const menu = () =>
+    ActionSheetIOS.showActionSheetWithOptions({ title: 'Starting fresh sets this conversation aside and begins an empty one. What the bot has learned stays.', options: ['Start fresh', 'Cancel'], cancelButtonIndex: 1 }, (choice) => {
+      if (choice === 0 && bot) api('POST', `/api/bots/${bot.id}/fresh`).then(() => setError(''), (e) => setError(e.message))
+    })
 
   const tail = (
     <View style={{ paddingBottom: 12 }}>
@@ -116,15 +123,22 @@ export default function Chat() {
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 44}>
       <Stack.Screen
         options={{
-          title: thread?.title ?? bot?.name ?? '',
+          title: (forBot ? bot?.name : thread?.title) ?? '',
           headerRight: () => bot && (
-            <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name}’s browser`} hitSlop={12} onPress={() => router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: thread?.id ?? '' } })}>
-              <Text style={{ fontSize: 20 }}>🌐</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+              {forBot && !!items?.length && !running && (
+                <Pressable accessibilityRole="button" accessibilityLabel="More" hitSlop={12} onPress={menu}>
+                  <Text style={{ color: theme.muted, fontSize: 22, lineHeight: 24 }}>⋯</Text>
+                </Pressable>
+              )}
+              <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name}’s browser`} hitSlop={12} onPress={() => router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: thread?.id ?? '' } })}>
+                <Text style={{ fontSize: 20 }}>🌐</Text>
+              </Pressable>
+            </View>
           ),
         }}
       />
-      {!thread && bot ? (
+      {bot && (!thread || items?.length === 0) ? (
         <View style={styles.empty}>
           <Text style={{ fontSize: 44 }}>{bot.emoji}</Text>
           <Text style={{ color: theme.text, fontSize: 20, fontWeight: '600' }}>{bot.name}</Text>
@@ -137,7 +151,7 @@ export default function Chat() {
           data={shown}
           keyExtractor={(row) => row.key}
           renderItem={({ item }) => <Line row={item} theme={theme} />}
-          ListHeaderComponent={parent ? <Text style={[styles.notice, { color: theme.faint }]}>A subagent of “{parent.title}”</Text> : undefined}
+          ListHeaderComponent={parent ? <Text style={[styles.notice, { color: theme.faint }]}>{parent.parentId ? `A subagent of “${parent.title}”` : 'A subagent of this bot’s conversation'}</Text> : undefined}
           ListFooterComponent={tail}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}
           keyboardDismissMode="interactive"

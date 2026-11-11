@@ -164,6 +164,14 @@ class BotBrowser {
     return (await this.newTab(threadId)).page
   }
 
+  /** Gives the tab one thread was working in to another, when the first is set aside. */
+  handOver(from: string, to: string) {
+    const tab = [...this.tabs.values()].find((t) => t.threadId === from)
+    if (!tab) return
+    tab.threadId = to
+    this.announce()
+  }
+
   tab(tabId: string): Tab {
     const tab = this.tabs.get(tabId)
     if (!tab) throw new Error('That tab is closed')

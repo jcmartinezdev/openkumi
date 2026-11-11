@@ -15,9 +15,9 @@ export interface Prefs {
   suggestions: boolean
   /** Bring up the browser panel when a bot starts browsing. */
   autoOpenBrowser: boolean
-  /** How many chats the sidebar shows under each bot before "Show more". */
-  recentChats: number
   confirmDelete: boolean
+  /** Models kept at hand in the model picker, as "<provider>:<model>". */
+  favoriteModels: string[]
 }
 
 export const PREF_DEFAULTS: Prefs = {
@@ -28,8 +28,8 @@ export const PREF_DEFAULTS: Prefs = {
   expandSteps: false,
   suggestions: true,
   autoOpenBrowser: true,
-  recentChats: 5,
   confirmDelete: true,
+  favoriteModels: [],
 }
 
 const KEY = 'openbot.prefs'

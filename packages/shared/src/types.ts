@@ -1,6 +1,22 @@
 // Types shared by the server and the web UI. Import with `import type` only.
 
-export type Effort = '' | 'low' | 'medium' | 'high'
+/** How hard a model should think. Empty leaves it to the model's own default. Which levels a model takes varies. */
+export type Effort = '' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/** One model a provider offers. The first in a provider's list is the one it uses by default. */
+export interface ModelInfo {
+  /** What the provider calls it. */
+  id: string
+  /** Its name for people, with its version when the provider tells it: "Claude Opus 5.5". */
+  name: string
+  description?: string
+  /** The reasoning levels it takes, lightest first. Missing when the provider does not say. */
+  efforts?: Exclude<Effort, ''>[]
+  /** The level it uses when none is chosen, when the provider tells it. */
+  defaultEffort?: Exclude<Effort, ''>
+  /** An earlier model of a kind that has a newer one: kept out of the way until asked for. */
+  older?: boolean
+}
 
 /**
  * A bot is a folder (see server/bots.ts). These fields are what its owner controls: they live in
@@ -102,6 +118,10 @@ export interface HistoryEntry {
 
 export type ThreadStatus = 'idle' | 'running' | 'error'
 
+/**
+ * A bot has one conversation with its owner: the thread of kind 'chat' that is not archived.
+ * Starting fresh archives it and begins an empty one. Subagents work in threads beneath it.
+ */
 export interface Thread {
   id: string
   botId: string
@@ -109,6 +129,8 @@ export interface Thread {
   parentId: string | null
   title: string
   kind: 'chat' | 'subagent'
+  /** When the owner started fresh and left this conversation behind; null for the current one. Archived ones are read-only. */
+  archivedAt: number | null
   status: ThreadStatus
   /** Model override for this thread (subagents may run on a different model). */
   model: string | null
@@ -126,11 +148,24 @@ export type ItemData =
   | { type: 'function_call_output'; call_id: string; output: string }
   | { type: 'web_search_call'; action: unknown; status?: string }
   | { type: 'notice'; level: 'info' | 'error'; text: string }
+  /** Stands in, for the model, for every item of the thread up to and including item `upTo`. */
+  | { type: 'summary'; text: string; upTo: number }
 
 export interface Item {
   id: number
   threadId: string
   data: ItemData
+  createdAt: number
+}
+
+/** A message found by searching a bot's conversations, the current one and the archived ones. */
+export interface HistoryMatch {
+  threadId: string
+  itemId: number
+  /** Who said it: the owner, the bot, or a subagent reporting back. */
+  from: 'user' | 'bot' | 'subagent'
+  /** The part of the message around the first word that matched. */
+  snippet: string
   createdAt: number
 }
 
@@ -160,6 +195,11 @@ export interface Settings {
   maxDepth: number
   /** How much of a bot's AGENTS.md is loaded into each conversation, in characters. */
   instructionsLimit: number
+  /**
+   * How long a conversation may get, in tokens (roughly), before its older part is replaced by a
+   * summary. For bots on an API or a local model; Claude Code, Codex and Grok look after this themselves.
+   */
+  historyLimit: number
   /** Write everything Claude Code, Codex and Grok print to the server log. */
   debugEngines: boolean
 }
@@ -185,8 +225,9 @@ export interface ProviderInfo {
   hint?: string
   /** Switched off in Settings: not offered for bots. Missing means switched on. */
   enabled?: boolean
-  /** For a program on this computer: where it was found. */
+  /** For a program on this computer: where it was found, and which version it is. */
   path?: string
+  version?: string
   baseUrl?: string
 }
 

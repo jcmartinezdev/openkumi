@@ -7,6 +7,7 @@ import qrcode from 'qrcode-generator'
 import { pairingLink } from '@openbot/client/pair'
 import { BotPage, type BotTab } from './BotPage'
 import { PluginList, PluginPage } from './Plugins'
+import { Providers } from './Providers'
 import { desktop, reason, useDesktop } from './desktop'
 import { Icon } from './Icon'
 import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
@@ -40,23 +41,22 @@ const NAV: { heading: string | null; pages: PageId[] }[] = [
 ]
 
 /** Every setting the search can find: the page it is on, the row to bring into view, and what it is called. */
-const SEARCH: { page: PageId; id: string; title: string; also?: string }[] = [
+const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: string }[] = [
   { page: 'general', id: 'default-provider', title: 'New bots run on', also: 'default provider model' },
   { page: 'general', id: 'default-web-search', title: 'Web search for new bots' },
   { page: 'general', id: 'default-show-browser', title: 'Show the browser window for new bots', also: 'headless' },
-  { page: 'general', id: 'recent-chats', title: 'Chats shown per bot', also: 'sidebar' },
-  { page: 'general', id: 'confirm-delete', title: 'Confirm before deleting a chat' },
+  { page: 'general', id: 'confirm-delete', title: 'Confirm before deleting a conversation', also: 'chat' },
   { page: 'appearance', id: 'theme', title: 'Theme', also: 'dark light mode' },
   { page: 'appearance', id: 'text-size', title: 'Message text size', also: 'font' },
   { page: 'appearance', id: 'wide', title: 'Wide conversation', also: 'width' },
   { page: 'chat', id: 'enter-sends', title: 'Enter sends the message', also: 'keyboard shortcut newline' },
   { page: 'chat', id: 'suggestions', title: 'Suggestions in a new chat' },
   { page: 'chat', id: 'expand-steps', title: 'Show the details of each step', also: 'tool calls thoughts activity' },
-  { page: 'providers', id: 'provider-codex', title: 'Codex', also: 'openai chatgpt plan program path sign in' },
-  { page: 'providers', id: 'provider-grok', title: 'Grok', also: 'xai grok build plan program path sign in' },
-  { page: 'providers', id: 'provider-local', title: 'Local models', also: 'ollama lm studio offline private free' },
-  { page: 'providers', id: 'provider-claude-code', title: 'Claude Code', also: 'anthropic claude plan program path sign in' },
-  { page: 'providers', id: 'provider-openai-compatible', title: 'Other models', also: 'api key base url ollama openrouter' },
+  { page: 'providers', id: 'provider-codex', sub: 'codex', title: 'Codex', also: 'openai chatgpt plan program path sign in' },
+  { page: 'providers', id: 'provider-grok', sub: 'grok', title: 'Grok', also: 'xai grok build plan program path sign in' },
+  { page: 'providers', id: 'provider-local', sub: 'local', title: 'Local models', also: 'ollama lm studio offline private free' },
+  { page: 'providers', id: 'provider-claude-code', sub: 'claude-code', title: 'Claude Code', also: 'anthropic claude plan program path sign in' },
+  { page: 'providers', id: 'provider-openai-compatible', sub: 'openai-compatible', title: 'Other models', also: 'api key base url ollama openrouter' },
   { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot' },
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
   { page: 'browser', id: 'browser-panel', title: 'Open the panel when a bot starts browsing' },
@@ -74,19 +74,20 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string }[] = [
   { page: 'advanced', id: 'max-subagents', title: 'Subagents at once', also: 'limit parallel' },
   { page: 'advanced', id: 'max-depth', title: 'Subagent levels', also: 'depth nested' },
   { page: 'advanced', id: 'instructions-limit', title: 'Size of a bot’s own instructions', also: 'agents.md limit' },
+  { page: 'advanced', id: 'history-limit', title: 'Length of a conversation', also: 'context window summary tokens history' },
   { page: 'advanced', id: 'debug-engines', title: 'Log what the engines print', also: 'debug troubleshooting' },
   { page: 'advanced', id: 'data-folder', title: 'Data folder', also: 'files location' },
-  { page: 'advanced', id: 'delete-chats', title: 'Delete all chats' },
+  { page: 'advanced', id: 'delete-chats', title: 'Delete all conversations', also: 'chats history' },
   { page: 'about', id: 'version', title: 'Version' },
 ]
 
 /** The settings each page's "Restore defaults" puts back. */
 const RESTORE: Partial<Record<PageId, { settings?: (keyof Settings)[]; prefs?: (keyof Prefs)[] }>> = {
-  general: { settings: ['defaultProvider', 'defaultWebSearch', 'defaultShowBrowser'], prefs: ['recentChats', 'confirmDelete'] },
+  general: { settings: ['defaultProvider', 'defaultWebSearch', 'defaultShowBrowser'], prefs: ['confirmDelete'] },
   appearance: { prefs: ['theme', 'textSize', 'wide'] },
   chat: { prefs: ['enterSends', 'suggestions', 'expandSteps'] },
   browser: { settings: ['browserChannel'], prefs: ['autoOpenBrowser'] },
-  advanced: { settings: ['maxSteps', 'maxSubagents', 'maxDepth', 'instructionsLimit', 'debugEngines'] },
+  advanced: { settings: ['maxSteps', 'maxSubagents', 'maxDepth', 'instructionsLimit', 'historyLimit', 'debugEngines'] },
 }
 
 function RestoreDefaults({ page }: { page: PageId }) {
@@ -115,7 +116,8 @@ function Nav({ page }: { page: PageId }) {
   const go = (result: (typeof SEARCH)[number]) => {
     pointAt(result.id)
     setQuery('')
-    openSettings(result.page)
+    // Some settings are on a part of their page that has an address of its own, such as one provider.
+    openSettings(result.page, ...(result.sub ? [result.sub] : []))
     // The page may already be showing, in which case its rows do not mount again.
     requestAnimationFrame(() => {
       const row = document.getElementById(result.id)
@@ -208,7 +210,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           {page === 'general' && <General />}
           {page === 'appearance' && <Appearance />}
           {page === 'chat' && <ChatPage />}
-          {page === 'providers' && <Providers />}
+          {page === 'providers' && <Providers selected={path[1]} />}
           {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={(['bot', 'skills', 'connections', 'files'].includes(path[2]) ? path[2] : 'bot') as BotTab} file={path.slice(3).join('/') || undefined} /> : <Bots newBot={newBot} />)}
           {page === 'browser' && <BrowserPage />}
           {page === 'plugins' && (path[1] ? <PluginPage id={path[1]} /> : <PluginList />)}
@@ -232,7 +234,6 @@ function General() {
   const runsOn = useSetting('defaultProvider')
   const webSearch = useSetting('defaultWebSearch')
   const showBrowser = useSetting('defaultShowBrowser')
-  const recent = usePref('recentChats')
   const confirmDelete = usePref('confirmDelete')
   const usable = providers.filter((p) => (p.connected && p.enabled !== false) || p.id === runsOn.value)
   return (
@@ -254,17 +255,8 @@ function General() {
           control={<Switch label="Show the browser window for new bots" checked={showBrowser.value} onChange={showBrowser.set} />}
         />
       </Section>
-      <Section title="Sidebar">
-        <Row
-          id="recent-chats"
-          title="Chats shown per bot"
-          description="How many recent chats are listed under each bot before “Show more”. This device only."
-          reset={recent.reset}
-          control={<Pick label="Chats shown per bot" value={recent.value} options={[[3, '3'], [5, '5'], [10, '10'], [20, '20']]} onChange={recent.set} />}
-        />
-      </Section>
       <Section title="Confirmations">
-        <Row id="confirm-delete" title="Confirm before deleting a chat" description="This device only." reset={confirmDelete.reset} control={<Switch label="Confirm before deleting a chat" checked={confirmDelete.value} onChange={confirmDelete.set} />} />
+        <Row id="confirm-delete" title="Confirm before deleting a conversation" description="Asked when you delete one of a bot’s earlier conversations. This device only." reset={confirmDelete.reset} control={<Switch label="Confirm before deleting a conversation" checked={confirmDelete.value} onChange={confirmDelete.set} />} />
       </Section>
     </Page>
   )
@@ -323,111 +315,6 @@ function ChatPage() {
 }
 
 // ---- Providers
-
-function ProviderStatus({ provider }: { provider: ProviderInfo }) {
-  if (provider.enabled === false) return <span className="pill">Off</span>
-  return <span className={`pill ${provider.connected ? 'good' : ''}`}>{provider.connected ? 'Connected' : provider.kind === 'cli' ? provider.detail : 'Not connected'}</span>
-}
-
-/** Whether a provider is offered for bots at all. */
-function UseForBots({ provider }: { provider: ProviderInfo }) {
-  const off = useSetting('disabledProviders')
-  const enabled = !off.value.includes(provider.id)
-  return (
-    <Row
-      title="Use for bots"
-      description="When off, it is not offered as something a bot can run on."
-      control={<Switch label={`Use ${provider.name} for bots`} checked={enabled} onChange={(on) => off.set(on ? off.value.filter((id) => id !== provider.id) : [...off.value, provider.id])} />}
-    />
-  )
-}
-
-function Engine({ provider, pathKey }: { provider: ProviderInfo; pathKey: 'claudePath' | 'codexPath' | 'grokPath' }) {
-  const path = useSetting(pathKey)
-  const [checking, setChecking] = useState(false)
-  const check = () => {
-    setChecking(true)
-    api('POST', '/api/providers/check').catch(() => {}).finally(() => setChecking(false))
-  }
-  return (
-    <Section title={provider.name} action={<ProviderStatus provider={provider} />}>
-      <Row
-        id={`provider-${provider.id}`}
-        title={provider.connected ? 'Signed in' : provider.detail}
-        description={provider.connected ? `${provider.detail}. Open Bot starts the program installed on this computer; you sign in there, not here.` : provider.hint}
-        control={<button disabled={checking} onClick={check}>{checking ? 'Checking…' : 'Check again'}</button>}
-      />
-      <Row
-        title="Program"
-        description="Where the program is. Leave empty to have it found."
-        status={provider.path ? <>Using <code>{provider.path}</code></> : undefined}
-        reset={path.reset}
-        control={<Field label={`Path of the ${provider.name} program`} value={path.value} placeholder="Found automatically" onCommit={path.set} />}
-      />
-      <UseForBots provider={provider} />
-    </Section>
-  )
-}
-
-function Providers() {
-  const providers = useStore((s) => s.providers)
-  const by = (id: string) => providers.find((p) => p.id === id)
-  const compat = by('openai-compatible')
-  const claude = by('claude-code')
-  const codex = by('codex')
-  const grok = by('grok')
-  const local = by('local')
-  const localUrl = useSetting('localUrl')
-  const saveCompat = (patch: { baseUrl?: string; apiKey?: string }) => api('PUT', '/api/providers/openai-compatible', { baseUrl: compat?.baseUrl ?? '', apiKey: '', ...patch })
-
-  // The programs may have been installed or signed in since the server last looked.
-  useEffect(() => {
-    api('POST', '/api/providers/check').catch(() => {})
-  }, [])
-
-  return (
-    <Page>
-      <p className="set-intro">Where the models come from. Codex runs on your ChatGPT plan, Claude Code on your Claude plan and Grok on your Grok plan; you sign in to each in its own program. Local models run on this computer. A bot runs on one of these; choose which in the bot’s settings.</p>
-      {codex && <Engine provider={codex} pathKey="codexPath" />}
-      {claude && <Engine provider={claude} pathKey="claudePath" />}
-      {grok && <Engine provider={grok} pathKey="grokPath" />}
-      {local && (
-        <Section title="Local models" action={<ProviderStatus provider={local} />}>
-          <Row
-            id="provider-local"
-            title={local.connected ? local.detail : local.detail}
-            description={local.connected ? 'Models that run on the computer running Open Bot, through Ollama or LM Studio. Nothing is sent anywhere and nothing is paid for. Small models often cannot use tools well, so pick one made for tool use.' : local.hint}
-            control={<button onClick={() => api('POST', '/api/providers/check').catch(() => {})}>Check again</button>}
-          />
-          <Row
-            title="Address"
-            description="Ollama and LM Studio are found by themselves. Fill this in only for another program, or another port."
-            status={local.baseUrl ? <>Using <code>{local.baseUrl}</code></> : undefined}
-            reset={localUrl.reset}
-            control={<Field label="Address of the local model server" value={localUrl.value} placeholder="Found automatically" onCommit={localUrl.set} />}
-          />
-          <UseForBots provider={local} />
-        </Section>
-      )}
-      {compat && (
-        <Section title="Other models" action={<ProviderStatus provider={compat} />}>
-          <Row
-            id="provider-openai-compatible"
-            title="Base URL"
-            description="Any OpenAI-compatible API, such as OpenAI or OpenRouter. Clear it to disconnect."
-            control={<Field label="Base URL" value={compat.baseUrl ?? ''} placeholder="https://api.openai.com/v1" onCommit={(baseUrl) => saveCompat({ baseUrl })} />}
-          />
-          <Row
-            title="API key"
-            description="Stored on the computer running Open Bot."
-            control={<Field label="API key" type="password" value="" placeholder={compat.connected ? 'Saved' : 'None'} onCommit={(apiKey) => saveCompat({ apiKey })} />}
-          />
-          <UseForBots provider={compat} />
-        </Section>
-      )}
-    </Page>
-  )
-}
 
 // ---- Bots
 
@@ -890,21 +777,23 @@ function Advanced() {
   const maxSubagents = useSetting('maxSubagents')
   const maxDepth = useSetting('maxDepth')
   const limit = useSetting('instructionsLimit')
+  const history = useSetting('historyLimit')
   const debug = useSetting('debugEngines')
   const home = useStore((s) => s.home)
+  // Each bot's conversation, and the earlier ones that were set aside.
   const chats = useStore((s) => s.threads.filter((t) => !t.parentId).length)
   const number = (bind: { value: number; set: (n: number) => void }, label: string) => (
     <Field label={label} type="number" className="set-input number" value={String(bind.value)} onCommit={(v) => bind.set(Number(v))} />
   )
   const deleteChats = () => {
-    if (!confirm(`Delete all ${chats} chats of every bot? Bots, their files and their memory are kept. This cannot be undone.`)) return
+    if (!confirm(`Delete every conversation of every bot, ${chats} in all, the earlier ones included? Bots, their files and their memory are kept. This cannot be undone.`)) return
     api('DELETE', '/api/threads').catch((e) => alert(e.message))
   }
   return (
     <Page>
       <Section title="Limits">
         <Row id="max-steps" title="Steps per turn" description="How many times a bot may call the model in one turn before it is stopped. Each tool call takes a step." reset={maxSteps.reset} control={number(maxSteps, 'Steps per turn')} />
-        <Row id="max-subagents" title="Subagents at once" description="How many subagents of one chat may run at the same time." reset={maxSubagents.reset} control={number(maxSubagents, 'Subagents at once')} />
+        <Row id="max-subagents" title="Subagents at once" description="How many subagents of one conversation may run at the same time." reset={maxSubagents.reset} control={number(maxSubagents, 'Subagents at once')} />
         <Row
           id="max-depth"
           title="Subagent levels"
@@ -918,6 +807,13 @@ function Advanced() {
           description="How many characters of a bot’s AGENTS.md are loaded into each conversation. Anything beyond is left out, and the bot is told to shorten the file."
           reset={limit.reset}
           control={number(limit, 'Characters of AGENTS.md loaded')}
+        />
+        <Row
+          id="history-limit"
+          title="Length of a conversation"
+          description="How long a bot’s conversation may get, in tokens, before its older part is replaced by a summary for the bot. Lower it for a local model with a small context window. Nothing is deleted: you still see every message, and the bot can look them up. Bots on Claude Code, Codex or Grok are not affected, as those programs look after this themselves."
+          reset={history.reset}
+          control={number(history, 'Tokens of conversation sent to the model')}
         />
       </Section>
       <Section title="Troubleshooting">
@@ -933,10 +829,10 @@ function Advanced() {
         <Row
           id="data-folder"
           title="Data folder"
-          description={<>Everything Open Bot keeps is in <code>{home}</code>: bots, chats, skills, connections and these settings.</>}
+          description={<>Everything Open Bot keeps is in <code>{home}</code>: bots, conversations, skills, connections and these settings.</>}
           control={onServer() && <button onClick={() => api('POST', '/api/reveal', {}).catch((e) => alert(e.message))}><Icon name="folder" size={14} /> Open folder</button>}
         />
-        <Row id="delete-chats" title="Delete all chats" description="Removes every chat of every bot. Bots, their files and their memory are kept." control={<button className="danger" disabled={!chats} onClick={deleteChats}>Delete {chats || ''} chats</button>} />
+        <Row id="delete-chats" title="Delete all conversations" description="Removes what was said with every bot, the earlier conversations included. Bots, their files and their memory are kept." control={<button className="danger" disabled={!chats} onClick={deleteChats}>Delete all conversations</button>} />
       </Section>
     </Page>
   )

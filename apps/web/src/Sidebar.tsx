@@ -1,10 +1,8 @@
-import { useState } from 'react'
 import type { Bot, Thread } from '@openbot/shared'
 import type { Modal } from './App'
 import { Icon } from './Icon'
 import { desktop, useDesktop } from './desktop'
-import { usePrefs } from './prefs'
-import { api, navigate, openSettings, rootOf, useStore } from './store'
+import { mainThread, openSettings, recentSubagents, rootOf, useStore } from './store'
 
 export function StatusDot({ thread }: { thread: Thread }) {
   if (thread.status === 'running') return <span className="spinner" aria-label="Working" />
@@ -29,29 +27,18 @@ interface Props {
   close: () => void
 }
 
+/** The bots, one row each: a bot has a single conversation, so there is nothing to pick beneath it. */
 export function Sidebar({ bot, thread, openModal, open, close }: Props) {
   const bots = useStore((s) => s.bots)
   const threads = useStore((s) => s.threads)
   const providers = useStore((s) => s.providers)
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const { recentChats: RECENT, confirmDelete } = usePrefs()
   const root = thread && rootOf(threads, thread)
-  // A subagent may run as another bot; the chat it belongs to decides which bot is current.
+  // A subagent may run as another bot; the conversation it belongs to decides which bot is current.
   const currentBotId = root?.botId ?? bot?.id
   const connected = providers.some((p) => p.connected)
   const app = useDesktop()
   // The environments that are turned on, to switch between.
   const environments = [...(app.local.enabled ? [{ id: 'local', name: 'This computer' }] : []), ...app.environments.filter((e) => e.enabled)]
-
-  const remove = async (t: Thread) => {
-    if (confirmDelete && !confirm(`Delete "${t.title}"?`)) return
-    try {
-      await api('DELETE', `/api/threads/${t.id}`)
-      if (root?.id === t.id) navigate(t.botId)
-    } catch (e: any) {
-      alert(`Could not delete the chat: ${e.message}`)
-    }
-  }
 
   return (
     <nav className={`sidebar ${open ? 'open' : ''}`}>
@@ -70,50 +57,44 @@ export function Sidebar({ bot, thread, openModal, open, close }: Props) {
       </div>
       <div className="side-scroll">
         {bots.map((b) => {
-          const chats = threads.filter((t) => t.botId === b.id && !t.parentId).sort((x, y) => y.updatedAt - x.updatedAt)
-          const shown = expanded[b.id] ? chats : chats.slice(0, RECENT)
+          const main = mainThread(threads, b.id)
+          const current = b.id === currentBotId
+          // What its subagents are doing shows under the bot being looked at, and as a mark on the others.
+          const subagents = main ? recentSubagents(threads, main) : []
+          const working = main?.status === 'running' || subagents.some((t) => t.status === 'running')
           return (
             <section key={b.id} className="group">
               <div className="item">
                 <a
-                  className={`row bot ${b.id === currentBotId && !thread ? 'active' : ''}`}
+                  // Lit for its conversation and its earlier ones; a subagent listed beneath it is lit instead.
+                  className={`row bot ${current && !subagents.some((t) => t.id === thread?.id) ? 'active' : ''}`}
                   href={`#/${b.id}`}
-                  title={`New chat with ${b.name}`}
+                  aria-current={current ? 'page' : undefined}
                   onClick={close}
                 >
                   <span className="avatar">{b.emoji}</span>
                   <span className="grow name">{b.name}</span>
+                  <span className="meta">
+                    {working ? <span className="spinner" aria-label="Working" /> : main?.status === 'error' ? <span className="dot error" aria-label="Failed" /> : main && <span className="time">{ago(main.updatedAt)}</span>}
+                  </span>
                 </a>
                 <button className="icon reveal" title="Bot settings" aria-label={`Settings for ${b.name}`} onClick={() => (close(), openSettings('bots', b.id))}>
                   <Icon name="more" />
                 </button>
               </div>
-              {shown.map((t) => (
-                <div key={t.id}>
-                  <div className="item">
-                    <a
-                      className={`row thread ${t.id === thread?.id ? 'active' : ''}`}
-                      href={`#/${b.id}/${t.id}`}
-                      aria-current={t.id === thread?.id ? 'page' : undefined}
-                      onClick={close}
-                    >
-                      <span className="grow title">{t.title}</span>
-                      <span className="meta">
-                        {t.status === 'idle' ? <span className="time">{ago(t.updatedAt)}</span> : <StatusDot thread={t} />}
-                      </span>
-                    </a>
-                    <button className="icon reveal" title="Delete chat" aria-label={`Delete chat ${t.title}`} onClick={() => remove(t)}>
-                      <Icon name="trash" size={14} />
-                    </button>
-                  </div>
-                  {root?.id === t.id && <SubThreads parent={t} threads={threads} activeId={thread?.id} depth={1} close={close} />}
-                </div>
+              {current && subagents.map((t) => (
+                <a
+                  key={t.id}
+                  className={`row thread sub ${t.id === thread?.id ? 'active' : ''}`}
+                  href={`#/${t.botId}/${t.id}`}
+                  aria-current={t.id === thread?.id ? 'page' : undefined}
+                  onClick={close}
+                >
+                  <Icon name="agents" size={13} />
+                  <span className="grow title">{t.title}</span>
+                  <span className="meta"><StatusDot thread={t} /></span>
+                </a>
               ))}
-              {chats.length > RECENT && (
-                <button className="row more" onClick={() => setExpanded((e) => ({ ...e, [b.id]: !e[b.id] }))}>
-                  {expanded[b.id] ? 'Show less' : `Show ${chats.length - RECENT} more`}
-                </button>
-              )}
             </section>
           )
         })}
@@ -124,29 +105,5 @@ export function Sidebar({ bot, thread, openModal, open, close }: Props) {
         {!connected && <span className="pill warn">Connect a model</span>}
       </button>
     </nav>
-  )
-}
-
-function SubThreads({ parent, threads, activeId, depth, close }: { parent: Thread; threads: Thread[]; activeId?: string; depth: number; close: () => void }) {
-  const children = threads.filter((t) => t.parentId === parent.id)
-  return (
-    <>
-      {children.map((t) => (
-        <div key={t.id}>
-          <a
-            className={`row thread sub ${t.id === activeId ? 'active' : ''}`}
-            style={{ paddingLeft: 30 + depth * 12 }}
-            href={`#/${t.botId}/${t.id}`}
-            aria-current={t.id === activeId ? 'page' : undefined}
-            onClick={close}
-          >
-            <Icon name="agents" size={13} />
-            <span className="grow title">{t.title}</span>
-            <span className="meta"><StatusDot thread={t} /></span>
-          </a>
-          <SubThreads parent={t} threads={threads} activeId={activeId} depth={depth + 1} close={close} />
-        </div>
-      ))}
-    </>
   )
 }

@@ -169,6 +169,7 @@ route('POST', '/api/reveal', (_, body, { req }) => {
   const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
   spawn(opener, [dir], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
 })
+// Every conversation of every bot, the archived ones too.
 route('DELETE', '/api/threads', () => {
   for (const t of db.listThreads().filter((t) => !t.parentId)) {
     agent.stop(t.id)
@@ -278,17 +279,36 @@ route('GET', '/api/bots/:id/history', ([id]) => ws.history(needBot(id).id))
 route('GET', '/api/bots/:id/history/:change', async ([id, change]) => ({ diff: await ws.diff(needBot(id).id, change) }))
 route('POST', '/api/bots/:id/history/:change/undo', ([id, change]) => ws.undo(needBot(id).id, change))
 
+// ---- a bot's conversation: one that goes on, and the earlier ones that were set aside
+const messageText = (body: Record<string, any>) => (typeof body.text === 'string' && body.text.trim()) || fail(400, 'Message text is required')
+// What the bot itself refuses (it is still working, the conversation is archived) is for the owner to put right.
+const unless = <T>(act: () => T): T => {
+  try {
+    return act()
+  } catch (e: any) {
+    fail(409, e.message)
+  }
+}
+route('POST', '/api/bots/:id/messages', ([id], body) => {
+  const text = messageText(body)
+  const thread = agent.conversation(needBot(id).id)
+  agent.postMessage(thread.id, text, 'user')
+  return db.getThread(thread.id)
+})
+route('POST', '/api/bots/:id/fresh', ([id]) => unless(() => agent.startFresh(needBot(id).id)))
+route('GET', '/api/bots/:id/search', ([id], _, { url }) => ({ matches: db.searchMessages(needBot(id).id, url.searchParams.get('q') ?? '') }))
+route('POST', '/api/threads/:id/resume', ([id]) => unless(() => agent.resume(needThread(id))))
+
 // ---- threads
-route('POST', '/api/bots/:id/threads', ([id]) => db.createThread({ botId: needBot(id).id }))
 route('GET', '/api/threads/:id', ([id]) => ({
   thread: needThread(id),
   items: db.listItems(id),
   partial: agent.partialOf(id),
 }))
 route('POST', '/api/threads/:id/messages', ([id], body) => {
-  const text = typeof body.text === 'string' ? body.text.trim() : ''
-  if (!text) fail(400, 'Message text is required')
-  agent.postMessage(needThread(id).id, text, 'user')
+  const text = messageText(body)
+  const thread = needThread(id)
+  unless(() => agent.postMessage(thread.id, text, 'user'))
 })
 route('POST', '/api/threads/:id/stop', ([id]) => agent.stop(needThread(id).id))
 route('DELETE', '/api/threads/:id', ([id]) => {

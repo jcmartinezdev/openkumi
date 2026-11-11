@@ -9,7 +9,7 @@ import { NewBot } from './Modals'
 import { usePrefs } from './prefs'
 import { SettingsView } from './Settings'
 import { Sidebar } from './Sidebar'
-import { type Route, navigate, openSettings, useRoute, useStore } from './store'
+import { type Route, mainThread, navigate, openSettings, useRoute, useStore } from './store'
 
 export type Modal = { kind: 'new-bot' } | null
 
@@ -52,7 +52,8 @@ export function App() {
   const [navOpen, setNavOpen] = useState(false)
   useEffect(() => setNavOpen(false), [route.botId, route.threadId])
 
-  const thread = threads.find((t) => t.id === route.threadId)
+  // A bot's address shows its conversation; a longer one shows a subagent's thread or an earlier conversation.
+  const thread = threads.find((t) => t.id === route.threadId) ?? mainThread(threads, route.botId)
   const bot = bots.find((b) => b.id === (thread?.botId ?? route.botId))
 
   // Land on the first bot when the URL names nothing that exists.
@@ -97,9 +98,11 @@ export function App() {
         {bot ? (
           <>
             <Chat
-              key={`chat:${thread?.id ?? bot.id}`}
+              // A bot's own conversation is one view, whichever thread holds it at the moment.
+              key={`chat:${thread && thread.id !== mainThread(threads, bot.id)?.id ? thread.id : bot.id}`}
               bot={bot}
               thread={thread}
+              focus={thread?.id === route.threadId ? route.itemId : 0}
               browserOpen={showPane}
               toggleBrowser={toggleBrowser}
               openNav={() => setNavOpen(true)}

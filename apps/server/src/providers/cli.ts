@@ -47,6 +47,12 @@ export function capture(bin: string, args: string[]): Promise<{ code: number; st
   })
 }
 
+/** The version a program says it is ("codex-cli 0.166.0" gives "0.166.0"), or an empty string. */
+export async function versionOf(bin: string): Promise<string> {
+  const { stdout } = await capture(bin, ['--version'])
+  return stdout.match(/\d+\.\d+(?:\.\d+)?[\w.-]*/)?.[0] ?? ''
+}
+
 export interface Exit {
   code: number | null
   /** The end of what the program wrote to its error output, for error messages. */

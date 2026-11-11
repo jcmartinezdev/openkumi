@@ -4,7 +4,7 @@
 import type { ProviderInfo } from '@openbot/shared'
 import { settings } from '../settings.ts'
 import { type Config, chat, modelsAt } from './openai-compat.ts'
-import type { ModelRequest, Provider } from './types.ts'
+import { type ModelRequest, type Provider, plainModel } from './types.ts'
 
 /** Where each program listens when it is left as it comes. */
 const USUAL = [
@@ -40,7 +40,7 @@ export const localModels: Provider = {
   async models() {
     // Models come and go as they are downloaded, so the list is read again when it is asked for.
     await refresh()
-    return found?.models ?? []
+    return (found?.models ?? []).map(plainModel)
   },
   stream(req: ModelRequest) {
     if (!found) throw new Error('No local model server is running on this computer. Start Ollama or LM Studio.')

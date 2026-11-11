@@ -2,12 +2,13 @@ import DOMPurify from 'dompurify'
 import { Lexer, marked } from 'marked'
 import { type ReactNode, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Bot, Effort, Item, ItemData, Thread } from '@openbot/shared'
+import { History, day } from './History'
 import { Icon } from './Icon'
-import { useModels } from './models'
+import { ModelPicker } from './ModelPicker'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
 import { describe, parse, site } from '@openbot/client/steps'
-import { api, loadThread, navigate, onEnvironmentChange, openSettings, rootOf, useStore } from './store'
+import { api, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, recentSubagents, rootOf, useStore } from './store'
 
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
   if (node.tagName === 'A') {
@@ -135,6 +136,9 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
     return map
   }, [items])
 
+  // Where the bot's own view of a long conversation begins: before it, it has a summary.
+  const summary = useMemo(() => items.findLast((i) => i.data.type === 'summary')?.data as Extract<ItemData, { type: 'summary' }> | undefined, [items])
+
   // Consecutive tool calls and thoughts collapse into one quiet activity log between messages.
   const blocks: ReactNode[] = []
   let steps: ReactNode[] = []
@@ -142,8 +146,19 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
     if (steps.length) blocks.push(<div key={`a${key}`} className="activity">{steps}</div>)
     steps = []
   }
+  let marked = false
   for (const { id, data } of items) {
-    if (data.type === 'function_call_output') continue
+    if (data.type === 'function_call_output' || data.type === 'summary') continue
+    if (summary && !marked && id > summary.upTo) {
+      marked = true
+      flush(-id)
+      blocks.push(
+        <details key="summary" className="summarised">
+          <summary><span>Above here, the bot works from a summary</span><Icon name="chevron" size={12} /></summary>
+          <Markdown text={summary.text} />
+        </details>,
+      )
+    }
     if (isStep(data)) {
       if (data.type === 'function_call') steps.push(<ToolStep key={id} call={data} output={outputs.get(data.call_id)} running={running} openFile={openFile} />)
       else if (data.type === 'reasoning') steps.push(<Step key={id} icon="thought" label="Thought"><Markdown text={data.summary} /></Step>)
@@ -155,10 +170,10 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
     }
     flush(id)
     if (data.type === 'message') {
-      if (data.role === 'assistant') blocks.push(<div key={id} className="msg assistant"><Markdown text={data.text} /></div>)
-      else if (data.source === 'subagent') blocks.push(<SubagentReport key={id} text={data.text} />)
+      if (data.role === 'assistant') blocks.push(<div key={id} data-item={id} className="msg assistant"><Markdown text={data.text} /></div>)
+      else if (data.source === 'subagent') blocks.push(<div key={id} data-item={id}><SubagentReport text={data.text} /></div>)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
-      else blocks.push(<div key={id} className="msg user">{data.text}</div>)
+      else blocks.push(<div key={id} data-item={id} className="msg user">{data.text}</div>)
     } else if (data.type === 'notice') {
       blocks.push(<div key={id} className={`notice ${data.level}`}>{data.text}</div>)
     }
@@ -167,18 +182,14 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
   return <>{blocks}</>
 }
 
-/** Every subagent under this chat as a strip of chips above the composer: tap to open, × to stop. */
+/**
+ * The subagents under this conversation as a strip of chips above the composer: tap to open, × to
+ * stop. A conversation goes on for good, so only the ones at work, or just done, are kept here;
+ * older ones are opened from where they were started, further up.
+ */
 function Subagents({ thread }: { thread: Thread }) {
   const threads = useStore((s) => s.threads)
-  const root = rootOf(threads, thread)
-  const all: Thread[] = []
-  const collect = (parent: Thread) => {
-    for (const t of threads.filter((x) => x.parentId === parent.id)) {
-      all.push(t)
-      collect(t)
-    }
-  }
-  collect(root)
+  const all = recentSubagents(threads, rootOf(threads, thread))
   if (!all.length) return null
   const running = all.filter((t) => t.status === 'running')
   return (
@@ -207,31 +218,6 @@ function Subagents({ thread }: { thread: Thread }) {
 }
 
 /** Model and reasoning pickers that live in the composer, so they are one tap away. */
-function ModelPicker({ bot }: { bot: Bot }) {
-  const connected = useStore((s) => s.providers).find((p) => p.id === bot.provider)?.connected
-  const models = useModels(bot.provider, connected)
-
-  const save = (patch: Partial<Bot>) => api('PATCH', `/api/bots/${bot.id}`, patch).catch(() => {})
-  // The first model is the provider's default, stored as "" so the bot follows it if it changes.
-  const options = bot.model && !models.includes(bot.model) ? [...models, bot.model] : models
-  return (
-    <>
-      <select className="picker" aria-label="Model" value={bot.model === models[0] ? '' : bot.model} onChange={(e) => save({ model: e.target.value })}>
-        <option value="">{models[0] ?? 'Default model'}</option>
-        {options.filter((m) => m !== models[0]).map((m) => (
-          <option key={m} value={m}>{m}</option>
-        ))}
-      </select>
-      <select className="picker" aria-label="Reasoning effort" value={bot.effort} onChange={(e) => save({ effort: e.target.value as Effort })}>
-        <option value="">Auto</option>
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
-    </>
-  )
-}
-
 const SUGGESTIONS = [
   'Find today’s top tech headlines and summarize them',
   'Compare three laptops in parallel using subagents',
@@ -240,23 +226,29 @@ const SUGGESTIONS = [
 
 interface Props {
   bot: Bot
+  /** The bot's conversation (none until something is said), a subagent's thread, or an earlier conversation. */
   thread?: Thread
+  /** A message to bring into view, or 0. */
+  focus: number
   browserOpen: boolean
   toggleBrowser: () => void
   openNav: () => void
 }
 
-/** Unsent text per chat, so looking at a subagent and coming back does not lose it. */
+/** Unsent text per conversation, so looking at a subagent and coming back does not lose it. */
 const drafts = new Map<string, string>()
 // Chats in another environment can have the same ids.
 onEnvironmentChange(() => drafts.clear())
 
-export function Chat({ bot, thread, browserOpen, toggleBrowser, openNav }: Props) {
+export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }: Props) {
   const items = useStore((s) => (thread ? s.items[thread.id] : undefined))
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
   const threads = useStore((s) => s.threads)
   const provider = useStore((s) => s.providers).find((p) => p.id === bot.provider)
-  const draftKey = thread?.id ?? bot.id
+  const archived = !!thread?.archivedAt
+  /** The bot's own conversation, as opposed to a subagent's thread or an earlier conversation. */
+  const main = !thread || (!thread.parentId && !archived)
+  const draftKey = main ? bot.id : thread.id
   const [draft, setDraftState] = useState(drafts.get(draftKey) ?? '')
   const setDraft = (text: string) => {
     drafts.set(draftKey, text)
@@ -264,7 +256,7 @@ export function Chat({ bot, thread, browserOpen, toggleBrowser, openNav }: Props
   }
   const [error, setError] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
-  const stick = useRef(true)
+  const stick = useRef(!focus)
   const input = useRef<HTMLTextAreaElement>(null)
   const prefs = usePrefs()
 
@@ -281,6 +273,18 @@ export function Chat({ bot, thread, browserOpen, toggleBrowser, openNav }: Props
   useEffect(() => {
     if (matchMedia('(hover: hover)').matches) input.current?.focus()
   }, [thread?.id])
+
+  // A message that was asked for (found by searching) is brought into view and marked for a moment.
+  const loaded = !!items
+  useEffect(() => {
+    const found = focus && loaded ? scroller.current?.querySelector(`[data-item="${focus}"]`) : null
+    if (!found) return
+    stick.current = false
+    found.scrollIntoView({ block: 'center' })
+    found.classList.add('found')
+    const fade = setTimeout(() => found.classList.remove('found'), 2400)
+    return () => clearTimeout(fade)
+  }, [focus, loaded, thread?.id])
 
   // Follow new output only while the reader is already at the bottom.
   useLayoutEffect(() => {
@@ -314,30 +318,40 @@ export function Chat({ bot, thread, browserOpen, toggleBrowser, openNav }: Props
     setError('')
     stick.current = true
     try {
-      const id = thread?.id ?? (await api<Thread>('POST', `/api/bots/${bot.id}/threads`)).id
-      await api('POST', `/api/threads/${id}/messages`, { text })
-      if (!thread) navigate(bot.id, id)
+      // What is said to the bot goes to its one conversation, which begins with the first message.
+      await api('POST', main ? `/api/bots/${bot.id}/messages` : `/api/threads/${thread.id}/messages`, { text })
     } catch (e: any) {
       setError(e.message)
       setDraft(text)
     }
   }
 
+  // Sets the conversation aside and begins an empty one. It is kept, and can be continued from the earlier conversations.
+  const startFresh = () => api('POST', `/api/bots/${bot.id}/fresh`).then(() => (setError(''), navigate(bot.id)), (e) => setError(e.message))
+  const resume = () => api('POST', `/api/threads/${thread!.id}/resume`).then(() => navigate(bot.id), (e) => setError(e.message))
+  const earlier = threads.some((t) => t.botId === bot.id && !t.parentId && t.archivedAt)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  // Where "back" leads: from a subagent to whoever started it, from an earlier conversation to the current one.
+  const back = parent ? { to: parent, label: `Back to ${parent.kind === 'subagent' ? parent.title : 'the conversation'}` } : archived ? { to: null, label: 'Back to the current conversation' } : null
+
   return (
     <div className="parts">
       <header>
         <button className="icon menu" aria-label="Menu" onClick={openNav}><Icon name="menu" size={18} /></button>
-        {parent && (
-          <button className="icon" title={`Back to ${parent.title}`} aria-label="Back to parent chat" onClick={() => navigate(parent.botId, parent.id)}>
+        {back && (
+          <button className="icon" title={back.label} aria-label={back.label} onClick={() => (back.to && back.to.id !== mainThread(threads, back.to.botId)?.id ? navigate(back.to.botId, back.to.id) : navigate(back.to?.botId ?? bot.id))}>
             <Icon name="back" />
           </button>
         )}
         <div className="heading">
-          <span className="title">{thread ? thread.title : bot.name}</span>
-          {thread && <span className="faint">{bot.name}</span>}
+          <span className="title">{main ? bot.name : thread.title}</span>
+          {!main && <span className="faint">{archived ? `Earlier conversation · ${day(thread.createdAt)}` : bot.name}</span>}
         </div>
-        {thread && (
-          <button className="icon" title="New chat" aria-label="New chat" onClick={() => navigate(bot.id)}><Icon name="compose" size={17} /></button>
+        {main && (
+          <>
+            <History bot={bot} open={historyOpen} setOpen={setHistoryOpen} />
+            <button className="icon" title="Start fresh" aria-label="Start fresh" disabled={running || !items?.length} onClick={startFresh}><Icon name="compose" size={17} /></button>
+          </>
         )}
         <button className="icon" title="Bot settings" aria-label={`Settings for ${bot.name}`} onClick={() => openSettings('bots', bot.id)}>
           <Icon name="sliders" size={17} />
@@ -356,16 +370,20 @@ export function Chat({ bot, thread, browserOpen, toggleBrowser, openNav }: Props
         }}
       >
         <div className="column">
-          {!thread && (
+          {main && (!thread || items?.length === 0) && (
             <div className="empty">
               <div className="avatar big">{bot.emoji}</div>
               <h1>{bot.name}</h1>
               {provider?.connected ? (
-                prefs.suggestions && (
-                  <div className="suggestions">
-                    {SUGGESTIONS.map((s) => <button key={s} onClick={() => submit(s)}>{s}</button>)}
-                  </div>
-                )
+                <>
+                  {prefs.suggestions && (
+                    <div className="suggestions">
+                      {SUGGESTIONS.map((s) => <button key={s} onClick={() => submit(s)}>{s}</button>)}
+                    </div>
+                  )}
+                  {/* After starting fresh: where the conversation went. */}
+                  {earlier && <button className="quiet" onClick={() => setHistoryOpen(true)}><Icon name="history" size={14} /> Earlier conversations</button>}
+                </>
               ) : (
                 <>
                   <p>Connect a model to start chatting.</p>
@@ -392,6 +410,12 @@ export function Chat({ bot, thread, browserOpen, toggleBrowser, openNav }: Props
       <footer>
         <div className="column">
           {thread && <Subagents thread={thread} />}
+          {archived ? (
+            <div className="set-aside">
+              <span className="grow">This is an earlier conversation with {bot.name}. It can be read, and continued in place of the current one.</span>
+              <button onClick={resume}>Continue this one</button>
+            </div>
+          ) : (
           <div className="composer">
             <textarea
               ref={input}
@@ -427,6 +451,7 @@ export function Chat({ bot, thread, browserOpen, toggleBrowser, openNav }: Props
               )}
             </div>
           </div>
+          )}
         </div>
       </footer>
     </div>

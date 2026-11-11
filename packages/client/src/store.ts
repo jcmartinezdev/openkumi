@@ -353,6 +353,25 @@ export async function loadThread(id: string) {
   }
 }
 
+/** A bot's conversation with its owner: its one chat that is not archived. There is none until something has been said. */
+export function mainThread(threads: Thread[], botId: string): Thread | undefined {
+  return threads.find((t) => t.botId === botId && !t.parentId && !t.archivedAt)
+}
+
+/** The subagents under a thread, at every depth, that are at work or were until a moment ago: the ones worth showing beside it. */
+export function recentSubagents(threads: Thread[], root: Thread, withinMs = 60 * 60_000): Thread[] {
+  const found: Thread[] = []
+  const collect = (parent: Thread) => {
+    for (const t of threads) {
+      if (t.parentId !== parent.id) continue
+      if (t.status === 'running' || Date.now() - t.updatedAt < withinMs) found.push(t)
+      collect(t)
+    }
+  }
+  collect(root)
+  return found
+}
+
 /** The top-level chat a (possibly nested) subagent thread belongs to. */
 export function rootOf(threads: Thread[], thread: Thread): Thread {
   let t = thread

@@ -11,8 +11,27 @@ const args = process.argv.slice(2)
 const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
 const print = (obj) => process.stdout.write(JSON.stringify(obj) + '\n')
 
+if (args[0] === '--version') {
+  console.log('2.0.0 (Claude Code)')
+  process.exit(0)
+}
+
 if (args[0] === 'auth' && args[1] === 'status') {
   print({ loggedIn: true, authMethod: 'claude.ai', email: 'test@example.com', subscriptionType: 'pro' })
+  process.exit(0)
+}
+
+// Asked about itself instead of being given a message: it says which models it offers, as the real program does.
+if (args.includes('--input-format')) {
+  const levels = ['low', 'medium', 'high', 'xhigh', 'max']
+  const models = [
+    { value: 'default', resolvedModel: 'claude-opus-9', displayName: 'Default (recommended)', description: 'Opus 9 · Best for everyday tasks', supportedEffortLevels: levels },
+    { value: 'opus', resolvedModel: 'claude-opus-9', displayName: 'Opus 9', description: 'For complex work', supportedEffortLevels: levels },
+    { value: 'sonnet', resolvedModel: 'claude-sonnet-9', displayName: 'Sonnet 9', description: 'Most efficient', supportedEffortLevels: levels },
+    { value: 'haiku', resolvedModel: 'claude-haiku-9', displayName: 'Haiku 9', description: 'Fastest' },
+    { value: 'claude-sonnet-8', resolvedModel: 'claude-sonnet-8', displayName: 'Sonnet 8', description: 'Efficient for routine tasks', supportedEffortLevels: ['low', 'medium', 'high'] },
+  ]
+  print({ type: 'control_response', response: { subtype: 'success', request_id: 'models', response: { models } } })
   process.exit(0)
 }
 

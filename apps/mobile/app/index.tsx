@@ -1,8 +1,7 @@
-// The bots on the paired server, each with its recent chats.
-import { ActionSheetIOS, ActivityIndicator, Alert, Pressable, SectionList, StyleSheet, Text, View } from 'react-native'
+// The bots on the paired server. Each has one conversation, so a bot is a row, like a contact.
+import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
-import type { Thread } from '@openbot/shared'
-import { useStore } from '@openbot/client/store'
+import { mainThread, useStore } from '@openbot/client/store'
 import { forget, useSession } from '../src/session'
 import { useTheme } from '../src/theme'
 
@@ -43,32 +42,24 @@ export default function Home() {
     )
   }
 
-  const sections = bots.map((bot) => ({
-    bot,
-    data: threads.filter((t) => t.botId === bot.id && !t.parentId).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6),
-  }))
   return (
     <>
       {header}
       {!connected && <Text style={[styles.banner, { color: theme.muted, backgroundColor: theme.side }]}>Reconnecting…</Text>}
-      <SectionList
-        sections={sections}
-        keyExtractor={(thread: Thread) => thread.id}
-        contentContainerStyle={{ paddingBottom: 40 }}
-        stickySectionHeadersEnabled={false}
-        renderSectionHeader={({ section: { bot } }) => (
-          <Pressable accessibilityRole="button" accessibilityLabel={`New chat with ${bot.name}`} style={styles.bot} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: `new:${bot.id}` } })}>
-            <View style={[styles.avatar, { backgroundColor: theme.bubble }]}><Text style={{ fontSize: 20 }}>{bot.emoji}</Text></View>
-            <Text style={[styles.botName, { color: theme.text }]} numberOfLines={1}>{bot.name}</Text>
-            <Text style={{ color: theme.muted, fontSize: 22 }}>＋</Text>
-          </Pressable>
-        )}
-        renderItem={({ item: thread }) => (
-          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.chat, pressed && { backgroundColor: theme.side }]} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: thread.id } })}>
-            <Text style={[styles.chatTitle, { color: theme.text }]} numberOfLines={1}>{thread.title}</Text>
-            {thread.status === 'running' ? <ActivityIndicator size="small" color={theme.run} /> : <Text style={{ color: theme.faint, fontSize: 13 }}>{ago(thread.updatedAt)}</Text>}
-          </Pressable>
-        )}
+      <FlatList
+        data={bots}
+        keyExtractor={(bot) => bot.id}
+        contentContainerStyle={{ paddingVertical: 8, paddingBottom: 40 }}
+        renderItem={({ item: bot }) => {
+          const thread = mainThread(threads, bot.id)
+          return (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Conversation with ${bot.name}`} style={({ pressed }) => [styles.bot, pressed && { backgroundColor: theme.side }]} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: `bot:${bot.id}` } })}>
+              <View style={[styles.avatar, { backgroundColor: theme.bubble }]}><Text style={{ fontSize: 20 }}>{bot.emoji}</Text></View>
+              <Text style={[styles.botName, { color: theme.text }]} numberOfLines={1}>{bot.name}</Text>
+              {thread?.status === 'running' ? <ActivityIndicator size="small" color={theme.run} /> : thread && <Text style={{ color: theme.faint, fontSize: 13 }}>{ago(thread.updatedAt)}</Text>}
+            </Pressable>
+          )
+        }}
         ListEmptyComponent={<Text style={[styles.lead, { color: theme.muted, padding: 24 }]}>There are no bots on this server yet. Create one in the app on your computer.</Text>}
       />
     </>
@@ -79,9 +70,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 },
   lead: { fontSize: 15, lineHeight: 22, textAlign: 'center' },
   banner: { textAlign: 'center', fontSize: 13, paddingVertical: 6 },
-  bot: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 18, paddingBottom: 8 },
-  avatar: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  bot: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: 60 },
+  avatar: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   botName: { flex: 1, fontSize: 17, fontWeight: '600' },
-  chat: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 64, paddingRight: 16, height: 44 },
-  chatTitle: { flex: 1, fontSize: 15 },
 })

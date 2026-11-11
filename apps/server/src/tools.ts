@@ -65,7 +65,7 @@ const botTools: Tool[] = [
   {
     name: 'create_bot',
     description:
-      'Create a new bot. It appears in the app sidebar with its own chats, workspace and browser profile. ' +
+      'Create a new bot. It appears in the app sidebar with its own conversation, workspace and browser profile. ' +
       'Use this when the user asks for a new bot or persona.',
     parameters: params(
       {
@@ -166,6 +166,48 @@ const fileTools: Tool[] = [
       const path = ws.remove(ctx.bot.id, a.path)
       await ws.commit(ctx.bot.id, 'bot', `Delete ${path}`)
       return `Deleted ${path}.`
+    },
+  },
+]
+
+const when = (time: number) => new Date(time).toISOString().slice(0, 16).replace('T', ' ')
+const speaker = (data: Extract<ItemData, { type: 'message' }>) => (data.role === 'assistant' ? 'you' : data.source === 'user' ? 'user' : 'subagent report')
+
+/** The bot's own conversation, as far back as it goes: what is no longer in front of the model can be looked up here. */
+const historyTools: Tool[] = [
+  {
+    name: 'search_history',
+    description:
+      'Search everything that was said between you and the user, including the parts of the conversation you can no ' +
+      'longer see (summarised, or set aside when the user started fresh). Returns the messages that contain every ' +
+      'word of the query, newest first, each with an id for read_history.',
+    parameters: params({ query: str('Words to look for, e.g. "dentist appointment"') }, ['query']),
+    run: (a, ctx) => {
+      const matches = db.searchMessages(ctx.bot.id, String(a.query ?? ''), 20)
+      if (!matches.length) return 'Nothing was found. Try fewer or different words.'
+      return matches.map((m) => `[${m.itemId}] ${when(m.createdAt)} UTC, ${m.from === 'bot' ? 'you' : m.from === 'user' ? 'user' : 'subagent report'}: ${m.snippet}`).join('\n')
+    },
+  },
+  {
+    name: 'read_history',
+    description: 'Read a stretch of your conversation with the user around one message, by the id search_history gave for it.',
+    parameters: params(
+      {
+        id: { type: 'number', description: 'Message id from search_history' },
+        before: { type: 'number', description: 'How many earlier messages to include (default 6, max 30)' },
+        after: { type: 'number', description: 'How many later messages to include (default 6, max 30)' },
+      },
+      ['id'],
+    ),
+    run: (a, ctx) => {
+      const item = db.getItem(Number(a.id))
+      const thread = item && db.getThread(item.threadId)
+      // Only the bot's own conversations: not another bot's, and not what subagents said among themselves.
+      if (!item || !thread || thread.botId !== ctx.bot.id || thread.parentId) throw new Error(`There is no message with id ${a.id} in your conversation. Use search_history.`)
+      const count = (v: unknown) => Math.min(Math.max(Number.isFinite(Number(v)) ? Math.round(Number(v)) : 6, 0), 30)
+      return db.messagesAround(thread.id, item.id, count(a.before), count(a.after)).flatMap(({ id, data, createdAt }) =>
+        data.type === 'message' ? [`[${id}] ${when(createdAt)} UTC, ${speaker(data)}:\n${data.text.slice(0, 6000)}`] : [],
+      ).join('\n\n')
     },
   },
 ]
@@ -424,7 +466,7 @@ const webTools: Tool[] = [
 export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; notes: string[] }> {
   const canSpawn = agent.depthOf(thread) < settings().maxDepth
   const connected = await connectionTools(thread.botId)
-  const own = [...botTools, ...fileTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...browserTools, ...webTools]
+  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...browserTools, ...webTools]
   return { tools: [...own, ...connected.tools], notes: connected.notes }
 }
 

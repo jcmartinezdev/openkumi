@@ -20,6 +20,7 @@ export const DEFAULTS: Settings = {
   maxSubagents: 8,
   maxDepth: 2,
   instructionsLimit: 12_000,
+  historyLimit: 60_000,
   debugEngines: false,
 }
 
@@ -47,6 +48,7 @@ const ACCEPT: { [K in keyof Settings]: (v: unknown) => Settings[K] | undefined }
   maxSubagents: whole(1, 16),
   maxDepth: whole(0, 3),
   instructionsLimit: whole(2000, 60_000),
+  historyLimit: whole(2000, 1_000_000),
   debugEngines: bool,
 }
 
