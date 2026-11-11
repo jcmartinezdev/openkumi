@@ -5,7 +5,7 @@ import type { ItemData } from '@openbot/shared'
 import { readSecrets } from '../config.ts'
 import { type ModelEvent, type ModelRequest, type Provider, errorText, sse } from './types.ts'
 
-interface Config {
+export interface Config {
   baseUrl: string
   apiKey: string
 }
@@ -39,36 +39,20 @@ function toMessages(instructions: string, items: ItemData[]) {
   return messages.map(({ closed, ...m }) => m)
 }
 
-export const openaiCompat: Provider = {
-  id: 'openai-compatible',
+/** The models a server offers, or null when it does not answer. */
+export async function modelsAt(c: Config, timeoutMs = 4000): Promise<string[] | null> {
+  try {
+    const res = await fetch(`${c.baseUrl}/models`, { headers: authHeaders(c), signal: AbortSignal.timeout(timeoutMs) })
+    if (!res.ok) return null
+    const list: any[] = (await res.json()).data ?? []
+    return list.map((m) => m.id as string)
+  } catch {
+    return null
+  }
+}
 
-  info() {
-    const c = config()
-    return {
-      id: 'openai-compatible',
-      name: 'OpenAI-compatible API',
-      kind: 'apikey',
-      connected: !!c,
-      detail: c ? c.baseUrl : 'Not configured',
-      baseUrl: c?.baseUrl ?? '',
-    }
-  },
-
-  async models() {
-    const c = config()
-    if (!c) return []
-    try {
-      const res = await fetch(`${c.baseUrl}/models`, { headers: authHeaders(c) })
-      const list: any[] = (await res.json()).data ?? []
-      return list.map((m) => m.id as string)
-    } catch {
-      return []
-    }
-  },
-
-  async *stream(req: ModelRequest): AsyncGenerator<ModelEvent> {
-    const c = config()
-    if (!c) throw new Error('The OpenAI-compatible provider is not configured. Open Settings to add a base URL.')
+/** One conversation step against a server that speaks the Chat Completions API. */
+export async function* chat(c: Config, req: ModelRequest): AsyncGenerator<ModelEvent> {
     const res = await fetch(`${c.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: { ...authHeaders(c), 'Content-Type': 'application/json' },
@@ -119,5 +103,31 @@ export const openaiCompat: Provider = {
         },
       }
     }
+}
+
+export const openaiCompat: Provider = {
+  id: 'openai-compatible',
+
+  info() {
+    const c = config()
+    return {
+      id: 'openai-compatible',
+      name: 'OpenAI-compatible API',
+      kind: 'apikey',
+      connected: !!c,
+      detail: c ? c.baseUrl : 'Not configured',
+      baseUrl: c?.baseUrl ?? '',
+    }
+  },
+
+  async models() {
+    const c = config()
+    return (c && (await modelsAt(c))) || []
+  },
+
+  stream(req: ModelRequest) {
+    const c = config()
+    if (!c) throw new Error('The OpenAI-compatible provider is not configured. Open Settings to add a base URL.')
+    return chat(c, req)
   },
 }

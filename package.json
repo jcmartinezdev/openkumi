@@ -22,10 +22,15 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test -w @openbot/server && npm run test -w @openbot/desktop",
     "dist": "npm run build && npm run dist -w @openbot/desktop",
-    "dist:dir": "npm run build && npm run dist -w @openbot/desktop -- --dir"
+    "dist:dir": "npm run build && npm run dist -w @openbot/desktop -- --dir",
+    "mobile": "npm run ios -w @openbot/mobile"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0"
+  },
+  "overrides": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }

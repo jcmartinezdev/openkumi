@@ -11,9 +11,10 @@ import type { AppState, ClientEvent, ServerEvent } from '@openbot/shared'
 import * as agent from './agent.ts'
 import { announce, createBot, deleteBot, getBot, listBots, updateBot } from './bots.ts'
 import { type Frame, browserFor, browserStates, isWebPage, stopBrowser } from './browser.ts'
-import { HOME, HOME_LABEL, LAN, PORT, ROOT, SKILLS, accessToken, botDir, onEvent, readSecrets, writeSecret } from './config.ts'
+import { HOME, HOME_LABEL, LAN, PORT, ROOT, SKILLS, accessToken, botDir, emit, onEvent, readSecrets, writeSecret } from './config.ts'
 import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, removeComputer } from './clients.ts'
 import * as mcp from './connections.ts'
+import { installPlugin, installedPlugins, listPlugins, removePlugin, saveSetup } from './plugins.ts'
 import * as db from './db.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
@@ -139,6 +140,7 @@ route('GET', '/api/state', (): AppState => ({
   browsers: browserStates(),
   skills: listSkills(),
   connections: mcp.listConnections(),
+  plugins: listPlugins(),
   connectionStatus: mcp.connectionStatuses(),
   home: HOME_LABEL,
   settings: settings(),
@@ -181,9 +183,12 @@ route('DELETE', '/api/bots/:id', async ([id]) => {
   needBot(id)
   for (const t of db.listThreads().filter((t) => t.botId === id)) agent.stop(t.id)
   await stopBrowser(id)
+  // Its plugins go first, so nothing they brought is left behind for no bot.
+  for (const plugin of installedPlugins(id)) await removePlugin(id, plugin)
   await mcp.closeBotConnections(id)
   db.deleteBotThreads(id)
   deleteBot(id)
+  emit({ type: 'plugins', plugins: listPlugins() })
 })
 
 // ---- skills and connections: what a bot may use, set by its owner
@@ -192,6 +197,21 @@ route('PUT', '/api/bots/:id/skills/:name', ([id, name], body) => {
   setSkill(needBot(id).id, name, !!body.on)
   return announce(id)
 })
+// ---- plugins: ready-made abilities, installed for one bot at a time
+const announcePlugins = () => emit({ type: 'plugins', plugins: listPlugins() })
+route('GET', '/api/plugins', () => listPlugins())
+route('PUT', '/api/bots/:id/plugins/:plugin', async ([id, plugin], body) => {
+  if (body.on === false) await removePlugin(needBot(id).id, plugin)
+  else await installPlugin(needBot(id).id, plugin)
+  announcePlugins()
+  return announce(id)
+})
+// What the owner provides once for the plugins that need it, such as a client created with Google.
+route('PUT', '/api/plugins/setup/:id', async ([id], body) => {
+  for (const botId of await saveSetup(id, body)) announce(botId)
+  announcePlugins()
+})
+
 route('POST', '/api/connections', (_, body, { req }) => {
   // A local program runs with the user's full rights, so only this computer may add one.
   if (body.command && !LOOPBACK.has(req.socket.remoteAddress ?? '')) fail(403, 'A local program can only be added from the computer running Open Bot.')

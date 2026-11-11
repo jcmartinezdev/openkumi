@@ -5,11 +5,13 @@ computer of yours that the app connects to. Each bot is a folder with its own in
 memory, files, skills and connections, plus its own chats, subagents and a private web browser
 that stays logged in.
 
-- **Bring the subscription you already have.** Bots run on Codex (your ChatGPT plan) or Claude
-  Code (your Claude plan): if the program is installed and signed in on the computer, Open Bot
-  uses it. No API key. Settings shows whether each one is connected; a bot's settings choose what
-  it runs on. Other models plug in through any OpenAI-compatible endpoint (OpenAI API, OpenRouter,
-  Ollama, LM Studio).
+- **Bring the subscription you already have.** Bots run on Codex (your ChatGPT plan), Claude Code
+  (your Claude plan) or Grok (your Grok plan): if the program is installed and signed in on the
+  computer, Open Bot uses it. No API key. Settings shows whether each one is connected; a bot's
+  settings choose what it runs on.
+- **Or no subscription at all.** Local models through Ollama or LM Studio are found by themselves
+  when the program is running. Other models plug in through any OpenAI-compatible endpoint
+  (OpenAI API, OpenRouter).
 - **Subagents.** A bot can split work into parallel subagents, each in its own thread. Watch them
   live, open one to read or message it, or stop it. Results flow back to the parent automatically.
 - **A browser per bot.** Every bot gets its own Chrome profile. Sign in to a site once in the
@@ -21,12 +23,16 @@ that stays logged in.
 - **Skills and connections you switch on.** A catalog of skills (the `SKILL.md` format Claude Code
   and Codex use) and MCP servers, toggled per bot. Each bot signs in to a server with its own
   account. A bot can use what you give it but cannot change it or give itself more.
+- **Plugins.** Ready-made abilities you install for one bot at a time: Gmail, Google Calendar,
+  Google Drive, Notion and Linear to start with. Each has a page that says what it does; installing
+  gives that bot the skill and the connection it needs.
 - **Bots that make bots.** Create bots in the app, or just ask in chat.
 
 ## Run it
 
 Requires Node.js 22.18+ and Google Chrome, plus something for the bots to run on: the Codex CLI
-(`codex login`) or Claude Code (`claude`), signed in, or an OpenAI-compatible API. With git
+(`codex login`), Claude Code (`claude`) or Grok Build (`grok login`), signed in; or Ollama or LM
+Studio running; or an OpenAI-compatible API. With git
 installed, each bot's changes to its own files are kept as a history you can undo.
 
 ```sh
@@ -36,7 +42,7 @@ npm run dist       # builds an installer into release/ (a .dmg on macOS)
 ```
 
 The first time, the app asks where your bots should run. Check under **Settings → Providers** that
-Codex or Claude Code shows as connected (or add another model there), then start chatting.
+something shows as connected, then start chatting.
 
 ### Environments: where bots run
 
@@ -76,6 +82,21 @@ npm run server     # the server
 npm run pair       # a code for pairing one more computer with it
 ```
 
+### On an iPhone
+
+There is an iPhone app (`apps/mobile`, Expo and React Native) for chatting with your bots and
+watching and steering their browsers. It pairs with a server the way another computer does: on
+the computer that runs the bots choose **Pair a computer**, and in the phone app scan the QR code
+it shows, or type the address and the code. The key the phone is given is kept in its keychain,
+and the server lists the phone so you can remove it.
+
+```sh
+npm run mobile     # builds it and opens it in the iPhone simulator (needs Xcode and CocoaPods)
+```
+
+The phone reaches the server over your network, so it works at home, or anywhere with a private
+network such as Tailscale on both. Settings, plugins and files are managed in the desktop app.
+
 There is no web version: the server has no pages, and opening its address in a browser shows a
 note saying so. The only way in is the app.
 
@@ -95,6 +116,7 @@ Everything is set from the Settings page, which saves each change as you make it
 | Providers | Codex and Claude Code (status, program path), other models; switch any of them off |
 | Bots | every bot: its rules, model, skills, connections and files |
 | Browser | which browser program the bots drive, and which bots have one running |
+| Plugins | ready-made abilities to browse and install for a bot |
 | Skills, Connections | the two catalogs, and which bots use what |
 | Environments | the local environment (on or off) and remote ones; letting other computers connect to the one being shown, its link and access code |
 | Advanced | limits (steps per turn, subagents), troubleshooting, the data folder |
@@ -128,7 +150,7 @@ apps/
       connections.ts   MCP servers: catalog, per-bot connections and sign-in
       browser.ts       one persistent Chrome profile per bot; live view via CDP screencast
       providers/       what bots run on: the Codex and Claude Code engines (codex.ts,
-                       claude-code.ts), OpenAI-compatible APIs, and a mock for tests
+                       claude-code.ts, grok.ts), local models, OpenAI-compatible APIs, a mock for tests
       tool-endpoint.ts serves a bot's tools to an engine over MCP for the length of one turn
       settings.ts      app-wide settings, kept in settings.json
       http.ts          the API and the stream of events. No pages
@@ -145,8 +167,11 @@ apps/
       environments.ts  the list of environments and their access codes
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app
+  mobile/            the iPhone app (Expo, React Native): pairing, chats, a bot's browser
 packages/
-  shared/            the types all three agree on
+  shared/            the types every app agrees on
+  client/            what every app needs to talk to a server: the connection, the state
+                     kept from it, pairing. Used by the desktop window and the phone app
 ```
 
 ### One app, several processes and threads
@@ -181,6 +206,7 @@ screens only read and write these files, so you can also edit them by hand.
     bot.md                   yours: name, model and the rules the bot must follow
     skills/                  links to the catalog skills switched on for this bot
     mcp.json                 the connections switched on for this bot
+    plugins.json             the plugins installed for this bot
     workspace/               the bot's own, and the only place its file tools reach
       AGENTS.md              its instructions, which it writes and updates itself
       memory/                its notes; only the list is loaded, it reads a note when needed
@@ -191,7 +217,7 @@ screens only read and write these files, so you can also edit them by hand.
       history.git/           the record of every change to the workspace
   openbot.db                 chats and messages
   settings.json              app-wide settings that differ from the defaults
-  auth.json                  API keys and the access code (owner-readable only)
+  auth.json                  API keys, the access code, and what plugins were set up with (owner-readable only)
   clients.json               the computers paired with this one (owner-readable only)
 ```
 
@@ -200,6 +226,26 @@ sit outside its workspace, so it cannot grant itself anything. **What a bot know
 rewrites `AGENTS.md` and `memory/` freely. Each change is a commit in a git history kept in
 `private/history.git`, labelled with who made it (the bot or you), and the Files tab can show and
 undo it. (`git --git-dir=…/private/history.git --work-tree=…/workspace log` reads it by hand.)
+
+### Plugins
+
+A plugin is a folder in `apps/server/plugins/<id>`:
+
+```
+plugin.json     name, tagline, category, what a bot can do with it, the skills and the connection it brings
+README.md       the plugin's page in the app
+skills/<name>/SKILL.md
+```
+
+Installing one for a bot switches its skills on for that bot and, when it has one, switches its
+connection on for that bot; the bot then signs in to the service with its own account. Nothing is
+installed for all bots at once. A plugin adds nothing a skill and a connection could not be set
+up to do by hand; it is the two put together, with an explanation.
+
+The Google plugins work in two ways. With nothing set up, the bot uses the service through its
+own browser, signed in there by you. Google also offers a direct connection (in developer
+preview), which needs a client you create once in Google Cloud; each plugin's page has the steps,
+and the three share the client. Notion and Linear need no setup: install, then sign in.
 
 ### Tools available to a bot
 
@@ -218,25 +264,36 @@ scripts are not run.
 A subagent can run as a different bot (`spawn_subagent` with `bot_id`), which is how bots hand
 work to each other. Subagents can nest two levels deep; each gets its own browser tab.
 
-### Engines: Claude Code and Codex
+### Engines: Claude Code, Codex and Grok
 
 Bots run on an engine by default. An engine is a program that keeps the conversation and runs the
 model-and-tools loop itself. (Open Bot also has a loop of its own, which asks a model for one step
-at a time; it is what bots on an OpenAI-compatible API run on.) Open Bot starts the `claude`
-or `codex` program installed on the computer for each turn, gives it the bot's instructions and
+at a time; it is what bots on local models or an OpenAI-compatible API run on.) Open Bot starts
+the `claude`, `codex` or `grok` program installed on the computer for each turn, gives it the bot's instructions and
 what was said since it last ran, and serves the bot's tools to it over MCP at an address that
 exists only for that turn. Tool calls are carried out and recorded the same way on either path.
 
-Both engines are started with their own tools for running commands and touching files switched
-off, and without your personal Claude Code or Codex setup (settings, instruction files, skills,
-plugins, MCP servers). A bot on an engine can therefore do exactly what it can do on Open Bot's
+The engines are started with their own tools for running commands and touching files switched
+off, and without your personal setup in them (settings, instruction files, skills, plugins, MCP
+servers), with one exception noted below for Grok. A bot on an engine can therefore do exactly what it can do on Open Bot's
 own loop. What changes is whose model and account it runs on.
 
-- You sign in to each program yourself (`claude`, `codex login`); Open Bot never sees the
+- You sign in to each program yourself (`claude`, `codex login`, `grok login`); Open Bot never sees the
   credentials. Usage counts against that account.
 - Each program keeps its own record of the conversations it ran (under `~/.claude` and
   `~/.codex`).
 - Replies from Codex appear a message at a time rather than word by word.
+- Grok takes an MCP server only from a settings file in a folder it has been told to trust. Open
+  Bot keeps a folder for that inside each bot (`private/grok/`), so Grok's own list of trusted
+  folders (`~/.grok/trusted_folders.toml`) gains an entry per bot. Grok's skill list is not
+  switched off; with its tools off, a skill there has nothing to act with.
+
+### Local models
+
+Start Ollama or LM Studio on the computer that runs the bots and it shows up under **Settings →
+Providers → Local models**, with the models it has; a bot's settings then offer them. For another
+program or port, enter its address there. Bots need a model that can call tools, and small models
+are often poor at it: expect a bot on one to be less capable than on the engines above.
 
 ### Adding a model provider
 
@@ -255,7 +312,7 @@ and from its own format.
 | `OPENBOT_HOME` | `~/.openbot` | data directory |
 | `OPENBOT_BROWSER_CHANNEL` | from Settings | Playwright browser channel (`chrome`, `msedge`, …); overrides Settings |
 | `OPENBOT_MOCK` | unset | set to `1` to enable the scripted offline provider used by tests |
-| `OPENBOT_CLAUDE_BIN`, `OPENBOT_CODEX_BIN` | from Settings, else found on `PATH` | where the `claude` and `codex` programs are; overrides Settings |
+| `OPENBOT_CLAUDE_BIN`, `OPENBOT_CODEX_BIN`, `OPENBOT_GROK_BIN` | from Settings, else found on `PATH` | where the `claude`, `codex` and `grok` programs are; overrides Settings |
 | `OPENBOT_DEBUG` | from Settings | set to `1` to log everything an engine prints |
 
 ## Security notes

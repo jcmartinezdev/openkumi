@@ -43,7 +43,13 @@ export function listSkills(): Skill[] {
 
 /** Refreshes the catalog's copies of the skills that ship with Open Bot. Skills the user added are left alone. */
 export function syncBundledSkills() {
-  const source = path.join(ROOT, 'skills')
+  syncFrom(path.join(ROOT, 'skills'))
+  // The skills that plugins bring are in the catalog too, so installing a plugin only has to switch them on.
+  const plugins = path.join(ROOT, 'plugins')
+  if (fs.existsSync(plugins)) for (const id of fs.readdirSync(plugins)) syncFrom(path.join(plugins, id, 'skills'))
+}
+
+function syncFrom(source: string) {
   if (!fs.existsSync(source)) return
   for (const name of fs.readdirSync(source)) {
     if (!NAME.test(name) || !fs.existsSync(path.join(source, name, 'SKILL.md'))) continue

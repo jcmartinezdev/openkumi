@@ -1,0 +1,27 @@
+{
+  "name": "@openbot/client",
+  "version": "0.1.0",
+  "description": "What every Open Bot app needs to talk to a server: the connection, the state kept from it, and pairing.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./store": "./src/store.ts",
+    "./connection": "./src/connection.ts",
+    "./pair": "./src/pair.ts",
+    "./steps": "./src/steps.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.0"
+  },
+  "peerDependencies": {
+    "react": ">=19"
+  },
+  "devDependencies": {
+    "@openbot/shared": "*",
+    "@types/react": "^19.0.0"
+  }
+}

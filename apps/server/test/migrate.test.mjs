@@ -64,7 +64,7 @@ test('bots stored in the database become folders, keeping their id, logins and c
       assert.deepEqual([state.bots[1].id, state.bots[1].provider, state.bots[1].model], ['b_Old-2', 'codex', 'gpt-5.5'])
       assert.ok(!state.providers.some((p) => p.id === 'chatgpt'))
       assert.deepEqual([state.settings.defaultProvider, state.settings.disabledProviders], ['', ['mock']])
-      const { skills: _, connections: __, ...bot } = state.bots[0]
+      const { skills: _, connections: __, plugins: ___, ...bot } = state.bots[0]
       assert.deepEqual(bot, {
         id: 'b_Old-1_x', name: 'Helper: v2', emoji: '🦊', rules: '', provider: 'mock', model: 'mock-1', effort: 'low',
         webSearch: false, headless: false, createdAt: 1700000000000,

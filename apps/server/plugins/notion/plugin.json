@@ -1,0 +1,21 @@
+{
+  "name": "Notion",
+  "icon": "📝",
+  "color": "#37352f",
+  "category": "Notes and documents",
+  "publisher": "Open Bot",
+  "tagline": "Search your workspace, read pages and databases, and write new ones.",
+  "can": [
+    "Search and read the pages and databases you share with it",
+    "Create pages and add entries to databases",
+    "Change or archive an existing page, only after you approve it"
+  ],
+  "skills": [
+    "notion"
+  ],
+  "connection": {
+    "name": "notion",
+    "url": "https://mcp.notion.com/mcp"
+  },
+  "site": "https://www.notion.so/"
+}

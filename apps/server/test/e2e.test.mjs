@@ -79,6 +79,7 @@ before(async () => {
       // Scripted stand-ins for the Claude Code and Codex programs.
       OPENBOT_CLAUDE_BIN: path.resolve('test/fixtures/fake-claude.mjs'),
       OPENBOT_CODEX_BIN: path.resolve('test/fixtures/fake-codex.mjs'),
+      OPENBOT_GROK_BIN: path.resolve('test/fixtures/fake-grok.mjs'),
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -300,6 +301,57 @@ test('skills: switching one on links it into the bot\'s folder and tells the bot
   await assert.rejects(api('PUT', `/api/bots/${bot.id}/skills/nope`, { on: true }))
 })
 
+test('plugins: one is installed for one bot, bringing its skill and, once set up, its connection', async () => {
+  const plugins = async () => Object.fromEntries((await api('GET', '/api/plugins')).map((p) => [p.id, p]))
+  const botNow = async (id) => (await api('GET', '/api/state')).bots.find((b) => b.id === id)
+  const other = await api('POST', '/api/bots', { name: 'No plugins', provider: 'mock' })
+
+  // What ships: each with a page of its own, saying what it does and what it adds.
+  const before = await plugins()
+  assert.deepEqual(Object.keys(before), ['gmail', 'google-calendar', 'google-drive', 'linear', 'notion'])
+  const { gmail } = before
+  assert.deepEqual([gmail.name, gmail.category, gmail.skills, gmail.connection, gmail.installedOn], ['Gmail', 'Google', ['gmail'], { name: 'gmail', host: 'gmailmcp.googleapis.com' }, []])
+  assert.ok(gmail.tagline && gmail.can.length >= 3 && /## Two ways it can work/.test(gmail.description))
+  assert.deepEqual([gmail.setup.id, gmail.setup.done, gmail.setup.values], ['google', false, { clientId: '', clientSecret: '' }])
+
+  // Installing is for one bot. Google's direct connection needs a client of the owner's first, so
+  // until then the bot gets the skill and works through its browser.
+  await api('PUT', `/api/bots/${bot.id}/plugins/gmail`, { on: true })
+  assert.deepEqual([(await botNow(bot.id)).plugins, (await botNow(bot.id)).skills.includes('gmail'), (await botNow(bot.id)).connections.includes('gmail')], [['gmail'], true, false])
+  assert.deepEqual([(await botNow(other.id)).plugins, (await botNow(other.id)).skills], [[], []], 'no other bot is touched')
+  assert.deepEqual((await plugins()).gmail.installedOn, [bot.id])
+  assert.match(await told(), /- Gmail: Read, search and answer the user's Gmail\..*\(skills\/gmail\/SKILL\.md\)/)
+  assert.match(await tool('read_file', { path: 'skills/gmail/SKILL.md' }), /https:\/\/mail\.google\.com\//)
+  assert.equal(fs.readlinkSync(botPath('skills', 'gmail')), path.join('..', '..', '..', 'skills', 'gmail'))
+
+  // The owner provides the client once; every Google plugin shares it, and the secret is never sent back.
+  await api('PUT', '/api/plugins/setup/google', { clientId: 'client-123', clientSecret: 'very-secret' })
+  const after = await plugins()
+  assert.deepEqual([after.gmail.setup.done, after['google-drive'].setup.done, after.gmail.setup.values], [true, true, { clientId: 'client-123', clientSecret: '••••••••' }])
+  assert.ok(!JSON.stringify(await api('GET', '/api/state')).includes('very-secret'))
+  // The connection that was waiting for it is now switched on, for the bot that has the plugin and no other.
+  assert.equal((await botNow(bot.id)).connections.includes('gmail'), true)
+  assert.equal((await botNow(other.id)).connections.includes('gmail'), false)
+  const catalog = JSON.parse(fs.readFileSync(path.join(home, 'mcp.json'), 'utf8')).mcpServers
+  assert.deepEqual([catalog.gmail.url, catalog.gmail.oauth.clientId, /gmail\.readonly/.test(catalog.gmail.oauth.scope)], ['https://gmailmcp.googleapis.com/mcp/v1', 'client-123', true])
+  assert.equal(fs.statSync(path.join(home, 'mcp.json')).mode & 0o777, 0o600)
+  // Changing the client ID alone keeps the secret that was saved.
+  await api('PUT', '/api/plugins/setup/google', { clientId: 'client-456' })
+  assert.deepEqual(Object.values(JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).plugins.google), ['client-456', 'very-secret'])
+
+  // A plugin that is installed after the setup gets its connection at once.
+  await api('PUT', `/api/bots/${other.id}/plugins/google-calendar`, { on: true })
+  assert.deepEqual([(await botNow(other.id)).skills, (await botNow(other.id)).connections], [['google-calendar'], ['google-calendar']])
+
+  // Removing takes away what it brought, from that bot only.
+  await api('PUT', `/api/bots/${bot.id}/plugins/gmail`, { on: false })
+  assert.deepEqual([(await botNow(bot.id)).plugins, (await botNow(bot.id)).skills.includes('gmail'), (await botNow(bot.id)).connections.includes('gmail')], [[], false, false])
+  assert.deepEqual((await botNow(other.id)).plugins, ['google-calendar'])
+  await assert.rejects(api('PUT', `/api/bots/${bot.id}/plugins/no-such`, { on: true }), /No such plugin/)
+  await assert.rejects(api('PUT', '/api/plugins/setup/nothing', {}), /No plugin asks for that/)
+  await api('DELETE', `/api/bots/${other.id}`)
+})
+
 test('connections: a local MCP server gives the bot its tools', async () => {
   await api('POST', '/api/connections', { name: 'echo', command: `"${process.execPath}" ${path.resolve('test/fixtures/mcp-stdio.mjs')}` })
   assert.deepEqual((await api('GET', '/api/state')).connections.map((c) => [c.name, c.kind]), [['echo', 'command']])
@@ -392,15 +444,16 @@ test('a bot cannot reach Open Bot itself or files on the computer through its br
   await api('POST', `/api/bots/${bot.id}/browser/stop`)
 })
 
-test('engines: Claude Code and Codex are shown as connected and run a bot\'s turns', async () => {
+test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\'s turns', async () => {
   await api('POST', '/api/providers/check')
   const providers = Object.fromEntries((await api('GET', '/api/state')).providers.map((p) => [p.id, p]))
   assert.deepEqual(
-    [providers['claude-code'], providers.codex].map((p) => [p.kind, p.connected, p.detail]),
-    [['cli', true, 'test@example.com · Pro plan'], ['cli', true, 'Signed in with ChatGPT']],
+    [providers['claude-code'], providers.codex, providers.grok].map((p) => [p.kind, p.connected, p.detail]),
+    [['cli', true, 'test@example.com · Pro plan'], ['cli', true, 'Signed in with ChatGPT'], ['cli', true, 'Signed in with grok.com']],
   )
+  assert.deepEqual(await api('GET', '/api/providers/grok/models'), ['default', 'grok-test', 'grok-test-fast'])
 
-  for (const engine of ['claude-code', 'codex']) {
+  for (const engine of ['claude-code', 'codex', 'grok']) {
     const runner = await api('POST', '/api/bots', { name: `On ${engine}`, provider: engine, purpose: 'Likes brevity.' })
     const id = await newThread(runner.id)
     const reply = async (text) => lastText(await say(id, text))
@@ -423,6 +476,12 @@ test('engines: Claude Code and Codex are shown as connected and run a bot\'s tur
     if (engine === 'claude-code') {
       assert.deepEqual([started.tools, started.allowed, started.model], ['WebSearch', 'mcp__openbot,WebSearch', null])
       for (const flag of ['--restricted', '--strict-mcp-config', '--disable-slash-commands', '--resume']) assert.ok(started.flags.includes(flag), flag)
+    } else if (engine === 'grok') {
+      assert.deepEqual([started.tools, started.mode, started.sandbox, started.model], ['web_search', 'dontAsk', 'read-only', null])
+      for (const flag of ['--no-subagents', '--no-plan', '--trust', '--resume']) assert.ok(started.flags.includes(flag), flag)
+      // It is started in a folder of its own, out of the bot's reach, and what it was given there is cleared afterwards.
+      assert.equal(fs.realpathSync(started.cwd), fs.realpathSync(path.join(home, 'bots', runner.id, 'private', 'grok', 'run-1')))
+      assert.deepEqual(fs.readdirSync(path.join(started.cwd, '.grok')), [])
     } else {
       assert.equal(started.config.sandbox_mode, 'read-only')
       assert.equal(started.config['skills.include_instructions'], false)
@@ -459,6 +518,52 @@ test('engines: a thread can move to another engine, and the tool address only wo
   await new Promise((r) => setTimeout(r, 400))
   await api('POST', `/api/threads/${id}/stop`)
   assert.deepEqual((await settle(id, 5000)).at(-1), { type: 'notice', level: 'info', text: 'Stopped.' })
+})
+
+test('local models: a model server on this computer is found and runs a bot, with tools', async () => {
+  // Stands in for Ollama or LM Studio: the same API, with one scripted model.
+  const asked = []
+  const fake = http.createServer(async (req, res) => {
+    if (req.url === '/v1/models') return void res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ data: [{ id: 'tiny-local' }] }))
+    let body = ''
+    for await (const chunk of req) body += chunk
+    const request = JSON.parse(body)
+    asked.push(request)
+    const last = request.messages.at(-1)
+    const delta = last.role === 'tool'
+      ? { content: `The tool said: ${last.content}` }
+      : last.content.startsWith('save')
+        ? { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'write_file', arguments: JSON.stringify({ path: 'memory/local.md', content: 'kept here' }) } }] }
+        : { content: `Local echo: ${last.content}` }
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+    res.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`)
+  })
+  await new Promise((resolve) => fake.listen(0, '127.0.0.1', resolve))
+  try {
+    const local = async () => (await api('GET', '/api/state')).providers.find((p) => p.id === 'local')
+    // Nothing is running at the address yet, and the settings say what to do about it.
+    await api('PATCH', '/api/settings', { localUrl: 'http://127.0.0.1:9/v1' })
+    await until(async () => (await local()).detail === 'Not answering')
+    assert.equal((await local()).connected, false)
+    assert.equal((await api('PATCH', '/api/settings', { localUrl: 'not an address' })).localUrl, 'http://127.0.0.1:9/v1', 'only an address is accepted')
+
+    await api('PATCH', '/api/settings', { localUrl: `http://127.0.0.1:${fake.address().port}/v1/` })
+    await until(async () => (await local()).connected)
+    assert.deepEqual([(await local()).kind, (await local()).detail], ['local', `127.0.0.1:${fake.address().port} · 1 model`])
+    assert.deepEqual(await api('GET', '/api/providers/local/models'), ['tiny-local'])
+
+    const runner = await api('POST', '/api/bots', { name: 'Local runner', provider: 'local', model: 'tiny-local' })
+    const id = await newThread(runner.id)
+    assert.equal(lastText(await say(id, 'hello')), 'Local echo: hello')
+    // The model is given the bot's tools, and what it calls is carried out here.
+    assert.equal(lastText(await say(id, 'save a note')), 'The tool said: Saved memory/local.md.')
+    assert.equal(fs.readFileSync(path.join(home, 'bots', runner.id, 'workspace', 'memory', 'local.md'), 'utf8'), 'kept here')
+    assert.deepEqual([asked[0].model, asked[0].messages[0].role, asked[0].tools.some((t) => t.function.name === 'write_file')], ['tiny-local', 'system', true])
+    assert.equal(asked.every((request) => !request.headers), true)
+  } finally {
+    await api('PATCH', '/api/settings', { localUrl: '' })
+    fake.close()
+  }
 })
 
 test('subagent: result is pushed to the parent when it finishes', async () => {

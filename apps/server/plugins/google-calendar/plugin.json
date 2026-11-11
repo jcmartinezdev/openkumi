@@ -1,0 +1,41 @@
+{
+  "name": "Google Calendar",
+  "icon": "📅",
+  "color": "#1a73e8",
+  "category": "Google",
+  "publisher": "Open Bot",
+  "tagline": "See what is coming up, find a free slot, and put things in the calendar.",
+  "can": [
+    "See your calendars and the events in them",
+    "Find times when you are free",
+    "Create, move or cancel an event, only after you approve it"
+  ],
+  "skills": [
+    "google-calendar"
+  ],
+  "connection": {
+    "name": "google-calendar",
+    "url": "https://calendarmcp.googleapis.com/mcp/v1",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+      "https://www.googleapis.com/auth/calendar.events.freebusy",
+      "https://www.googleapis.com/auth/calendar.events"
+    ]
+  },
+  "site": "https://calendar.google.com/",
+  "setup": {
+    "id": "google",
+    "title": "Your Google Cloud client",
+    "fields": [
+      {
+        "key": "clientId",
+        "label": "Client ID"
+      },
+      {
+        "key": "clientSecret",
+        "label": "Client secret",
+        "secret": true
+      }
+    ]
+  }
+}

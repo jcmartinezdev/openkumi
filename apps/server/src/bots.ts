@@ -10,6 +10,7 @@ import { enabledConnections } from './connections.ts'
 import { formatFrontMatter, parseFrontMatter } from './frontmatter.ts'
 import { providerInfos } from './providers/index.ts'
 import { settings as appSettings, updateSettings } from './settings.ts'
+import { installedPlugins } from './plugins.ts'
 import { enabledSkills } from './skills.ts'
 import { scaffold } from './workspace.ts'
 
@@ -20,7 +21,7 @@ const FALLBACK = 'codex'
 const file = (id: string) => path.join(botDir(id), 'bot.md')
 
 /** Settings as stored in bot.md; the lists of skills and connections are read from their own places. */
-type Settings = Omit<Bot, 'skills' | 'connections'>
+type Settings = Omit<Bot, 'skills' | 'connections' | 'plugins'>
 export type BotPatch = Partial<Omit<Settings, 'id' | 'createdAt'>>
 
 function readSettings(id: string): Settings | undefined {
@@ -63,7 +64,7 @@ function writeSettings(s: Settings) {
   fs.writeFileSync(file(s.id), formatFrontMatter(front, s.rules))
 }
 
-const full = (s: Settings): Bot => ({ ...s, skills: enabledSkills(s.id), connections: enabledConnections(s.id) })
+const full = (s: Settings): Bot => ({ ...s, skills: enabledSkills(s.id), connections: enabledConnections(s.id), plugins: installedPlugins(s.id) })
 
 export function getBot(id: string): Bot | undefined {
   const settings = readSettings(id)

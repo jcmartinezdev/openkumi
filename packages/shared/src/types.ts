@@ -25,6 +25,8 @@ export interface Bot {
   skills: string[]
   /** Names of the catalog connections switched on for this bot. */
   connections: string[]
+  /** Ids of the plugins installed for this bot. */
+  plugins: string[]
   createdAt: number
 }
 
@@ -36,6 +38,32 @@ export interface Skill {
   description: string
   /** Ships with Open Bot, as opposed to one the user added to the catalog. */
   bundled: boolean
+}
+
+/** A ready-made ability that can be installed for one bot: its skills, and usually a connection to a service. */
+export interface Plugin {
+  id: string
+  name: string
+  /** An emoji, shown on a tile of `color`. */
+  icon: string
+  color: string
+  category: string
+  publisher: string
+  tagline: string
+  /** The plugin's own page, in Markdown. */
+  description: string
+  /** What a bot with the plugin is able to do, in plain words. */
+  can: string[]
+  /** Names of the catalog skills it switches on. */
+  skills: string[]
+  /** The connection it switches on, and the service it leads to. */
+  connection: { name: string; host: string } | null
+  /** Where the service is on the web. */
+  site: string
+  /** Something the owner provides once before the connection can be used. Secrets are never sent back. */
+  setup: { id: string; title: string; fields: { key: string; label: string; secret?: boolean }[]; done: boolean; values: Record<string, string> } | null
+  /** Ids of the bots it is installed for. */
+  installedOn: string[]
 }
 
 /** An MCP server in the shared catalog. Secrets (headers, environment) never leave the server. */
@@ -118,9 +146,12 @@ export interface Settings {
   defaultShowBrowser: boolean
   /** Providers switched off: they are not offered for bots. */
   disabledProviders: string[]
-  /** Where the Claude Code and Codex programs are, when they should not be looked up. */
+  /** Where the Claude Code, Codex and Grok programs are, when they should not be looked up. */
   claudePath: string
   codexPath: string
+  grokPath: string
+  /** The address of a local model server, when it is not Ollama or LM Studio at their usual place. */
+  localUrl: string
   /** How many model steps one turn may take before it is stopped. */
   maxSteps: number
   /** How many subagents of one chat may run at the same time. */
@@ -129,7 +160,7 @@ export interface Settings {
   maxDepth: number
   /** How much of a bot's AGENTS.md is loaded into each conversation, in characters. */
   instructionsLimit: number
-  /** Write everything Claude Code and Codex print to the server log. */
+  /** Write everything Claude Code, Codex and Grok print to the server log. */
   debugEngines: boolean
 }
 
@@ -147,7 +178,7 @@ export interface ProviderInfo {
   id: string
   name: string
   /** 'cli' is an agent program installed on this computer (Claude Code, Codex) that Open Bot drives. */
-  kind: 'apikey' | 'cli'
+  kind: 'apikey' | 'cli' | 'local'
   connected: boolean
   detail: string
   /** What to do to connect it, when it is not connected. */
@@ -188,6 +219,7 @@ export type ServerEvent =
   | { type: 'settings'; settings: Settings }
   | { type: 'skills'; skills: Skill[] }
   | { type: 'connections'; connections: Connection[] }
+  | { type: 'plugins'; plugins: Plugin[] }
   | { type: 'connection.status'; botId: string; name: string; status: ConnectionStatus | null }
   | { type: 'files.changed'; botId: string }
   | { type: 'browser.state'; botId: string; state: BrowserState }
@@ -218,6 +250,7 @@ export interface AppState {
   browsers: Record<string, BrowserState>
   skills: Skill[]
   connections: Connection[]
+  plugins: Plugin[]
   /** Live state of each bot's switched-on connections, by bot id then connection name. */
   connectionStatus: Record<string, Record<string, ConnectionStatus>>
   /** Where everything is stored, for display (e.g. "~/.openbot"). */

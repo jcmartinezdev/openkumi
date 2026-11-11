@@ -1,0 +1,40 @@
+{
+  "name": "Gmail",
+  "icon": "✉️",
+  "color": "#ea4335",
+  "category": "Google",
+  "publisher": "Open Bot",
+  "tagline": "Read, search and answer your email, with nothing sent until you say so.",
+  "can": [
+    "Read and search the mail in the account you sign it in to",
+    "Write drafts and replies",
+    "Send, archive or delete a message, only after you approve that message"
+  ],
+  "skills": [
+    "gmail"
+  ],
+  "connection": {
+    "name": "gmail",
+    "url": "https://gmailmcp.googleapis.com/mcp/v1",
+    "scopes": [
+      "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.compose"
+    ]
+  },
+  "site": "https://mail.google.com/",
+  "setup": {
+    "id": "google",
+    "title": "Your Google Cloud client",
+    "fields": [
+      {
+        "key": "clientId",
+        "label": "Client ID"
+      },
+      {
+        "key": "clientSecret",
+        "label": "Client secret",
+        "secret": true
+      }
+    ]
+  }
+}

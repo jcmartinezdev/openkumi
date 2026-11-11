@@ -3,6 +3,8 @@ import { emit } from '../config.ts'
 import { onSettingsChange, settings } from '../settings.ts'
 import { claudeCode } from './claude-code.ts'
 import { codex } from './codex.ts'
+import { grok } from './grok.ts'
+import { localModels } from './local.ts'
 import { openaiCompat } from './openai-compat.ts'
 import type { ModelEvent, ModelRequest, Provider } from './types.ts'
 
@@ -50,7 +52,7 @@ const mock: Provider = {
 }
 
 // The order is the order of preference when a new bot is given "the first one connected".
-const providers: Provider[] = [codex, claudeCode, openaiCompat, ...(process.env.OPENBOT_MOCK ? [mock] : [])]
+const providers: Provider[] = [codex, claudeCode, grok, localModels, openaiCompat, ...(process.env.OPENBOT_MOCK ? [mock] : [])]
 
 export function getProvider(id: string): Provider {
   const p = providers.find((p) => p.id === id)
@@ -75,6 +77,6 @@ export async function refreshProviders() {
 
 onSettingsChange((now, before) => {
   // A new program path has to be looked at; switching a provider on or off only has to be announced.
-  if (now.claudePath !== before.claudePath || now.codexPath !== before.codexPath) void refreshProviders()
+  if (now.claudePath !== before.claudePath || now.codexPath !== before.codexPath || now.grokPath !== before.grokPath || now.localUrl !== before.localUrl) void refreshProviders()
   else if (now.disabledProviders.join() !== before.disabledProviders.join()) announceProviders()
 })

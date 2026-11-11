@@ -351,3 +351,44 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
     far.kill()
   }
 })
+
+test('plugins: browse them, open one, and install it for one bot', async () => {
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  win.on('dialog', (dialog) => dialog.accept())
+  await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Second bot', provider: 'mock' })
+
+  // The list: every plugin with what it is for.
+  await win.evaluate(() => (location.hash = '/settings/plugins'))
+  await win.locator('.plugin-card').first().waitFor()
+  assert.deepEqual(await win.locator('.plugin-card h3').allInnerTexts(), ['Gmail', 'Google Calendar', 'Google Drive', 'Linear', 'Notion'])
+
+  // A plugin's own page says what it does, what a bot can do with it and what installing adds.
+  await win.locator('.plugin-card', { hasText: 'Gmail' }).click()
+  await win.locator('.plugin-head h1', { hasText: 'Gmail' }).waitFor()
+  assert.match(await win.locator('.plugin-about').innerText(), /Gives a bot your inbox[\s\S]*Two ways it can work/)
+  assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['What a bot can do with it', 'What installing adds to the bot', 'Direct connection'])
+
+  // Install asks which bot it is for, and only that bot gets it.
+  await win.getByRole('button', { name: 'Install' }).click()
+  await win.locator('.choose-bot button', { hasText: 'Second bot' }).click()
+  const row = win.locator('.set-section', { hasText: 'Installed for' }).locator('.set-row')
+  await row.waitFor()
+  assert.match(await row.innerText(), /Second bot\s*Works through the bot’s browser/)
+  const bots = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots
+  assert.deepEqual(bots.map((b) => [b.name, b.plugins, b.skills.includes('gmail')]), [['Assistant', [], false], ['Second bot', ['gmail'], true]])
+  // It cannot be installed twice for the same bot.
+  await win.getByRole('button', { name: 'Install' }).click()
+  assert.equal(await win.locator('.choose-bot button', { hasText: 'Second bot' }).isDisabled(), true)
+  await win.keyboard.press('Escape')
+
+  // The list shows where it is installed, and removing it takes it away again.
+  await win.locator('.crumbs a', { hasText: 'Plugins' }).click()
+  await win.locator('.plugin-card', { hasText: 'Installed for 1 bot' }).click()
+  await win.locator('.set-row', { hasText: 'Second bot' }).getByRole('button', { name: 'Remove' }).click()
+  await win.locator('.set-section', { hasText: 'Installed for' }).waitFor({ state: 'detached' })
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})

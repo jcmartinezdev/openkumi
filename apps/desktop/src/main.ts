@@ -6,7 +6,9 @@
 //     environment it shows; its connection and the drawing of a bot's browser run on a worker thread.
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, app, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import type { DesktopState, Link } from '@openbot/shared/desktop'
-import { config, find, nameOf, pair, parseAddress, save, showing, statuses, turnedOn } from './environments.ts'
+import os from 'node:os'
+import { pair, parseAddress } from '@openbot/client/pair'
+import { config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
 import { ASSUME_YES, HIDDEN, PRELOAD } from './paths.ts'
 import { APP_URL, serveInterface } from './protocol.ts'
@@ -84,7 +86,7 @@ async function setLocal(on: boolean) {
 
 async function add(input: { address?: unknown; code?: unknown; name?: unknown }) {
   const url = parseAddress(input?.address)
-  const token = await pair(url, input?.code)
+  const token = await pair(url, input?.code, os.hostname().replace(/\.local$/, ''))
   const listed = config.environments.find((e) => e.url === url)
   const name = String(input?.name ?? '').trim().slice(0, 60) || listed?.name || new URL(url).hostname
   // Pairing again with a computer that is already listed replaces the key it gave before.

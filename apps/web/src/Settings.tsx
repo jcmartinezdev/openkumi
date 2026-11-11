@@ -3,14 +3,17 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import type { Bot, Connection, PairedComputer, ProviderInfo, Settings } from '@openbot/shared'
 import type { EnvironmentStatus, LocalEnvironment } from '@openbot/shared/desktop'
+import qrcode from 'qrcode-generator'
+import { pairingLink } from '@openbot/client/pair'
 import { BotPage, type BotTab } from './BotPage'
+import { PluginList, PluginPage } from './Plugins'
 import { desktop, reason, useDesktop } from './desktop'
 import { Icon } from './Icon'
 import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
 import { api, closeSettings, openSettings, refreshSkills, saveSettings, useStore } from './store'
 
-type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'browser' | 'skills' | 'connections' | 'environments' | 'advanced' | 'about'
+type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'browser' | 'plugins' | 'skills' | 'connections' | 'environments' | 'advanced' | 'about'
 type IconName = Parameters<typeof Icon>[0]['name']
 
 const PAGES: Record<PageId, { label: string; icon: IconName }> = {
@@ -20,6 +23,7 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   providers: { label: 'Providers', icon: 'cpu' },
   bots: { label: 'Bots', icon: 'bot' },
   browser: { label: 'Browser', icon: 'globe' },
+  plugins: { label: 'Plugins', icon: 'download' },
   skills: { label: 'Skills', icon: 'book' },
   connections: { label: 'Connections', icon: 'plug' },
   environments: { label: 'Environments', icon: 'monitor' },
@@ -30,7 +34,7 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
 const NAV: { heading: string | null; pages: PageId[] }[] = [
   { heading: null, pages: ['general', 'appearance', 'chat'] },
   { heading: 'Agents', pages: ['providers', 'bots', 'browser'] },
-  { heading: 'Tools', pages: ['skills', 'connections'] },
+  { heading: 'Tools', pages: ['plugins', 'skills', 'connections'] },
   { heading: 'Network', pages: ['environments'] },
   { heading: null, pages: ['advanced', 'about'] },
 ]
@@ -49,12 +53,15 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string }[] = [
   { page: 'chat', id: 'suggestions', title: 'Suggestions in a new chat' },
   { page: 'chat', id: 'expand-steps', title: 'Show the details of each step', also: 'tool calls thoughts activity' },
   { page: 'providers', id: 'provider-codex', title: 'Codex', also: 'openai chatgpt plan program path sign in' },
+  { page: 'providers', id: 'provider-grok', title: 'Grok', also: 'xai grok build plan program path sign in' },
+  { page: 'providers', id: 'provider-local', title: 'Local models', also: 'ollama lm studio offline private free' },
   { page: 'providers', id: 'provider-claude-code', title: 'Claude Code', also: 'anthropic claude plan program path sign in' },
   { page: 'providers', id: 'provider-openai-compatible', title: 'Other models', also: 'api key base url ollama openrouter' },
   { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot' },
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
   { page: 'browser', id: 'browser-panel', title: 'Open the panel when a bot starts browsing' },
   { page: 'browser', id: 'browsers-running', title: 'Browsers running now', also: 'stop' },
+  { page: 'plugins', id: 'plugins', title: 'Plugins', also: 'marketplace install gmail google calendar drive notion linear email' },
   { page: 'skills', id: 'skills', title: 'Skill catalog' },
   { page: 'connections', id: 'connections', title: 'Connections', also: 'mcp server gmail calendar' },
   { page: 'connections', id: 'add-connection', title: 'Add a connection', also: 'mcp' },
@@ -67,7 +74,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string }[] = [
   { page: 'advanced', id: 'max-subagents', title: 'Subagents at once', also: 'limit parallel' },
   { page: 'advanced', id: 'max-depth', title: 'Subagent levels', also: 'depth nested' },
   { page: 'advanced', id: 'instructions-limit', title: 'Size of a bot’s own instructions', also: 'agents.md limit' },
-  { page: 'advanced', id: 'debug-engines', title: 'Log what Claude Code and Codex print', also: 'debug troubleshooting' },
+  { page: 'advanced', id: 'debug-engines', title: 'Log what the engines print', also: 'debug troubleshooting' },
   { page: 'advanced', id: 'data-folder', title: 'Data folder', also: 'files location' },
   { page: 'advanced', id: 'delete-chats', title: 'Delete all chats' },
   { page: 'about', id: 'version', title: 'Version' },
@@ -165,6 +172,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
   const page: PageId = path[0] in PAGES ? (path[0] as PageId) : 'general'
   const bots = useStore((s) => s.bots)
   const bot = page === 'bots' && path[1] ? bots.find((b) => b.id === path[1]) : undefined
+  const plugin = useStore((s) => (page === 'plugins' && path[1] ? s.plugins.find((p) => p.id === path[1]) : undefined))
 
   // Escape closes the settings, unless a dialog on top of them is open (it closes itself).
   useEffect(() => {
@@ -183,11 +191,11 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           <nav className="crumbs" aria-label="Breadcrumb">
             <span className="crumb-root">Settings</span>
             <Icon name="chevron" size={12} />
-            {bot ? <a href="#/settings/bots">{PAGES[page].label}</a> : <span aria-current="page">{PAGES[page].label}</span>}
-            {bot && (
+            {bot || plugin ? <a href={`#/settings/${page}`}>{PAGES[page].label}</a> : <span aria-current="page">{PAGES[page].label}</span>}
+            {(bot || plugin) && (
               <>
                 <Icon name="chevron" size={12} />
-                <span aria-current="page">{bot.emoji} {bot.name}</span>
+                <span aria-current="page">{bot ? `${bot.emoji} ${bot.name}` : plugin!.name}</span>
               </>
             )}
           </nav>
@@ -196,13 +204,14 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           <button className="icon" title="Close" aria-label="Close settings" onClick={closeSettings}><Icon name="x" /></button>
         </header>
         {/* Keyed by page so each one starts scrolled to the top. */}
-        <div className="set-body" key={bot ? `bot:${bot.id}` : page}>
+        <div className="set-body" key={bot ? `bot:${bot.id}` : plugin ? `plugin:${plugin.id}` : page}>
           {page === 'general' && <General />}
           {page === 'appearance' && <Appearance />}
           {page === 'chat' && <ChatPage />}
           {page === 'providers' && <Providers />}
           {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={(['bot', 'skills', 'connections', 'files'].includes(path[2]) ? path[2] : 'bot') as BotTab} file={path.slice(3).join('/') || undefined} /> : <Bots newBot={newBot} />)}
           {page === 'browser' && <BrowserPage />}
+          {page === 'plugins' && (path[1] ? <PluginPage id={path[1]} /> : <PluginList />)}
           {page === 'skills' && <SkillsCatalog />}
           {page === 'connections' && <ConnectionsCatalog />}
           {page === 'environments' && <Environments />}
@@ -333,7 +342,7 @@ function UseForBots({ provider }: { provider: ProviderInfo }) {
   )
 }
 
-function Engine({ provider, pathKey }: { provider: ProviderInfo; pathKey: 'claudePath' | 'codexPath' }) {
+function Engine({ provider, pathKey }: { provider: ProviderInfo; pathKey: 'claudePath' | 'codexPath' | 'grokPath' }) {
   const path = useSetting(pathKey)
   const [checking, setChecking] = useState(false)
   const check = () => {
@@ -366,6 +375,9 @@ function Providers() {
   const compat = by('openai-compatible')
   const claude = by('claude-code')
   const codex = by('codex')
+  const grok = by('grok')
+  const local = by('local')
+  const localUrl = useSetting('localUrl')
   const saveCompat = (patch: { baseUrl?: string; apiKey?: string }) => api('PUT', '/api/providers/openai-compatible', { baseUrl: compat?.baseUrl ?? '', apiKey: '', ...patch })
 
   // The programs may have been installed or signed in since the server last looked.
@@ -375,20 +387,39 @@ function Providers() {
 
   return (
     <Page>
-      <p className="set-intro">Where the models come from. Codex runs on your ChatGPT plan and Claude Code on your Claude plan; you sign in to each in its own program. A bot runs on one of these; choose which in the bot’s settings.</p>
+      <p className="set-intro">Where the models come from. Codex runs on your ChatGPT plan, Claude Code on your Claude plan and Grok on your Grok plan; you sign in to each in its own program. Local models run on this computer. A bot runs on one of these; choose which in the bot’s settings.</p>
       {codex && <Engine provider={codex} pathKey="codexPath" />}
       {claude && <Engine provider={claude} pathKey="claudePath" />}
+      {grok && <Engine provider={grok} pathKey="grokPath" />}
+      {local && (
+        <Section title="Local models" action={<ProviderStatus provider={local} />}>
+          <Row
+            id="provider-local"
+            title={local.connected ? local.detail : local.detail}
+            description={local.connected ? 'Models that run on the computer running Open Bot, through Ollama or LM Studio. Nothing is sent anywhere and nothing is paid for. Small models often cannot use tools well, so pick one made for tool use.' : local.hint}
+            control={<button onClick={() => api('POST', '/api/providers/check').catch(() => {})}>Check again</button>}
+          />
+          <Row
+            title="Address"
+            description="Ollama and LM Studio are found by themselves. Fill this in only for another program, or another port."
+            status={local.baseUrl ? <>Using <code>{local.baseUrl}</code></> : undefined}
+            reset={localUrl.reset}
+            control={<Field label="Address of the local model server" value={localUrl.value} placeholder="Found automatically" onCommit={localUrl.set} />}
+          />
+          <UseForBots provider={local} />
+        </Section>
+      )}
       {compat && (
         <Section title="Other models" action={<ProviderStatus provider={compat} />}>
           <Row
             id="provider-openai-compatible"
             title="Base URL"
-            description="Any OpenAI-compatible API: OpenAI, OpenRouter, or local models through Ollama or LM Studio. Clear it to disconnect."
+            description="Any OpenAI-compatible API, such as OpenAI or OpenRouter. Clear it to disconnect."
             control={<Field label="Base URL" value={compat.baseUrl ?? ''} placeholder="https://api.openai.com/v1" onCommit={(baseUrl) => saveCompat({ baseUrl })} />}
           />
           <Row
             title="API key"
-            description="Stored on the computer running Open Bot. Not needed for local models."
+            description="Stored on the computer running Open Bot."
             control={<Field label="API key" type="password" value="" placeholder={compat.connected ? 'Saved' : 'None'} onCommit={(apiKey) => saveCompat({ apiKey })} />}
           />
           <UseForBots provider={compat} />
@@ -724,6 +755,22 @@ function AddEnvironment({ add, busy }: { add: (input: { address: string; code: s
   )
 }
 
+/** A QR code, drawn as squares, dark on light whatever the app's colours, so a camera can always read it. */
+function Qr({ text }: { text: string }) {
+  const code = qrcode(0, 'M')
+  code.addData(text)
+  code.make()
+  const size = code.getModuleCount()
+  const squares = []
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (code.isDark(y, x)) squares.push(`M${x + 2} ${y + 2}h1v1h-1z`)
+  return (
+    <svg className="qr" viewBox={`0 0 ${size + 4} ${size + 4}`} role="img" aria-label="Pairing code as a QR code">
+      <rect width="100%" height="100%" fill="#fff" />
+      <path d={squares.join('')} fill="#000" />
+    </svg>
+  )
+}
+
 interface AccessInfo {
   on: boolean
   port: number
@@ -791,7 +838,7 @@ function Sharing() {
             <Row
               id="pair"
               title="Pair a computer"
-              description={local ? 'Makes a code that lets one computer in. In the Open Bot app there, choose Settings, Environments, “Add environment”, and enter this computer’s address and the code.' : 'Computers are paired, and removed, in the app on the computer that runs this environment.'}
+              description={local ? 'Makes a code that lets one computer or phone in. In the Open Bot app on a computer, choose Settings, Environments, “Add environment”, and enter this computer’s address and the code. On a phone, scan the picture.' : 'Computers are paired, and removed, in the app on the computer that runs this environment.'}
               control={local && <button onClick={() => run(async () => setPairing(await api('POST', '/api/pairing')))}>{pairing ? 'New code' : 'Pair a computer'}</button>}
             >
               {pairing && (
@@ -809,6 +856,12 @@ function Sharing() {
                     </div>
                   ))}
                   {!info.addresses.length && <p className="faint">This computer is not connected to a network right now.</p>}
+                  {info.addresses[0] && (
+                    <div className="pair-qr">
+                      <Qr text={pairingLink(`${info.addresses[0]}:${info.port}`, pairing.code)} />
+                      <p className="faint">On a phone, open the Open Bot app and choose “Scan the code”. It carries the address and the code, so there is nothing to type.</p>
+                    </div>
+                  )}
                   <p className="faint">The code works once, until {new Date(pairing.expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}. This closes by itself when the other computer has used it.</p>
                 </div>
               )}
@@ -870,10 +923,10 @@ function Advanced() {
       <Section title="Troubleshooting">
         <Row
           id="debug-engines"
-          title="Log what Claude Code and Codex print"
+          title="Log what the engines print"
           description="Write everything those programs print to the output of the Open Bot server, to work out why a turn went wrong."
           reset={debug.reset}
-          control={<Switch label="Log what Claude Code and Codex print" checked={debug.value} onChange={debug.set} />}
+          control={<Switch label="Log what the engines print" checked={debug.value} onChange={debug.set} />}
         />
       </Section>
       <Section title="Data">

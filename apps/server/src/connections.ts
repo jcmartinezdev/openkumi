@@ -29,6 +29,8 @@ interface Entry {
   command?: string
   args?: string[]
   env?: Record<string, string>
+  /** For a service that does not let an app register itself: the client the owner created with it. */
+  oauth?: { clientId: string; clientSecret: string; scope?: string }
 }
 
 const NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$/
@@ -68,6 +70,14 @@ export function listConnections(): Connection[] {
 /** Splits a command line into words, keeping quoted parts together. */
 function words(line: string): string[] {
   return [...line.matchAll(/"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+)/g)].map((m) => m[1]?.replace(/\\(.)/g, '$1') ?? m[2] ?? m[3])
+}
+
+/** Adds a connection, or replaces the one of that name. For connections that plugins bring. */
+export function putConnection(name: string, entry: Entry) {
+  const servers = readCatalog()
+  if (JSON.stringify(servers[name]) === JSON.stringify(entry)) return
+  servers[name] = entry
+  writeCatalog(servers)
 }
 
 export function addConnection(input: Record<string, unknown>) {
@@ -189,13 +199,19 @@ class Credentials implements OAuthClientProvider {
     return `http://localhost:${PORT}/api/mcp/callback`
   }
 
+  /** The client the owner created with the service, when it is one that needs that. */
+  private get own() {
+    return readCatalog()[this.name]?.oauth
+  }
+
   get clientMetadata() {
     return {
       client_name: 'Open Bot',
       redirect_uris: [this.redirectUrl],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
-      token_endpoint_auth_method: 'none',
+      token_endpoint_auth_method: this.own ? 'client_secret_post' : 'none',
+      ...(this.own?.scope ? { scope: this.own.scope } : {}),
     }
   }
 
@@ -207,7 +223,8 @@ class Credentials implements OAuthClientProvider {
     return state
   }
 
-  clientInformation = () => this.load().client
+  // With a client of the owner's there is nothing to register: that client is the one used.
+  clientInformation = () => (this.own ? { client_id: this.own.clientId, client_secret: this.own.clientSecret } : this.load().client)
   saveClientInformation = (client: StoredOAuthClientInformation) => this.save({ client })
   tokens = () => this.load().tokens
   saveTokens = (tokens: StoredOAuthTokens) => this.save({ tokens })
@@ -241,7 +258,8 @@ function urlEntry(name: string): Entry & { url: string } {
 export async function login(botId: string, name: string): Promise<{ url: string | null }> {
   const entry = urlEntry(name)
   const creds = new Credentials(botId, name)
-  const result = await auth(creds, { serverUrl: entry.url })
+  // With a client of the owner's, only what the plugin asks for is requested, not everything the service offers.
+  const result = await auth(creds, { serverUrl: entry.url, scope: entry.oauth?.scope })
   if (result === 'AUTHORIZED') {
     await reconnect(botId, name)
     return { url: null }

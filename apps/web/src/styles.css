@@ -634,3 +634,26 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 
 .pair-code { font-size: 18px; font-weight: 600; letter-spacing: 0.08em; }
 .set-link-row > .faint { width: 58px; flex: none; font-size: 12px; }
+
+/* ---- plugins */
+.plugin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.plugin-card { display: flex; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); text-decoration: none; transition: border-color 0.12s, background 0.12s; }
+.plugin-card:hover { border-color: var(--border-strong); background: var(--hover); }
+.plugin-card-text { min-width: 0; display: grid; gap: 4px; align-content: start; justify-items: start; }
+.plugin-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.plugin-card p { font-size: 12.5px; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
+.plugin-tile { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 11px; font-size: 22px; }
+.plugin-tile.big { width: 64px; height: 64px; border-radius: 16px; font-size: 32px; }
+.plugin-head { display: flex; align-items: center; gap: 18px; padding: 0 4px; }
+.plugin-head-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.plugin-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.plugin-head p { color: var(--muted); font-size: 13.5px; }
+.plugin-head .faint { font-size: 12px; }
+.plugin-about { padding: 0 16px; font-size: 14px; line-height: 1.6; }
+.set-row h3 > .avatar { width: 22px; height: 22px; font-size: 13px; border-radius: 6px; }
+.choose-bot { display: grid; gap: 6px; }
+.choose-bot > button { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; text-align: left; font-weight: 500; }
+@media (max-width: 560px) { .plugin-head { flex-wrap: wrap; } }
+
+.pair-qr { display: flex; align-items: center; gap: 16px; padding: 4px 0; }
+.qr { width: 148px; height: 148px; flex: none; border-radius: 8px; }

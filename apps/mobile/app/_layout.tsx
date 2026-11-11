@@ -1,0 +1,33 @@
+import { useEffect } from 'react'
+import { StatusBar } from 'expo-status-bar'
+import { Stack, useRouter, useSegments } from 'expo-router'
+import { restore, useSession } from '../src/session'
+import { useTheme } from '../src/theme'
+
+export default function Layout() {
+  const theme = useTheme()
+  const { server, ready } = useSession()
+  const router = useRouter()
+  const pairing = useSegments()[0] === 'pair'
+
+  useEffect(() => void restore(), [])
+  // With no server there is only one thing to do; once paired, the pairing screen is left.
+  useEffect(() => {
+    if (!ready) return
+    if (!server && !pairing) router.replace('/pair')
+    else if (server && pairing) router.replace('/')
+  }, [ready, server, pairing])
+
+  return (
+    <>
+      <StatusBar style="auto" />
+      <Stack screenOptions={{ headerStyle: { backgroundColor: theme.bg }, headerTintColor: theme.text, headerShadowVisible: false, contentStyle: { backgroundColor: theme.bg }, headerBackButtonDisplayMode: 'minimal' }}>
+        <Stack.Screen name="index" options={{ title: 'Open Bot' }} />
+        <Stack.Screen name="pair" options={{ title: 'Pair with your computer', headerBackVisible: false }} />
+        <Stack.Screen name="scan" options={{ title: 'Scan the code', presentation: 'modal' }} />
+        <Stack.Screen name="chat/[id]" options={{ title: '' }} />
+        <Stack.Screen name="browser/[botId]" options={{ title: 'Browser' }} />
+      </Stack>
+    </>
+  )
+}

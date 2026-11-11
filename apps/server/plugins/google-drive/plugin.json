@@ -1,0 +1,40 @@
+{
+  "name": "Google Drive",
+  "icon": "📁",
+  "color": "#188038",
+  "category": "Google",
+  "publisher": "Open Bot",
+  "tagline": "Find and read your documents, sheets and files, and save new ones.",
+  "can": [
+    "Search and read the files in the account you sign it in to",
+    "Create new documents and files",
+    "Change, move, share or delete a file, only after you approve it"
+  ],
+  "skills": [
+    "google-drive"
+  ],
+  "connection": {
+    "name": "google-drive",
+    "url": "https://drivemcp.googleapis.com/mcp/v1",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/drive.file"
+    ]
+  },
+  "site": "https://drive.google.com/",
+  "setup": {
+    "id": "google",
+    "title": "Your Google Cloud client",
+    "fields": [
+      {
+        "key": "clientId",
+        "label": "Client ID"
+      },
+      {
+        "key": "clientSecret",
+        "label": "Client secret",
+        "secret": true
+      }
+    ]
+  }
+}

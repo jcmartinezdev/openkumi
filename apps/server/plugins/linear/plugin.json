@@ -1,0 +1,21 @@
+{
+  "name": "Linear",
+  "icon": "📐",
+  "color": "#5e6ad2",
+  "category": "Work",
+  "publisher": "Open Bot",
+  "tagline": "Look up issues and projects, file new ones, and keep them up to date.",
+  "can": [
+    "Read the issues, projects and cycles your account can see",
+    "Create issues and comments",
+    "Change an issue's status, assignee or priority, only after you approve it"
+  ],
+  "skills": [
+    "linear"
+  ],
+  "connection": {
+    "name": "linear",
+    "url": "https://mcp.linear.app/mcp"
+  },
+  "site": "https://linear.app/"
+}
