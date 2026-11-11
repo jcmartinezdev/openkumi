@@ -11,6 +11,7 @@ import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
 import { ModelChip } from '../../src/ModelChip'
 import { PageSheet, PageView, Sheet } from '../../src/PageView'
+import { ScreenTitle } from '../../src/ScreenTitle'
 import { type Theme, useTheme } from '../../src/theme'
 
 /** What one line of the chat shows. Tool results and the bot's private reasoning are left out on a phone. */
@@ -149,10 +150,7 @@ export default function Chat() {
   }
 
   // Sets the conversation so far aside (it is kept, and found again in the app on the computer) and begins an empty one.
-  const menu = () =>
-    ActionSheetIOS.showActionSheetWithOptions({ title: 'Starting fresh sets this conversation aside and begins an empty one. What the bot has learned stays.', options: ['Start fresh', 'Cancel'], cancelButtonIndex: 1 }, (choice) => {
-      if (choice === 0 && bot) api('POST', `/api/bots/${bot.id}/fresh`).then(() => setError(''), (e) => setError(e.message))
-    })
+  const startFresh = () => bot && api('POST', `/api/bots/${bot.id}/fresh`).then(() => setError(''), (e) => setError(e.message))
 
   const tail = (
     <View style={{ paddingBottom: 12 }}>
@@ -174,23 +172,20 @@ export default function Chat() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 44}>
-      <Stack.Screen
-        options={{
-          title: (forBot ? bot?.name : thread?.title) ?? '',
-          headerRight: () => bot && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
-              {forBot && !!items?.length && !running && (
-                <Pressable accessibilityRole="button" accessibilityLabel="More" hitSlop={12} onPress={menu}>
-                  <Text style={{ color: theme.muted, fontSize: 22, lineHeight: 24 }}>⋯</Text>
-                </Pressable>
-              )}
-              <Pressable accessibilityRole="button" accessibilityLabel={`${bot.name}’s browser`} hitSlop={12} onPress={() => router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: thread?.id ?? '' } })}>
-                <Text style={{ fontSize: 20 }}>🌐</Text>
-              </Pressable>
-            </View>
-          ),
-        }}
-      />
+      {/* A subagent's thread says whose it is, as on the computer; a bot's conversation says when the bot is at work. */}
+      <ScreenTitle title={(forBot ? bot?.name : thread?.title) ?? ''} subtitle={forBot ? (running ? 'Working…' : undefined) : bot?.name} buttons={forBot ? 2 : 1} />
+      {bot && (
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button icon="globe" accessibilityLabel={`${bot.name}’s browser`} onPress={() => router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: thread?.id ?? '' } })} />
+          {forBot && (
+            <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="More">
+              <Stack.Toolbar.MenuAction icon="square.and.pencil" subtitle="Sets this conversation aside. The bot keeps what it learned." disabled={running || !items?.length} onPress={startFresh}>
+                Start fresh
+              </Stack.Toolbar.MenuAction>
+            </Stack.Toolbar.Menu>
+          )}
+        </Stack.Toolbar>
+      )}
       {bot && (!thread || items?.length === 0) ? (
         <View style={styles.empty}>
           <Text style={{ fontSize: 44 }}>{bot.emoji}</Text>

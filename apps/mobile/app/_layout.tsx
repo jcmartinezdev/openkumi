@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
-import { Stack, useRouter, useSegments } from 'expo-router'
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router'
 import { restore, useSession } from '../src/session'
-import { useTheme } from '../src/theme'
+import { useAppearance, useTheme } from '../src/theme'
 
 export default function Layout() {
   const theme = useTheme()
+  const appearance = useAppearance()
   const { server, ready } = useSession()
   const router = useRouter()
   const pairing = useSegments()[0] === 'pair'
@@ -19,7 +20,8 @@ export default function Layout() {
   }, [ready, server, pairing])
 
   return (
-    <>
+    // Navigation draws its bars and their buttons and menus light unless told the app is dark.
+    <ThemeProvider value={appearance === 'dark' ? DarkTheme : DefaultTheme}>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerStyle: { backgroundColor: theme.bg }, headerTintColor: theme.text, headerShadowVisible: false, contentStyle: { backgroundColor: theme.bg }, headerBackButtonDisplayMode: 'minimal' }}>
         <Stack.Screen name="index" options={{ title: 'Open Bot' }} />
@@ -30,6 +32,6 @@ export default function Layout() {
         {/* A sheet over the chat that stops halfway, and goes up the whole way when pulled or scrolled. */}
         <Stack.Screen name="model/[botId]" options={{ presentation: 'formSheet', headerShown: false, sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, contentStyle: { backgroundColor: theme.card } }} />
       </Stack>
-    </>
+    </ThemeProvider>
   )
 }

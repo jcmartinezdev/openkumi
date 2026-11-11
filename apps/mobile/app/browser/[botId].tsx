@@ -2,10 +2,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, type GestureResponderEvent, type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Canvas, Image, type SkImage, Skia } from '@shopify/react-native-skia'
-import { Stack, useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { BrowserInput } from '@openbot/shared'
 import { api, send, useStore } from '@openbot/client/store'
+import { ScreenTitle } from '../../src/ScreenTitle'
 import { watch } from '../../src/session'
 import { useTheme } from '../../src/theme'
 
@@ -72,7 +73,7 @@ export default function Browser() {
 
   return (
     <View style={{ flex: 1 }}>
-      <Stack.Screen options={{ title: bot ? `${bot.name}’s browser` : 'Browser' }} />
+      <ScreenTitle title="Browser" subtitle={bot?.name} />
       <View style={[styles.bar, { borderBottomColor: theme.border }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={!tab} hitSlop={8} onPress={() => act('back')}><Text style={[styles.icon, { color: tab ? theme.text : theme.faint }]}>‹</Text></Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Reload" disabled={!tab} hitSlop={8} onPress={() => act('reload')}><Text style={[styles.icon, { color: tab ? theme.text : theme.faint, fontSize: 20 }]}>↻</Text></Pressable>

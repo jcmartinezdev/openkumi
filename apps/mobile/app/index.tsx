@@ -1,5 +1,5 @@
 // The bots on the paired server. Each has one conversation, so a bot is a row, like a contact.
-import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import { mainThread, useStore } from '@openbot/client/store'
 import { forget, useSession } from '../src/session'
@@ -24,11 +24,14 @@ export default function Home() {
   const refused = useStore((s) => s.refused)
   const failures = useStore((s) => s.failures)
 
-  const menu = () =>
-    ActionSheetIOS.showActionSheetWithOptions({ title: server ? `Paired with ${server.name}` : undefined, options: ['Unpair this phone', 'Cancel'], destructiveButtonIndex: 0, cancelButtonIndex: 1 }, (choice) => {
-      if (choice === 0) Alert.alert('Unpair this phone?', 'The phone forgets the server. To use it again, pair it again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Unpair', style: 'destructive', onPress: () => void forget() }])
-    })
-  const header = <Stack.Screen options={{ headerRight: () => <Pressable accessibilityRole="button" accessibilityLabel="Server" hitSlop={12} onPress={menu}><Text style={{ color: theme.muted, fontSize: 22, lineHeight: 24 }}>⋯</Text></Pressable> }} />
+  const unpair = () => Alert.alert('Unpair this phone?', 'The phone forgets the server. To use it again, pair it again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Unpair', style: 'destructive', onPress: () => void forget() }])
+  const header = (
+    <Stack.Toolbar placement="right">
+      <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="Server" title={server ? `Paired with ${server.name}` : undefined}>
+        <Stack.Toolbar.MenuAction destructive onPress={unpair}>Unpair this phone</Stack.Toolbar.MenuAction>
+      </Stack.Toolbar.Menu>
+    </Stack.Toolbar>
+  )
 
   if (!loaded) {
     // Nothing to show yet: the server has not answered, or no longer lets this phone in.
