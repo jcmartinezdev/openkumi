@@ -138,7 +138,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     '--system-prompt-snapshot', 'off',
     // No built-in tools: no commands, no files, no fetching. Web search runs on Anthropic's side.
     '--tools', req.webSearch ? 'WebSearch' : '',
-    '--mcp-config', JSON.stringify({ mcpServers: { openbot: { type: 'http', url: req.toolsUrl } } }),
+    '--mcp-config', JSON.stringify({ mcpServers: req.toolsUrl ? { openbot: { type: 'http', url: req.toolsUrl } } : {} }),
     '--strict-mcp-config',
     '--allowedTools', req.webSearch ? 'mcp__openbot,WebSearch' : 'mcp__openbot',
     // Nobody is there to answer a permission prompt; anything not allowed above is refused.

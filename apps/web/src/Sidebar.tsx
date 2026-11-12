@@ -3,6 +3,7 @@ import type { Modal } from './App'
 import { Icon } from './Icon'
 import { desktop, useDesktop } from './desktop'
 import { mainThread, openSettings, recentSubagents, rootOf, useStore } from './store'
+import { BotHead } from './Mascot'
 
 export function StatusDot({ thread }: { thread: Thread }) {
   if (thread.status === 'running') return <span className="spinner" aria-label="Working" />
@@ -76,7 +77,7 @@ export function Sidebar({ bot, thread, tasksOpen, openModal, open, close }: Prop
                   aria-current={current ? 'page' : undefined}
                   onClick={close}
                 >
-                  <span className="avatar">{b.emoji}</span>
+                  <BotHead bot={b} />
                   <span className="grow name">{b.name}</span>
                   <span className="meta">
                     {working ? <span className="spinner" aria-label="Working" /> : main?.status === 'error' ? <span className="dot error" aria-label="Failed" /> : main && <span className="time">{ago(main.updatedAt)}</span>}

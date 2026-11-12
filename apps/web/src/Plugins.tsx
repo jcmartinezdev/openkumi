@@ -8,6 +8,7 @@ import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { Field, Page, Row, Section, onServer } from './settingsUi'
 import { api, useStore } from './store'
+import { BotHead } from './Mascot'
 
 const Tile = ({ plugin, big }: { plugin: Plugin; big?: boolean }) => (
   <span className={`plugin-tile ${big ? 'big' : ''}`} style={{ background: `color-mix(in srgb, ${plugin.color} 16%, transparent)` }} aria-hidden>{plugin.icon}</span>
@@ -100,7 +101,7 @@ export function PluginPage({ id }: { id: string }) {
             return (
               <Row
                 key={bot.id}
-                title={<><span className="avatar">{bot.emoji}</span>{bot.name}</>}
+                title={<><BotHead bot={bot} />{bot.name}</>}
                 description={standing(plugin, status)}
                 status={needsSignIn && !local ? 'Sign in from the computer that runs Open Bot.' : undefined}
                 control={
@@ -170,7 +171,7 @@ function ChooseBot({ plugin, close, install }: { plugin: Plugin; close: () => vo
             const has = plugin.installedOn.includes(bot.id)
             return (
               <button key={bot.id} disabled={has} onClick={() => install(bot)}>
-                <span className="avatar">{bot.emoji}</span>
+                <BotHead bot={bot} />
                 <span className="grow">{bot.name}</span>
                 {has ? <span className="faint">Installed</span> : <Icon name="chevron" size={14} />}
               </button>

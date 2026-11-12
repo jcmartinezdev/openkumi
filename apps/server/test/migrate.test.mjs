@@ -56,6 +56,7 @@ test('bots stored in the database become folders, keeping their id, logins and c
     fs.writeFileSync(path.join(oldProfile, 'Cookies'), 'logins')
 
     const dir = path.join(home, 'bots', 'b_Old-1_x')
+    const looks = []
     for (const run of [1, 2]) {
       // The second start must find nothing left to do.
       const state = await withServer(home, (get) => get('/api/state'))
@@ -64,7 +65,10 @@ test('bots stored in the database become folders, keeping their id, logins and c
       assert.deepEqual([state.bots[1].id, state.bots[1].provider, state.bots[1].model], ['b_Old-2', 'codex', 'gpt-5.5'])
       assert.ok(!state.providers.some((p) => p.id === 'chatgpt'))
       assert.deepEqual([state.settings.defaultProvider, state.settings.disabledProviders], ['', ['mock']])
-      const { skills: _, connections: __, plugins: ___, ...bot } = state.bots[0]
+      const { skills: _, connections: __, plugins: ___, look, ...bot } = state.bots[0]
+      // It had no look, so it is given one made from its id: the same on every start.
+      looks.push(JSON.stringify(look))
+      assert.deepEqual(Object.keys(look), ['creature', 'color', 'hat', 'extra', 'clothes'])
       assert.deepEqual(bot, {
         id: 'b_Old-1_x', name: 'Helper: v2', emoji: '🦊', description: '', rules: '', provider: 'mock', model: 'mock-1', effort: 'low',
         webSearch: false, headless: false, createdAt: 1700000000000,
@@ -72,6 +76,7 @@ test('bots stored in the database become folders, keeping their id, logins and c
       assert.deepEqual(state.threads.map((t) => [t.id, t.botId, t.title]), [['t_1', 'b_Old-1_x', 'An old chat']])
     }
 
+    assert.equal(looks[0], looks[1])
     assert.equal(fs.readFileSync(path.join(dir, 'private', 'browser-profile', 'Cookies'), 'utf8'), 'logins', 'logins moved with the profile')
     assert.ok(!fs.existsSync(oldProfile))
     assert.match(fs.readFileSync(path.join(dir, 'workspace', 'AGENTS.md'), 'utf8'), /^# Helper: v2\n\nBe brief\.\n/)

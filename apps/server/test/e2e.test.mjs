@@ -295,6 +295,45 @@ test('bots can be created from chat', async () => {
   assert.match(fs.readFileSync(path.join(home, 'bots', 'researcher', 'workspace', 'AGENTS.md'), 'utf8'), /Dig deep\./, 'the instructions start its own file')
 })
 
+test('looks: a new bot\'s own model dresses it, and the owner changes it a part at a time', async () => {
+  const state = async () => (await api('GET', '/api/state')).bots
+  // Made without a look, its model chooses one, and the emoji on its sign.
+  const made = await api('POST', '/api/bots', { name: 'Traveller', provider: 'mock', purpose: 'Plans our trips.' })
+  const dressed = await until(async () => (await state()).find((b) => b.id === made.id && !b.choosingLook && b.emoji === '✈️'))
+  assert.deepEqual(dressed.look, { creature: 'cat', color: 'sky', hat: 'cap', extra: 'none', clothes: 'orange' })
+  const file = path.join(home, 'bots', made.id, 'bot.md')
+  assert.match(fs.readFileSync(file, 'utf8'), /\nemoji: ✈️\n[\s\S]*\nlook: cat sky cap orange\n/)
+
+  // A part at a time; what is not a part is dropped.
+  const changed = await api('PATCH', `/api/bots/${made.id}`, { look: { hat: 'crown', extra: 'glasses', color: 'neon' } })
+  assert.deepEqual(changed.look, { creature: 'cat', color: 'sky', hat: 'crown', extra: 'glasses', clothes: 'orange' })
+  // By hand in bot.md, in any order; a part left out is none.
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace(/\nlook: .*\n/, '\nlook: scarf, Bunny red mint\n'))
+  assert.deepEqual((await state()).find((b) => b.id === made.id).look, { creature: 'bunny', color: 'mint', hat: 'none', extra: 'scarf', clothes: 'red' })
+
+  // Given a look and an emoji, a new bot keeps them.
+  const own = { creature: 'bear', color: 'lemon', hat: 'top', extra: 'none', clothes: 'forest' }
+  const chosen = await api('POST', '/api/bots', { name: 'Penny', provider: 'mock', emoji: '💰', look: own })
+  assert.deepEqual([chosen.look, chosen.emoji, chosen.choosingLook], [own, '💰', undefined])
+  // Given only an emoji, the model chooses the rest and leaves the emoji alone.
+  const given = await api('POST', '/api/bots', { name: 'Scholar', provider: 'mock', emoji: '📚' })
+  const finished = await until(async () => (await state()).find((b) => b.id === given.id && !b.choosingLook))
+  assert.deepEqual([finished.look.hat, finished.emoji], ['cap', '📚'])
+
+  // "Pick for me" asks the bot's model and saves nothing.
+  const picked = await api('POST', '/api/looks/pick', { botId: chosen.id })
+  assert.deepEqual(picked, { look: { creature: 'cat', color: 'sky', hat: 'cap', extra: 'none', clothes: 'orange' }, emoji: '✈️' })
+  assert.deepEqual((await state()).find((b) => b.id === chosen.id).look, own)
+
+  // An engine chooses too, in a turn with none of the bot's tools.
+  await api('POST', '/api/providers/check')
+  const engine = await api('POST', '/api/bots', { name: 'Health', provider: 'claude-code', purpose: 'Reads my lab results.' })
+  const healthy = await until(async () => (await state()).find((b) => b.id === engine.id && b.emoji === '🧬'))
+  assert.deepEqual(healthy.look, { creature: 'bunny', color: 'mint', hat: 'headband', extra: 'none', clothes: 'red' })
+
+  for (const b of [made, chosen, given, engine]) await api('DELETE', `/api/bots/${b.id}`)
+})
+
 test('a bot is a folder: bot.md holds the owner\'s settings and rules', async () => {
   await api('PATCH', `/api/bots/${bot.id}`, { rules: 'Never email anyone without asking first.', emoji: '🧪' })
   const file = fs.readFileSync(botPath('bot.md'), 'utf8')
@@ -752,6 +791,11 @@ test('local models: a model server on this computer is found and runs a bot, wit
     let body = ''
     for await (const chunk of req) body += chunk
     const request = JSON.parse(body)
+    // A new bot asks its model for a look, with none of its tools.
+    if (request.messages[0].content.startsWith('You dress up the mascot') && !request.tools?.length) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      return void res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: '{"creature":"bug","color":"lime","hat":"none","extra":"glasses","clothes":"teal","emoji":"🖥️"}' } }] })}\n\ndata: [DONE]\n\n`)
+    }
     asked.push(request)
     const last = request.messages.at(-1)
     // Like a model with a small window, it refuses a conversation that is too long for it.
@@ -784,6 +828,8 @@ test('local models: a model server on this computer is found and runs a bot, wit
     assert.deepEqual(await api('GET', '/api/providers/local/models'), [{ id: 'tiny-local', name: 'tiny-local' }])
 
     const runner = await api('POST', '/api/bots', { name: 'Local runner', provider: 'local', model: 'tiny-local' })
+    const dressed = await until(async () => (await api('GET', '/api/state')).bots.find((b) => b.id === runner.id && b.emoji === '🖥️'))
+    assert.deepEqual(dressed.look, { creature: 'bug', color: 'lime', hat: 'none', extra: 'glasses', clothes: 'teal' })
     const id = await fresh(runner.id)
     assert.equal(lastText(await say(id, 'hello')), 'Local echo: hello')
     // The model is given the bot's tools, and what it calls is carried out here.

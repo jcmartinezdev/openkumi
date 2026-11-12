@@ -75,7 +75,7 @@ function BotRow({ bot, main }: { bot: Bot; main: boolean }) {
   const { name, effort } = useBotModel(bot)
   return (
     <Row
-      leading={<Avatar emoji={bot.emoji} />}
+      leading={<Avatar bot={bot} />}
       label={bot.name}
       detail={[main && 'Main assistant', name, effort].filter(Boolean).join(' · ')}
       opens

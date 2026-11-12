@@ -9,6 +9,7 @@ import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
 import { describe, parse, site } from '@openbot/client/steps'
 import { api, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, openTasks, recentSubagents, rootOf, useStore } from './store'
+import { BotHead, Mascot } from './Mascot'
 
 type Call = Extract<ItemData, { type: 'function_call' }>
 
@@ -425,8 +426,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
         <div className="column">
           {main && (!thread || items?.length === 0) && (
             <div className="empty">
-              <div className="avatar big">{bot.emoji}</div>
+              <div className="empty-mascot"><Mascot look={bot.look} emoji={bot.emoji} live /></div>
               <h1>{bot.name}</h1>
+              {bot.choosingLook && <p className="faint">Choosing its look…</p>}
               {provider?.connected ? (
                 <>
                   {prefs.suggestions && (
@@ -455,7 +457,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
             </div>
           )}
           {partial?.text && <div className="msg assistant"><Markdown text={partial.text} live /></div>}
-          {running && !partial?.text && !partial?.reasoning && <div className="working"><span className="spinner" /> Working</div>}
+          {running && !partial?.text && !partial?.reasoning && <div className="working"><BotHead bot={bot} className="bob" /> Working</div>}
           {error && <div className="notice error">{error}</div>}
         </div>
         </FileLinks.Provider>

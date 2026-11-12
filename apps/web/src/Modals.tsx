@@ -1,7 +1,10 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import type { Bot } from '@openbot/shared'
+import type { Bot, Look } from '@openbot/shared'
+import { UNDECIDED, describeLook } from '@openbot/client/mascot'
 import { Icon } from './Icon'
+import { type Dress, LookEditor } from './LookEditor'
+import { Mascot } from './Mascot'
 import { api } from './store'
 
 export function Dialog({ title, close, wide, full, children }: { title: string; close: () => void; wide?: boolean; full?: boolean; children: React.ReactNode }) {
@@ -46,32 +49,56 @@ export function Dialog({ title, close, wide, full, children }: { title: string; 
   )
 }
 
-/** A new bot needs only a name; what it is for becomes the start of the instructions it then keeps itself. */
+/**
+ * A new bot needs only a name; what it is for becomes the start of the instructions it then keeps
+ * itself. Its look can be chosen here; otherwise the bot chooses its own once it is made.
+ */
 export function NewBot({ close, created }: { close: () => void; created: (bot: Bot) => void }) {
-  const [form, setForm] = useState({ name: '', emoji: '🤖', purpose: '' })
+  const [form, setForm] = useState({ name: '', purpose: '' })
+  /** Null while the look is left to the bot. */
+  const [dress, setDress] = useState<Dress | null>(null)
   const [error, setError] = useState('')
   const field = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }))
+  const change = (patch: { look?: Partial<Look>; emoji?: string }) =>
+    setDress((d) => ({ look: { ...(d?.look ?? UNDECIDED), ...patch.look }, emoji: patch.emoji ?? d?.emoji ?? '🤖' }))
 
   const save = async () => {
     try {
       // What it runs on is left to the server: the default from Settings, else the first provider that is connected.
-      created(await api<Bot>('POST', '/api/bots', form))
+      created(await api<Bot>('POST', '/api/bots', { ...form, ...dress }))
     } catch (e: any) {
       setError(e.message)
     }
   }
 
   return (
-    <Dialog title="New bot" close={close}>
+    <Dialog title="New bot" close={close} wide>
       <div className="form">
-        <div className="name-row">
-          <input className="emoji-input" aria-label="Avatar emoji" value={form.emoji} maxLength={8} onChange={(e) => field('emoji', e.target.value)} />
-          <input autoFocus aria-label="Name" value={form.name} placeholder="Name" onChange={(e) => field('name', e.target.value)} />
+        <div className="new-bot">
+          <div className="new-bot-mascot">
+            {/* A blank blob holding sparkles: the bot is yet to dress. */}
+            <Mascot look={dress?.look ?? UNDECIDED} emoji={dress?.emoji ?? '✨'} live />
+            <p>{dress ? describeLook(dress.look) : `${form.name.trim() || 'The bot'} chooses its own look once it is made.`}</p>
+          </div>
+          <div className="form nested">
+            <label>
+              Name
+              <input autoFocus value={form.name} placeholder="Name" onChange={(e) => field('name', e.target.value)} />
+            </label>
+            <label>
+              What is it for?
+              <textarea rows={4} value={form.purpose} placeholder="A sentence or two is enough. The bot writes and updates its own instructions from here." onChange={(e) => field('purpose', e.target.value)} />
+            </label>
+            {dress ? (
+              <>
+                <div className="actions"><button className="ghost" onClick={() => setDress(null)}><Icon name="undo" size={14} /> Let {form.name.trim() || 'the bot'} choose</button></div>
+                <LookEditor look={dress.look} emoji={dress.emoji} change={change} pick={async () => setDress(await api<Dress>('POST', '/api/looks/pick', form))} />
+              </>
+            ) : (
+              <div className="actions"><button onClick={() => change({})}>Choose a look</button></div>
+            )}
+          </div>
         </div>
-        <label>
-          What is it for?
-          <textarea rows={4} value={form.purpose} placeholder="A sentence or two is enough. The bot writes and updates its own instructions from here." onChange={(e) => field('purpose', e.target.value)} />
-        </label>
         {error && <div className="notice error">{error}</div>}
         <div className="actions">
           <span className="grow" />

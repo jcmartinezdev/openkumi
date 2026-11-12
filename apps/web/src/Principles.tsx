@@ -6,6 +6,7 @@ import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { Field, Page, Pick, Row, Section } from './settingsUi'
 import { api, savePrinciples, useStore } from './store'
+import { BotHead } from './Mascot'
 
 export function Principles() {
   const principles = useStore((s) => s.principles)
@@ -40,7 +41,7 @@ export function Principles() {
           description="Every bot is told the others’ names and these lines, so it knows when to hand a task over. It hands one over as a subagent: the other bot does the task as itself, with its own logins and connections, and reports back. A bot cannot change its own line."
         />
         {bots.map((bot, i) => (
-          <Row key={bot.id} title={<>{bot.emoji} {bot.name}{i === 0 && bots.length > 1 && <span className="pill">Main assistant</span>}</>}>
+          <Row key={bot.id} title={<><BotHead bot={bot} />{bot.name}{i === 0 && bots.length > 1 && <span className="pill">Main assistant</span>}</>}>
             <Field label={`What ${bot.name} is for`} className="set-input set-line" value={bot.description} placeholder="Say in a line what it is for" onCommit={(description) => api('PATCH', `/api/bots/${bot.id}`, { description })} />
           </Row>
         ))}

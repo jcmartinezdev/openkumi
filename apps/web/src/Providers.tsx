@@ -8,6 +8,7 @@ import { loadModels, useModelLists } from '@openbot/client/models'
 import { ProviderIcon } from './ProviderIcon'
 import { Field, Row, Switch, useSetting } from './settingsUi'
 import { api, useStore } from './store'
+import { BotHead } from './Mascot'
 
 /** The setting that holds where each engine's program is. */
 const PATH_KEY: Record<string, 'codexPath' | 'claudePath' | 'grokPath'> = { codex: 'codexPath', 'claude-code': 'claudePath', grok: 'grokPath' }
@@ -137,7 +138,7 @@ function Detail({ provider }: { provider: ProviderInfo }) {
       <div className="prov-block">
         <h4>Bots on it</h4>
         {bots.length ? (
-          <p className="prov-bots">{bots.map((bot) => <a key={bot.id} href={`#/settings/bots/${encodeURIComponent(bot.id)}`}><span className="avatar">{bot.emoji}</span>{bot.name}</a>)}</p>
+          <p className="prov-bots">{bots.map((bot) => <a key={bot.id} href={`#/settings/bots/${encodeURIComponent(bot.id)}`}><BotHead bot={bot} />{bot.name}</a>)}</p>
         ) : <p className="faint">No bot runs on it.</p>}
       </div>
     </section>

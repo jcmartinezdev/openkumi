@@ -7,6 +7,7 @@ import { moment } from '@openbot/client/tasks'
 import { Glyph } from '../src/icons'
 import { forget, useSession } from '../src/session'
 import { useTheme } from '../src/theme'
+import { BotHead } from '../src/Mascot'
 
 function ago(time: number): string {
   const minutes = Math.floor((Date.now() - time) / 60_000)
@@ -76,7 +77,7 @@ export default function Home() {
           const thread = mainThread(threads, bot.id)
           return (
             <Pressable accessibilityRole="button" accessibilityLabel={`Conversation with ${bot.name}`} style={({ pressed }) => [styles.bot, pressed && { backgroundColor: theme.side }]} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: `bot:${bot.id}` } })}>
-              <View style={[styles.avatar, { backgroundColor: theme.bubble }]}><Text style={{ fontSize: 20 }}>{bot.emoji}</Text></View>
+              <BotHead bot={bot} size={40} />
               <Text style={[styles.botName, { color: theme.text }]} numberOfLines={1}>{bot.name}</Text>
               {thread?.status === 'running' ? <ActivityIndicator size="small" color={theme.run} /> : thread && <Text style={{ color: theme.faint, fontSize: 13 }}>{ago(thread.updatedAt)}</Text>}
             </Pressable>

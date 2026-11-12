@@ -7,6 +7,7 @@ import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, madeBy, nextRun, runStatus, ru
 import { Icon } from './Icon'
 import { Page, Pick, Row, Section, Switch } from './settingsUi'
 import { api, openTasks, useStore } from './store'
+import { BotHead } from './Mascot'
 
 export function Tasks({ path, openNav }: { path: string[]; openNav: () => void }) {
   const id = path[0] ?? ''
@@ -80,7 +81,7 @@ function TaskCard({ task }: { task: ScheduledTask }) {
       <div className="set-row task-head">
         <div className="set-row-main">
           <a className="task-open" href={`#/tasks/${encodeURIComponent(task.id)}`}>
-            <span className="avatar">{bot?.emoji ?? '🤖'}</span>
+            {bot ? <BotHead bot={bot} /> : <span className="avatar">🤖</span>}
             <span className="set-row-text">
               <h3>{task.title}</h3>
               <p>{scheduleLabel(task.schedule, zone)} · {bot?.name ?? task.botId} · made by {madeBy(task, bots)}</p>

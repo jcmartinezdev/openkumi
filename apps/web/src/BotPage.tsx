@@ -2,9 +2,12 @@
 // the server: the owner's settings (Bot), what the bot may use (Skills, Connections) and what the
 // bot itself keeps (Files).
 import { useEffect, useRef, useState } from 'react'
-import type { Bot, Connection, ConnectionStatus, Effort, FileEntry, HistoryEntry, Skill } from '@openbot/shared'
+import type { Bot, Connection, ConnectionStatus, Effort, FileEntry, HistoryEntry, Look, Skill } from '@openbot/shared'
 import { Icon } from './Icon'
+import { describeLook } from '@openbot/client/mascot'
 import { EFFORT_LABEL, effortsOf, useModels } from '@openbot/client/models'
+import { type Dress, LookEditor } from './LookEditor'
+import { Mascot } from './Mascot'
 import { ago } from './Sidebar'
 import { Field, Page, Pick, Row, Section, Switch, onServer } from './settingsUi'
 import { api, download, openSettings, refreshSkills, request, useStore } from './store'
@@ -24,6 +27,30 @@ function useAction() {
     }
   }
   return { error, run, note: error && <div className="notice error">{error}</div> }
+}
+
+/** The bot's mascot and everything to change about it. Each change is saved at once, and shown before the server says so. */
+function LookRow({ bot }: { bot: Bot }) {
+  const [shown, setShown] = useState<Dress | null>(null)
+  const { run, note } = useAction()
+  useEffect(() => setShown(null), [bot.look, bot.emoji])
+  const dress = shown ?? { look: bot.look, emoji: bot.emoji }
+  const change = (patch: { look?: Partial<Look>; emoji?: string }) => {
+    setShown({ look: { ...dress.look, ...patch.look }, emoji: patch.emoji ?? dress.emoji })
+    run(() => api('PATCH', `/api/bots/${bot.id}`, patch))
+  }
+  return (
+    <div className="set-row look-row" id="bot-look">
+      <div className="look-stage">
+        <Mascot look={dress.look} emoji={dress.emoji} live />
+        <p>{bot.choosingLook ? `${bot.name} is choosing its look…` : describeLook(dress.look)}</p>
+      </div>
+      <div className="look-side">
+        {note}
+        <LookEditor look={dress.look} emoji={dress.emoji} change={change} pick={async () => change(await api<Dress>('POST', '/api/looks/pick', { botId: bot.id }))} />
+      </div>
+    </div>
+  )
 }
 
 export function BotPage({ botId, tab, file }: { botId: string; tab: BotTab; file?: string }) {
@@ -87,7 +114,6 @@ function General({ bot }: { bot: Bot }) {
       {note}
       <Section title="Identity">
         <Row id="bot-name" title="Name" control={<Field label="Name" value={bot.name} onCommit={(name) => api('PATCH', `/api/bots/${bot.id}`, { name })} />} />
-        <Row title="Avatar" description="An emoji shown beside the bot’s name." control={<Field label="Avatar emoji" className="set-input emoji" value={bot.emoji} onCommit={(emoji) => api('PATCH', `/api/bots/${bot.id}`, { emoji })} />} />
         <Row
           id="bot-description"
           title="What it is for"
@@ -95,6 +121,10 @@ function General({ bot }: { bot: Bot }) {
         >
           <Field label="What it is for" className="set-input set-line" value={bot.description} placeholder="For example: plans trips and books travel." onCommit={(description) => api('PATCH', `/api/bots/${bot.id}`, { description })} />
         </Row>
+      </Section>
+
+      <Section title="Look">
+        <LookRow bot={bot} />
       </Section>
 
       <Section title="Rules">

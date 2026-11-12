@@ -160,7 +160,7 @@ export default function TaskPage() {
       )}
 
       <Section title="Task">
-        <Row leading={bot && <Avatar emoji={bot.emoji} size={28} />} label="Bot" value={bot?.name ?? 'Choose a bot'} opens onPress={pickBot} />
+        <Row leading={bot && <Avatar bot={bot} size={28} />} label="Bot" value={bot?.name ?? 'Choose a bot'} opens onPress={pickBot} />
         <Field label="Name" value={draft.title} placeholder="Morning brief" onChange={(title) => change({ title })} autoCapitalize="sentences" />
       </Section>
 

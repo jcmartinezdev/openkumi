@@ -9,7 +9,7 @@ import path from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { AppState, ClientEvent, ServerEvent } from '@openbot/shared'
 import * as agent from './agent.ts'
-import { announce, createBot, deleteBot, getBot, listBots, updateBot } from './bots.ts'
+import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
 import { type Frame, browserFor, browserStates, isWebPage, stopBrowser } from './browser.ts'
 import { HOME, HOME_LABEL, LAN, PORT, ROOT, SKILLS, accessToken, botDir, emit, onEvent, readSecrets, writeSecret } from './config.ts'
 import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, removeComputer } from './clients.ts'
@@ -186,6 +186,7 @@ route('DELETE', '/api/threads', () => {
 
 // ---- bots
 route('POST', '/api/bots', (_, body) => createBot(body))
+route('POST', '/api/looks/pick', (_, body) => pickLook(body))
 route('PATCH', '/api/bots/:id', ([id], body) => updateBot(needBot(id).id, body))
 // Everything the bot is told in its conversation, for its owner to read.
 route('GET', '/api/bots/:id/instructions', ([id]) => ({ text: agent.systemPrompt(needBot(id)) }))

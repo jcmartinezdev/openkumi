@@ -14,6 +14,7 @@ import { PageSheet, PageView, Sheet } from '../../src/PageView'
 import { useTextScale } from '../../src/prefs'
 import { ScreenTitle } from '../../src/ScreenTitle'
 import { type Theme, useTheme } from '../../src/theme'
+import { Bobbing, BotHead, Mascot } from '../../src/Mascot'
 
 /** What one line of the chat shows. Tool results and the bot's private reasoning are left out on a phone. */
 type Row =
@@ -161,7 +162,7 @@ export default function Chat() {
   const tail = (
     <View style={{ paddingBottom: 12 }}>
       {!!partial?.text && <View style={styles.bot}><Markdown text={partial.text} live /></View>}
-      {running && !partial?.text && <View style={styles.working}><ActivityIndicator size="small" color={theme.muted} /><Text style={{ color: theme.muted, fontSize: 14 }}>Working</Text></View>}
+      {running && !partial?.text && <View style={styles.working}>{bot ? <Bobbing><BotHead bot={bot} size={24} /></Bobbing> : <ActivityIndicator size="small" color={theme.muted} />}<Text style={{ color: theme.muted, fontSize: 14 }}>Working</Text></View>}
       {subagents.length > 0 && (
         <View style={styles.chips}>
           {subagents.map((t) => (
@@ -197,8 +198,9 @@ export default function Chat() {
       )}
       {bot && (!thread || items?.length === 0) ? (
         <View style={styles.empty}>
-          <Text style={{ fontSize: 44 }}>{bot.emoji}</Text>
+          <Mascot look={bot.look} emoji={bot.emoji} size={130} live />
           <Text style={{ color: theme.text, fontSize: 20, fontWeight: '600' }}>{bot.name}</Text>
+          {bot.choosingLook && <Text style={{ color: theme.faint, fontSize: 14 }}>Choosing its look…</Text>}
         </View>
       ) : !items ? (
         <View style={styles.empty}><ActivityIndicator color={theme.muted} /></View>

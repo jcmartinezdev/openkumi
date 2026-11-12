@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Glyph, type GlyphName } from './icons'
 import { ScreenTitle } from './ScreenTitle'
 import { useTheme } from './theme'
+import type { Bot } from '@openbot/shared'
+import { BotHead } from './Mascot'
 
 /** A pushed settings page: its title in the bar, and its sections in a scroll view. */
 export function SettingsPage({ title, subtitle, buttons, refresh, children }: { title: string; subtitle?: string; buttons?: number; refresh?: { busy: boolean; run: () => void }; children: ReactNode }) {
@@ -223,14 +225,9 @@ export function Segments<T extends string>({ label, value, options, onChange }: 
 /** Where a row's icon goes, for a mark that is not one of the line icons, so the two line up. */
 export const Slot = ({ children }: { children: ReactNode }) => <View style={styles.icon}>{children}</View>
 
-/** A bot's emoji on a tile, at the start of its row. The row says whose it is, so it is not read out. */
-export function Avatar({ emoji, size = 32 }: { emoji: string; size?: number }) {
-  const theme = useTheme()
-  return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.avatar, { width: size, height: size, borderRadius: size * 0.28, backgroundColor: theme.bubble }]}>
-      <Text style={{ fontSize: size * 0.55 }}>{emoji}</Text>
-    </View>
-  )
+/** A bot's head, at the start of its row. The row says whose it is, so it is not read out. */
+export function Avatar({ bot, size = 32 }: { bot: Pick<Bot, 'look' | 'emoji'> | undefined; size?: number }) {
+  return <BotHead bot={bot} size={size} />
 }
 
 /** A short note in a section's place, such as what a page is about. */
@@ -260,6 +257,5 @@ const styles = StyleSheet.create({
   segments: { flexDirection: 'row', padding: 2, borderRadius: 10 },
   segment: { flex: 1, height: 32, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, borderRadius: 8 },
   segmentOn: { shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 3, shadowOffset: { width: 0, height: 1 } },
-  avatar: { alignItems: 'center', justifyContent: 'center' },
   note: { fontSize: 14, lineHeight: 20, paddingHorizontal: 16 },
 })

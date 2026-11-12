@@ -48,7 +48,26 @@ export interface Bot {
   connections: string[]
   /** Ids of the plugins installed for this bot. */
   plugins: string[]
+  /** How its mascot looks. The mascot holds a sign with `emoji` on it. */
+  look: Look
+  /** Set while the bot's model is choosing its look, just after the bot was made. */
+  choosingLook?: boolean
   createdAt: number
+}
+
+/** The parts a bot's mascot is put together from. Every app draws them the same way (@openbot/client/mascot). */
+export type Creature = 'bear' | 'cat' | 'bunny' | 'blob' | 'bug'
+export type BodyColor = 'berry' | 'coral' | 'tangerine' | 'lemon' | 'lime' | 'mint' | 'sky' | 'periwinkle' | 'grape' | 'cocoa' | 'slate' | 'cloud'
+export type Hat = 'none' | 'party' | 'beanie' | 'top' | 'crown' | 'chef' | 'cap' | 'grad' | 'wizard' | 'hardhat' | 'headphones' | 'headband' | 'flower'
+export type Extra = 'none' | 'glasses' | 'bowtie' | 'scarf'
+/** The colour of its hat, bow tie or scarf. None of these names is also a body colour. */
+export type ClothesColor = 'navy' | 'red' | 'orange' | 'yellow' | 'forest' | 'teal' | 'purple' | 'pink' | 'white' | 'charcoal'
+export interface Look {
+  creature: Creature
+  color: BodyColor
+  hat: Hat
+  extra: Extra
+  clothes: ClothesColor
 }
 
 /** A skill in the shared catalog: a folder with a SKILL.md the bot reads when the task calls for it. */

@@ -4,11 +4,12 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Bot, Effort } from '@openbot/shared'
+import type { Bot, Effort, Look } from '@openbot/shared'
 import { HOME, botDir, emit, privateDir, readSecrets, workspaceDir, writeSecret } from './config.ts'
 import { enabledConnections } from './connections.ts'
 import { formatFrontMatter, parseFrontMatter } from './frontmatter.ts'
-import { providerInfos } from './providers/index.ts'
+import { CHOOSE_LOOK, cleanLook, lookFrom, lookQuestion, readChoice, readLook, writeLook } from './look.ts'
+import { askOnce, getProvider, providerInfos } from './providers/index.ts'
 import { settings as appSettings, updateSettings } from './settings.ts'
 import { installedPlugins } from './plugins.ts'
 import { enabledSkills } from './skills.ts'
@@ -21,8 +22,9 @@ const FALLBACK = 'codex'
 const file = (id: string) => path.join(botDir(id), 'bot.md')
 
 /** Settings as stored in bot.md; the lists of skills and connections are read from their own places. */
-type Settings = Omit<Bot, 'skills' | 'connections' | 'plugins'>
-export type BotPatch = Partial<Omit<Settings, 'id' | 'createdAt'>>
+type Settings = Omit<Bot, 'skills' | 'connections' | 'plugins' | 'choosingLook'>
+/** A look can be changed a part at a time. */
+export type BotPatch = Partial<Omit<Settings, 'id' | 'createdAt' | 'look'>> & { look?: Partial<Look> }
 
 function readSettings(id: string): Settings | undefined {
   if (!ID.test(id)) return
@@ -40,6 +42,7 @@ function readSettings(id: string): Settings | undefined {
     name: data.name || id,
     emoji: data.emoji || '🤖',
     description: oneLine(data.description ?? ''),
+    look: readLook(data.look, id),
     rules: body.trim(),
     provider: data.provider || FALLBACK,
     model: data.model ?? '',
@@ -56,6 +59,7 @@ function writeSettings(s: Settings) {
     name: s.name,
     emoji: s.emoji,
     description: s.description,
+    look: writeLook(s.look),
     provider: s.provider,
     model: s.model,
     effort: s.effort,
@@ -66,7 +70,16 @@ function writeSettings(s: Settings) {
   fs.writeFileSync(file(s.id), formatFrontMatter(front, s.rules))
 }
 
-const full = (s: Settings): Bot => ({ ...s, skills: enabledSkills(s.id), connections: enabledConnections(s.id), plugins: installedPlugins(s.id) })
+/** Bots whose model is choosing their look right now. */
+const choosing = new Set<string>()
+
+const full = (s: Settings): Bot => ({
+  ...s,
+  skills: enabledSkills(s.id),
+  connections: enabledConnections(s.id),
+  plugins: installedPlugins(s.id),
+  ...(choosing.has(s.id) ? { choosingLook: true } : {}),
+})
 
 export function getBot(id: string): Bot | undefined {
   const settings = readSettings(id)
@@ -112,6 +125,8 @@ function clean(patch: Record<string, unknown>): BotPatch {
   if (EFFORTS.includes(patch.effort as string)) out.effort = patch.effort
   if (typeof patch.webSearch === 'boolean') out.webSearch = patch.webSearch
   if (typeof patch.headless === 'boolean') out.headless = patch.headless
+  const look = cleanLook(patch.look)
+  if (Object.keys(look).length) out.look = look
   return out
 }
 
@@ -126,24 +141,32 @@ function newId(name: string): string {
   }
 }
 
+/** What a new bot runs on: the default chosen in Settings, else the first provider that is ready to use. */
+function newBotProvider(): string {
+  const app = appSettings()
+  const usable = providerInfos().filter((p) => p.connected && p.enabled !== false)
+  return usable.find((p) => p.id === app.defaultProvider)?.id ?? usable[0]?.id ?? FALLBACK
+}
+
 /**
  * `purpose` seeds the new bot's own instructions, which it maintains from then on. Without a
- * description, the first sentence of the purpose stands in, for the owner to change.
+ * description, the first sentence of the purpose stands in, for the owner to change. A bot made
+ * without a look gets one from its own model, which chooses from its name and purpose once it
+ * exists (and the emoji on its sign too, when none was given).
  */
 export async function createBot(input: Record<string, unknown>): Promise<Bot> {
-  const patch = clean(input)
+  const { look, ...patch } = clean(input)
   const name = patch.name?.trim()
   if (!name) throw new Error('A bot needs a name')
   const purpose = typeof input.purpose === 'string' ? input.purpose.slice(0, 8000) : ''
   const app = appSettings()
-  // What a new bot runs on: the default chosen in Settings, else the first provider that is ready to use.
-  const usable = providerInfos().filter((p) => p.connected && p.enabled !== false)
-  const provider = usable.find((p) => p.id === app.defaultProvider)?.id ?? usable[0]?.id ?? FALLBACK
+  const id = newId(name)
   const made: Settings = {
-    id: newId(name),
+    id,
     emoji: '🤖',
+    look: { ...lookFrom(id), ...look },
     rules: '',
-    provider,
+    provider: newBotProvider(),
     model: '',
     effort: '',
     webSearch: app.defaultWebSearch,
@@ -156,16 +179,68 @@ export async function createBot(input: Record<string, unknown>): Promise<Bot> {
   writeSettings(made)
   fs.mkdirSync(privateDir(made.id), { recursive: true })
   await scaffold(made.id, name, purpose)
+  if (!look) void dress(id, purpose, !patch.emoji)
   return announce(made.id)!
 }
 
 export function updateBot(id: string, patch: Record<string, unknown>): Bot {
   const settings = readSettings(id)
   if (!settings) throw new Error(`No bot with id ${id}`)
-  const next = { ...settings, ...clean(patch) }
+  const { look, ...rest } = clean(patch)
+  const next = { ...settings, ...rest, look: { ...settings.look, ...look } }
   if (!next.name.trim()) throw new Error('A bot needs a name')
   writeSettings(next)
   return announce(id)!
+}
+
+/** Has a model choose a look and an emoji for a bot of this name and purpose. Null when its answer was no use. */
+async function chooseLook(providerId: string, model: string, name: string, purpose: string, signal: AbortSignal) {
+  const provider = getProvider(providerId)
+  if (!provider.info().connected) throw new Error(`${provider.info().name} is not connected, so it cannot choose a look.`)
+  return readChoice(await askOnce(provider, { model, instructions: CHOOSE_LOOK, text: lookQuestion(name, purpose), signal }))
+}
+
+/** A new bot's model chooses its look. Whatever the owner changes meanwhile is kept, and a failure leaves the look it was made with. */
+async function dress(id: string, purpose: string, emoji: boolean) {
+  const before = getBot(id)
+  if (!before) return
+  choosing.add(id)
+  announce(id)
+  try {
+    const choice = await chooseLook(before.provider, before.model, before.name, purpose, AbortSignal.timeout(120_000))
+    const now = readSettings(id)
+    if (!choice || !now) return
+    updateBot(id, {
+      ...(writeLook(now.look) === writeLook(before.look) ? { look: choice.look } : {}),
+      ...(emoji && now.emoji === before.emoji ? { emoji: choice.emoji } : {}),
+    })
+  } catch {
+    // The look it was made with is a fine look.
+  } finally {
+    choosing.delete(id)
+    announce(id)
+  }
+}
+
+/**
+ * "Pick for me": a look chosen by a bot's own model, from its name and what it is for (its rules and
+ * its own instructions). Before a bot exists, by the model a new bot would run on. Nothing is saved.
+ */
+export async function pickLook(input: Record<string, unknown>): Promise<{ look: Look; emoji: string }> {
+  const bot = typeof input.botId === 'string' ? getBot(input.botId) : undefined
+  if (input.botId !== undefined && !bot) throw new Error(`No bot with id ${input.botId}`)
+  const name = (typeof input.name === 'string' && input.name.trim()) || bot?.name || 'A new bot'
+  let purpose = typeof input.purpose === 'string' ? input.purpose : ''
+  if (bot && !purpose.trim()) {
+    let own = ''
+    try {
+      own = fs.readFileSync(path.join(workspaceDir(bot.id), 'AGENTS.md'), 'utf8')
+    } catch {}
+    purpose = [bot.description, bot.rules, own.slice(0, 3000)].filter(Boolean).join('\n\n')
+  }
+  const choice = await chooseLook(bot?.provider ?? newBotProvider(), bot?.model ?? '', name, purpose, AbortSignal.timeout(120_000))
+  if (!choice) throw new Error('The model did not come up with a look. Try again, or choose one yourself.')
+  return choice
 }
 
 export function deleteBot(id: string) {
@@ -216,6 +291,7 @@ export async function importLegacyBots(rows: Record<string, any>[]) {
       name: String(r.name),
       emoji: String(r.emoji || '🤖'),
       description: '',
+      look: lookFrom(id),
       rules: '',
       provider: String(r.provider || FALLBACK),
       model: String(r.model ?? ''),

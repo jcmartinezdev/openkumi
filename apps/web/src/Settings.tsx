@@ -14,6 +14,7 @@ import { Icon } from './Icon'
 import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
 import { api, closeSettings, openSettings, refreshSkills, saveSettings, useStore } from './store'
+import { BotHead } from './Mascot'
 
 type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'principles' | 'browser' | 'plugins' | 'skills' | 'connections' | 'environments' | 'advanced' | 'about'
 type IconName = Parameters<typeof Icon>[0]['name']
@@ -335,7 +336,7 @@ function Bots({ newBot }: { newBot: () => void }) {
         {bots.map((bot: Bot) => (
           <a key={bot.id} className="set-row set-link" id={bot.id === bots[0]?.id ? 'bots' : undefined} href={`#/settings/bots/${encodeURIComponent(bot.id)}`}>
             <div className="set-row-main">
-              <span className="avatar">{bot.emoji}</span>
+              <BotHead bot={bot} />
               <div className="set-row-text">
                 <h3>{bot.name}{bot.id === bots[0]?.id && <span className="pill" title="The first bot. It can schedule, change and delete tasks for every bot.">Main assistant</span>}</h3>
                 {bot.description && <p>{bot.description}</p>}
@@ -399,7 +400,7 @@ function BrowserPage() {
           <Row
             key={bot.id}
             id={i === 0 ? 'browsers-running' : undefined}
-            title={<>{bot.emoji} {bot.name}</>}
+            title={<><BotHead bot={bot} />{bot.name}</>}
             description={`${browsers[bot.id].tabs.length} ${browsers[bot.id].tabs.length === 1 ? 'tab' : 'tabs'} open${browsers[bot.id].headless ? '' : ', with a window on the desktop'}.`}
             control={<button onClick={() => api('POST', `/api/bots/${bot.id}/browser/stop`).catch((e) => alert(e.message))}>Stop</button>}
           />

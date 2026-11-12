@@ -47,7 +47,7 @@ function TaskRow({ task }: { task: ScheduledTask }) {
   const problem = trouble(task)
   return (
     <Row
-      leading={<Avatar emoji={bot?.emoji ?? '🤖'} />}
+      leading={<Avatar bot={bot} />}
       label={task.title}
       detail={
         <>

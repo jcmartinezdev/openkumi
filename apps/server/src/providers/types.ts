@@ -33,7 +33,7 @@ export interface TurnRequest {
   session: string | null
   /** The bot's workspace, used as the working folder. */
   cwd: string
-  /** Open Bot's tools for this turn, served as an MCP server at this address. */
+  /** Open Bot's tools for this turn, served as an MCP server at this address. Empty for a turn with no tools. */
   toolsUrl: string
   effort: Effort
   webSearch: boolean

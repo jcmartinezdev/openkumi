@@ -34,6 +34,7 @@ if (!listBots().length) {
     name: 'Assistant',
     emoji: '🤖',
     description: 'Everyday questions and tasks, and the first stop for anything new.',
+    look: { creature: 'bear', color: 'sky', hat: 'headphones', extra: 'none', clothes: 'orange' },
     purpose: 'A capable general-purpose assistant. Concise, and researches before answering when facts matter.',
   })
 }

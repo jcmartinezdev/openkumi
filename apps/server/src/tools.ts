@@ -75,7 +75,7 @@ const botTools: Tool[] = [
         name: str('Short display name'),
         description: str('One line saying what the bot is for, e.g. "Plans trips and books travel". Every other bot is told it, to know when to hand it work.'),
         instructions: str('What the bot is for and how it should behave. This starts its own instructions file, which it maintains itself from then on.'),
-        emoji: str('A single emoji used as the avatar'),
+        emoji: str('A single emoji for the sign its mascot holds. Omit it and the new bot chooses its own look and emoji.'),
         model: str('Model id. Omit to use the provider default.'),
       },
       ['name', 'description', 'instructions'],

@@ -38,6 +38,9 @@ that stays logged in.
   change, is what every bot is told before anything else. Each bot is also told who the other bots
   are and what each is for, so it hands a task to the one it fits.
 - **Bots that make bots.** Create bots in the app, or just ask in chat.
+- **A mascot for every bot.** Each bot is a little jelly creature holding a sign with its emoji.
+  Choose its creature, colour, hat, extra and clothes, or leave it and the new bot dresses itself
+  from its name and what it is for. Its look is a line in `bot.md` (`look: cat sky cap orange`).
 
 ## Run it
 

@@ -15,7 +15,8 @@
     "./page": "./src/page.ts",
     "./models": "./src/models.ts",
     "./marks": "./src/marks.ts",
-    "./tasks": "./src/tasks.ts"
+    "./tasks": "./src/tasks.ts",
+    "./mascot": "./src/mascot.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

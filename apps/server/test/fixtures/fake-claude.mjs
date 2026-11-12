@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Stands in for the `claude` program in tests: same command line and output format, scripted replies.
 // "!tool <name> <json>" calls a tool at the address it was given, "!system" and "!args" report what
-// it was started with, "!slow" takes a while, anything else is echoed with the turn number.
+// it was started with, "!slow" takes a while, anything else is echoed with the turn number. Asked
+// to choose a bot's look, it gives one.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -59,6 +60,10 @@ if (call) {
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: call[1], arguments: JSON.parse(call[2] || '{}') } }),
   })
   reply = `Tool result: ${(await res.json()).result.content[0].text.slice(0, 600)}`
+} else if (flag('--system-prompt').startsWith('You dress up the mascot')) {
+  // Asked to choose a bot's look, which it is given no tools for.
+  const tools = Object.keys(JSON.parse(flag('--mcp-config')).mcpServers)
+  reply = JSON.stringify({ creature: 'bunny', color: 'mint', hat: tools.length ? 'crown' : 'headband', extra: 'none', clothes: 'red', emoji: '🧬' })
 } else if (prompt === '!system') {
   reply = flag('--system-prompt')
 } else if (prompt === '!args') {

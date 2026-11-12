@@ -86,7 +86,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   if (!program) throw new Error('Grok is not installed on this computer.')
   const folder = borrowFolder(req.cwd)
   fs.mkdirSync(path.join(folder, '.grok'), { recursive: true })
-  fs.writeFileSync(path.join(folder, '.grok', 'config.toml'), `[mcp_servers.openbot]\nurl = ${JSON.stringify(req.toolsUrl)}\ntool_timeout_sec = 1900\n`, { mode: 0o600 })
+  fs.writeFileSync(path.join(folder, '.grok', 'config.toml'), req.toolsUrl ? `[mcp_servers.openbot]\nurl = ${JSON.stringify(req.toolsUrl)}\ntool_timeout_sec = 1900\n` : '', { mode: 0o600 })
   // What was said goes in a file of its own: it can be longer than a command line may be.
   const prompt = path.join(folder, 'prompt.txt')
   fs.writeFileSync(prompt, req.input, { mode: 0o600 })

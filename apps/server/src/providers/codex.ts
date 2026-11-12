@@ -65,10 +65,14 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     // Codex has its own skills (and finds the user's); the bot's skills are the ones in its instructions.
     '-c', 'skills.include_instructions=false',
     '-c', 'skills.bundled.enabled=false',
-    '-c', `mcp_servers.openbot.url=${toml(req.toolsUrl)}`,
-    '-c', 'mcp_servers.openbot.tool_timeout_sec=1900',
-    // Nobody is there to approve a tool call, and Open Bot's tools are the ones the owner chose.
-    '-c', 'mcp_servers.openbot.default_tools_approval_mode="approve"',
+    ...(req.toolsUrl
+      ? [
+          '-c', `mcp_servers.openbot.url=${toml(req.toolsUrl)}`,
+          '-c', 'mcp_servers.openbot.tool_timeout_sec=1900',
+          // Nobody is there to approve a tool call, and Open Bot's tools are the ones the owner chose.
+          '-c', 'mcp_servers.openbot.default_tools_approval_mode="approve"',
+        ]
+      : []),
     '-c', `web_search=${toml(req.webSearch ? 'live' : 'disabled')}`,
   ]
   if (req.model && req.model !== 'default') args.push('-m', req.model)

@@ -2,15 +2,17 @@
 // without its files and connections, which need the computer. What the bot knows (its AGENTS.md
 // and memory) it writes itself; this is what it can do.
 import { useEffect, useState } from 'react'
-import { Alert, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, StyleSheet, Text } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import type { Bot, Skill } from '@openbot/shared'
 import { api, refreshSkills, useStore } from '@openbot/client/store'
 import { scheduleLabel } from '@openbot/client/tasks'
 import { ProviderIcon } from '../../../src/icons'
 import { useBotModel } from '../../../src/ModelChip'
-import { Avatar, Field, ICON_INSET, Row, Section, SettingsPage, Slot, SwitchRow } from '../../../src/SettingsUi'
+import { Field, ICON_INSET, Row, Section, SettingsPage, Slot, SwitchRow } from '../../../src/SettingsUi'
 import { useTheme } from '../../../src/theme'
+import { describeLook } from '@openbot/client/mascot'
+import { Mascot } from '../../../src/Mascot'
 
 export default function BotSettings() {
   const theme = useTheme()
@@ -46,6 +48,7 @@ export default function BotSettings() {
       { text: 'Switch on', onPress: () => void turn() },
     ])
   }
+  const openLook = () => router.push({ pathname: '/settings/look/[botId]', params: { botId: bot.id } })
   const remove = () =>
     Alert.alert(`Delete ${bot.name}?`, 'Its conversations, files, memory and saved logins are removed. This cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
@@ -58,14 +61,14 @@ export default function BotSettings() {
 
   return (
     <SettingsPage title={bot.name} subtitle="Bot settings">
-      <View style={styles.hero}>
-        <Avatar emoji={bot.emoji} size={64} />
+      <Pressable accessibilityRole="button" accessibilityLabel={`Change ${bot.name}’s look`} style={styles.hero} onPress={openLook}>
+        <Mascot look={bot.look} emoji={bot.emoji} size={120} live />
         {main && <Text style={[styles.tag, { color: theme.muted, borderColor: theme.border }]}>Main assistant</Text>}
-      </View>
+      </Pressable>
 
       <Section>
         <Field label="Name" value={bot.name} required onCommit={(name) => save({ name })} />
-        <Field label="Avatar" value={bot.emoji} required onCommit={(emoji) => save({ emoji })} />
+        <Row label="Look" detail={bot.choosingLook ? 'Choosing its look…' : describeLook(bot.look)} opens onPress={openLook} />
       </Section>
 
       <Section title="What it is for" footer="One line. The other bots are told it, so they know when to hand this bot work; the bot cannot change it.">

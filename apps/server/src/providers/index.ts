@@ -1,6 +1,10 @@
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 import type { ProviderInfo } from '@openbot/shared'
-import { emit } from '../config.ts'
+import { HOME, emit } from '../config.ts'
 import { SUMMARISE } from '../history.ts'
+import { CHOOSE_LOOK } from '../look.ts'
 import { onSettingsChange, settings } from '../settings.ts'
 import { claudeCode } from './claude-code.ts'
 import { codex } from './codex.ts'
@@ -14,7 +18,7 @@ import type { ModelEvent, ModelRequest, Provider } from './types.ts'
  * "!tool <name> <json>" calls a tool, "!steps <n>" calls one n times in a row, "!slow" takes a few
  * seconds, "!say <text>" replies with exactly that text, "!system", "!tools" and "!sent" report what
  * the model was sent, anything else is echoed. Asked for a summary, it gives the
- * start of everything the user said in what it was to summarise.
+ * start of everything the user said in what it was to summarise; asked for a look, always the same one.
  */
 const mock: Provider = {
   id: 'mock',
@@ -58,7 +62,9 @@ const mock: Provider = {
       }
       if (text.startsWith('!slow')) await sleep(4000)
       const said = () => text.split('\n').filter((line) => /^(User|Summary): /.test(line)).map((line) => line.replace(/^Summary: /, '').slice(0, 40))
-      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : text.startsWith('!say ') ? text.slice(5) : `Echo: ${text}`
+      // Asked to choose a bot's look, it dresses every bot for travel.
+      const look = '{"creature":"cat","color":"sky","hat":"cap","extra":"none","clothes":"orange","emoji":"✈️"}'
+      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : req.instructions === CHOOSE_LOOK ? look : text.startsWith('!say ') ? text.slice(5) : `Echo: ${text}`
     }
     for (const word of reply.split(/(?<=\s)/)) {
       await sleep(5)
@@ -75,6 +81,27 @@ export function getProvider(id: string): Provider {
   const p = providers.find((p) => p.id === id)
   if (!p) throw new Error(`Unknown provider "${id}"`)
   return p
+}
+
+/**
+ * Asks a provider's model one thing, with no tools and nothing kept, and gives back its answer:
+ * for small jobs such as choosing a bot's look. Engines run in an empty folder kept for this, out
+ * of every bot's way. An empty `model` is the provider's default.
+ */
+export async function askOnce(provider: Provider, ask: { model: string; instructions: string; text: string; signal: AbortSignal }): Promise<string> {
+  const model = ask.model || (await provider.models())[0]?.id || 'default'
+  const cwd = path.join(HOME, 'asks', 'workspace')
+  fs.mkdirSync(cwd, { recursive: true })
+  const events = provider.stream
+    ? provider.stream({ model, instructions: ask.instructions, items: [{ type: 'message', role: 'user', source: 'user', text: ask.text }], tools: [], effort: '', webSearch: false, sessionId: `ask:${crypto.randomUUID()}`, signal: ask.signal })
+    : provider.turn!({ model, instructions: ask.instructions, input: ask.text, session: null, cwd, toolsUrl: '', effort: '', webSearch: false, signal: ask.signal })
+  let said = ''
+  let streamed = ''
+  for await (const ev of events) {
+    if (ev.type === 'text_delta') streamed += ev.delta
+    else if (ev.type === 'item' && ev.item.type === 'message' && ev.item.role === 'assistant') said += ev.item.text
+  }
+  return (said || streamed).trim()
 }
 
 export function providerInfos(): ProviderInfo[] {
