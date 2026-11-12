@@ -11,6 +11,7 @@ import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
 import { ModelChip } from '../../src/ModelChip'
 import { PageSheet, PageView, Sheet } from '../../src/PageView'
+import { useTextScale } from '../../src/prefs'
 import { ScreenTitle } from '../../src/ScreenTitle'
 import { type Theme, useTheme } from '../../src/theme'
 
@@ -86,8 +87,8 @@ function useKeyboardUp() {
   return up
 }
 
-const Line = memo(function Line({ row, theme }: { row: Row; theme: Theme }) {
-  if (row.kind === 'user') return <Pressable onLongPress={() => offerCopy(row.text)} style={[styles.user, { backgroundColor: theme.bubble }]}><Text style={{ color: theme.text, fontSize: 16, lineHeight: 22 }}>{row.text}</Text></Pressable>
+const Line = memo(function Line({ row, theme, scale }: { row: Row; theme: Theme; scale: number }) {
+  if (row.kind === 'user') return <Pressable onLongPress={() => offerCopy(row.text)} style={[styles.user, { backgroundColor: theme.bubble }]}><Text style={{ color: theme.text, fontSize: 16 * scale, lineHeight: 22 * scale }}>{row.text}</Text></Pressable>
   if (row.kind === 'bot') return <View style={styles.bot}><Markdown text={row.text} /><CopyReply text={row.text} theme={theme} /></View>
   if (row.kind === 'steps') return <Steps steps={row.steps} theme={theme} />
   if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
@@ -108,6 +109,8 @@ export default function Chat() {
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
   const connected = useStore((s) => s.connected)
   const threads = useStore((s) => s.threads)
+  const task = useStore((s) => (thread?.taskId ? s.tasks.find((t) => t.id === thread.taskId) : undefined))
+  const scale = useTextScale()
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
@@ -185,6 +188,9 @@ export default function Chat() {
               <Stack.Toolbar.MenuAction icon="square.and.pencil" subtitle="Sets this conversation aside. The bot keeps what it learned." disabled={running || !items?.length} onPress={startFresh}>
                 Start fresh
               </Stack.Toolbar.MenuAction>
+              <Stack.Toolbar.MenuAction icon="gearshape" onPress={() => router.push({ pathname: '/settings/bot/[botId]', params: { botId: bot.id } })}>
+                Bot settings
+              </Stack.Toolbar.MenuAction>
             </Stack.Toolbar.Menu>
           )}
         </Stack.Toolbar>
@@ -202,8 +208,16 @@ export default function Chat() {
           ref={list}
           data={shown}
           keyExtractor={(row) => row.key}
-          renderItem={({ item }) => <Line row={item} theme={theme} />}
-          ListHeaderComponent={parent ? <Text style={[styles.notice, { color: theme.faint }]}>{thread?.kind === 'task' ? 'A run of a scheduled task' : parent.parentId ? `A subagent of “${parent.title}”` : 'A subagent of this bot’s conversation'}</Text> : undefined}
+          renderItem={({ item }) => <Line row={item} theme={theme} scale={scale} />}
+          extraData={scale}
+          ListHeaderComponent={
+            // A run leads back to its task, as on the computer.
+            task ? (
+              <Pressable accessibilityRole="link" hitSlop={6} onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: task.id } })}>
+                <Text style={[styles.notice, { color: theme.faint }]}>A run of the scheduled task <Text style={{ color: theme.text, textDecorationLine: 'underline' }}>{task.title}</Text></Text>
+              </Pressable>
+            ) : parent ? <Text style={[styles.notice, { color: theme.faint }]}>{thread?.kind === 'task' ? 'A run of a scheduled task' : parent.parentId ? `A subagent of “${parent.title}”` : 'A subagent of this bot’s conversation'}</Text> : undefined
+          }
           ListFooterComponent={tail}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}
           keyboardDismissMode="interactive"

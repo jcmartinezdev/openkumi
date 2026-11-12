@@ -5,6 +5,7 @@
   "dependencies": {
     "@openbot/client": "*",
     "@openbot/shared": "*",
+    "@react-native-community/datetimepicker": "9.2.1",
     "@shopify/react-native-skia": "2.14.0",
     "expo": "~58.0.24",
     "expo-camera": "~58.0.14",

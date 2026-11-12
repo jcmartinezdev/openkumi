@@ -10,6 +10,7 @@ import { CODE_COLORS, highlightRuns, languageName } from '@openbot/client/highli
 import { fenceMath, workspaceLink } from '@openbot/client/markdown'
 import { DIAGRAM_THEME } from '@openbot/client/page'
 import { WebBlock } from './PageView'
+import { useTextScale } from './prefs'
 import { type Theme, useAppearance, useTheme } from './theme'
 
 type Appearance = 'light' | 'dark'
@@ -63,7 +64,7 @@ function SideScroll({ children, style, contentContainerStyle }: { children: Reac
   )
 }
 
-const Code = memo(function Code({ lang, code, theme, appearance, plain }: { lang: string; code: string; theme: Theme; appearance: Appearance; plain?: boolean }) {
+const Code = memo(function Code({ lang, code, theme, appearance, scale, plain }: { lang: string; code: string; theme: Theme; appearance: Appearance; scale: number; plain?: boolean }) {
   const runs = useMemo(() => (plain ? null : highlightRuns(code, lang)), [code, lang, plain])
   const colors = CODE_COLORS[appearance]
   return (
@@ -73,7 +74,7 @@ const Code = memo(function Code({ lang, code, theme, appearance, plain }: { lang
         <CopyButton text={code} theme={theme} />
       </View>
       <SideScroll contentContainerStyle={styles.codeBody}>
-        <Text selectable style={[styles.codeText, { color: theme.text }]}>
+        <Text selectable style={[styles.codeText, { color: theme.text, fontSize: 13 * scale, lineHeight: 19 * scale }]}>
           {runs ? runs.map((run, i) => (run.kind ? <Text key={i} style={{ color: colors[run.kind], fontStyle: run.kind === 'comment' ? 'italic' : 'normal' }}>{run.text}</Text> : run.text)) : code}
         </Text>
       </SideScroll>
@@ -141,13 +142,14 @@ function columnWidths(table: ASTNode): number[] {
   return found
 }
 
-function rules(theme: Theme, appearance: Appearance, live: boolean): RenderRules {
+/** `scale` is the message text size chosen in Settings › Appearance. */
+function rules(theme: Theme, appearance: Appearance, live: boolean, scale: number): RenderRules {
   const cell = (node: ASTNode, children: React.ReactNode[], parents: ASTNode[], head: boolean) => {
     const table = parents.find((p) => p.type === 'table')
     const width = table ? columnWidths(table)[node.index] : undefined
     return (
       <View key={node.key} style={[styles.cell, { width, borderColor: theme.border }, head && { backgroundColor: theme.side }]}>
-        {head ? <Text style={{ color: theme.text, fontWeight: '600', fontSize: 15 }}>{children}</Text> : children}
+        {head ? <Text style={{ color: theme.text, fontWeight: '600', fontSize: 15 * scale }}>{children}</Text> : children}
       </View>
     )
   }
@@ -158,11 +160,11 @@ function rules(theme: Theme, appearance: Appearance, live: boolean): RenderRules
     // While a reply is being written, its diagrams and formulas wait until it is done.
     if (!live && lang === 'mermaid') return <Diagram key={node.key} code={code} theme={theme} appearance={appearance} />
     if (!live && lang === 'math') return <View key={node.key} style={{ marginVertical: 4 }}><WebBlock html={formulaPage(code)} height={60} /></View>
-    return <Code key={node.key} lang={lang} code={code} theme={theme} appearance={appearance} plain={live} />
+    return <Code key={node.key} lang={lang} code={code} theme={theme} appearance={appearance} scale={scale} plain={live} />
   }
   return {
     fence,
-    code_block: (node) => <Code key={node.key} lang="" code={(node.content ?? '').replace(/\n$/, '')} theme={theme} appearance={appearance} plain />,
+    code_block: (node) => <Code key={node.key} lang="" code={(node.content ?? '').replace(/\n$/, '')} theme={theme} appearance={appearance} scale={scale} plain />,
     table: (node, children) => (
       <SideScroll key={node.key} style={styles.tableScroll}>
         <View style={[styles.table, { borderColor: theme.border }]}>{children}</View>
@@ -174,17 +176,17 @@ function rules(theme: Theme, appearance: Appearance, live: boolean): RenderRules
   }
 }
 
-const look = (theme: Theme) =>
+const look = (theme: Theme, scale: number) =>
   StyleSheet.create({
-    body: { color: theme.text, fontSize: 16, lineHeight: 23 },
+    body: { color: theme.text, fontSize: 16 * scale, lineHeight: 23 * scale },
     // Text in a table is a little smaller, so more of it fits across.
-    th: { fontSize: 15, lineHeight: 21 },
-    td: { fontSize: 15, lineHeight: 21 },
+    th: { fontSize: 15 * scale, lineHeight: 21 * scale },
+    td: { fontSize: 15 * scale, lineHeight: 21 * scale },
     paragraph: { marginTop: 0, marginBottom: 10 },
-    heading1: { fontSize: 20, fontWeight: '600', marginTop: 10, marginBottom: 6 },
-    heading2: { fontSize: 18, fontWeight: '600', marginTop: 10, marginBottom: 6 },
-    heading3: { fontSize: 16, fontWeight: '600', marginTop: 8, marginBottom: 4 },
-    code_inline: { backgroundColor: theme.bubble, color: theme.text, fontFamily: MONO, fontSize: 14 },
+    heading1: { fontSize: 20 * scale, fontWeight: '600', marginTop: 10, marginBottom: 6 },
+    heading2: { fontSize: 18 * scale, fontWeight: '600', marginTop: 10, marginBottom: 6 },
+    heading3: { fontSize: 16 * scale, fontWeight: '600', marginTop: 8, marginBottom: 4 },
+    code_inline: { backgroundColor: theme.bubble, color: theme.text, fontFamily: MONO, fontSize: 14 * scale },
     blockquote: { backgroundColor: 'transparent', borderLeftColor: theme.border, borderLeftWidth: 2, paddingHorizontal: 10, marginLeft: 0 },
     link: { color: theme.text, textDecorationLine: 'underline' },
     hr: { backgroundColor: theme.border, marginVertical: 12 },
@@ -202,8 +204,9 @@ export const FileLinks = createContext<((path: string) => void) | null>(null)
 export const Markdown = memo(function Markdown({ text, live = false }: { text: string; live?: boolean }) {
   const theme = useTheme()
   const appearance = useAppearance()
-  const style = useMemo(() => look(theme), [theme])
-  const drawn = useMemo(() => rules(theme, appearance, live), [theme, appearance, live])
+  const scale = useTextScale()
+  const style = useMemo(() => look(theme, scale), [theme, scale])
+  const drawn = useMemo(() => rules(theme, appearance, live, scale), [theme, appearance, live, scale])
   const openFile = useContext(FileLinks)
   // A link to one of the bot's files opens it here; any other link opens in Safari.
   const press = (url: string) => {

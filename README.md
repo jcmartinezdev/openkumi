@@ -92,8 +92,12 @@ npm run pair       # a code for pairing one more computer with it
 
 ### On an iPhone
 
-There is an iPhone app (`apps/mobile`, Expo and React Native) for chatting with your bots and
-watching and steering their browsers. It pairs with a server the way another computer does: on
+There is an iPhone app (`apps/mobile`, Expo and React Native) for chatting with your bots,
+watching and steering their browsers, and looking after them: its Settings (the gear on the list
+of bots) change each bot's name, rules, model, browser and skills, switch providers on and off,
+set what new bots start with, and choose light or dark and the size of messages on the phone.
+Scheduled tasks are at the bottom of the list of bots, as on the computer: turn them on and off,
+run them, read their runs, and make or change them. It pairs with a server the way another computer does: on
 the computer that runs the bots choose **Pair a computer**, and in the phone app scan the QR code
 it shows, or type the address and the code. The key the phone is given is kept in its keychain,
 and the server lists the phone so you can remove it.
@@ -103,7 +107,8 @@ npm run mobile     # builds it and opens it in the iPhone simulator (needs Xcode
 ```
 
 The phone reaches the server over your network, so it works at home, or anywhere with a private
-network such as Tailscale on both. Settings, plugins and files are managed in the desktop app.
+network such as Tailscale on both. Signing in to providers, plugins, connections, files and
+the Advanced settings are managed in the desktop app.
 
 There is no web version: the server has no pages, and opening its address in a browser shows a
 note saying so. The only way in is the app.
@@ -176,7 +181,8 @@ apps/
       environments.ts  the list of environments and their access codes
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app
-  mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser
+  mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser,
+                     settings and scheduled tasks
 packages/
   shared/            the types every app agrees on
   client/            what every app needs to talk to a server: the connection, the state

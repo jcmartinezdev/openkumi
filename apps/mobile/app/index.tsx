@@ -1,7 +1,10 @@
 // The bots on the paired server. Each has one conversation, so a bot is a row, like a contact.
+// Under them, as at the bottom of the computer's sidebar, the scheduled tasks; Settings is the gear.
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import { mainThread, useStore } from '@openbot/client/store'
+import { moment } from '@openbot/client/tasks'
+import { Glyph } from '../src/icons'
 import { forget, useSession } from '../src/session'
 import { useTheme } from '../src/theme'
 
@@ -23,14 +26,25 @@ export default function Home() {
   const connected = useStore((s) => s.connected)
   const refused = useStore((s) => s.refused)
   const failures = useStore((s) => s.failures)
+  const tasks = useStore((s) => s.tasks)
 
   const unpair = () => Alert.alert('Unpair this phone?', 'The phone forgets the server. To use it again, pair it again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Unpair', style: 'destructive', onPress: () => void forget() }])
   const header = (
     <Stack.Toolbar placement="right">
-      <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="Server" title={server ? `Paired with ${server.name}` : undefined}>
-        <Stack.Toolbar.MenuAction destructive onPress={unpair}>Unpair this phone</Stack.Toolbar.MenuAction>
-      </Stack.Toolbar.Menu>
+      <Stack.Toolbar.Button icon="gearshape" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
     </Stack.Toolbar>
+  )
+  // The task that runs soonest, for the line under Scheduled tasks.
+  const next = tasks.reduce<number | null>((soonest, t) => (t.enabled && t.nextRunAt && (soonest === null || t.nextRunAt < soonest) ? t.nextRunAt : soonest), null)
+  const scheduled = (
+    <Pressable accessibilityRole="button" style={({ pressed }) => [styles.bot, styles.tasks, { borderTopColor: theme.border }, pressed && { backgroundColor: theme.side }]} onPress={() => router.push('/tasks')}>
+      <View style={styles.avatar}><Glyph name="clock" size={22} color={theme.muted} weight={1.7} /></View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: theme.text, fontSize: 17, fontWeight: '500' }}>Scheduled tasks</Text>
+        <Text style={{ color: theme.faint, fontSize: 13 }} numberOfLines={1}>{!tasks.length ? 'None yet' : next ? `Next ${moment(next)}` : `${tasks.length} paused or done`}</Text>
+      </View>
+      {tasks.some((t) => t.lastStatus === 'running') && <ActivityIndicator size="small" color={theme.run} />}
+    </Pressable>
   )
 
   if (!loaded) {
@@ -41,6 +55,11 @@ export default function Home() {
         {header}
         {!refused && <ActivityIndicator color={theme.muted} />}
         <Text accessibilityRole="alert" style={[styles.lead, { color: theme.muted }]}>{lead}</Text>
+        {refused && (
+          <Pressable accessibilityRole="button" style={[styles.unpair, { borderColor: theme.border }]} onPress={unpair}>
+            <Text style={{ color: theme.err, fontSize: 16, fontWeight: '600' }}>Unpair this phone</Text>
+          </Pressable>
+        )}
       </View>
     )
   }
@@ -64,6 +83,7 @@ export default function Home() {
           )
         }}
         ListEmptyComponent={<Text style={[styles.lead, { color: theme.muted, padding: 24 }]}>There are no bots on this server yet. Create one in the app on your computer.</Text>}
+        ListFooterComponent={bots.length ? scheduled : undefined}
       />
     </>
   )
@@ -76,4 +96,6 @@ const styles = StyleSheet.create({
   bot: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: 60 },
   avatar: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   botName: { flex: 1, fontSize: 17, fontWeight: '600' },
+  tasks: { height: 64, marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  unpair: { height: 46, paddingHorizontal: 22, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
 })

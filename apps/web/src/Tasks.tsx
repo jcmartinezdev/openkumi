@@ -3,12 +3,10 @@
 // opens like any other. Unlike the settings, a task is a form: it is saved when it is whole.
 import { useState } from 'react'
 import type { Bot, Schedule, ScheduledTask, Thread } from '@openbot/shared'
-import { DAY_LETTERS, DAY_NAMES, STATUS_LABEL, WEEK, localZone, madeBy, moment, runsOf, scheduleLabel } from '@openbot/client/tasks'
+import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, madeBy, nextRun, runStatus, runTime, runsOf, scheduleLabel, standing, trouble } from '@openbot/client/tasks'
 import { Icon } from './Icon'
 import { Page, Pick, Row, Section, Switch } from './settingsUi'
 import { api, openTasks, useStore } from './store'
-
-const upper = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 export function Tasks({ path, openNav }: { path: string[]; openNav: () => void }) {
   const id = path[0] ?? ''
@@ -57,32 +55,11 @@ function TaskList() {
   )
 }
 
-/** When a task runs next, or why it does not. */
-const nextRun = (task: ScheduledTask) => (!task.enabled ? 'Paused' : task.nextRunAt ? upper(moment(task.nextRunAt)) : 'Will not run again')
-
-/** What went wrong the last time, when the runs beneath the task cannot say it. */
-function trouble(task: ScheduledTask): string | null {
-  if (task.lastStatus === 'missed' && task.lastRunAt) return `Missed ${moment(task.lastRunAt)}, when the computer was off or asleep`
-  // A run that failed before it had a thread of its own has nowhere else to say so.
-  if (task.lastStatus === 'failed' && task.lastError && !task.lastThreadId) return `Could not start: ${task.lastError}`
-  return null
-}
-
-/** Where a task stands, in one line. */
-const standing = (task: ScheduledTask) => [task.enabled && task.nextRunAt ? `Next ${moment(task.nextRunAt)}` : nextRun(task), trouble(task)].filter(Boolean).join(' · ')
-
-/** How a run went. The task knows exactly how its latest run ended; for the earlier ones, the thread says enough. */
-function runStatus(run: Thread, task: ScheduledTask): string {
-  if (run.status === 'running') return 'Running'
-  if (run.status === 'error') return 'Failed'
-  return run.id === task.lastThreadId && task.lastStatus ? STATUS_LABEL[task.lastStatus] : 'Done'
-}
-
 function RunRow({ run, task }: { run: Thread; task: ScheduledTask }) {
   return (
     <a className="task-run" href={`#/${encodeURIComponent(run.botId)}/${encodeURIComponent(run.id)}`}>
       {run.status === 'running' ? <span className="spinner" aria-label="Running" /> : <span className={`dot ${run.status === 'error' ? 'error' : ''}`} />}
-      <span className="grow">{upper(moment(run.createdAt))}</span>
+      <span className="grow">{runTime(run)}</span>
       <span className="faint">{runStatus(run, task)}</span>
       <Icon name="chevron" size={12} />
     </a>

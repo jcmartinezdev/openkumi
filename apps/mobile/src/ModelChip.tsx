@@ -7,13 +7,19 @@ import { useStore } from '@openbot/client/store'
 import { Glyph, ProviderIcon } from './icons'
 import { useTheme } from './theme'
 
-export function ModelChip({ bot, onPress }: { bot: Bot; onPress: () => void }) {
-  const theme = useTheme()
+/** What a bot runs on, in words: its provider, its model's name and its reasoning level. Also shown in Settings. */
+export function useBotModel(bot: Bot) {
   const provider = useStore((s) => s.providers.find((p) => p.id === bot.provider))
   const models = useModels(bot.provider, provider?.connected)
   // No model stored means the provider's own default, which is the first it lists.
   const name = (bot.model ? models.find((m) => m.id === bot.model) : models[0])?.name ?? (bot.model || 'Default')
   const effort = bot.effort ? EFFORT_LABEL[bot.effort] : ''
+  return { provider, name, effort }
+}
+
+export function ModelChip({ bot, onPress }: { bot: Bot; onPress: () => void }) {
+  const theme = useTheme()
+  const { provider, name, effort } = useBotModel(bot)
   return (
     <Pressable
       accessibilityRole="button"

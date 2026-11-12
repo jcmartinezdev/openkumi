@@ -47,6 +47,32 @@ export const STATUS_LABEL: Record<NonNullable<ScheduledTask['lastStatus']>, stri
   missed: 'Missed',
 }
 
+const upper = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
+/** When a task runs next, or why it does not. */
+export const nextRun = (task: ScheduledTask) => (!task.enabled ? 'Paused' : task.nextRunAt ? upper(moment(task.nextRunAt)) : 'Will not run again')
+
+/** What went wrong the last time, when the runs beneath the task cannot say it. */
+export function trouble(task: ScheduledTask): string | null {
+  if (task.lastStatus === 'missed' && task.lastRunAt) return `Missed ${moment(task.lastRunAt)}, when the computer was off or asleep`
+  // A run that failed before it had a thread of its own has nowhere else to say so.
+  if (task.lastStatus === 'failed' && task.lastError && !task.lastThreadId) return `Could not start: ${task.lastError}`
+  return null
+}
+
+/** Where a task stands, in one line. */
+export const standing = (task: ScheduledTask) => [task.enabled && task.nextRunAt ? `Next ${moment(task.nextRunAt)}` : nextRun(task), trouble(task)].filter(Boolean).join(' · ')
+
+/** When a run started, as a list of runs shows it: "Today 08:00". */
+export const runTime = (run: Thread) => upper(moment(run.createdAt))
+
+/** How a run went. The task knows exactly how its latest run ended; for the earlier ones, the thread says enough. */
+export function runStatus(run: Thread, task: ScheduledTask): string {
+  if (run.status === 'running') return 'Running'
+  if (run.status === 'error') return 'Failed'
+  return run.id === task.lastThreadId && task.lastStatus ? STATUS_LABEL[task.lastStatus] : 'Done'
+}
+
 /** The runs of a task, newest first. */
 export const runsOf = (threads: Thread[], taskId: string) => threads.filter((t) => t.taskId === taskId).sort((a, b) => b.createdAt - a.createdAt)
 

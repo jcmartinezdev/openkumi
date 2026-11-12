@@ -6,7 +6,7 @@ import * as Crypto from 'expo-crypto'
 import * as SecureStore from 'expo-secure-store'
 import { type Picture, createConnection } from '@openbot/client/connection'
 import { pair, parseAddress } from '@openbot/client/pair'
-import { follow, receive, useTransport } from '@openbot/client/store'
+import { follow, receive, useStore, useTransport } from '@openbot/client/store'
 
 export interface Server {
   name: string
@@ -32,6 +32,20 @@ const set = (next: Server | null) => {
 }
 
 export const useSession = () => useSyncExternalStore(subscribe, () => snapshot)
+
+/** How the connection to the server stands, in a few words and in one, and whether that is good. */
+export function useServerStatus(): { text: string; word: string; ok: boolean } {
+  const connected = useStore((s) => s.connected)
+  const loaded = useStore((s) => s.loaded)
+  const refused = useStore((s) => s.refused)
+  const failures = useStore((s) => s.failures)
+  const version = useStore((s) => s.about.version)
+  if (refused) return { text: 'No longer lets this phone in', word: 'Refused', ok: false }
+  if (connected) return { text: version ? `Connected · Open Bot ${version}` : 'Connected', word: 'Connected', ok: true }
+  if (failures >= 2) return { text: 'Cannot be reached. Still trying…', word: 'Unreachable', ok: false }
+  const word = loaded ? 'Reconnecting…' : 'Connecting…'
+  return { text: word, word, ok: false }
+}
 
 // ---- pictures of a bot's browser: handed to whichever screen is watching that view
 
@@ -60,6 +74,14 @@ export async function pairWith(address: string, code: string, phone: string) {
   const url = parseAddress(address)
   const key = await pair(url, code, phone, () => Crypto.getRandomBytes(16))
   const next = { name: new URL(url).host, url, key }
+  await SecureStore.setItemAsync(SAVED, JSON.stringify(next))
+  set(next)
+}
+
+/** What the phone calls the server. Empty goes back to its address. */
+export async function rename(name: string) {
+  if (!server) return
+  const next = { ...server, name: name.trim() || new URL(server.url).host }
   await SecureStore.setItemAsync(SAVED, JSON.stringify(next))
   set(next)
 }
