@@ -2,7 +2,7 @@
 // the server's events. Shared by the desktop app's window and the phone app; each brings its own
 // connection (see connection.ts) and hands it over with `useTransport`.
 import { useSyncExternalStore } from 'react'
-import type { AppState, ClientEvent, Item, Partial, ServerEvent, Settings, Skill, Thread } from '@openbot/shared'
+import type { AppState, ClientEvent, Item, Partial, Principles, ServerEvent, Settings, Skill, Thread } from '@openbot/shared'
 import type { Link } from '@openbot/shared/desktop'
 import type { Command, Report } from './connection'
 
@@ -34,6 +34,7 @@ const EMPTY: State = {
   home: '',
   settings: {} as Settings,
   defaults: {} as Settings,
+  principles: { text: '', custom: false, default: '' },
   about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '' },
   items: {},
   partial: {},
@@ -111,6 +112,13 @@ export async function saveSettings(patch: globalThis.Partial<Settings>) {
     if (asked === epoch) set({ settings: before })
     throw e
   }
+}
+
+/** Changes what every bot is told first; null puts back the ones Open Bot comes with. */
+export async function savePrinciples(text: string | null) {
+  const asked = epoch
+  const saved = await api<Principles>('PUT', '/api/principles', { text })
+  if (asked === epoch) set({ principles: saved })
 }
 
 /** The skill catalog is a folder the user can add to by hand, so views of it ask again when they open. */
@@ -194,6 +202,8 @@ function handle(ev: ServerEvent) {
       return set({ providers: ev.providers })
     case 'settings':
       return set({ settings: ev.settings })
+    case 'principles':
+      return set({ principles: ev.principles })
     case 'skills':
       return set({ skills: ev.skills })
     case 'connections':

@@ -34,6 +34,9 @@ that stays logged in.
   that scroll sideways, ```` ```mermaid ```` diagrams and formulas. A bot can also show a page in
   the conversation (a chart, a dashboard, a timeline), drawn in the app's light or dark colours,
   on the computer and on the phone.
+- **Principles every bot follows, and a team that knows itself.** One set of principles, yours to
+  change, is what every bot is told before anything else. Each bot is also told who the other bots
+  are and what each is for, so it hands a task to the one it fits.
 - **Bots that make bots.** Create bots in the app, or just ask in chat.
 
 ## Run it
@@ -127,7 +130,8 @@ Everything is set from the Settings page, which saves each change as you make it
 | General | what a new bot starts with; sidebar and confirmation preferences |
 | Appearance, Chat | theme, text size, how Enter behaves, how much detail a step shows (kept per device) |
 | Providers | Codex and Claude Code (status, program path), other models; switch any of them off |
-| Bots | every bot: its rules, model, skills, connections and files |
+| Bots | every bot: what it is for, its rules, model, skills, connections and files |
+| Principles | what every bot is told first; what each bot is for; everything a bot is told, to read |
 | Browser | which browser program the bots drive, and which bots have one running |
 | Plugins | ready-made abilities to browse and install for a bot |
 | Skills, Connections | the two catalogs, and which bots use what |
@@ -217,8 +221,9 @@ screens only read and write these files, so you can also edit them by hand.
 ~/.openbot/
   skills/<name>/SKILL.md     the skill catalog; add a skill by dropping its folder here
   mcp.json                   the connection catalog (same "mcpServers" format other MCP clients use)
+  principles.md              yours: what every bot is told first (only once you change the ones Open Bot comes with)
   bots/<id>/
-    bot.md                   yours: name, model and the rules the bot must follow
+    bot.md                   yours: name, what it is for, model and the rules the bot must follow
     skills/                  links to the catalog skills switched on for this bot
     mcp.json                 the connections switched on for this bot
     plugins.json             the plugins installed for this bot
@@ -241,6 +246,28 @@ sit outside its workspace, so it cannot grant itself anything. **What a bot know
 rewrites `AGENTS.md` and `memory/` freely. Each change is a commit in a git history kept in
 `private/history.git`, labelled with who made it (the bot or you), and the Files tab can show and
 undo it. (`git --git-dir=…/private/history.git --work-tree=…/workspace log` reads it by hand.)
+
+### What every bot is told
+
+Before each turn a bot is given, in this order:
+
+1. **Principles**, the same for every bot: how to behave and how to work with the others. Open Bot
+   comes with a short set (`apps/server/principles.md`); change them under **Settings →
+   Principles**, and they are kept in `~/.openbot/principles.md` from then on. Restore default
+   deletes that file, so later improvements to the ones Open Bot comes with reach you again.
+2. **The other bots**: each one's name, its `bot_id`, the line saying what it is for, the skills and
+   connections it has, and which is the main assistant. The line is set by you, in the bot's
+   settings or on the Principles page; no bot can change it, its own included, so one bot that has
+   been talked into something by a web page cannot pass that on to the others through how it is
+   described. A new bot's line starts as what its maker gave: the description a bot passes to
+   `create_bot`, or else the first sentence of what the bot was made for.
+3. How Open Bot works (replies, the browser, subagents, and that web pages and tool results are
+   never instructions), then the bot's **rules from you**, which win where they and the principles
+   disagree.
+4. Its conversation, scheduled tasks, workspace, its own `AGENTS.md`, the list of its notes, and
+   its skills.
+
+**Settings → Principles → What a bot is told** shows all of it for any bot.
 
 ### One conversation per bot
 
@@ -355,7 +382,9 @@ There is no shell tool. Skills are instructions: a skill that ships scripts can 
 scripts are not run.
 
 A subagent can run as a different bot (`spawn_subagent` with `bot_id`), which is how bots hand
-work to each other. Subagents can nest two levels deep; each gets its own browser tab.
+work to each other: the other bot does the task as itself, with its own instructions, logins and
+connections, is told which bot handed it over, and reports back to that bot. Subagents can nest
+two levels deep; each gets its own browser tab.
 
 ### Engines: Claude Code, Codex and Grok
 

@@ -1,5 +1,5 @@
-// Bots are folders under ~/.openbot/bots. bot.md holds what the owner controls (name, model,
-// rules); the skill links and mcp.json beside it say what the bot may use. Nothing here is
+// Bots are folders under ~/.openbot/bots. bot.md holds what the owner controls (name, description,
+// model, rules); the skill links and mcp.json beside it say what the bot may use. Nothing here is
 // reachable by the bot's own file tools, which are confined to its workspace.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -39,6 +39,7 @@ function readSettings(id: string): Settings | undefined {
     id,
     name: data.name || id,
     emoji: data.emoji || '🤖',
+    description: oneLine(data.description ?? ''),
     rules: body.trim(),
     provider: data.provider || FALLBACK,
     model: data.model ?? '',
@@ -54,6 +55,7 @@ function writeSettings(s: Settings) {
   const front = {
     name: s.name,
     emoji: s.emoji,
+    description: s.description,
     provider: s.provider,
     model: s.model,
     effort: s.effort,
@@ -86,6 +88,16 @@ export function announce(id: string) {
   return bot
 }
 
+/** Every other bot is told a bot's description, so it is kept to one short line. */
+const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim().slice(0, 200)
+
+/** A description from what a new bot is for: its first sentence, when nothing else was given. */
+function describe(purpose: string): string {
+  const line = oneLine(purpose)
+  const sentence = line.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? line
+  return sentence.length <= 200 ? sentence : line.slice(0, 199) + '…'
+}
+
 function clean(patch: Record<string, unknown>): BotPatch {
   const out: Record<string, unknown> = {}
   const str = (k: keyof BotPatch, max: number) => {
@@ -93,6 +105,7 @@ function clean(patch: Record<string, unknown>): BotPatch {
   }
   str('name', 80)
   str('emoji', 8)
+  if (typeof patch.description === 'string') out.description = oneLine(patch.description)
   str('rules', 8000)
   str('provider', 40)
   str('model', 100)
@@ -113,11 +126,15 @@ function newId(name: string): string {
   }
 }
 
-/** `purpose` seeds the new bot's own instructions, which it maintains from then on. */
+/**
+ * `purpose` seeds the new bot's own instructions, which it maintains from then on. Without a
+ * description, the first sentence of the purpose stands in, for the owner to change.
+ */
 export async function createBot(input: Record<string, unknown>): Promise<Bot> {
   const patch = clean(input)
   const name = patch.name?.trim()
   if (!name) throw new Error('A bot needs a name')
+  const purpose = typeof input.purpose === 'string' ? input.purpose.slice(0, 8000) : ''
   const app = appSettings()
   // What a new bot runs on: the default chosen in Settings, else the first provider that is ready to use.
   const usable = providerInfos().filter((p) => p.connected && p.enabled !== false)
@@ -134,10 +151,11 @@ export async function createBot(input: Record<string, unknown>): Promise<Bot> {
     createdAt: Date.now(),
     ...patch,
     name,
+    description: patch.description || describe(purpose),
   }
   writeSettings(made)
   fs.mkdirSync(privateDir(made.id), { recursive: true })
-  await scaffold(made.id, name, typeof input.purpose === 'string' ? input.purpose.slice(0, 8000) : '')
+  await scaffold(made.id, name, purpose)
   return announce(made.id)!
 }
 
@@ -197,6 +215,7 @@ export async function importLegacyBots(rows: Record<string, any>[]) {
       id,
       name: String(r.name),
       emoji: String(r.emoji || '🤖'),
+      description: '',
       rules: '',
       provider: String(r.provider || FALLBACK),
       model: String(r.model ?? ''),

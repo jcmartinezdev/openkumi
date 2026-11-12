@@ -68,6 +68,10 @@ export default function BotSettings() {
         <Field label="Avatar" value={bot.emoji} required onCommit={(emoji) => save({ emoji })} />
       </Section>
 
+      <Section title="What it is for" footer="One line. The other bots are told it, so they know when to hand this bot work; the bot cannot change it.">
+        <Field label="What it is for" multiline value={bot.description} placeholder="For example: plans trips and books travel." onCommit={(description) => save({ description })} />
+      </Section>
+
       <Section title="Rules from you" footer="The bot follows these and cannot change them. Its own instructions, which it writes and updates itself, are in AGENTS.md among its files.">
         <Field label="Rules" multiline value={bot.rules} placeholder="For example: never send an email without asking me first." onCommit={(rules) => save({ rules })} />
       </Section>
