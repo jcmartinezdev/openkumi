@@ -1,0 +1,18 @@
+{
+  "name": "Gmail",
+  "category": "Google",
+  "tagline": "Search and read your email, sort it, and write drafts for you to send.",
+  "summary": "Search and read the user's Gmail, write drafts and replies, and label, archive or trash mail. It cannot send: a draft waits in Gmail for the user to send it. Labels, archiving, trash and spam only after the user approves.",
+  "can": [
+    "Search and read the mail in the account it signs in to",
+    "Write drafts and replies, which wait in Gmail for you to send",
+    "Label, archive, trash or mark as spam, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://gmailmcp.googleapis.com/mcp/v1",
+    "registration": "google",
+    "scopes": ["https://www.googleapis.com/auth/gmail.modify"],
+    "apis": ["gmail.googleapis.com", "gmailmcp.googleapis.com"]
+  },
+  "site": "https://mail.google.com/"
+}

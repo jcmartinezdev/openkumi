@@ -1,0 +1,18 @@
+{
+  "name": "Google Slides",
+  "category": "Google",
+  "tagline": "Read your presentations, and add and edit slides.",
+  "summary": "Read and edit the user's Google Slides, given a link, including how each slide looks. Adds slides freely; changes or deletes existing slides only after the user approves.",
+  "can": [
+    "Read a presentation you give it a link to, and look at its slides",
+    "Add slides, text and shapes",
+    "Change or delete existing slides, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://slidesmcp.googleapis.com/mcp/v1",
+    "registration": "google",
+    "scopes": ["https://www.googleapis.com/auth/presentations"],
+    "apis": ["slides.googleapis.com", "slidesmcp.googleapis.com"]
+  },
+  "site": "https://docs.google.com/presentation/"
+}

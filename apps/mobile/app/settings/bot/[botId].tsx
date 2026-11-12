@@ -4,6 +4,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import * as WebBrowser from 'expo-web-browser'
 import type { Bot, Superpower, SuperpowerStatus } from '@openbot/shared'
 import { signInThread, windowCount } from '@openbot/client/browser'
 import { api, useStore } from '@openbot/client/store'
@@ -50,12 +51,27 @@ export default function BotSettings() {
     ])
   }
   // One that works in an app is active once the bot has signed in to it. On the phone that happens
-  // in the bot's own browser, on the browser screen, with the phone in control.
+  // in the bot's own browser, on the browser screen, with the phone in control, or on the phone itself.
   const signIn = (power: Superpower) =>
     api<{ windowId?: string }>('POST', `/api/bots/${bot.id}/superpowers/${power.id}/login`, { via: 'bot' }).then(
       ({ windowId }) => windowId && router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: signInThread(power.id), take: '1' } }),
       (e) => Alert.alert('Could not start the sign-in', (e as Error).message),
     )
+  // On the phone itself: the service's page opens in a sign-in sheet that has the accounts the phone
+  // has in Safari. The service sends the sheet back to the app's own address (Google's by way of Open
+  // Bot's page on the web), the sheet hands that over, and the server finishes the sign-in.
+  const signInHere = async (power: Superpower) => {
+    const path = `/api/bots/${bot.id}/superpowers/${power.id}/login`
+    try {
+      const { url } = await api<{ url?: string }>('POST', path, { via: 'app' })
+      if (!url) return
+      const result = await WebBrowser.openAuthSessionAsync(url, 'openbot://sign-in/callback')
+      if (result.type !== 'success') return void api('DELETE', path).catch(() => {})
+      await api('POST', '/api/superpowers/return', { url: result.url })
+    } catch (e) {
+      Alert.alert('Not signed in', (e as Error).message)
+    }
+  }
   const activate = (power: Superpower, again = false) => {
     if (!power.signIn) {
       return Alert.alert(`Activate ${power.name}?`, `${bot.name} can use ${power.name} as soon as it is active. There is nothing to sign in to.`, [
@@ -63,12 +79,23 @@ export default function BotSettings() {
         { text: 'Activate', onPress: () => void api('PUT', `/api/bots/${bot.id}/superpowers/${power.id}`, { on: true }).catch((e) => Alert.alert('Not activated', (e as Error).message)) },
       ])
     }
+    // Registering Open Bot with Google means its Cloud console and pasting two values, which is the computer's job.
+    const registration = power.registration
+    if (registration && !registration.done) {
+      return Alert.alert(
+        `Set up ${registration.name} first`,
+        `Before a bot can sign in to ${power.name}, Open Bot has to be registered with ${registration.name}, once. Do that on your computer: in the Open Bot app, open Settings, then Superpowers, then ${power.name}.`,
+      )
+    }
+    // A company that admits only registered apps (Google) comes back to the phone by way of Open Bot's page, which this version may not have.
+    const here = !registration || registration.ownBrowser
     Alert.alert(
       again ? `Sign ${bot.name} in to ${power.name} again?` : `Activate ${power.name}?`,
-      `${bot.name} signs in to ${power.name} with an account of its own, in its own browser, which opens next.${again ? '' : ` Once it is signed in, ${power.name} is active.`}`,
+      `${bot.name} signs in to ${power.name} with an account of its own${here ? ': on this phone, with the accounts you have in Safari, or inside its own browser, which suits a different account' : ', inside its own browser'}.${again ? '' : ` Once it is signed in, ${power.name} is active.`}`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign in', onPress: () => void signIn(power) },
+        ...(here ? [{ text: 'Sign in on this phone', onPress: () => void signInHere(power) }] : []),
+        { text: `Sign in inside ${bot.name}’s browser`, onPress: () => void signIn(power) },
       ],
     )
   }

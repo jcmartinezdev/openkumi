@@ -138,7 +138,7 @@ test('a bot that had several chats keeps the one used last as its conversation, 
   }
 })
 
-test('skills, connections and plugins become superpowers: what a bot had that is now one stays on, and the rest goes', async () => {
+test('skills, connections and plugins become superpowers: what a bot had that is now one stays on, except Google\'s, and the rest goes', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-migrate-'))
   try {
     const bot = (id, settings) => {

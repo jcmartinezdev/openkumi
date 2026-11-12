@@ -848,6 +848,11 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .power-head .faint { font-size: 12px; }
 .power-head .faint a { color: inherit; }
 .power-about { padding: 0 16px; font-size: 14px; line-height: 1.6; }
+/* How to register Open Bot with a company such as Google, at the top of the card its fields are in. */
+.registration-guide { padding: 14px 16px 10px; font-size: 13.5px; line-height: 1.6; }
+.registration-guide ol { padding-left: 22px; }
+.registration-guide li + li { margin-top: 6px; }
+.registration-guide code { overflow-wrap: anywhere; }
 .sign-in-note { padding: 2px 20px 10px; font-size: 13px; color: var(--muted); }
 .activate-head { display: flex; align-items: center; gap: 14px; }
 .activate-head p { color: var(--muted); font-size: 13.5px; line-height: 1.45; }

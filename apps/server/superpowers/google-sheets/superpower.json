@@ -1,0 +1,18 @@
+{
+  "name": "Google Sheets",
+  "category": "Google",
+  "tagline": "Read your spreadsheets, fill them in, and keep them up to date.",
+  "summary": "Read and edit the user's Google Sheets, given a link: values, formulas, rows and columns. Adds to a sheet freely; overwrites or deletes what is already there only after the user approves.",
+  "can": [
+    "Read a spreadsheet you give it a link to",
+    "Add rows, values and formulas",
+    "Overwrite or delete what is already there, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://sheetsmcp.googleapis.com/mcp/v1",
+    "registration": "google",
+    "scopes": ["https://www.googleapis.com/auth/spreadsheets"],
+    "apis": ["sheets.googleapis.com", "sheetsmcp.googleapis.com"]
+  },
+  "site": "https://docs.google.com/spreadsheets/"
+}

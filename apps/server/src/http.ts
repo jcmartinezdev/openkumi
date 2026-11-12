@@ -18,7 +18,7 @@ import * as db from './db.ts'
 import { principles, setPrinciples } from './principles.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
-import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower } from './superpowers.ts'
+import { announceSuperpowers, enabledSuperpowers, listSuperpowers, register, setSuperpower } from './superpowers.ts'
 import * as tasks from './tasks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
 import * as ws from './workspace.ts'
@@ -217,6 +217,11 @@ route('POST', '/api/bots/:id/superpowers/:power/login', ([id, power], body) => {
 })
 route('DELETE', '/api/bots/:id/superpowers/:power/login', ([id, power]) => mcp.cancelLogin(needBot(id).id, power))
 route('POST', '/api/superpowers/return', (_, body) => mcp.finishAppSignIn(String(body.url ?? '')).catch((e) => fail(400, e.message)))
+// Open Bot registered by the owner with a company that does not let apps register themselves (Google).
+route('PUT', '/api/registrations/:id', ([id], body) =>
+  register(id, { clientId: body.clientId, clientSecret: body.clientSecret }).then(listSuperpowers, (e) => fail(400, e.message)),
+)
+route('DELETE', '/api/registrations/:id', ([id]) => register(id, null).then(listSuperpowers, (e) => fail(400, e.message)))
 
 // ---- files: the bot's workspace, as its owner sees it
 const filePath = (url: URL) => url.searchParams.get('path') ?? ''

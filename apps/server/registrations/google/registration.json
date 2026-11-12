@@ -1,0 +1,8 @@
+{
+  "name": "Google",
+  "clientId": "\\.apps\\.googleusercontent\\.com$",
+  "authorize": {
+    "access_type": "offline",
+    "prompt": "consent"
+  }
+}

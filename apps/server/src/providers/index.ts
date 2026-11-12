@@ -45,7 +45,7 @@ const mock: Provider = {
     } else {
       const ask = req.items.findLast((i) => i.type === 'message' && i.role === 'user')
       const text = ask?.type === 'message' ? ask.text : ''
-      const call = text.match(/^!tool (\w+)\s*([\s\S]*)$/)
+      const call = text.match(/^!tool ([\w-]+)\s*([\s\S]*)$/)
       if (call) {
         yield { type: 'item', item: { type: 'function_call', name: call[1], arguments: call[2] || '{}', call_id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` } }
         return

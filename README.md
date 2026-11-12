@@ -30,8 +30,8 @@ that stays logged in.
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone.
 - **Superpowers.** What a bot can do beyond chatting and browsing, switched on by you for one bot
-  at a time: working in Notion or Linear to start with. Each has a page that says what it does, and
-  signs in with an account of the bot's own. A bot can use what you give it but cannot
+  at a time: working in Gmail, Google Calendar, Drive, Docs, Sheets, Slides, Notion or Linear. Each
+  has a page that says what it does, and signs in with an account of the bot's own. A bot can use what you give it but cannot
   change it or give itself more.
 - **Replies you can look at.** Replies are drawn with code in colour (with a copy button), tables
   that scroll sideways, ```` ```mermaid ```` diagrams and formulas. A bot can also show a page in
@@ -116,8 +116,8 @@ npm run mobile     # builds it and opens it in the iPhone simulator (needs Xcode
 ```
 
 The phone reaches the server over your network, so it works at home, or anywhere with a private
-network such as Tailscale on both. Signing in to providers and to a superpower's app, files and
-the Advanced settings are managed in the desktop app.
+network such as Tailscale on both. Signing in to providers, registering Open Bot with Google, files
+and the Advanced settings are managed in the desktop app.
 
 There is no web version: the server has no pages, and opening its address in a browser shows a
 note saying so. The only way in is the app.
@@ -179,6 +179,7 @@ apps/
       history.ts       what a model is shown of a long conversation: trimming, and the summary of its older part
       db.ts            SQLite (conversations and messages)
     superpowers/       the superpowers that ship with Open Bot
+    registrations/     how to register Open Bot with a company that does not let apps register themselves (Google)
   web/               the interface (React, Vite). Built into the desktop app; nothing serves it
     src/
       store.ts               the window's copy of the environment it shows
@@ -192,6 +193,7 @@ apps/
       preload.ts       the bridge between the window and the app
   mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser,
                      settings and scheduled tasks
+  sign-in-page/      the public page Google sends your own browser back to, which hands it to the app
 packages/
   shared/            the types every app agrees on
   client/            what every app needs to talk to a server: the connection, the state
@@ -238,7 +240,7 @@ screens only read and write these files, so you can also edit them by hand.
       history.git/           the record of every change to the workspace
   openbot.db                 conversations, messages and scheduled tasks
   settings.json              app-wide settings that differ from the defaults
-  auth.json                  API keys and the access code (owner-readable only)
+  auth.json                  API keys, the access code and Open Bot's registration with Google (owner-readable only)
   clients.json               the computers paired with this one (owner-readable only)
 ```
 
@@ -358,10 +360,27 @@ README.md         its page in the app
 instructions.md   how the bot goes about it; the bot reads it when a task calls for it
 ```
 
-A superpower has instructions, a service, or both. Notion and Linear, the two that ship for now,
-are both: instructions, and the app's own MCP server, which the bot signs in to with an account of
-its own (two bots can use two different accounts). A service can also be a program run on this
-computer, which is how a superpower with code of its own would work.
+A superpower has instructions, a service, or both. Those that ship (Gmail, Google Calendar,
+Google Drive, Google Docs, Google Sheets, Google Slides, Notion and Linear) are all both:
+instructions, and the app's own MCP server, which the bot signs in to with an account of its own
+(two bots can use two different accounts). A service can also be a program run on this computer,
+which is how a superpower with code of its own would work.
+
+Notion and Linear let Open Bot register itself as a bot signs in. Google does not: its MCP servers
+(`https://<product>mcp.googleapis.com/mcp/v1`, in developer preview) let in only an app registered
+in a Google Cloud project, and during the preview only for the people in the organisation that
+registered it. So you register Open Bot with Google once, on any Google superpower's page, which
+walks you through it (`apps/server/registrations/google/README.md`, with this server's own address
+filled in), and paste the client ID and secret Google gives you. Every Google superpower and every
+bot then signs in with that client, asking Google only for what that superpower needs (in its
+`superpower.json`) and for a sign-in that lasts. Changing to another client or removing it
+deactivates the Google superpowers for every bot, since their sign-ins belong to the old one.
+The kind of client Google asks for sends a browser back only to a web address, never to
+`openbot://`. So your own browser comes back by way of a small public page of Open Bot's
+(`apps/sign-in-page/index.html`), which hands what it came back with to the app at
+`openbot://sign-in/callback` and does nothing else. Host it as it is, at any `https://` address,
+and put that address in `RETURN_PAGE` (`apps/server/src/mcp.ts`); the guide then asks you to give
+Google both addresses. Until it is set, Google's sign-ins happen inside the bot's browser only.
 
 You activate a superpower for one bot at a time, on its page or in the bot's settings; nothing is
 activated for all bots at once. Deactivating one for a bot forgets that bot's sign-in.
@@ -373,6 +392,8 @@ superpower** opens a popup that asks how:
   your computer, with the accounts you already have there. The service sends that browser back to
   `openbot://sign-in/callback`, which the computer opens with Open Bot, and the app passes it to
   the environment it shows, so this works whichever computer the bots run on.
+- **On the phone**: the service's page opens in a sign-in sheet that has the accounts you have in
+  Safari, and the sheet hands the way back to the app, which passes it on the same way.
 - **Inside the bot's browser**: the page opens in a window of the bot's own browser, which you use
   from the app on any computer or the phone, as you would any window you take control of. It suits
   giving a bot an account other than yours. The service sends that browser back to an Open Bot
@@ -498,11 +519,16 @@ and from its own format.
   bot's browser only the window it was started in counts. Open Bot's own address cannot finish one
   over the network or from a bot's own windows. Signing in inside the bot's browser also leaves that
   browser signed in to the service's website; signing in with your own browser does not.
+- The public sign-in page that Google sends your browser back to keeps nothing and loads nothing,
+  passes on only what a sign-in comes back with, and clears it from the address bar. The code it
+  passes on is of no use without the client secret and the one-time key the server kept for that
+  sign-in, so a copy of the page elsewhere could not finish a sign-in either.
 
 ## Not built yet
 
-Image attachments, running commands in a sandbox, superpowers with code of their own, Google
-(Gmail, Calendar, Drive) as superpowers, and native Anthropic/Gemini providers.
+Image attachments, running commands in a sandbox, superpowers with code of their own, answering
+the confirmations Google's servers can ask for (MCP elicitation), and native Anthropic/Gemini
+providers.
 
 ## License
 
