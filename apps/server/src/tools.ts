@@ -34,12 +34,18 @@ const params = (properties: Record<string, unknown>, required: string[] = []) =>
 })
 const str = (description: string) => ({ type: 'string', description })
 
-/** The thread's browser tab. A tab showing something other than a web page (the user may have opened a local file in it) is off limits. */
-async function page(ctx: ToolContext, leaving = false) {
-  const tab = await browserFor(ctx.bot.id).pageFor(ctx.thread.id, ctx.bot.headless)
+/**
+ * The page the thread works in, in its own browser window. A tab showing something other than a web
+ * page is off limits. Reading is allowed while the owner has control of the window; acting is not.
+ */
+async function page(ctx: ToolContext, { leaving = false, reading = false } = {}) {
+  const tab = await browserFor(ctx.bot.id).pageFor(ctx.thread.id, ctx.bot.headless, !reading)
   if (!leaving && !isWebPage(tab.url())) throw new Error('This tab is not showing a web page, so it cannot be read. Open a web address with browser_navigate.')
   return tab
 }
+
+/** How long browser_ask_user waits for the owner: less than the half hour Claude Code, Codex and Grok wait for a tool. */
+const ASK_TIMEOUT = 25 * 60_000
 
 /** Open Bot's own address. Requests from this computer are trusted like the owner, so a bot must never make one. */
 function isOwnServer(url: URL) {
@@ -372,15 +378,27 @@ const taskTools: Tool[] = [
   },
 ]
 
-const browserTools: Tool[] = [
+/** Puts what the owner did with the bot's window since it last looked before each browser tool's result. */
+function withNews(tools: Tool[]): Tool[] {
+  return tools.map((tool) => ({
+    ...tool,
+    run: async (a, ctx) => {
+      const output = await tool.run(a, ctx)
+      const news = browserFor(ctx.bot.id).news(ctx.thread.id)
+      return news ? `${news}\n\n${output}` : output
+    },
+  }))
+}
+
+const browserTools: Tool[] = withNews([
   {
     name: 'browser_navigate',
-    description: 'Open a URL in your browser tab and return a snapshot of the page.',
+    description: 'Open a URL in your browser window and return a snapshot of the page.',
     parameters: params({ url: str('Absolute URL') }, ['url']),
     run: async (a, ctx) => {
       const url = /^[a-z][a-z0-9+.-]*:/i.test(a.url) ? String(a.url) : `https://${a.url}`
       if (!isWebPage(url)) throw new Error('Only web addresses (http or https) can be opened.')
-      const p = await page(ctx, true)
+      const p = await page(ctx, { leaving: true })
       await p.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
       return snapshot(p)
     },
@@ -391,7 +409,7 @@ const browserTools: Tool[] = [
       'Return a text outline of the current page. Interactive elements are numbered like [12]; pass that number as ' +
       '`ref` to browser_click / browser_type. Take a fresh snapshot after the page changes.',
     parameters: params({}),
-    run: async (_, ctx) => snapshot(await page(ctx)),
+    run: async (_, ctx) => snapshot(await page(ctx, { reading: true })),
   },
   {
     name: 'browser_click',
@@ -401,8 +419,8 @@ const browserTools: Tool[] = [
       const p = await page(ctx)
       await byRef(p, a.ref).click({ timeout: 8000 })
       await p.waitForTimeout(600)
-      // A click may have opened a new tab that now belongs to this thread.
-      return snapshot(await page(ctx))
+      // A click may have opened a popup, which is where the work goes on.
+      return snapshot(await page(ctx, { reading: true }))
     },
   },
   {
@@ -484,7 +502,7 @@ const browserTools: Tool[] = [
     description: 'Return the full readable text of the current page (no element refs). Best for articles and long documents.',
     parameters: params({}),
     run: async (_, ctx) => {
-      const p = await page(ctx)
+      const p = await page(ctx, { reading: true })
       const text = await p.evaluate(() => document.body.innerText)
       return `Page: ${await p.title()}\nURL: ${p.url()}\n\n${text.replace(/\n{3,}/g, '\n\n')}`
     },
@@ -498,7 +516,34 @@ const browserTools: Tool[] = [
       return JSON.stringify(result, null, 1) ?? 'undefined'
     },
   },
-]
+  {
+    name: 'browser_ask_user',
+    description:
+      'Ask the user to take over your browser window for a step only they can do, such as signing in, a CAPTCHA or a ' +
+      'two-factor code, and wait until they hand it back. Open the page first, so they start in the right place, and ' +
+      'say exactly what you need, e.g. "Sign in to LinkedIn". Returns once they are done or say no.',
+    parameters: params({ request: str('What the user should do, in a few words') }, ['request']),
+    run: async (a, ctx) => {
+      const browser = browserFor(ctx.bot.id)
+      const text = String(a.request ?? '').replace(/\s+/g, ' ').trim().slice(0, 200) || 'Help with the browser'
+      const outcome = await browser.ask(ctx.thread.id, ctx.bot.headless, text, ctx.signal, ASK_TIMEOUT)
+      switch (outcome) {
+        case 'done':
+          return `The user handed the browser back.\n\n${await snapshot(await page(ctx, { reading: true }))}`
+        case 'declined':
+          return 'The user said no. Do not ask again for the same thing now; go on without it, or tell them what you needed.'
+        case 'left':
+          return 'The user took over, then left without handing back (their app closed or lost its connection). Check the page with browser_snapshot before going on.'
+        case 'closed':
+          return 'The browser window was closed before the user handed it back.'
+        case 'timeout':
+          return `Nothing came of it in ${ASK_TIMEOUT / 60_000} minutes. End your turn and tell the user what you need; they can take control of your browser in the app.`
+        case 'stopped':
+          throw new Error('Stopped')
+      }
+    },
+  },
+])
 
 const pageTool: Tool = {
   name: 'show_page',
@@ -561,7 +606,9 @@ const webTools: Tool[] = [
 export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; notes: string[] }> {
   const canSpawn = agent.depthOf(thread) < settings().maxDepth
   const connected = await connectionTools(thread.botId)
-  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...taskTools, ...browserTools, ...webTools, pageTool]
+  // Nobody watches a scheduled run, so there is nobody to ask to take over its browser.
+  const browsing = thread.kind === 'task' ? browserTools.filter((t) => t.name !== 'browser_ask_user') : browserTools
+  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...taskTools, ...browsing, ...webTools, pageTool]
   return { tools: [...own, ...connected.tools], notes: connected.notes }
 }
 

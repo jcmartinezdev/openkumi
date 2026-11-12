@@ -6,7 +6,7 @@ import * as Crypto from 'expo-crypto'
 import * as SecureStore from 'expo-secure-store'
 import { type Picture, createConnection } from '@openbot/client/connection'
 import { pair, parseAddress } from '@openbot/client/pair'
-import { follow, receive, useStore, useTransport } from '@openbot/client/store'
+import { follow, receive, send, useStore, useTransport } from '@openbot/client/store'
 
 export interface Server {
   name: string
@@ -47,15 +47,37 @@ export function useServerStatus(): { text: string; word: string; ok: boolean } {
   return { text: word, word, ok: false }
 }
 
-// ---- pictures of a bot's browser: handed to whichever screen is watching that view
+// ---- pictures of a bot's browser: handed to every screen watching that tab (the chat's floating
+// view and the browser screen can watch the same one). The server is asked for them while anyone watches.
 
-const watchers = new Map<string, (picture: Picture) => void>()
-export function watch(key: string, fn: (picture: Picture) => void) {
-  watchers.set(key, fn)
-  return () => void (watchers.get(key) === fn && watchers.delete(key))
+const watchers = new Map<string, { fns: Set<(picture: Picture) => void>; last: Picture | null }>()
+export function watch(botId: string, tabId: string, fn: (picture: Picture) => void) {
+  const key = `${botId}:${tabId}`
+  let watching = watchers.get(key)
+  if (!watching) {
+    watchers.set(key, (watching = { fns: new Set(), last: null }))
+    send({ type: 'browser.subscribe', botId, tabId })
+  }
+  const mine = watching
+  mine.fns.add(fn)
+  // One who joins starts from the picture there is: a page that is not changing sends no new one.
+  if (mine.last) fn(mine.last)
+  return () => {
+    mine.fns.delete(fn)
+    if (mine.fns.size || watchers.get(key) !== mine) return
+    watchers.delete(key)
+    send({ type: 'browser.unsubscribe', botId, tabId })
+  }
 }
 
-useTransport(createConnection(receive, (picture) => watchers.get(picture.key)?.(picture)))
+useTransport(
+  createConnection(receive, (picture) => {
+    const watching = watchers.get(picture.key)
+    if (!watching) return
+    watching.last = picture
+    watching.fns.forEach((fn) => fn(picture))
+  }),
+)
 
 /** Reads the paired server from the keychain, once, when the app starts. */
 export async function restore() {

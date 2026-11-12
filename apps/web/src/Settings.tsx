@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import type { Bot, Connection, PairedComputer, ProviderInfo, Settings } from '@openbot/shared'
 import type { EnvironmentStatus, LocalEnvironment } from '@openbot/shared/desktop'
 import qrcode from 'qrcode-generator'
+import { windowCount } from '@openbot/client/browser'
 import { pairingLink } from '@openbot/client/pair'
 import { BotPage, type BotTab } from './BotPage'
 import { PluginList, PluginPage } from './Plugins'
@@ -389,10 +390,10 @@ function BrowserPage() {
         />
         <Row
           id="browser-panel"
-          title="Open the panel when a bot starts browsing"
-          description="Show the bot’s browser beside the chat as soon as it uses it. This device only."
+          title="Show the browser when a bot starts browsing"
+          description="A small live view of the window the bot is using floats over the chat, from where it can go beside the chat or fill the window. A window where the bot asks for your help is always shown. This device only."
           reset={autoOpen.reset}
-          control={<Switch label="Open the panel when a bot starts browsing" checked={autoOpen.value} onChange={autoOpen.set} />}
+          control={<Switch label="Show the browser when a bot starts browsing" checked={autoOpen.value} onChange={autoOpen.set} />}
         />
       </Section>
       <Section title="Running now">
@@ -401,7 +402,7 @@ function BrowserPage() {
             key={bot.id}
             id={i === 0 ? 'browsers-running' : undefined}
             title={<><BotHead bot={bot} />{bot.name}</>}
-            description={`${browsers[bot.id].tabs.length} ${browsers[bot.id].tabs.length === 1 ? 'tab' : 'tabs'} open${browsers[bot.id].headless ? '' : ', with a window on the desktop'}.`}
+            description={`${windowCount(browsers[bot.id])} open${browsers[bot.id].headless ? ', out of sight' : ', also on the desktop'}.`}
             control={<button onClick={() => api('POST', `/api/bots/${bot.id}/browser/stop`).catch((e) => alert(e.message))}>Stop</button>}
           />
         ))}

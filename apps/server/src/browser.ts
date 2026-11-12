@@ -1,6 +1,8 @@
 // One Chromium instance per bot, each with its own persistent profile directory, so cookies and
-// logins belong to that bot alone and survive restarts. The UI watches and drives a tab through a
-// CDP screencast; agent tools drive it through Playwright.
+// logins belong to that bot alone and survive restarts. Inside it, every thread that browses (the
+// conversation, a subagent, a scheduled run) gets a window of its own, so sessions that run at the
+// same time never get in each other's way. The UI watches a window's tabs through a CDP screencast
+// and, once the owner takes control of it, drives them; agent tools drive them through Playwright.
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { type BrowserContext, type CDPSession, type Page, chromium } from 'playwright-core'
@@ -16,6 +18,12 @@ const VIEWPORT = { width: 1280, height: 800 }
 // make Chrome send any request for this server's address somewhere that refuses it.
 const NO_SELF_ACCESS = `--host-rules=${['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${PORT} 0.0.0.0:1`).join(', ')}`
 
+/** What the bot is told when it tries to act in a window the owner has taken control of. */
+export const OWNER_HAS_CONTROL =
+  'The user has taken control of this browser window and is using it. You can still read the page ' +
+  '(browser_snapshot, browser_read) but cannot act in it until they hand it back. Do not retry now: go on ' +
+  'with other work, or end your turn and say what you are waiting for.'
+
 /** Pages a bot may read and act on: the web, and blank or inline pages. Never files on this computer or the browser's own pages. */
 export function isWebPage(url: string) {
   return /^(https?|about|data|blob):/i.test(url)
@@ -27,21 +35,58 @@ export interface Frame {
   height: number
 }
 
+/** How a request to the owner to take over a window ended. */
+export type AskOutcome = 'done' | 'declined' | 'left' | 'closed' | 'timeout' | 'stopped'
+
 interface Tab {
   id: string
   page: Page
-  /** The agent thread that owns this tab, or null for tabs the user opened. */
-  threadId: string | null
-  cast?: { cdp: CDPSession; subs: Set<(f: Frame) => void> }
+  win: Win
+  /** The screencast, while someone watches: who, and the latest picture, which is all a newcomer gets of a page that is not changing. */
+  cast?: { cdp: CDPSession; subs: Set<(f: Frame) => void>; last: Frame | null }
   /** Serialises forwarded input so events apply in the order they were sent. */
   queue: Promise<unknown>
 }
+
+/** A window of the browser, and the thread that works in it. Popups open in the window of the page that opened them. */
+interface Win {
+  id: string
+  /** Chrome's numbers for the windows its tabs are in. */
+  chromeIds: Set<number>
+  /** The thread that works in it; null for the window Chrome starts with, until a thread needs one. */
+  threadId: string | null
+  /** The window Chrome opened at launch, which the first thread to need a window takes over. */
+  spare: boolean
+  /** Its tabs, in the order they were opened. */
+  tabs: Tab[]
+  /** The tab the bot works in: the newest still open (a popup, while it is open), unless the owner picked another. */
+  active: Tab | null
+  /** The app view that has taken control, or null while the bot has it. */
+  controller: string | null
+  /** The owner had control since the bot last used it, which the bot is told. */
+  touched: boolean
+  /** What the bot asked the owner to do in it (browser_ask_user), and how to tell it how that ended. */
+  request: { text: string; taken: boolean; settle: (outcome: AskOutcome) => void } | null
+  /** When the bot last used it. */
+  usedAt: number
+  retiring?: NodeJS.Timeout
+}
+
+const newId = () => crypto.randomBytes(4).toString('hex')
 
 class BotBrowser {
   botId: string
   context: BrowserContext | null = null
   headless = true
   tabs = new Map<string, Tab>()
+  windows = new Map<string, Win>()
+  /** Every page seen, and the tab it became: adopting a page takes a moment, and may be asked for twice. */
+  private adopted = new WeakMap<Page, Promise<Tab | null>>()
+  /** Tabs by the id Chrome knows them by, so a window that was asked for can be found when it opens. */
+  private targets = new Map<string, Tab>()
+  private expected = new Map<string, (tab: Tab) => void>()
+  /** Windows being opened, by the thread they are for. */
+  private opening = new Map<string, Promise<Win>>()
   private starting: Promise<void> | null = null
   private stateTimer: NodeJS.Timeout | null = null
 
@@ -50,10 +95,19 @@ class BotBrowser {
   }
 
   state(): BrowserState {
+    const windows = [...this.windows.values()]
     return {
       running: !!this.context,
       headless: this.headless,
-      tabs: [...this.tabs.values()].map((t) => ({ id: t.id, url: t.page.url(), title: '', threadId: t.threadId })),
+      tabs: windows.flatMap((w) => w.tabs.map((t) => ({ id: t.id, url: t.page.url(), title: '', threadId: w.threadId, windowId: w.id }))),
+      windows: windows.map((w) => ({
+        id: w.id,
+        threadId: w.threadId,
+        activeTab: w.active?.id ?? null,
+        controller: w.controller,
+        request: w.request?.text ?? null,
+        usedAt: w.usedAt,
+      })),
     }
   }
 
@@ -105,25 +159,41 @@ class BotBrowser {
     this.headless = headless
     context.on('page', (page) => void this.adopt(page))
     context.on('close', () => {
-      this.context = null
-      this.tabs.clear()
-      this.announce()
+      if (this.context === context) this.forget()
     })
-    for (const page of context.pages()) await this.adopt(page)
+    for (const page of context.pages()) await this.adopt(page, true)
     this.announce()
   }
 
-  private async adopt(page: Page) {
-    if ([...this.tabs.values()].some((t) => t.page === page)) return
-    const tab: Tab = { id: crypto.randomBytes(4).toString('hex'), page, threadId: null, queue: Promise.resolve() }
-    this.tabs.set(tab.id, tab)
-    // A popup or target=_blank link continues the work of the tab that opened it.
-    const opener = await page.opener().catch(() => null)
-    const parent = opener && [...this.tabs.values()].find((t) => t.page === opener)
-    if (parent?.threadId) {
-      tab.threadId = parent.threadId
-      parent.threadId = null
+  private adopt(page: Page, spare = false): Promise<Tab | null> {
+    let adopting = this.adopted.get(page)
+    if (!adopting) {
+      adopting = this.place(page, spare)
+      this.adopted.set(page, adopting)
     }
+    return adopting
+  }
+
+  /** Gives a new page a tab in the window it belongs to. */
+  private async place(page: Page, spare: boolean): Promise<Tab | null> {
+    const context = this.context
+    // A popup belongs with the page that opened it, whichever window Chrome put it in.
+    const opener = await page.opener().catch(() => null)
+    const parent = opener ? await this.adopted.get(opener) : null
+    const { targetId, chromeId } = await this.whereIs(page)
+    if (page.isClosed() || !context || this.context !== context) return null
+    let win = parent?.win.tabs.length ? parent.win : [...this.windows.values()].find((w) => chromeId !== null && w.chromeIds.has(chromeId))
+    if (!win) {
+      win = { id: newId(), chromeIds: new Set(), threadId: null, spare, tabs: [], active: null, controller: null, touched: false, request: null, usedAt: 0 }
+      this.windows.set(win.id, win)
+    }
+    if (chromeId !== null) win.chromeIds.add(chromeId)
+    const tab: Tab = { id: newId(), page, win, queue: Promise.resolve() }
+    this.tabs.set(tab.id, tab)
+    win.tabs.push(tab)
+    // Work carries on in the newest tab: a sign-in popup, say, until it closes again.
+    win.active = tab
+    if (targetId) this.targets.set(targetId, tab)
     // Downloads land in the bot's files/ folder, where its file tools and the Files tab can reach them.
     page.on('download', (download) => {
       Promise.resolve()
@@ -133,42 +203,147 @@ class BotBrowser {
     page.on('framenavigated', (frame) => frame === page.mainFrame() && this.announce())
     page.on('domcontentloaded', () => this.announce())
     page.on('close', () => {
-      this.tabs.delete(tab.id)
-      this.announce()
+      if (targetId) this.targets.delete(targetId)
+      this.drop(tab)
     })
-    this.announce()
-  }
-
-  async newTab(threadId: string | null = null, url?: string): Promise<Tab> {
-    if (!this.context) throw new Error('Browser is not running')
-    const page = await this.context.newPage()
-    await this.adopt(page)
-    const tab = [...this.tabs.values()].find((t) => t.page === page)!
-    tab.threadId = threadId
-    if (url) await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => {})
+    this.expected.get(targetId)?.(tab)
     this.announce()
     return tab
   }
 
-  /** The tab an agent thread works in. Each thread gets its own, so subagents can browse in parallel. */
-  async pageFor(threadId: string, headless: boolean): Promise<Page> {
-    await this.start(headless)
-    const mine = [...this.tabs.values()].find((t) => t.threadId === threadId)
-    if (mine) return mine.page
-    const blank = [...this.tabs.values()].find((t) => !t.threadId && t.page.url() === 'about:blank')
-    if (blank) {
-      blank.threadId = threadId
-      this.announce()
-      return blank.page
+  /** The id Chrome knows a page by, and the number of the window it is in. */
+  private async whereIs(page: Page): Promise<{ targetId: string; chromeId: number | null }> {
+    let cdp: CDPSession | undefined
+    try {
+      cdp = await this.context!.newCDPSession(page)
+      const { targetInfo } = await cdp.send('Target.getTargetInfo')
+      const window = await cdp.send('Browser.getWindowForTarget', { targetId: targetInfo.targetId }).catch(() => null)
+      return { targetId: targetInfo.targetId, chromeId: window?.windowId ?? null }
+    } catch {
+      return { targetId: '', chromeId: null }
+    } finally {
+      cdp?.detach().catch(() => {})
     }
-    return (await this.newTab(threadId)).page
   }
 
-  /** Gives the tab one thread was working in to another, when the first is set aside. */
+  private drop(tab: Tab) {
+    if (!this.tabs.delete(tab.id)) return
+    const win = tab.win
+    win.tabs = win.tabs.filter((t) => t !== tab)
+    // Back to the page the closed one was opened from.
+    if (win.active === tab) win.active = win.tabs.at(-1) ?? null
+    if (!win.tabs.length) {
+      this.windows.delete(win.id)
+      clearTimeout(win.retiring)
+      win.request?.settle('closed')
+    }
+    this.announce()
+  }
+
+  private forget() {
+    for (const win of this.windows.values()) {
+      clearTimeout(win.retiring)
+      win.request?.settle('closed')
+    }
+    this.context = null
+    this.tabs.clear()
+    this.windows.clear()
+    this.targets.clear()
+    this.announce()
+  }
+
+  /** Opens a new window, with one empty tab. */
+  private async openWindow(): Promise<Win> {
+    const context = this.context
+    if (!context) throw new Error('Browser is not running')
+    const any = this.tabs.values().next().value
+    if (!any) {
+      // With no window open, Chrome puts a new tab in a window of its own.
+      const tab = await this.adopt(await context.newPage())
+      if (!tab) throw new Error('The new browser window closed as it opened')
+      return tab.win
+    }
+    const cdp = await context.newCDPSession(any.page)
+    let targetId: string
+    try {
+      ;({ targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', newWindow: true }))
+    } finally {
+      cdp.detach().catch(() => {})
+    }
+    const tab =
+      this.targets.get(targetId) ??
+      (await new Promise<Tab>((resolve, reject) => {
+        const timer = setTimeout(() => (this.expected.delete(targetId), reject(new Error('A new browser window did not open'))), 15_000)
+        this.expected.set(targetId, (tab) => (clearTimeout(timer), this.expected.delete(targetId), resolve(tab)))
+      }))
+    return tab.win
+  }
+
+  private windowOf(threadId: string): Win | undefined {
+    return [...this.windows.values()].find((w) => w.threadId === threadId && w.tabs.length)
+  }
+
+  /** Stops a window from being closed for having finished its work: it is wanted again. */
+  private keep(win: Win): Win {
+    clearTimeout(win.retiring)
+    win.retiring = undefined
+    return win
+  }
+
+  /** The window a thread works in, opened if it has none yet. */
+  async windowFor(threadId: string): Promise<Win> {
+    const mine = this.windowOf(threadId)
+    if (mine) return this.keep(mine)
+    const opening = this.opening.get(threadId)
+    if (opening) return opening
+    // The empty window Chrome starts with goes to the first thread that needs one.
+    const spare = [...this.windows.values()].find((w) => w.spare && !w.threadId)
+    if (spare) {
+      spare.spare = false
+      spare.threadId = threadId
+      this.announce()
+      return spare
+    }
+    const opened = this.openWindow()
+      .then((win) => {
+        win.threadId = threadId
+        this.announce()
+        return win
+      })
+      .finally(() => this.opening.delete(threadId))
+    this.opening.set(threadId, opened)
+    return opened
+  }
+
+  /**
+   * The page a thread's bot works in: the active tab of the thread's own window, so subagents and
+   * scheduled runs can browse at the same time. Acting is refused while the owner has control.
+   */
+  async pageFor(threadId: string, headless: boolean, act = true): Promise<Page> {
+    await this.start(headless)
+    const win = await this.windowFor(threadId)
+    if (act && win.controller) throw new Error(OWNER_HAS_CONTROL)
+    if (!win.active) throw new Error('That browser window was closed.')
+    win.usedAt = Date.now()
+    this.announce()
+    return win.active.page
+  }
+
+  /** What the bot should be told, with the result of a browser tool, about what the owner did with its window. */
+  news(threadId: string): string {
+    const win = this.windowOf(threadId)
+    if (!win) return ''
+    if (win.controller) return '(The user has control of this window right now: you can read it but not act in it.)'
+    if (!win.touched) return ''
+    win.touched = false
+    return '(The user used this browser window since you last looked, and has handed it back. The page may have changed.)'
+  }
+
+  /** Gives the window one thread was working in to another, when the first is set aside. */
   handOver(from: string, to: string) {
-    const tab = [...this.tabs.values()].find((t) => t.threadId === from)
-    if (!tab) return
-    tab.threadId = to
+    const win = this.windowOf(from)
+    if (!win || this.windowOf(to)) return
+    win.threadId = to
     this.announce()
   }
 
@@ -178,22 +353,115 @@ class BotBrowser {
     return tab
   }
 
+  /** The owner picked a tab of a window they control: the bot carries on there when it gets the window back. */
+  focus(tab: Tab) {
+    tab.win.active = tab
+    this.announce()
+  }
+
+  /** The owner takes control of a window, from one view of the app. The bot can then only read it, until it is handed back. */
+  take(windowId: string, viewer: string) {
+    const win = this.windows.get(windowId)
+    if (!win) return
+    win.controller = viewer
+    win.touched = true
+    if (win.request) win.request.taken = true
+    this.keep(win)
+    this.announce()
+  }
+
+  /** Hands a window back to the bot. Given a view, only if that view is the one in control. */
+  give(windowId: string, viewer?: string, outcome: AskOutcome = 'done') {
+    const win = this.windows.get(windowId)
+    if (!win?.controller || (viewer && win.controller !== viewer)) return
+    win.controller = null
+    if (win.request?.taken) win.request.settle(outcome)
+    this.announce()
+  }
+
+  /** The owner said no to what the bot asked of them. */
+  decline(windowId: string) {
+    this.windows.get(windowId)?.request?.settle('declined')
+  }
+
+  /** A view of the app went away: the windows it had control of go back to the bot. */
+  letGo(viewer: string) {
+    for (const win of this.windows.values()) if (win.controller === viewer) this.give(win.id, viewer, 'left')
+  }
+
+  /** The view of the app in control of the window a tab is in, or null while the bot has it. */
+  controllerOf(tabId: string): string | null {
+    return this.tabs.get(tabId)?.win.controller ?? null
+  }
+
+  /**
+   * Asks the owner to take over a thread's window for something only they can do (a sign-in, a
+   * CAPTCHA), and waits until they hand it back, say no, or `timeoutMs` passes.
+   */
+  async ask(threadId: string, headless: boolean, text: string, signal: AbortSignal, timeoutMs: number): Promise<AskOutcome> {
+    await this.start(headless)
+    const win = await this.windowFor(threadId)
+    signal.throwIfAborted()
+    if (win.request) throw new Error('You are already waiting for the user in this window.')
+    win.usedAt = Date.now()
+    return new Promise<AskOutcome>((done) => {
+      const request: NonNullable<Win['request']> = {
+        text,
+        // Asked while the owner is already in control: handing back is all that is left to do.
+        taken: !!win.controller,
+        settle: (outcome) => {
+          if (win.request !== request) return
+          win.request = null
+          clearTimeout(timer)
+          signal.removeEventListener('abort', stopped)
+          // How it went is the answer the bot gets; there is nothing left to tell it later.
+          win.touched = false
+          this.announce()
+          done(outcome)
+        },
+      }
+      const timer = setTimeout(() => request.settle('timeout'), timeoutMs)
+      const stopped = () => request.settle('stopped')
+      signal.addEventListener('abort', stopped, { once: true })
+      win.request = request
+      this.keep(win)
+      this.announce()
+    })
+  }
+
+  /** Closes the window of a thread that finished, after a while, unless the owner is using it or the thread browses again. */
+  retire(threadId: string, afterMs = 60_000) {
+    const win = this.windowOf(threadId)
+    if (!win) return
+    clearTimeout(win.retiring)
+    win.retiring = setTimeout(() => {
+      if (win.controller || win.request) return
+      for (const tab of [...win.tabs]) tab.page.close().catch(() => {})
+    }, afterMs)
+    win.retiring.unref()
+  }
+
   async subscribe(tabId: string, fn: (f: Frame) => void): Promise<() => void> {
     const tab = this.tab(tabId)
     if (!tab.cast) {
       const cdp = await this.context!.newCDPSession(tab.page)
-      const cast = { cdp, subs: new Set<(f: Frame) => void>() }
+      const cast: NonNullable<Tab['cast']> = { cdp, subs: new Set(), last: null }
       tab.cast = cast
       cdp.on('Page.screencastFrame', (f) => {
         cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {})
         const frame = { data: f.data, width: f.metadata.deviceWidth, height: f.metadata.deviceHeight }
+        cast.last = frame
         cast.subs.forEach((sub) => sub(frame))
       })
-      await tab.page.bringToFront().catch(() => {})
+      // A tab behind another in its window is not drawn. Each thread has a window of its own, so this
+      // only happens with popups, and bringing one forward does not hide another thread's page.
+      if (tab.win.tabs.length > 1) await tab.page.bringToFront().catch(() => {})
       await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 70, maxWidth: VIEWPORT.width, maxHeight: VIEWPORT.height })
     }
     const cast = tab.cast
     cast.subs.add(fn)
+    // Chrome sends a picture only when the page changes, so one who joins a running screencast starts from the last.
+    if (cast.last) fn(cast.last)
     return () => {
       cast.subs.delete(fn)
       if (cast.subs.size || tab.cast !== cast) return
@@ -234,10 +502,8 @@ class BotBrowser {
 
   async stop() {
     const context = this.context
-    this.context = null
-    this.tabs.clear()
+    this.forget()
     await context?.close().catch(() => {})
-    this.announce()
   }
 }
 
@@ -261,6 +527,16 @@ export async function stopBrowser(botId: string) {
 /** Closes every browser cleanly so profiles are flushed to disk. */
 export async function stopAllBrowsers() {
   await Promise.all([...browsers.values()].map((b) => b.stop()))
+}
+
+/** A thread finished: its window is closed a little later. */
+export function retireWindow(botId: string, threadId: string) {
+  browsers.get(botId)?.retire(threadId)
+}
+
+/** A view of the app went away: whatever it had control of goes back to the bots. */
+export function letGo(viewer: string) {
+  for (const browser of browsers.values()) browser.letGo(viewer)
 }
 
 /**

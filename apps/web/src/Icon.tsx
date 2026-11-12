@@ -129,6 +129,19 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   expand: <path d="M15 4h5v5M9 20H4v-5M20 4l-6 6M4 20l6-6" />,
+  shrink: <path d="M14 4v6h6M10 20v-6H4M14 10l6-6M10 14l-6 6" />,
+  pip: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <rect x="12" y="11.500" width="6.500" height="5" rx="1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  dock: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M14 5v14" />
+    </>
+  ),
   code: <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />,
   steps: <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />,
 }

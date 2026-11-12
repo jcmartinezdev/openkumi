@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import type { Bot, Skill } from '@openbot/shared'
+import { windowCount } from '@openbot/client/browser'
 import { api, refreshSkills, useStore } from '@openbot/client/store'
 import { scheduleLabel } from '@openbot/client/tasks'
 import { ProviderIcon } from '../../../src/icons'
@@ -92,7 +93,7 @@ export default function BotSettings() {
         <Row
           icon="globe"
           label="Open its browser"
-          detail={browser?.running ? `Running, with ${browser.tabs.length} ${browser.tabs.length === 1 ? 'tab' : 'tabs'} open` : 'Not running. It starts when the bot needs it.'}
+          detail={browser?.running ? `Running, with ${windowCount(browser)} open` : 'Not running. It starts when the bot needs it.'}
           opens
           onPress={() => router.push({ pathname: '/browser/[botId]', params: { botId: bot.id } })}
         />

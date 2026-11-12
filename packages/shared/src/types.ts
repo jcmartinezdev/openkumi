@@ -311,13 +311,38 @@ export interface BrowserTab {
   id: string
   url: string
   title: string
+  /** The thread whose window the tab is in (the window says so too; kept for older apps). */
   threadId: string | null
+  windowId: string
+}
+
+/**
+ * A window of a bot's browser. Every thread that browses (the conversation, a subagent, a scheduled
+ * run) has one of its own, so sessions running at once never get in each other's way, while all of
+ * them share the bot's profile: its cookies and logins.
+ */
+export interface BrowserWindow {
+  id: string
+  /** The thread that works in it; null for the window the browser starts with, until a thread needs one. */
+  threadId: string | null
+  /** The tab the bot works in. */
+  activeTab: string | null
+  /**
+   * The view of an app that has taken control of it (each app view makes up an id of its own), or
+   * null while the bot has it. Only that view can use the page; the bot can then only read it.
+   */
+  controller: string | null
+  /** What the bot asked the owner to do in it, such as signing in, while it waits for them. */
+  request: string | null
+  /** When the bot last used it. */
+  usedAt: number
 }
 
 export interface BrowserState {
   running: boolean
   headless: boolean
   tabs: BrowserTab[]
+  windows: BrowserWindow[]
 }
 
 export interface Partial {
@@ -361,7 +386,13 @@ export type BrowserInput =
 export type ClientEvent =
   | { type: 'browser.subscribe'; botId: string; tabId: string }
   | { type: 'browser.unsubscribe'; botId: string; tabId: string }
+  /** Only reaches the page from the connection whose view has control of the tab's window. */
   | { type: 'browser.input'; botId: string; tabId: string; input: BrowserInput }
+  /**
+   * Taking control of a window for the view `viewer`, handing it back to the bot, or saying no to
+   * what the bot asked. Control goes back to the bot by itself when the connection closes.
+   */
+  | { type: 'browser.control'; botId: string; windowId: string; viewer: string; action: 'take' | 'give' | 'decline' }
 
 export interface AppState {
   bots: Bot[]

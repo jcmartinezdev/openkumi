@@ -477,6 +477,20 @@ button.chip { padding: 0 10px; }
 .view canvas { max-width: 100%; max-height: 100%; display: block; user-select: none; -webkit-user-drag: none; -webkit-touch-callout: none; border-radius: 8px; box-shadow: 0 0 0 1px var(--border), 0 8px 30px rgba(0, 0, 0, 0.25); }
 .view:focus-visible { box-shadow: inset 0 0 0 1px var(--border-strong); }
 .view-wait { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 13px; }
+/* Only watched until the owner takes control: then the page takes the pointer and the keys. */
+.view.driving canvas { cursor: default; box-shadow: 0 0 0 2px var(--primary), 0 8px 30px rgba(0, 0, 0, 0.25); }
+.view.pressable { cursor: pointer; }
+.address[readonly] { color: var(--muted); cursor: default; }
+.pane-session { flex: none; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; color: var(--muted); padding: 0 6px; }
+.control-bar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 10px 8px 14px; border-top: 1px solid var(--border); font-size: 13px; flex: none; }
+.control-bar .grow { overflow-wrap: anywhere; }
+.control-bar.you { background: color-mix(in srgb, var(--primary) 7%, transparent); }
+.control-bar.asking { background: color-mix(in srgb, var(--run) 12%, transparent); }
+/* Filling the app's window: over the sidebar and the chat, under the settings and dialogs. */
+.pane.full { position: fixed; inset: 0; z-index: 14; border: none; }
+html[data-inset] .pane.full .pane-bar { padding-left: 86px; }
+html[data-platform='darwin'] .pane.full .pane-bar { -webkit-app-region: drag; }
+html[data-platform='darwin'] .pane.full .pane-bar :is(button, input) { -webkit-app-region: no-drag; }
 .typebar { display: none; align-items: center; gap: 2px; padding: 6px 8px; border-top: 1px solid var(--border); flex: none; }
 .typebar input { height: 32px; padding: 0 12px; border-radius: 99px; background: var(--hover); border-color: transparent; }
 @media (pointer: coarse) { .typebar.show { display: flex; } }
@@ -690,6 +704,8 @@ button.day.on, button.day.on:hover:not(:disabled) { background: var(--primary); 
   .view canvas { border-radius: 0; box-shadow: none; }
   .with-pane .empty { margin: 0 auto; padding: 4px 0 16px; }
   .with-pane .empty .empty-mascot { width: 64px; }
+  .pane.full { max-height: none; border-bottom: none; }
+  .pane.full .view { flex: 1; aspect-ratio: auto; }
 }
 /* While typing a message on a touch keyboard, the page view steps aside for the conversation. */
 @media (max-width: 1020px) and (pointer: coarse) {
@@ -778,6 +794,19 @@ button.day.on, button.day.on:hover:not(:disabled) { background: var(--primary); 
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   .spinner { animation-duration: 1.5s !important; }
 }
+
+/* ---- picture in picture: a bot's window, small, floating over the chat while it browses */
+.pip {
+  position: fixed; right: 20px; bottom: 112px; z-index: 10; width: 340px; display: flex; flex-direction: column;
+  border: 1px solid var(--border-strong); border-radius: 12px; background: var(--raised); box-shadow: var(--shadow); overflow: hidden; animation: fade 0.15s;
+}
+.pip-head { display: flex; align-items: center; gap: 2px; height: 34px; padding: 0 4px 0 12px; font-size: 12px; }
+.pip-head .icon { width: 28px; height: 28px; }
+.pip-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.pip .view { flex: none; aspect-ratio: 1280 / 800; padding: 0; }
+.pip .view canvas { border-radius: 0; box-shadow: none; }
+.pip-ask { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; font-size: 12px; background: color-mix(in srgb, var(--run) 12%, transparent); }
+@media (max-width: 760px) { .pip { width: min(260px, calc(100vw - 32px)); right: 16px; } }
 
 /* ---- the window itself. The bars along the top move the window when dragged; on a Mac the
    window's own buttons sit over the top left corner, so whatever is there makes room for them. */

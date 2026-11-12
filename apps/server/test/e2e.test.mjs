@@ -60,6 +60,32 @@ async function tool(name, args, botId = bot.id) {
 /** What the model is told (its system prompt) or offered (its tool names) for a bot right now. */
 const told = async (what = '!system', botId = bot.id) => lastText(await say(await fresh(botId), what))
 
+/** Calls one tool in a thread through the scripted model and returns what the tool gave back. */
+async function toolIn(threadId, name, args, timeoutMs) {
+  const items = await say(threadId, `!tool ${name} ${JSON.stringify(args)}`, timeoutMs)
+  return items.findLast((d) => d.type === 'function_call_output').output
+}
+
+/** A connection to the server's event stream, as an app's view has. */
+async function openSocket() {
+  const socket = new WebSocket(`ws://127.0.0.1:${PORT}/ws?token=${token}`)
+  socket.binaryType = 'arraybuffer'
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve
+    socket.onerror = () => reject(new Error('The event stream failed'))
+  })
+  return socket
+}
+
+/** Takes control of a window of the bot's browser from a view of its own; closing the view hands it back. */
+async function takeControl(windowId, botId = bot.id) {
+  const socket = await openSocket()
+  const viewer = crypto.randomUUID()
+  const control = (action) => socket.send(JSON.stringify({ type: 'browser.control', botId, windowId, viewer, action }))
+  control('take')
+  return { socket, viewer, give: () => control('give'), decline: () => control('decline'), close: () => socket.close() }
+}
+
 async function until(check, timeoutMs = 10_000) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
@@ -692,8 +718,14 @@ test('a bot cannot reach Open Bot itself or files on the computer through its br
   assert.match(await tool('browser_navigate', { url: 'file:///etc/hosts' }), /^Error: Only web addresses/)
   assert.match(await tool('browser_navigate', { url: 'view-source:file:///etc/hosts' }), /^Error: Only web addresses/)
   // The owner's own controls for the bot's browser are held to the same rule.
-  const { tabId } = await api('POST', `/api/bots/${bot.id}/browser/new-tab`, {})
-  await assert.rejects(api('POST', `/api/bots/${bot.id}/browser/navigate`, { tabId, url: 'file:///etc/hosts' }), /Only web addresses/)
+  const { windowId } = await api('POST', `/api/bots/${bot.id}/browser/open`, {})
+  const viewer = await takeControl(windowId)
+  try {
+    const win = await until(async () => (await api('GET', '/api/state')).browsers[bot.id].windows.find((w) => w.id === windowId && w.controller))
+    await assert.rejects(api('POST', `/api/bots/${bot.id}/browser/navigate`, { tabId: win.activeTab, url: 'file:///etc/hosts' }), /Only web addresses/)
+  } finally {
+    viewer.close()
+  }
   await api('POST', `/api/bots/${bot.id}/browser/stop`)
 })
 
@@ -1059,6 +1091,131 @@ test('browser: navigate, snapshot refs, type and click', async () => {
   assert.equal(picture.subarray(7, 7 + named).toString(), `${bot.id}:${tab.id}`)
   assert.deepEqual([...picture.subarray(7 + named, 7 + named + 3)], [0xff, 0xd8, 0xff], 'the rest is a JPEG')
 
+  await api('POST', `/api/bots/${bot.id}/browser/stop`)
+})
+
+test('browser: each thread browses in a window of its own, and popups open and close in it', async () => {
+  const page = (title, body = '') => 'data:text/html,' + encodeURIComponent(`<title>${title}</title><h1>${title}</h1>${body}`)
+  const id = await fresh()
+  await toolIn(id, 'browser_navigate', { url: page('Mine') }, 60_000)
+  // A subagent of the conversation browses at the same time, somewhere else, without moving the conversation's page.
+  await say(id, `!tool spawn_subagent ${JSON.stringify({ name: 'Looker', task: `!tool browser_navigate ${JSON.stringify({ url: page('Theirs') })}` })}`)
+  const child = (await api('GET', '/api/state')).threads.find((t) => t.parentId === id)
+  await until(async () => (await api('GET', `/api/threads/${child.id}`)).thread.status !== 'running', 30_000)
+  const { browsers } = await api('GET', '/api/state')
+  const { windows, tabs } = browsers[bot.id]
+  const mine = windows.find((w) => w.threadId === id)
+  const theirs = windows.find((w) => w.threadId === child.id)
+  assert.ok(mine && theirs && mine.id !== theirs.id, 'two windows')
+  const url = (w) => tabs.find((t) => t.id === w.activeTab).url
+  assert.deepEqual([url(mine), url(theirs)], [page('Mine'), page('Theirs')])
+  assert.deepEqual(tabs.filter((t) => t.windowId === mine.id).map((t) => t.threadId), [id], 'tabs say which window and thread they are in')
+  assert.match(await toolIn(id, 'browser_snapshot', {}), /Page: Mine/)
+
+  // A popup opens in the window of the page that opened it, the work goes on there, and when it
+  // closes the bot is back on the page it came from.
+  await toolIn(id, 'browser_navigate', { url: page('Opener', `<button onclick="window.open('about:blank', '_blank')">Pop</button>`) })
+  const pop = (await toolIn(id, 'browser_snapshot', {})).match(/\[(\d+)\] button "Pop"/)[1]
+  assert.match(await toolIn(id, 'browser_click', { ref: Number(pop) }), /URL: about:blank/)
+  const opened = (await api('GET', '/api/state')).browsers[bot.id]
+  assert.equal(opened.tabs.filter((t) => t.windowId === mine.id).length, 2)
+  assert.equal(opened.windows.length, windows.length, 'no window of its own')
+  await toolIn(id, 'browser_eval', { expression: 'window.close()' })
+  await until(async () => (await api('GET', '/api/state')).browsers[bot.id].tabs.filter((t) => t.windowId === mine.id).length === 1)
+  assert.match(await toolIn(id, 'browser_snapshot', {}), /Page: Opener/)
+})
+
+test('browser: the owner takes control of a window; the bot can then only read it, and hears when it is handed back', async () => {
+  const page = (title) => 'data:text/html,' + encodeURIComponent(`<title>${title}</title><div style="height:100vh" onclick="document.title='Clicked'">${title}</div>`)
+  const id = await fresh()
+  await toolIn(id, 'browser_navigate', { url: page('Mine') }, 60_000)
+  const windowOf = async () => (await api('GET', '/api/state')).browsers[bot.id].windows.find((w) => w.threadId === id)
+  const win = await windowOf()
+  assert.equal(win.controller, null, 'the bot has it to begin with')
+
+  // Watching is not driving: a view that has not taken control cannot use the page, or its address bar.
+  const watcher = await openSocket()
+  const click = (socket) => ['down', 'up'].forEach((kind) => socket.send(JSON.stringify({ type: 'browser.input', botId: bot.id, tabId: win.activeTab, input: { kind, x: 200, y: 200, button: 'left' } })))
+  click(watcher)
+  await assert.rejects(api('POST', `/api/bots/${bot.id}/browser/reload`, { tabId: win.activeTab }), /Take control of the browser first/)
+
+  const owner = await takeControl(win.id)
+  assert.equal((await until(async () => (await windowOf()).controller)), owner.viewer)
+  click(watcher)
+  await new Promise((r) => setTimeout(r, 500))
+  let read = await toolIn(id, 'browser_snapshot', {})
+  assert.match(read, /^\(The user has control of this window right now: you can read it but not act in it\.\)/)
+  assert.match(read, /Page: Mine/, 'clicks from a view without control did not reach the page')
+  assert.match(await toolIn(id, 'browser_navigate', { url: page('Elsewhere') }), /^Error: The user has taken control of this browser window/)
+  click(owner.socket)
+  await until(async () => /Page: Clicked/.test(await toolIn(id, 'browser_read', {})))
+  await api('POST', `/api/bots/${bot.id}/browser/navigate`, { tabId: win.activeTab, url: page('Owner') })
+
+  owner.give()
+  await until(async () => !(await windowOf()).controller)
+  read = await toolIn(id, 'browser_snapshot', {})
+  assert.match(read, /^\(The user used this browser window since you last looked, and has handed it back\. The page may have changed\.\)/)
+  assert.match(read, /Page: Owner/)
+  assert.doesNotMatch(await toolIn(id, 'browser_snapshot', {}), /The user used/, 'the bot is told once')
+
+  // Control goes back to the bot when the view that has it goes away.
+  const leaving = await takeControl(win.id)
+  await until(async () => (await windowOf()).controller === leaving.viewer)
+  leaving.close()
+  await until(async () => !(await windowOf()).controller)
+  assert.match(await toolIn(id, 'browser_navigate', { url: page('Again') }), /Page: Again/)
+  watcher.close()
+  owner.close()
+})
+
+test('browser: a bot asks the owner to take over, and waits until they hand it back or say no', async () => {
+  const id = await fresh()
+  await toolIn(id, 'browser_navigate', { url: 'data:text/html,' + encodeURIComponent('<title>Sign in</title>') }, 60_000)
+  const windowOf = async () => (await api('GET', '/api/state')).browsers[bot.id].windows.find((w) => w.threadId === id)
+  const ask = async (request) => {
+    await api('POST', `/api/threads/${id}/messages`, { text: `!tool browser_ask_user ${JSON.stringify({ request })}` })
+    return until(async () => ((await windowOf()).request === request ? windowOf() : null))
+  }
+  const answer = async () => (await settle(id)).findLast((d) => d.type === 'function_call_output').output
+
+  // Done: the owner takes over, does it, and hands back; the bot carries on from the page as they left it.
+  const win = await ask('Sign in to Example')
+  const owner = await takeControl(win.id)
+  await until(async () => (await windowOf()).controller)
+  assert.equal((await api('GET', `/api/threads/${id}`)).thread.status, 'running', 'the bot is still waiting')
+  await api('POST', `/api/bots/${bot.id}/browser/navigate`, { tabId: win.activeTab, url: 'data:text/html,' + encodeURIComponent('<title>Signed in</title>') })
+  owner.give()
+  assert.match(await answer(), /^The user handed the browser back\.\n\nPage: Signed in/)
+  assert.equal((await windowOf()).request, null)
+
+  // Said no.
+  await ask('Solve the puzzle')
+  owner.decline()
+  assert.match(await answer(), /^The user said no/)
+
+  // Took over, then went away.
+  await ask('Type the code')
+  const leaving = await takeControl(win.id)
+  await until(async () => (await windowOf()).controller)
+  leaving.close()
+  assert.match(await answer(), /^The user took over, then left without handing back/)
+  owner.close()
+
+  // Stopping the bot stops the wait.
+  await ask('Anything')
+  await api('POST', `/api/threads/${id}/stop`)
+  assert.match(await answer(), /^Error: stopped by the user/)
+  assert.equal((await windowOf()).request, null)
+
+  // Nobody watches a scheduled run, so it cannot ask.
+  assert.match(lastText(await say(id, '!tools')), /\bbrowser_ask_user\b/)
+  const task = await api('POST', '/api/tasks', { botId: bot.id, title: 'Tools', prompt: '!tools', schedule: { type: 'interval', minutes: 60 } })
+  await api('POST', `/api/tasks/${task.id}/run`)
+  const run = await until(async () => (await api('GET', '/api/state')).tasks.find((t) => t.id === task.id && t.lastStatus === 'completed'))
+  const tools = lastText((await api('GET', `/api/threads/${run.lastThreadId}`)).items.map((i) => i.data))
+  assert.match(tools, /\bbrowser_navigate\b/)
+  assert.doesNotMatch(tools, /\bbrowser_ask_user\b/)
+  await api('DELETE', `/api/tasks/${task.id}`)
   await api('POST', `/api/bots/${bot.id}/browser/stop`)
 })
 

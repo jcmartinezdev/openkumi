@@ -10,7 +10,7 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import type { AppState, ClientEvent, ServerEvent } from '@openbot/shared'
 import * as agent from './agent.ts'
 import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
-import { type Frame, browserFor, browserStates, isWebPage, stopBrowser } from './browser.ts'
+import { type Frame, browserFor, browserStates, isWebPage, letGo, stopBrowser } from './browser.ts'
 import { HOME, HOME_LABEL, LAN, PORT, ROOT, SKILLS, accessToken, botDir, emit, onEvent, readSecrets, writeSecret } from './config.ts'
 import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, removeComputer } from './clients.ts'
 import * as mcp from './connections.ts'
@@ -361,11 +361,21 @@ route('POST', '/api/bots/:id/browser/:action', async ([id, action], body) => {
   const browser = browserFor(id)
   if (action === 'stop') return void (await browser.stop())
   await browser.start(bot.headless)
-  if (action === 'start') return
+  // The window of one of the bot's threads, opened if it has none: the conversation's unless another
+  // thread is named. ("start" is what apps from before windows ask for.) An earlier conversation's
+  // window went to the current one when it was set aside.
+  if (action === 'open' || action === 'start') {
+    const named = body.threadId ? db.getThread(String(body.threadId)) : undefined
+    if (body.threadId && named?.botId !== id) fail(404, 'No such thread')
+    const thread = named && !named.archivedAt ? named : agent.conversation(id)
+    return { windowId: (await browser.windowFor(thread.id)).id }
+  }
+  const tab = browser.tab(String(body.tabId))
+  // The owner uses a page only once they have taken control of its window, so they and the bot never act at once.
+  if (!tab.win.controller) fail(409, 'Take control of the browser first.')
   // A bot's browser is for the web. Files on this computer stay out of it, whoever is driving.
   const web = (url: string) => (isWebPage(url) ? url : fail(400, 'Only web addresses can be opened in a bot’s browser.'))
-  if (action === 'new-tab') return { tabId: (await browser.newTab(null, body.url ? web(String(body.url)) : undefined)).id }
-  const { page } = browser.tab(String(body.tabId))
+  const { page } = tab
   const nav = { waitUntil: 'commit', timeout: 30_000 } as const
   if (action === 'navigate') {
     const raw = String(body.url ?? '').trim()
@@ -375,6 +385,7 @@ route('POST', '/api/bots/:id/browser/:action', async ([id, action], body) => {
   else if (action === 'forward') await page.goForward(nav)
   else if (action === 'reload') await page.reload(nav)
   else if (action === 'close-tab') await page.close()
+  else if (action === 'focus-tab') browser.focus(tab)
   else fail(404, 'Unknown browser action')
 })
 
@@ -489,6 +500,8 @@ function createServer() {
       views.get(key)?.then((unsubscribe) => unsubscribe()).catch(() => {})
       views.delete(key)
     }
+    // The views of the app that have taken control of a window over this socket.
+    const viewers = new Set<string>()
     ws.on('message', (raw) => {
       let msg: ClientEvent
       try {
@@ -497,6 +510,15 @@ function createServer() {
         return
       }
       const browser = browserFor(msg.botId)
+      if (msg.type === 'browser.control') {
+        const viewer = String(msg.viewer)
+        if (msg.action === 'take') {
+          viewers.add(viewer)
+          browser.take(msg.windowId, viewer)
+        } else if (msg.action === 'give') browser.give(msg.windowId, viewer)
+        else if (msg.action === 'decline') browser.decline(msg.windowId)
+        return
+      }
       const key = `${msg.botId}:${msg.tabId}`
       if (msg.type === 'browser.subscribe') {
         if (views.has(key)) return
@@ -507,10 +529,14 @@ function createServer() {
       } else if (msg.type === 'browser.unsubscribe') {
         drop(key)
       } else if (msg.type === 'browser.input') {
-        browser.input(msg.tabId, msg.input)
+        // Watching is not driving: the page only takes input from the view that took control.
+        if (viewers.has(browser.controllerOf(msg.tabId) ?? '')) browser.input(msg.tabId, msg.input)
       }
     })
-    ws.on('close', () => [...views.keys()].forEach(drop))
+    ws.on('close', () => {
+      ;[...views.keys()].forEach(drop)
+      viewers.forEach(letGo)
+    })
   })
 
   /** Ends every open connection, so the server can stop listening at once. */

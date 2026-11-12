@@ -18,9 +18,14 @@ that stays logged in.
   or continue.
 - **Subagents.** A bot can split work into parallel subagents, each in its own thread. Watch them
   live, open one to read or message it, or stop it. Results flow back to the parent automatically.
-- **A browser per bot.** Every bot gets its own Chrome profile. Sign in to a site once in the
-  built-in browser panel and that bot stays signed in; nothing is shared between bots or with your
-  own browser. You can watch the bot browse and take over at any time.
+- **A browser per bot.** Every bot gets its own Chrome profile. Sign in to a site once and that bot
+  stays signed in; nothing is shared between bots or with your own browser. Inside it, each
+  session (the conversation, every subagent, every scheduled run) browses in a window of its own,
+  so sessions running at once never get in each other's way. When a bot starts browsing, a small
+  live view floats over its chat; dock it beside the chat or make it fill the window. You watch
+  until you **Take control**: then the page is yours to use, from the computer or the phone, and
+  the bot can only read it until you **Hand back**. A bot that needs you for a sign-in or a CAPTCHA
+  asks, and waits.
 - **Bots that write their own instructions.** A bot keeps an `AGENTS.md` and a `memory/` folder
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone.
@@ -168,7 +173,7 @@ apps/
       workspace.ts     a bot's own files: path confinement, file operations, git history
       skills.ts        the skill catalog and each bot's links into it
       connections.ts   MCP servers: catalog, per-bot connections and sign-in
-      browser.ts       one persistent Chrome profile per bot; live view via CDP screencast
+      browser.ts       one persistent Chrome profile per bot, a window per thread; live view via CDP screencast
       providers/       what bots run on: the Codex and Claude Code engines (codex.ts,
                        claude-code.ts, grok.ts), local models, OpenAI-compatible APIs, a mock for tests
       tool-endpoint.ts serves a bot's tools to an engine over MCP for the length of one turn
@@ -376,7 +381,7 @@ and the three share the client. Notion and Linear need no setup: install, then s
 | Its conversation | `search_history`, `read_history` |
 | Subagents | `spawn_subagent`, `wait_subagents`, `list_subagents`, `read_subagent`, `message_subagent`, `cancel_subagent` |
 | Scheduled tasks | `list_scheduled_tasks`, `schedule_task`, `update_scheduled_task`, `delete_scheduled_task` |
-| Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval` |
+| Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval`, `browser_ask_user` |
 | Web | `web_fetch`, plus the provider's built-in web search |
 | The conversation | `show_page` |
 | Connections | every tool of each MCP server switched on for the bot, named `mcp__<connection>__<tool>` |
@@ -387,7 +392,14 @@ scripts are not run.
 A subagent can run as a different bot (`spawn_subagent` with `bot_id`), which is how bots hand
 work to each other: the other bot does the task as itself, with its own instructions, logins and
 connections, is told which bot handed it over, and reports back to that bot. Subagents can nest
-two levels deep; each gets its own browser tab.
+two levels deep; each gets its own browser window.
+
+While you have control of a window, the bot's `browser_snapshot` and `browser_read` still work, and
+everything else in that window is refused at once, with a note saying so; the next result after you
+hand back tells it you used the window. `browser_ask_user` shows what the bot needs ("Sign in to
+LinkedIn") on the window, with **Take control** and **Not now**, and returns when you hand back,
+say no, or after 25 minutes. Scheduled runs do not have it, since nobody watches them. A
+subagent's or a run's window closes a minute after it finishes.
 
 ### Engines: Claude Code, Codex and Grok
 
@@ -464,6 +476,8 @@ and from its own format.
 - A bot that edits its own instructions can be talked into a bad edit by something it reads. Two
   things limit that: the rules in `bot.md` are outside its reach, and every change to `AGENTS.md`
   and `memory/` is in the history where you can undo it.
+- What you type into a bot's page goes to it only from the device that took control of its window,
+  so a view that is only watching cannot press anything by accident.
 - A bot's browser and `web_fetch` cannot open files on the computer or Open Bot's own address.
   Without that, a bot could read your keys, or open the app as you and change its own rules.
 - A skill is instructions the bot will follow with its browser and accounts, and a connection that
