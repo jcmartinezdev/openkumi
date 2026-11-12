@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Bot, Connection, ConnectionStatus, Effort, FileEntry, HistoryEntry, Look, Skill } from '@openbot/shared'
 import { Icon } from './Icon'
+import { windowCount } from '@openbot/client/browser'
 import { describeLook } from '@openbot/client/mascot'
 import { EFFORT_LABEL, effortsOf, useModels } from '@openbot/client/models'
 import { type Dress, LookEditor } from './LookEditor'
@@ -163,7 +164,7 @@ function General({ bot }: { bot: Bot }) {
         />
         <Row
           title="Its browser"
-          description={browser?.running ? `Running, with ${browser.tabs.length} ${browser.tabs.length === 1 ? 'tab' : 'tabs'} open.` : 'Not running. It starts when the bot needs it.'}
+          description={browser?.running ? `Running, with ${windowCount(browser)} open: one for each conversation, subagent or scheduled run that is browsing. They share its logins.` : 'Not running. It starts when the bot needs it.'}
           control={browser?.running && <button onClick={() => run(() => api('POST', `/api/bots/${bot.id}/browser/stop`))}>Stop</button>}
         />
       </Section>

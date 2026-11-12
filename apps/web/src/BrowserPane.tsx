@@ -1,65 +1,21 @@
 import type React from 'react'
-import { useEffect, useRef, useState } from 'react'
-import type { Bot, BrowserInput, Thread } from '@openbot/shared'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
+import type { Bot, BrowserInput, BrowserTab, BrowserWindow } from '@openbot/shared'
+import { control, driverOf, hostOf, sessionName } from '@openbot/client/browser'
 import { Icon } from './Icon'
 import { api, send, useStore, watch } from './store'
 
-const host = (url: string) => {
-  try {
-    return new URL(url).host || url
-  } catch {
-    return url
-  }
-}
-
 /**
- * Live, interactive view of the bot's own browser, docked next to the conversation (beside it on
- * wide screens, above it on narrow ones) so the chat stays visible while the bot browses.
+ * A live picture of one tab of a bot's browser. Only while `drive` is on does what is done to it
+ * (clicks, keys, scrolling, typing on a touch screen) reach the page; otherwise it is only watched.
  */
-export function BrowserPane({ bot, thread, close, setWidth, autoStart, clearAutoStart }: { bot: Bot; thread?: Thread; close: () => void; setWidth: (px: number) => void; autoStart: boolean; clearAutoStart: () => void }) {
-  const browser = useStore((s) => s.browsers[bot.id])
+function PageView({ bot, tab, drive, onPress, children }: { bot: Bot; tab: BrowserTab | undefined; drive: boolean; onPress?: () => void; children?: ReactNode }) {
   const connected = useStore((s) => s.connected)
-  const [chosen, setChosen] = useState<string | null>(null)
-  const [address, setAddress] = useState<string | null>(null)
-  const [error, setError] = useState('')
   const [hasFrame, setHasFrame] = useState(false)
-  const [starting, setStarting] = useState(false)
   const img = useRef<HTMLCanvasElement>(null)
+  const view = useRef<HTMLDivElement>(null)
   const size = useRef({ width: 1280, height: 800 })
-
-  const running = !!browser?.running
-  const tabs = running ? browser.tabs : []
-  // Show the tab the user picked; otherwise follow the tab the current thread's agent is using.
-  const tab = tabs.find((t) => t.id === chosen) ?? tabs.find((t) => thread && t.threadId === thread.id) ?? tabs[0]
   const tabId = tab?.id
-
-  const act = async (action: string, body?: Record<string, unknown>) => {
-    setError('')
-    try {
-      return await api('POST', `/api/bots/${bot.id}/browser/${action}`, { tabId, ...body })
-    } catch (e: any) {
-      setError(e.message)
-    }
-  }
-
-  const start = async () => {
-    setStarting(true)
-    await act('start')
-    setStarting(false)
-  }
-  // The user opened the pane to use the browser, so start it without a second step.
-  useEffect(() => {
-    if (autoStart && !running) start()
-    // One-shot: coming back to this bot later must not start a browser that was quit since.
-    clearAutoStart()
-  }, [])
-
-  // Keep the selected tab in sight when there are more tabs than fit.
-  const activeTab = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    // Braces matter: newer browsers return a promise from scrollIntoView, which is not an effect cleanup.
-    activeTab.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
-  }, [tabId, tabs.length])
 
   // The pictures of the page never pass through here: the connection's thread draws them onto the
   // canvas, and only says when the first one is showing and when the page changes size.
@@ -78,7 +34,12 @@ export function BrowserPane({ bot, thread, close, setWidth, autoStart, clearAuto
     return () => send({ type: 'browser.unsubscribe', botId: bot.id, tabId })
   }, [bot.id, tabId, connected])
 
-  const input = (event: BrowserInput) => tabId && send({ type: 'browser.input', botId: bot.id, tabId, input: event })
+  // Taking control puts the keyboard on the page at once.
+  useEffect(() => {
+    if (drive) view.current?.focus()
+  }, [drive])
+
+  const input = (event: BrowserInput) => drive && tabId && send({ type: 'browser.input', botId: bot.id, tabId, input: event })
 
   const point = (e: { clientX: number; clientY: number }) => {
     const rect = img.current!.getBoundingClientRect()
@@ -90,10 +51,9 @@ export function BrowserPane({ bot, thread, close, setWidth, autoStart, clearAuto
   const button = (e: React.MouseEvent) => (['left', 'middle', 'right'] as const)[e.button] ?? 'left'
 
   // React attaches wheel listeners passively, which would let the pane scroll instead of the page.
-  const view = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = view.current
-    if (!el) return
+    if (!el || !drive) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
       input({ kind: 'wheel', ...point(e), dx: e.deltaX, dy: e.deltaY })
@@ -117,120 +77,40 @@ export function BrowserPane({ bot, thread, close, setWidth, autoStart, clearAuto
     input({ kind: 'keyup', key })
   }
 
-  const resize = (e: React.PointerEvent) => {
-    e.preventDefault()
-    // The split lives on the chat grid, which also keeps a minimum width for the conversation.
-    const chat = e.currentTarget.closest('.chat')!.getBoundingClientRect()
-    let width = 0
-    const move = (m: PointerEvent) => {
-      // Same limits as the grid, so the handle never drifts away from the pointer.
-      width = Math.round(Math.min(Math.max(chat.right - m.clientX, 340), chat.width - 320, chat.width * 0.62))
-      setWidth(width)
-    }
-    const up = () => {
-      window.removeEventListener('pointermove', move)
-      window.removeEventListener('pointerup', up)
-      document.body.classList.remove('resizing')
-      try {
-        if (width) localStorage.setItem('openbot.paneWidth', String(width))
-      } catch {
-        // Storage can be unavailable (private windows); the width just won't be remembered.
-      }
-    }
-    document.body.classList.add('resizing')
-    window.addEventListener('pointermove', move)
-    window.addEventListener('pointerup', up)
-  }
-
   return (
-    <aside className="pane" aria-label={`${bot.name}’s browser`}>
-      <div className="pane-resize" onPointerDown={resize} />
-      <form
-        className="pane-bar"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (address?.trim()) act('navigate', { url: address })
-          setAddress(null)
-          view.current?.focus()
-        }}
-      >
-        <button type="button" className="icon" title="Back" aria-label="Back" disabled={!tab} onClick={() => act('back')}><Icon name="back" /></button>
-        <button type="button" className="icon" title="Reload" aria-label="Reload" disabled={!tab} onClick={() => act('reload')}><Icon name="reload" size={15} /></button>
-        <input
-          className="address"
-          value={address ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))}
-          placeholder="Search or enter address"
-          aria-label="Address"
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          disabled={!tab}
-          onChange={(e) => setAddress(e.target.value)}
-          onFocus={(e) => e.target.select()}
-          onBlur={() => setAddress(null)}
-        />
-        <button type="button" className="icon" title="New tab" aria-label="New tab" disabled={!running} onClick={async () => setChosen((await act('new-tab'))?.tabId ?? null)}>
-          <Icon name="plus" />
-        </button>
-        <button
-          type="button"
-          className="icon"
-          title="Quit browser (logins stay saved)"
-          aria-label="Quit browser"
-          disabled={!running}
-          onClick={async () => {
-            if (!confirm('Quit the browser? Open pages close; logins stay saved.')) return
-            await act('stop')
-            close()
-          }}
-        >
-          <Icon name="power" size={15} />
-        </button>
-        <button type="button" className="icon" title="Hide browser" aria-label="Hide browser" onClick={close}><Icon name="x" /></button>
-      </form>
-      {tabs.length > 1 && (
-        <div className="tabs">
-          {tabs.map((t) => (
-            <div key={t.id} ref={t.id === tabId ? activeTab : undefined} className={`tab ${t.id === tabId ? 'active' : ''}`} title={t.url}>
-              <button aria-current={t.id === tabId ? 'true' : undefined} className="tab-main" onClick={() => (setChosen(t.id), setAddress(null))}>
-                <span className="title">{t.title || host(t.url) || 'New tab'}</span>
-              </button>
-              <button className="icon" title="Close tab" aria-label="Close tab" onClick={() => act('close-tab', { tabId: t.id })}>
-                <Icon name="x" size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      {error && <div className="notice error">{error}</div>}
+    <>
       <div
-        className="view"
+        className={`view ${drive ? 'driving' : ''} ${onPress ? 'pressable' : ''}`}
         ref={view}
-        tabIndex={0}
+        tabIndex={drive ? 0 : -1}
+        onClick={onPress}
         onKeyDown={(e) => {
           // Only keys typed on the page view itself are forwarded, not ones for buttons inside it.
-          if (!running || e.target !== e.currentTarget) return
+          if (!drive || e.target !== e.currentTarget) return
           // Keys go to the page, so Shift+Escape is the way back out for keyboard users.
           if (e.key === 'Escape' && e.shiftKey) return e.currentTarget.blur()
           // Let the browser deliver the clipboard through the paste event instead.
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') return
           e.preventDefault()
+          e.stopPropagation()
           input({ kind: 'keydown', key: e.key === ' ' ? 'Space' : e.key })
         }}
         onKeyUp={(e) => {
-          if (!running || e.target !== e.currentTarget) return
+          if (!drive || e.target !== e.currentTarget) return
           e.preventDefault()
           input({ kind: 'keyup', key: e.key === ' ' ? 'Space' : e.key })
         }}
         onPaste={(e) => {
+          if (!drive) return
           e.preventDefault()
           input({ kind: 'text', text: e.clipboardData.getData('text') })
         }}
         onTouchStart={(e) => {
+          if (!drive) return
           const t = e.touches[0]
           touch.current = { x: t.clientX, y: t.clientY }
           // Where the tap lands in the page, worked out before anything changes the layout.
-          tap.current = running && img.current ? { ...point(t), x0: t.clientX, y0: t.clientY } : null
+          tap.current = img.current ? { ...point(t), x0: t.clientX, y0: t.clientY } : null
         }}
         onTouchMove={(e) => {
           const t = e.touches[0]
@@ -258,55 +138,293 @@ export function BrowserPane({ bot, thread, close, setWidth, autoStart, clearAuto
         <canvas
           key={tabId ?? 'none'}
           ref={img}
-          aria-label={tab ? `The page ${tab.title || host(tab.url)}` : undefined}
-          style={{ visibility: hasFrame && running ? 'visible' : 'hidden' }}
+          aria-label={tab ? `The page ${tab.title || hostOf(tab.url)}` : undefined}
+          style={{ visibility: hasFrame && tab ? 'visible' : 'hidden' }}
           onMouseDown={(e) => {
-            if (fromTouch()) return
+            if (!drive || fromTouch()) return
             view.current?.focus()
             input({ kind: 'down', ...point(e), button: button(e) })
           }}
-          onMouseUp={(e) => !fromTouch() && input({ kind: 'up', ...point(e), button: button(e) })}
+          onMouseUp={(e) => drive && !fromTouch() && input({ kind: 'up', ...point(e), button: button(e) })}
           onMouseMove={(e) => {
-            if (fromTouch()) return
+            if (!drive || fromTouch()) return
             const now = performance.now()
             if (now - lastMove.current < 30) return
             lastMove.current = now
             input({ kind: 'move', ...point(e) })
           }}
-          onContextMenu={(e) => e.preventDefault()}
+          onContextMenu={(e) => drive && e.preventDefault()}
         />
-        {!running ? (
-          <div className="view-wait">
-            {starting ? (
-              <><span className="spinner" /> Starting {bot.name}’s browser</>
-            ) : (
-              <button className="primary" onClick={start}>Start browser</button>
-            )}
-          </div>
-        ) : (
-          !hasFrame && <div className="view-wait"><span className="spinner" /> Loading page</div>
-        )}
+        {children ?? (tab && !hasFrame && <div className="view-wait"><span className="spinner" /> Loading page</div>)}
       </div>
+      {drive && (
+        <form
+          className={`typebar ${typing ? 'show' : ''}`}
+          onSubmit={(e) => {
+            e.preventDefault()
+            if (typed) input({ kind: 'text', text: typed })
+            setTyped('')
+          }}
+        >
+          <input
+            value={typed}
+            placeholder="Tap a field above, then type here"
+            aria-label="Text to type into the page"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            onChange={(e) => setTyped(e.target.value)}
+          />
+          <button type="button" className="icon" title="Backspace" aria-label="Backspace" onClick={() => press('Backspace')}><Icon name="backspace" /></button>
+          <button type="submit" className="icon" title="Type it" aria-label="Type it" onClick={(e) => { if (!typed) { e.preventDefault(); press('Enter') } }}><Icon name="enter" /></button>
+        </form>
+      )}
+    </>
+  )
+}
+
+/** Who has the window, what the bot asked for, and the button that changes hands. */
+function ControlBar({ bot, win }: { bot: Bot; win: BrowserWindow }) {
+  const driver = driverOf(win)
+  const act = (action: 'take' | 'give' | 'decline') => control(bot.id, win.id, action)
+  if (driver === 'you') {
+    return (
+      <div className="control-bar you" role="status">
+        <span className="grow">
+          <strong>You have control.</strong> {win.request ? `${win.request}, then hand back to ${bot.name}.` : `${bot.name} can’t act here until you hand it back.`}
+        </span>
+        <button className="primary" onClick={() => act('give')}>Hand back</button>
+      </div>
+    )
+  }
+  if (win.request) {
+    return (
+      <div className="control-bar asking" role="status">
+        <span className="grow"><strong>{bot.name} needs you:</strong> {win.request}</span>
+        {driver === 'bot' && <button onClick={() => act('decline')}>Not now</button>}
+        <button className="primary" onClick={() => act('take')}>{driver === 'elsewhere' ? 'Take control here' : 'Take control'}</button>
+      </div>
+    )
+  }
+  return (
+    <div className="control-bar" role="status">
+      <span className="grow faint">{driver === 'elsewhere' ? 'You have control on another device.' : `${bot.name} has control.`}</span>
+      <button onClick={() => act('take')}>{driver === 'elsewhere' ? 'Take control here' : 'Take control'}</button>
+    </div>
+  )
+}
+
+interface PaneProps {
+  bot: Bot
+  /** The thread whose window is shown; undefined while the bot's conversation has not begun. */
+  threadId: string | undefined
+  /** Shown instead of the chat's own window (one docked from picture in picture): its name is shown. */
+  other: boolean
+  full: boolean
+  setFull: (full: boolean) => void
+  /** Makes the window float in picture in picture instead. */
+  popOut: () => void
+  close: () => void
+  setWidth: (px: number) => void
+  autoStart: boolean
+  clearAutoStart: () => void
+}
+
+/**
+ * The window a thread of the bot browses in, live: docked next to the conversation (beside it on
+ * wide screens, above it on narrow ones) so the chat stays visible, or filling the app's window. It
+ * is watched until the owner takes control; then they use the page, and the bot can only read it.
+ */
+export function BrowserPane({ bot, threadId, other, full, setFull, popOut, close, setWidth, autoStart, clearAutoStart }: PaneProps) {
+  const browser = useStore((s) => s.browsers[bot.id])
+  const threads = useStore((s) => s.threads)
+  const [chosen, setChosen] = useState<string | null>(null)
+  const [address, setAddress] = useState<string | null>(null)
+  const [error, setError] = useState('')
+  const [opening, setOpening] = useState(false)
+
+  const running = !!browser?.running
+  const win = running && threadId ? (browser.windows ?? []).find((w) => w.threadId === threadId) : undefined
+  const tabs = win ? browser.tabs.filter((t) => t.windowId === win.id) : []
+  // The tab that was picked; otherwise the one the bot works in.
+  const tab = tabs.find((t) => t.id === chosen) ?? tabs.find((t) => t.id === win?.activeTab) ?? tabs[0]
+  const tabId = tab?.id
+  const drive = driverOf(win) === 'you'
+
+  const act = async (action: string, body?: Record<string, unknown>) => {
+    setError('')
+    try {
+      return await api('POST', `/api/bots/${bot.id}/browser/${action}`, { tabId, ...body })
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  // Starts the browser if need be, and opens the thread's window.
+  const open = async () => {
+    setOpening(true)
+    await act('open', { threadId })
+    setOpening(false)
+  }
+  // The user opened the pane to use the browser, so open the window without a second step.
+  useEffect(() => {
+    if (autoStart && !win) open()
+    // One-shot: coming back to this bot later must not start a browser that was quit since.
+    clearAutoStart()
+  }, [])
+
+  // Control is handed back when this view stops showing the window. (The server ignores a hand-back
+  // from a view that no longer has control, so losing it some other way needs no care here.)
+  const windowId = win?.id
+  useEffect(() => {
+    if (!drive || !windowId) return
+    return () => control(bot.id, windowId, 'give')
+  }, [bot.id, drive, windowId])
+  useEffect(() => setChosen(null), [windowId])
+
+  // Escape leaves full screen, unless the keys are going to the page.
+  useEffect(() => {
+    if (!full) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !e.defaultPrevented && setFull(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [full])
+
+  // Keep the selected tab in sight when there are more tabs than fit.
+  const activeTab = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    // Braces matter: newer browsers return a promise from scrollIntoView, which is not an effect cleanup.
+    activeTab.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+  }, [tabId, tabs.length])
+
+  const resize = (e: React.PointerEvent) => {
+    e.preventDefault()
+    // The split lives on the chat grid, which also keeps a minimum width for the conversation.
+    const chat = e.currentTarget.closest('.chat')!.getBoundingClientRect()
+    let width = 0
+    const move = (m: PointerEvent) => {
+      // Same limits as the grid, so the handle never drifts away from the pointer.
+      width = Math.round(Math.min(Math.max(chat.right - m.clientX, 340), chat.width - 320, chat.width * 0.62))
+      setWidth(width)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      document.body.classList.remove('resizing')
+      try {
+        if (width) localStorage.setItem('openbot.paneWidth', String(width))
+      } catch {
+        // Storage can be unavailable (private windows); the width just won't be remembered.
+      }
+    }
+    document.body.classList.add('resizing')
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  return (
+    <aside className={`pane ${full ? 'full' : ''}`} aria-label={`${bot.name}’s browser`}>
+      {!full && <div className="pane-resize" onPointerDown={resize} />}
       <form
-        className={`typebar ${typing ? 'show' : ''}`}
+        className="pane-bar"
         onSubmit={(e) => {
           e.preventDefault()
-          if (typed) input({ kind: 'text', text: typed })
-          setTyped('')
+          if (address?.trim()) act('navigate', { url: address })
+          setAddress(null)
         }}
       >
+        <button type="button" className="icon" title="Back" aria-label="Back" disabled={!drive} onClick={() => act('back')}><Icon name="back" /></button>
+        <button type="button" className="icon" title="Reload" aria-label="Reload" disabled={!drive} onClick={() => act('reload')}><Icon name="reload" size={15} /></button>
+        {(other || full) && win && <span className="pane-session" title={`${bot.name} · ${sessionName(threads, threadId)}`}>{sessionName(threads, threadId)}</span>}
         <input
-          value={typed}
-          placeholder="Tap a field above, then type here"
-          aria-label="Text to type into the page"
+          className="address"
+          value={address ?? (tab?.url === 'about:blank' ? '' : (tab?.url ?? ''))}
+          placeholder={drive ? 'Search or enter address' : ''}
+          aria-label="Address"
+          spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
-          spellCheck={false}
-          onChange={(e) => setTyped(e.target.value)}
+          readOnly={!drive}
+          disabled={!tab}
+          onChange={(e) => setAddress(e.target.value)}
+          onFocus={(e) => drive && e.target.select()}
+          onBlur={() => setAddress(null)}
         />
-        <button type="button" className="icon" title="Backspace" aria-label="Backspace" onClick={() => press('Backspace')}><Icon name="backspace" /></button>
-        <button type="submit" className="icon" title="Type it" aria-label="Type it" onClick={(e) => { if (!typed) { e.preventDefault(); press('Enter') } }}><Icon name="enter" /></button>
+        <button type="button" className="icon" title="Picture in picture" aria-label="Picture in picture" disabled={!win} onClick={popOut}><Icon name="pip" size={17} /></button>
+        <button type="button" className="icon" title={full ? 'Leave full screen' : 'Full screen'} aria-label={full ? 'Leave full screen' : 'Full screen'} onClick={() => setFull(!full)}>
+          <Icon name={full ? 'shrink' : 'expand'} size={15} />
+        </button>
+        <button type="button" className="icon" title="Hide browser" aria-label="Hide browser" onClick={close}><Icon name="x" /></button>
       </form>
+      {tabs.length > 1 && (
+        <div className="tabs">
+          {tabs.map((t) => (
+            <div key={t.id} ref={t.id === tabId ? activeTab : undefined} className={`tab ${t.id === tabId ? 'active' : ''}`} title={t.url}>
+              <button
+                aria-current={t.id === tabId ? 'true' : undefined}
+                className="tab-main"
+                onClick={() => {
+                  setChosen(t.id)
+                  setAddress(null)
+                  // In control, the tab picked is where the bot carries on once it has the window back.
+                  if (drive) act('focus-tab', { tabId: t.id })
+                }}
+              >
+                <span className="title">{t.title || hostOf(t.url) || 'New tab'}</span>
+              </button>
+              {drive && (
+                <button className="icon" title="Close tab" aria-label="Close tab" onClick={() => act('close-tab', { tabId: t.id })}>
+                  <Icon name="x" size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {error && <div className="notice error">{error}</div>}
+      <PageView bot={bot} tab={tab} drive={drive}>
+        {!win ? (
+          <div className="view-wait">
+            {opening ? (
+              <><span className="spinner" /> Opening {bot.name}’s browser</>
+            ) : (
+              <button className="primary" onClick={open}>Open browser</button>
+            )}
+          </div>
+        ) : undefined}
+      </PageView>
+      {win && <ControlBar bot={bot} win={win} />}
     </aside>
+  )
+}
+
+/**
+ * A small live view of a window that floats over the chat while the bot browses, from where it can
+ * be docked beside the chat, made to fill the window, or closed. It is only watched; taking control
+ * docks it first.
+ */
+export function BrowserPip({ bot, threadId, dock, close }: { bot: Bot; threadId: string; dock: (full: boolean, take?: string) => void; close: () => void }) {
+  const browser = useStore((s) => s.browsers[bot.id])
+  const threads = useStore((s) => s.threads)
+  const win = (browser?.windows ?? []).find((w) => w.threadId === threadId)
+  if (!browser?.running || !win) return null
+  const tab = browser.tabs.find((t) => t.id === win.activeTab)
+  const name = sessionName(threads, threadId)
+  return (
+    <div className="pip" role="region" aria-label={`${bot.name}’s browser, ${name}`}>
+      <div className="pip-head">
+        <span className="pip-title" title={tab?.url}>{name}{tab && tab.url !== 'about:blank' ? ` · ${tab.title || hostOf(tab.url)}` : ''}</span>
+        <button className="icon" title="Beside the chat" aria-label="Dock beside the chat" onClick={() => dock(false)}><Icon name="dock" size={15} /></button>
+        <button className="icon" title="Full screen" aria-label="Full screen" onClick={() => dock(true)}><Icon name="expand" size={14} /></button>
+        <button className="icon" title="Close" aria-label="Close picture in picture" onClick={close}><Icon name="x" size={14} /></button>
+      </div>
+      <PageView bot={bot} tab={tab} drive={false} onPress={() => dock(false)} />
+      {win.request && driverOf(win) !== 'you' && (
+        <div className="pip-ask">
+          <span className="grow"><strong>{bot.name} needs you:</strong> {win.request}</span>
+          <button className="primary" onClick={() => dock(false, win.id)}>Take control</button>
+        </div>
+      )}
+    </div>
   )
 }

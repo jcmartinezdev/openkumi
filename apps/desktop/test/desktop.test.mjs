@@ -241,14 +241,19 @@ test('a reply is drawn as it is written, and a bot’s browser is drawn and driv
 
   // The bot's browser: its pictures go from the server to the worker and onto the canvas.
   await win.getByRole('button', { name: 'Toggle browser' }).click()
-  await win.waitForFunction(() => getComputedStyle(document.querySelector('.view canvas')).visibility === 'visible', null, { timeout: 60_000 })
+  await win.waitForFunction(() => getComputedStyle(document.querySelector('.pane .view canvas')).visibility === 'visible', null, { timeout: 60_000 })
+  // It is only watched until the owner takes control of it.
+  assert.equal(await win.locator('.address').getAttribute('readonly'), '')
+  assert.match(await win.locator('.control-bar').innerText(), /Assistant has control\.\s+Take control/)
+  await win.getByRole('button', { name: 'Take control' }).click()
+  await win.locator('.control-bar.you').waitFor()
   // A page that is one big red link.
   const page = `data:text/html,<body style="margin:0"><a href="about:blank" style="display:block;height:100vh;background:rgb(210,40,60)"></a>`
   await win.locator('.address').fill(page)
   await win.keyboard.press('Enter')
   const middle = () =>
     win.evaluate(async () => {
-      const bitmap = await createImageBitmap(document.querySelector('.view canvas'))
+      const bitmap = await createImageBitmap(document.querySelector('.pane .view canvas'))
       const copy = new OffscreenCanvas(bitmap.width, bitmap.height).getContext('2d')
       copy.drawImage(bitmap, 0, 0)
       return [...copy.getImageData(bitmap.width >> 1, bitmap.height >> 1, 1, 1).data.slice(0, 3)]
@@ -257,9 +262,75 @@ test('a reply is drawn as it is written, and a bot’s browser is drawn and driv
   await until(async () => near(await middle()), 20_000)
 
   // And what is done to the canvas reaches the page.
-  await win.locator('.view canvas').click()
+  await win.locator('.pane .view canvas').click()
   await until(async () => (await state()).browsers[bot.id]?.tabs.every((t) => t.url === 'about:blank'), 15_000)
+  // Handing back gives the window to the bot again.
+  await win.getByRole('button', { name: 'Hand back' }).click()
+  await until(async () => (await state()).browsers[bot.id].windows.every((w) => !w.controller), 10_000)
+  await win.locator('.address[readonly]').waitFor()
 
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('a window the bot starts browsing in floats over the chat, docks beside it or fills the window, and is where the bot asks for help', async () => {
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
+  const surfer = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Surfer', provider: 'mock' })
+  await win.locator('.sidebar .row.bot', { hasText: 'Surfer' }).click()
+  await win.locator('.empty h1', { hasText: 'Surfer' }).waitFor()
+  const say = async (text) => {
+    await win.locator('.composer textarea').fill(text)
+    await win.keyboard.press('Meta+Enter')
+  }
+  const page = (title) => `data:text/html,<title>${title}</title><body style='background:rgb(40,120,210)'>`
+
+  // The bot starts browsing: its window floats over the chat, small, and can only be watched there.
+  await say(`!tool browser_navigate {"url":"${page('Hello')}"}`)
+  await win.locator('.pip').waitFor({ timeout: 60_000 })
+  await until(async () => /^Conversation · Hello$/.test(await win.locator('.pip-title').innerText()), 10_000)
+  assert.equal(await win.locator('.pane').count(), 0)
+
+  // Beside the chat, then filling the window, then back to floating.
+  await win.getByRole('button', { name: 'Dock beside the chat' }).click()
+  await win.locator('.chat.with-pane .pane').waitFor()
+  // The page is drawn there at once, though it is not changing (Chrome only sends a picture when it does).
+  await win.waitForFunction(() => getComputedStyle(document.querySelector('.pane .view canvas')).visibility === 'visible', null, { timeout: 15_000 })
+  assert.equal(await win.locator('.pip').count(), 0)
+  await win.locator('.pane').getByRole('button', { name: 'Full screen' }).click()
+  await win.locator('.pane.full').waitFor()
+  assert.equal(await win.locator('.chat.with-pane').count(), 0, 'the chat has the room to itself underneath')
+  await win.keyboard.press('Escape')
+  await win.locator('.chat.with-pane .pane:not(.full)').waitFor()
+  await win.getByRole('button', { name: 'Picture in picture' }).click()
+  await win.locator('.pip').waitFor()
+  assert.equal(await win.locator('.pane').count(), 0)
+  // Closed, it stays closed while the bot goes on browsing there.
+  await win.getByRole('button', { name: 'Close picture in picture' }).click()
+  await say(`!tool browser_navigate {"url":"${page('Again')}"}`)
+  await win.locator('.msg.assistant', { hasText: 'Page: Again' }).waitFor({ timeout: 20_000 })
+  assert.equal(await win.locator('.pip').count(), 0)
+
+  // But when the bot asks for help there, it comes back with the request; taking control docks it.
+  await say('!tool browser_ask_user {"request":"Sign in to Example"}')
+  await win.locator('.pip-ask', { hasText: 'Surfer needs you: Sign in to Example' }).waitFor({ timeout: 20_000 })
+  await win.locator('.pip-ask').getByRole('button', { name: 'Take control' }).click()
+  await win.locator('.pane .control-bar.you', { hasText: 'Sign in to Example, then hand back to Surfer.' }).waitFor()
+  assert.equal(await win.locator('.address').getAttribute('readonly'), null)
+  await win.getByRole('button', { name: 'Hand back' }).click()
+  await win.locator('.msg.assistant', { hasText: 'Tool result: The user handed the browser back.' }).waitFor({ timeout: 20_000 })
+
+  // A subagent browses in a window of its own, which floats while the conversation's is docked.
+  await say(`!tool spawn_subagent {"name":"Peeker","task":"!tool browser_navigate {\\"url\\":\\"${page('Theirs')}\\"}"}`)
+  await win.locator('.pip-title', { hasText: 'Peeker' }).waitFor({ timeout: 30_000 })
+  const windows = (await state()).browsers[surfer.id].windows
+  assert.equal(new Set(windows.map((w) => w.threadId)).size, 2, 'a window each')
+  await win.locator('.pip').getByRole('button', { name: 'Full screen' }).click()
+  await win.locator('.pane.full .pane-session', { hasText: 'Peeker' }).waitFor()
+
+  // The tests after this one expect the bots they began with.
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${surfer.id}`)
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })

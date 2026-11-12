@@ -1,6 +1,7 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { BrowserPane } from './BrowserPane'
+import { browsingThread, control, windowOf } from '@openbot/client/browser'
+import { BrowserPane, BrowserPip } from './BrowserPane'
 import { Chat } from './Chat'
 import { desktop, useDesktop } from './desktop'
 import { Gate } from './Gate'
@@ -13,6 +14,12 @@ import { Tasks } from './Tasks'
 import { type Route, mainThread, navigate, openSettings, useRoute, useStore } from './store'
 
 export type Modal = { kind: 'new-bot' } | null
+
+/** How a bot's browser is showing: beside the chat or filling the window, and whose window (null: the chat's own). */
+interface PaneState {
+  full: boolean
+  threadId: string | null
+}
 
 function savedPaneWidth(): number {
   try {
@@ -28,7 +35,7 @@ export function App() {
   const lastChat = useRef<Route>(current)
   if (!current.settings) lastChat.current = current
   const route = current.settings ? lastChat.current : current
-  const autoOpenBrowser = usePrefs().autoOpenBrowser
+  const autoPip = usePrefs().autoOpenBrowser
   const bots = useStore((s) => s.bots)
   const threads = useStore((s) => s.threads)
   const loaded = useStore((s) => s.loaded)
@@ -43,8 +50,12 @@ export function App() {
     if (stale) void desktop.retry().catch(() => {})
   }, [stale])
   const browsers = useStore((s) => s.browsers)
-  // Which bots have their browser pane showing. Each bot's pane is independent.
-  const [paneOpen, setPaneOpen] = useState<Record<string, boolean>>({})
+  // Which bots have their browser pane showing, and how. Each bot's pane is independent.
+  const [panes, setPanes] = useState<Record<string, PaneState | undefined>>({})
+  // The thread whose window floats over each bot's chat, in picture in picture.
+  const [pips, setPips] = useState<Record<string, string | undefined>>({})
+  // Threads whose floating window was closed: they stay closed until the bot asks for help in them.
+  const dismissed = useRef(new Set<string>())
   const [paneWidth, setPaneWidth] = useState(savedPaneWidth)
   // The bot whose pane the user just opened by hand; only that one starts its browser by itself.
   const [autoStart, setAutoStart] = useState<string | null>(null)
@@ -63,29 +74,62 @@ export function App() {
     if (loaded && !current.settings && !route.tasks && !bot && bots.length) navigate(bots[0].id)
   }, [loaded, bot, bots, current.settings, route.tasks])
 
-  // Reveal a bot's browser the moment that bot starts using it.
+  const pane = bot && !route.tasks ? panes[bot.id] : undefined
+  // The pane shows the window of the thread the chat shows, unless one was docked from picture in picture.
+  const chatBrowsing = browsingThread(threads, thread)?.id
+  const paneThread = pane?.threadId ?? chatBrowsing
+
+  // A window docked from picture in picture gives way to the chat's own when another chat is opened.
+  useEffect(() => {
+    if (bot) setPanes((all) => (all[bot.id]?.threadId ? { ...all, [bot.id]: { ...all[bot.id]!, threadId: null } } : all))
+  }, [thread?.id])
+
+  // A window the bot starts using floats over the chat, small; one where it asks for help always does.
   const previous = useRef<typeof browsers | null>(null)
   useEffect(() => {
     // Another environment starts from its own baseline.
     if (!loaded) return void (previous.current = null)
-    // Browsers already running when the environment loads are the baseline, not a reason to pop the pane open.
-    if (!previous.current) return void (previous.current = browsers)
+    // What windows were doing when the environment loaded is the baseline, not a reason to show one.
     const before = previous.current
-    const started = Object.keys(browsers).filter((id) => browsers[id].running && !before[id]?.running)
     previous.current = browsers
-    if (started.length && autoOpenBrowser) setPaneOpen((open) => ({ ...open, ...Object.fromEntries(started.map((id) => [id, true])) }))
+    if (!before) return
+    for (const [botId, browser] of Object.entries(browsers)) {
+      for (const win of browser.windows ?? []) {
+        if (!win.threadId) continue
+        const was = before[botId]?.windows?.find((w) => w.id === win.id)
+        const asked = !!win.request && win.request !== was?.request
+        const used = win.usedAt > (was?.usedAt ?? 0)
+        // One showing beside the chat or filling the window is in view already.
+        const docked = (id: string | undefined) => !!pane && botId === bot?.id && id === paneThread
+        if (docked(win.threadId)) continue
+        if (asked) dismissed.current.delete(win.threadId)
+        else if (!used || !autoPip || dismissed.current.has(win.threadId)) continue
+        const thread = win.threadId
+        // One that is floating already stays, unless the bot asks for help in another.
+        setPips((all) => (all[botId] && !asked && windowOf(browser, all[botId]) && !docked(all[botId]) ? all : { ...all, [botId]: thread }))
+      }
+    }
   }, [browsers, loaded])
 
   // Nothing to show: no environment is chosen, the one chosen has not answered, or it has stopped
   // accepting the access code, in which case nothing on screen would work any more.
   if (!loaded || refused) return <Gate />
 
-  const showPane = !!bot && !route.tasks && !!paneOpen[bot.id]
-  const setPane = (botId: string, open: boolean) => setPaneOpen((all) => ({ ...all, [botId]: open }))
+  const showPane = !!pane
+  const setPane = (botId: string, next: PaneState | undefined) => setPanes((all) => ({ ...all, [botId]: next }))
   const toggleBrowser = () => {
     if (!bot) return
-    setPane(bot.id, !showPane)
+    setPane(bot.id, showPane ? undefined : { full: false, threadId: null })
     setAutoStart(showPane ? null : bot.id)
+  }
+  const pipThread = bot && !route.tasks ? pips[bot.id] : undefined
+  const showPip = !!bot && !!pipThread && !(pane && paneThread === pipThread) && !!windowOf(browsers[bot.id], pipThread)
+  /** Moves the floating window into the pane, optionally taking control of it on the way. */
+  const dock = (full: boolean, take?: string) => {
+    if (!bot || !pipThread) return
+    setPane(bot.id, { full, threadId: pipThread === chatBrowsing ? null : pipThread })
+    setPips((all) => ({ ...all, [bot.id]: undefined }))
+    if (take) control(bot.id, take, 'take')
   }
 
   return (
@@ -93,8 +137,8 @@ export function App() {
       <Sidebar bot={route.tasks ? undefined : bot} thread={route.tasks ? undefined : thread} tasksOpen={!!route.tasks} openModal={(m) => (setNavOpen(false), setModal(m))} open={navOpen} close={() => setNavOpen(false)} />
       {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
       <main
-        className={`chat ${showPane ? 'with-pane' : ''}`}
-        style={showPane && paneWidth ? ({ '--pane-width': `${paneWidth}px` } as React.CSSProperties) : undefined}
+        className={`chat ${pane && !pane.full ? 'with-pane' : ''}`}
+        style={pane && !pane.full && paneWidth ? ({ '--pane-width': `${paneWidth}px` } as React.CSSProperties) : undefined}
       >
         {route.tasks ? (
           <Tasks path={route.tasks} openNav={() => setNavOpen(true)} />
@@ -111,7 +155,38 @@ export function App() {
               openNav={() => setNavOpen(true)}
             />
             {/* Outside the keyed Chat so switching chats does not reload the browser view. */}
-            {showPane && <BrowserPane key={`browser:${bot.id}`} bot={bot} thread={thread} close={() => setPane(bot.id, false)} setWidth={setPaneWidth} autoStart={autoStart === bot.id} clearAutoStart={() => setAutoStart(null)} />}
+            {pane && (
+              <BrowserPane
+                key={`browser:${bot.id}`}
+                bot={bot}
+                threadId={paneThread}
+                other={paneThread !== chatBrowsing}
+                full={pane.full}
+                setFull={(full) => setPane(bot.id, { ...pane, full })}
+                popOut={() => {
+                  if (!paneThread) return
+                  dismissed.current.delete(paneThread)
+                  setPips((all) => ({ ...all, [bot.id]: paneThread }))
+                  setPane(bot.id, undefined)
+                }}
+                close={() => setPane(bot.id, undefined)}
+                setWidth={setPaneWidth}
+                autoStart={autoStart === bot.id}
+                clearAutoStart={() => setAutoStart(null)}
+              />
+            )}
+            {showPip && (
+              <BrowserPip
+                key={`pip:${pipThread}`}
+                bot={bot}
+                threadId={pipThread}
+                dock={dock}
+                close={() => {
+                  dismissed.current.add(pipThread)
+                  setPips((all) => ({ ...all, [bot.id]: undefined }))
+                }}
+              />
+            )}
           </>
         ) : (
           <div className="parts">

@@ -9,6 +9,7 @@ import { describe } from '@openbot/client/steps'
 import { api, loadThread, mainThread, recentSubagents, useStore } from '@openbot/client/store'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
+import { BrowserPip } from '../../src/BrowserPip'
 import { ModelChip } from '../../src/ModelChip'
 import { PageSheet, PageView, Sheet } from '../../src/PageView'
 import { useTextScale } from '../../src/prefs'
@@ -230,6 +231,13 @@ export default function Chat() {
           onLayout={() => following.current && list.current?.scrollToEnd({ animated: false })}
         />
         </FileLinks.Provider>
+      )}
+      {/* The bot's browser, small, while one of its threads browses. */}
+      {bot && (
+        <BrowserPip
+          botId={bot.id}
+          open={(threadId, take) => router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId, ...(take ? { take: '1' } : {}) } })}
+        />
       )}
       {file && /\.html?$/i.test(file.path) && <PageSheet title={fileName} html={file.content} close={() => setFile(null)} />}
       {file && !/\.html?$/i.test(file.path) && (
