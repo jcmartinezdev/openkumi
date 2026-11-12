@@ -291,6 +291,7 @@ test('bots can be created from chat', async () => {
   assert.equal(made.emoji, '🔎')
   assert.equal(made.provider, 'mock', 'inherits the creating bot\'s provider')
   assert.equal(made.id, 'researcher', 'the folder is named after the bot')
+  assert.equal(made.description, 'Dig deep.', 'without a description, the first sentence of what it is for stands in')
   assert.match(fs.readFileSync(path.join(home, 'bots', 'researcher', 'workspace', 'AGENTS.md'), 'utf8'), /Dig deep\./, 'the instructions start its own file')
 })
 
@@ -308,6 +309,81 @@ test('a bot is a folder: bot.md holds the owner\'s settings and rules', async ()
   const { bots } = await api('GET', '/api/state')
   assert.equal(bots.find((b) => b.id === bot.id).name, 'Tester: two')
   await api('PATCH', `/api/bots/${bot.id}`, { name: 'Tester' })
+})
+
+test('principles: every bot is told them first; the owner changes them, and the ones Open Bot comes with come back', async () => {
+  const { principles } = await api('GET', '/api/state')
+  assert.equal(principles.custom, false)
+  assert.equal(principles.text, principles.default)
+  assert.match(principles.text, /\*\*Work as a team\.\*\*/)
+  const file = path.join(home, 'principles.md')
+
+  let prompt = await told()
+  assert.ok(prompt.includes(`# Principles\n`) && prompt.includes(principles.default))
+  assert.ok(prompt.indexOf('# Principles') < prompt.indexOf('# Working in Open Bot'), 'they come before anything else')
+
+  // The owner's own are kept in a file of their own, and told to every bot from the next turn.
+  const mine = await api('PUT', '/api/principles', { text: '  Always answer in French.\r\n' })
+  assert.deepEqual([mine.custom, mine.text], [true, 'Always answer in French.'])
+  assert.equal(fs.readFileSync(file, 'utf8'), 'Always answer in French.\n')
+  prompt = await told('!system', 'assistant')
+  assert.ok(prompt.includes('Always answer in French.') && !prompt.includes('Work as a team'))
+
+  // The file is the truth, as bot.md is; with nothing in it, bots are told no principles.
+  fs.writeFileSync(file, 'Edited by hand.')
+  assert.match(await told(), /# Principles\n[\s\S]*Edited by hand\./)
+  await api('PUT', '/api/principles', { text: '' })
+  assert.doesNotMatch(await told(), /# Principles/)
+
+  await assert.rejects(api('PUT', '/api/principles', { text: 5 }), /must be text/)
+  // Back to the ones Open Bot comes with, which are not written out, so that improvements to them reach everyone.
+  assert.equal((await api('PUT', '/api/principles', { text: null })).custom, false)
+  assert.ok(!fs.existsSync(file))
+  assert.equal((await api('PUT', '/api/principles', { text: principles.default })).custom, false, 'the same text as the default is the default')
+  assert.ok((await told()).includes(principles.default))
+})
+
+test('the other bots: each bot is told who the others are and what each is for, and hands one a task as a subagent', async () => {
+  const travel = await api('POST', '/api/bots', { name: 'Travel', emoji: '🧳', provider: 'mock', description: 'Plans trips\n and books   travel.' })
+  assert.equal(travel.description, 'Plans trips and books travel.', 'a description is one line')
+  assert.match(fs.readFileSync(path.join(home, 'bots', 'travel', 'bot.md'), 'utf8'), /\ndescription: Plans trips and books travel\.\n/)
+
+  const prompt = await told()
+  assert.match(prompt, /# The other bots\nYou are one of the user's bots\. These are the others, and what each is for:\n/)
+  assert.match(prompt, /\n- 🧳 Travel \(bot_id: travel\): Plans trips and books travel\.\n/)
+  assert.match(prompt, /\n- 🤖 Assistant \(bot_id: assistant\), the main assistant: Everyday questions and tasks/)
+  assert.ok(!prompt.includes('(bot_id: tester)'), 'a bot is not listed among the others')
+  assert.match(prompt, /To hand a task to one of them, call spawn_subagent with its bot_id\./)
+  assert.match(await told('!system', 'assistant'), /# The other bots\nYou are the main assistant: the user comes to you first/)
+  // What a bot may use is listed with it, and a bot with no description is said to have none.
+  await api('PUT', `/api/bots/travel/skills/deep-research`, { on: true })
+  await api('PATCH', '/api/bots/travel', { description: '' })
+  assert.match(await told(), /- 🧳 Travel \(bot_id: travel\): \(no description yet\) Uses skills: deep-research\.\n/)
+  await api('PATCH', '/api/bots/travel', { description: 'Plans trips and books travel.' })
+
+  // Handed a task, the other bot does it as itself, and knows who handed it over.
+  const id = await fresh()
+  await api('POST', `/api/threads/${id}/messages`, { text: '!tool spawn_subagent {"name":"Plan a trip","task":"!system","bot_id":"travel"}' })
+  const child = await until(async () => (await api('GET', '/api/state')).threads.find((t) => t.parentId === id && t.kind === 'subagent'))
+  assert.equal(child.botId, 'travel')
+  const handed = lastText(await settle(child.id))
+  // The scripted model would now read the whole report back, a word at a time; that is not what is tested here.
+  await api('POST', `/api/threads/${id}/stop`)
+  await settle(id)
+  assert.match(handed, /^You are Travel,/)
+  assert.match(handed, /# You are running as a subagent\nTester, another of the user's bots, handed you the task in the first message\./)
+  assert.match(handed, /\n- \S+ Tester \(bot_id: tester\): /)
+
+  // Where no subagent can be started, a bot is told it cannot hand tasks over.
+  await api('PATCH', '/api/settings', { maxDepth: 0 })
+  assert.match(await told(), /You cannot hand tasks to them from here\./)
+  await api('PATCH', '/api/settings', { maxDepth: 2 })
+
+  // The owner can read all a bot is told.
+  const { text } = await api('GET', `/api/bots/${bot.id}/instructions`)
+  assert.match(text, /^You are Tester,[\s\S]*# Principles[\s\S]*# The other bots[\s\S]*# Your instructions \(AGENTS\.md\)/)
+  await api('DELETE', '/api/bots/travel')
+  assert.ok(!(await told()).includes('Travel'))
 })
 
 test('file tools stay inside the workspace', async () => {

@@ -88,6 +88,13 @@ function General({ bot }: { bot: Bot }) {
       <Section title="Identity">
         <Row id="bot-name" title="Name" control={<Field label="Name" value={bot.name} onCommit={(name) => api('PATCH', `/api/bots/${bot.id}`, { name })} />} />
         <Row title="Avatar" description="An emoji shown beside the bot’s name." control={<Field label="Avatar emoji" className="set-input emoji" value={bot.emoji} onCommit={(emoji) => api('PATCH', `/api/bots/${bot.id}`, { emoji })} />} />
+        <Row
+          id="bot-description"
+          title="What it is for"
+          description={<>One line. The other bots are told it, so they know when to hand this bot work; the bot cannot change it. What every bot is told is under <a href="#/settings/principles">Principles</a>.</>}
+        >
+          <Field label="What it is for" className="set-input set-line" value={bot.description} placeholder="For example: plans trips and books travel." onCommit={(description) => api('PATCH', `/api/bots/${bot.id}`, { description })} />
+        </Row>
       </Section>
 
       <Section title="Rules">

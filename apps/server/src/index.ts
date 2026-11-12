@@ -33,6 +33,7 @@ if (!listBots().length) {
   await createBot({
     name: 'Assistant',
     emoji: '🤖',
+    description: 'Everyday questions and tasks, and the first stop for anything new.',
     purpose: 'A capable general-purpose assistant. Concise, and researches before answering when facts matter.',
   })
 }

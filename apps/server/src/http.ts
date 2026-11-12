@@ -16,6 +16,7 @@ import { beginPairing, computerWith, finishPairing, listComputers, newPairingCod
 import * as mcp from './connections.ts'
 import { installPlugin, installedPlugins, listPlugins, removePlugin, saveSetup } from './plugins.ts'
 import * as db from './db.ts'
+import { principles, setPrinciples } from './principles.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
 import { listSkills, setSkill } from './skills.ts'
@@ -148,11 +149,14 @@ route('GET', '/api/state', (): AppState => ({
   home: HOME_LABEL,
   settings: settings(),
   defaults: DEFAULTS,
+  principles: principles(),
   about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: tasks.TIME_ZONE },
 }))
 
 // ---- settings for the whole app
 route('PATCH', '/api/settings', (_, body) => updateSettings(body))
+// What every bot is told first. Null puts back the ones Open Bot comes with.
+route('PUT', '/api/principles', (_, body) => checked(() => setPrinciples(body.text)))
 // How other computers get in: whether they can reach this one, where, and which ones are paired.
 route('GET', '/api/access', () => ({ on: lanOn(), port: PORT, addresses: addresses(), computers: listComputers() }))
 // A code for pairing one more computer. It works once, for a few minutes.
@@ -183,6 +187,8 @@ route('DELETE', '/api/threads', () => {
 // ---- bots
 route('POST', '/api/bots', (_, body) => createBot(body))
 route('PATCH', '/api/bots/:id', ([id], body) => updateBot(needBot(id).id, body))
+// Everything the bot is told in its conversation, for its owner to read.
+route('GET', '/api/bots/:id/instructions', ([id]) => ({ text: agent.systemPrompt(needBot(id)) }))
 route('DELETE', '/api/bots/:id', async ([id]) => {
   needBot(id)
   for (const t of db.listThreads().filter((t) => t.botId === id)) agent.stop(t.id)

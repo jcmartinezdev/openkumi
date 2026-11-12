@@ -7,6 +7,7 @@ import qrcode from 'qrcode-generator'
 import { pairingLink } from '@openbot/client/pair'
 import { BotPage, type BotTab } from './BotPage'
 import { PluginList, PluginPage } from './Plugins'
+import { Principles } from './Principles'
 import { Providers } from './Providers'
 import { desktop, reason, useDesktop } from './desktop'
 import { Icon } from './Icon'
@@ -14,7 +15,7 @@ import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
 import { api, closeSettings, openSettings, refreshSkills, saveSettings, useStore } from './store'
 
-type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'browser' | 'plugins' | 'skills' | 'connections' | 'environments' | 'advanced' | 'about'
+type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'principles' | 'browser' | 'plugins' | 'skills' | 'connections' | 'environments' | 'advanced' | 'about'
 type IconName = Parameters<typeof Icon>[0]['name']
 
 const PAGES: Record<PageId, { label: string; icon: IconName }> = {
@@ -23,6 +24,7 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   chat: { label: 'Chat', icon: 'message' },
   providers: { label: 'Providers', icon: 'cpu' },
   bots: { label: 'Bots', icon: 'bot' },
+  principles: { label: 'Principles', icon: 'compass' },
   browser: { label: 'Browser', icon: 'globe' },
   plugins: { label: 'Plugins', icon: 'download' },
   skills: { label: 'Skills', icon: 'book' },
@@ -34,7 +36,7 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
 
 const NAV: { heading: string | null; pages: PageId[] }[] = [
   { heading: null, pages: ['general', 'appearance', 'chat'] },
-  { heading: 'Agents', pages: ['providers', 'bots', 'browser'] },
+  { heading: 'Agents', pages: ['providers', 'bots', 'principles', 'browser'] },
   { heading: 'Tools', pages: ['plugins', 'skills', 'connections'] },
   { heading: 'Network', pages: ['environments'] },
   { heading: null, pages: ['advanced', 'about'] },
@@ -58,6 +60,9 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'providers', id: 'provider-claude-code', sub: 'claude-code', title: 'Claude Code', also: 'anthropic claude plan program path sign in' },
   { page: 'providers', id: 'provider-openai-compatible', sub: 'openai-compatible', title: 'Other models', also: 'api key base url ollama openrouter' },
   { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot' },
+  { page: 'principles', id: 'principles', title: 'Principles for every bot', also: 'master prompt system instructions behaviour behavior rules all bots' },
+  { page: 'principles', id: 'team', title: 'What each bot is for', also: 'description team hand over handoff delegate other bots' },
+  { page: 'principles', id: 'told', title: 'What a bot is told', also: 'system prompt instructions preview read' },
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
   { page: 'browser', id: 'browser-panel', title: 'Open the panel when a bot starts browsing' },
   { page: 'browser', id: 'browsers-running', title: 'Browsers running now', also: 'stop' },
@@ -211,6 +216,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           {page === 'appearance' && <Appearance />}
           {page === 'chat' && <ChatPage />}
           {page === 'providers' && <Providers selected={path[1]} />}
+          {page === 'principles' && <Principles />}
           {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={(['bot', 'skills', 'connections', 'files'].includes(path[2]) ? path[2] : 'bot') as BotTab} file={path.slice(3).join('/') || undefined} /> : <Bots newBot={newBot} />)}
           {page === 'browser' && <BrowserPage />}
           {page === 'plugins' && (path[1] ? <PluginPage id={path[1]} /> : <PluginList />)}
@@ -324,7 +330,7 @@ function Bots({ newBot }: { newBot: () => void }) {
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
   return (
     <Page>
-      <p className="set-intro">Each bot is a folder with its own instructions, memory, files and browser. Open one to change its rules, model, skills and connections.</p>
+      <p className="set-intro">Each bot is a folder with its own instructions, memory, files and browser. Open one to change its rules, model, skills and connections. What all of them are told is under <a href="#/settings/principles">Principles</a>.</p>
       <Section title="Bots" action={<button onClick={newBot}><Icon name="plus" size={14} /> New bot</button>}>
         {bots.map((bot: Bot) => (
           <a key={bot.id} className="set-row set-link" id={bot.id === bots[0]?.id ? 'bots' : undefined} href={`#/settings/bots/${encodeURIComponent(bot.id)}`}>
@@ -332,6 +338,7 @@ function Bots({ newBot }: { newBot: () => void }) {
               <span className="avatar">{bot.emoji}</span>
               <div className="set-row-text">
                 <h3>{bot.name}{bot.id === bots[0]?.id && <span className="pill" title="The first bot. It can schedule, change and delete tasks for every bot.">Main assistant</span>}</h3>
+                {bot.description && <p>{bot.description}</p>}
                 <p>Runs on {providers.find((p) => p.id === bot.provider)?.name ?? bot.provider} · {count(bot.skills.length, 'skill')} · {count(bot.connections.length, 'connection')}</p>
               </div>
               <Icon name="chevron" size={14} />

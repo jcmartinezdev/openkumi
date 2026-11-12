@@ -53,6 +53,7 @@ const botSummary = (b: Bot) => ({
   id: b.id,
   name: b.name,
   emoji: b.emoji,
+  description: b.description,
   provider: b.provider,
   model: b.model || '(provider default)',
 })
@@ -72,14 +73,15 @@ const botTools: Tool[] = [
     parameters: params(
       {
         name: str('Short display name'),
+        description: str('One line saying what the bot is for, e.g. "Plans trips and books travel". Every other bot is told it, to know when to hand it work.'),
         instructions: str('What the bot is for and how it should behave. This starts its own instructions file, which it maintains itself from then on.'),
         emoji: str('A single emoji used as the avatar'),
         model: str('Model id. Omit to use the provider default.'),
       },
-      ['name', 'instructions'],
+      ['name', 'description', 'instructions'],
     ),
     run: async (a, ctx) => {
-      const bot = await createBot({ name: a.name, purpose: a.instructions, emoji: a.emoji, model: a.model, provider: ctx.bot.provider })
+      const bot = await createBot({ name: a.name, description: a.description, purpose: a.instructions, emoji: a.emoji, model: a.model, provider: ctx.bot.provider })
       return `Created bot ${JSON.stringify(botSummary(bot))}`
     },
   },
@@ -221,12 +223,13 @@ const spawnTool: Tool = {
   description:
     'Start a subagent that works on a task in the background, in parallel with you. Returns immediately with its id. ' +
     'The subagent has the same tools as you but none of this conversation, so the task must be fully self-contained. ' +
-    'Pass bot_id to delegate to a different bot (its instructions, workspace and browser logins apply).',
+    'Pass bot_id to hand the task to another of the user\'s bots instead: it does it as itself, with its own ' +
+    'instructions, files, browser logins and connections.',
   parameters: params(
     {
       name: str('Short label shown in the UI, e.g. "Compare prices"'),
       task: str('Complete, self-contained instructions, including what to report back'),
-      bot_id: str('Run as this bot instead of yourself'),
+      bot_id: str('Hand the task to this bot instead of doing it yourself'),
       model: str('Model id override for this subagent'),
     },
     ['name', 'task'],

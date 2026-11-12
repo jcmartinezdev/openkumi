@@ -28,6 +28,11 @@ export interface Bot {
   id: string
   name: string
   emoji: string
+  /**
+   * What the bot is for, in a line. The other bots are told it, so they know when to hand it work.
+   * The owner's, like the rules: a bot cannot change how the others see it.
+   */
+  description: string
   /** Rules from the owner. The bot reads them on every turn and cannot change them. */
   rules: string
   provider: string
@@ -312,6 +317,7 @@ export type ServerEvent =
   | { type: 'stream.delta'; threadId: string; kind: 'text' | 'reasoning'; delta: string }
   | { type: 'providers'; providers: ProviderInfo[] }
   | { type: 'settings'; settings: Settings }
+  | { type: 'principles'; principles: Principles }
   | { type: 'skills'; skills: Skill[] }
   | { type: 'connections'; connections: Connection[] }
   | { type: 'plugins'; plugins: Plugin[] }
@@ -354,5 +360,18 @@ export interface AppState {
   settings: Settings
   /** What every setting is when nothing has been changed, for "reset to default". */
   defaults: Settings
+  principles: Principles
   about: About
+}
+
+/**
+ * What every bot is told before anything else: how to behave, and how to work with the other bots.
+ * Set by the owner for all bots at once; a bot cannot change them.
+ */
+export interface Principles {
+  text: string
+  /** The owner has written their own, instead of the ones Open Bot comes with. */
+  custom: boolean
+  /** The ones Open Bot comes with, for "restore default". */
+  default: string
 }

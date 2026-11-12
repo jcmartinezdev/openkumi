@@ -66,7 +66,7 @@ test('bots stored in the database become folders, keeping their id, logins and c
       assert.deepEqual([state.settings.defaultProvider, state.settings.disabledProviders], ['', ['mock']])
       const { skills: _, connections: __, plugins: ___, ...bot } = state.bots[0]
       assert.deepEqual(bot, {
-        id: 'b_Old-1_x', name: 'Helper: v2', emoji: '🦊', rules: '', provider: 'mock', model: 'mock-1', effort: 'low',
+        id: 'b_Old-1_x', name: 'Helper: v2', emoji: '🦊', description: '', rules: '', provider: 'mock', model: 'mock-1', effort: 'low',
         webSearch: false, headless: false, createdAt: 1700000000000,
       })
       assert.deepEqual(state.threads.map((t) => [t.id, t.botId, t.title]), [['t_1', 'b_Old-1_x', 'An old chat']])
