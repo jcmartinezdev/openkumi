@@ -12,7 +12,7 @@ import { principles } from './principles.ts'
 import { getProvider } from './providers/index.ts'
 import type { ModelEvent } from './providers/types.ts'
 import { settings } from './settings.ts'
-import { skillIndex } from './skills.ts'
+import { superpowerIndex, superpowerNames } from './superpowers.ts'
 import { TIME_ZONE, finishRun, isMain } from './tasks.ts'
 import { openToolEndpoint } from './tool-endpoint.ts'
 import { runTool, toolsFor } from './tools.ts'
@@ -48,10 +48,10 @@ function team(bot: Bot, thread: Thread): string | null {
   if (!others.length) return null
   const main = bots[0]
   const line = (b: Bot) => {
-    const uses = [b.skills.length && `skills: ${b.skills.join(', ')}`, b.connections.length && `connections: ${b.connections.join(', ')}`].filter(Boolean)
+    const powers = superpowerNames(b.id)
     return (
       `- ${b.emoji} ${b.name} (bot_id: ${b.id})${b.id === main.id ? ', the main assistant' : ''}: ` +
-      `${b.description || '(no description yet)'}${uses.length ? ` Uses ${uses.join('; ')}.` : ''}`
+      `${b.description || '(no description yet)'}${powers.length ? ` Superpowers: ${powers.join(', ')}.` : ''}`
     )
   }
   const canHandOver = depthOf(thread) < settings().maxDepth
@@ -63,14 +63,14 @@ function team(bot: Bot, thread: Thread): string | null {
     `You are one of the user's bots. These are the others, and what each is for:\n${others.map(line).join('\n')}\n` +
     (canHandOver
       ? 'To hand a task to one of them, call spawn_subagent with its bot_id. It does the task as itself, with its own ' +
-        'instructions, files, logins and connections, and reports back to you; it sees nothing of this conversation, so ' +
+        'instructions, files, logins and superpowers, and reports back to you; it sees nothing of this conversation, so ' +
         'give it everything it needs. When the user will want to go on working with that bot, tell them to talk to it directly.'
       : 'You cannot hand tasks to them from here. If part of your task belongs to one of them, say so in your final message.')
   )
 }
 
 /** The system prompt, rebuilt from the bot's folder on every step so its own edits take effect at once. */
-function instructions(bot: Bot, thread: Thread, connectionNotes: string[]): string {
+function instructions(bot: Bot, thread: Thread, problems: Record<string, string>): string {
   const parts = [
     `You are ${bot.name}, an AI bot running locally on the user's own computer inside Open Bot. ` +
       `Today is ${new Date().toDateString()}.`,
@@ -143,15 +143,13 @@ function instructions(bot: Bot, thread: Thread, connectionNotes: string[]): stri
   parts.push(`# Your instructions (AGENTS.md)\n${agents || '(AGENTS.md is empty. Write your instructions there as you learn what the user wants.)'}`)
   const memory = memoryIndex(bot.id)
   parts.push(`# Your notes (memory/)\n${memory.length ? memory.join('\n') : '(none yet)'}`)
-  const skills = skillIndex(bot.id)
-  if (skills.length) {
+  const powers = superpowerIndex(bot.id, problems)
+  if (powers.length) {
     parts.push(
-      '# Skills\nThe user has given you these skills. When a task matches one, read its SKILL.md with read_file ' +
-        `before you start, and follow it. Skills are read-only.\n${skills.join('\n')}`,
+      '# Your superpowers\nThe user has given you these. When a task is one a superpower is for, read its instructions ' +
+        'with read_file before you start, and follow them. If one is not available right now and a task needs it, tell the user.\n' +
+        powers.join('\n'),
     )
-  }
-  if (connectionNotes.length) {
-    parts.push(`# Connections that are not available\nTell the user if a task needs one of these.\n${connectionNotes.join('\n')}`)
   }
   if (thread.kind === 'task') {
     // Who wrote the task decides whether it counts as the user's say-so; a task deleted since is not taken to be theirs.
@@ -190,8 +188,8 @@ function instructions(bot: Bot, thread: Thread, connectionNotes: string[]): stri
   return parts.join('\n\n')
 }
 
-/** What a bot is told in its conversation right now, for its owner to read. Connections are not checked for it. */
-export const systemPrompt = (bot: Bot) => instructions(bot, conversation(bot.id), [])
+/** What a bot is told in its conversation right now, for its owner to read. Its services are not checked for it. */
+export const systemPrompt = (bot: Bot) => instructions(bot, conversation(bot.id), {})
 
 const isUserMessage = (item: Item) => item.data.type === 'message' && item.data.role === 'user'
 const said = (items: Item[]) => items.map((i) => (i.data.type === 'message' ? i.data.text : '')).join('\n\n')
@@ -222,7 +220,7 @@ async function loop(threadId: string, state: Run) {
       if (disabledProviders.includes(provider.id)) throw new Error(`${provider.info().name} is switched off in Settings.`)
       const model = thread.model || bot.model || (await provider.models())[0]?.id
       if (!model) throw new Error(`No model is available from ${provider.info().name}. Check Settings.`)
-      const { tools, notes } = await toolsFor(thread)
+      const { tools, problems } = await toolsFor(thread)
       signal.throwIfAborted()
       let items = db.listItems(threadId)
       const seen = items.at(-1)?.id ?? 0
@@ -260,7 +258,7 @@ async function loop(threadId: string, state: Run) {
         try {
           const events = provider.turn({
             model,
-            instructions: instructions(bot, thread, notes),
+            instructions: instructions(bot, thread, problems),
             input,
             session: sessionId,
             cwd: workspaceDir(bot.id),
@@ -291,7 +289,7 @@ async function loop(threadId: string, state: Run) {
         // An engine that ran this thread earlier has missed what happens from here on, so its
         // conversation is dropped; if the thread goes back to it, it starts again from what was said.
         if (db.getSession(threadId)) db.setSession(threadId, null)
-        const system = instructions(bot, thread, notes)
+        const system = instructions(bot, thread, problems)
         // The conversation is sent whole each time, so it is kept within what the model can take.
         const room = Math.max(1000, settings().historyLimit - Math.ceil(system.length / 4))
         if (await shorten(threadId, room, { provider, model, signal })) items = db.listItems(threadId)

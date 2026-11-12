@@ -1,8 +1,12 @@
 // Icons drawn with Skia from path data on a 24-unit square: the providers' marks (shared with the
 // computer, @openbot/client/marks) and the few line icons the phone needs, drawn as the computer's are.
-import { Canvas, Group, Path } from '@shopify/react-native-skia'
-import type { ProviderInfo } from '@openbot/shared'
+// Superpowers bring app icons of their own, as SVG, which Skia draws as they are.
+import { useMemo } from 'react'
+import { Text, View } from 'react-native'
+import { Canvas, Group, ImageSVG, Path, Skia } from '@shopify/react-native-skia'
+import type { ProviderInfo, Superpower } from '@openbot/shared'
 import { markOf } from '@openbot/client/marks'
+import { useTheme } from './theme'
 
 // Circles are written as two arcs, which is all a path can say.
 const GLYPHS = {
@@ -47,4 +51,19 @@ export function Glyph({ name, size = 16, color, weight = 1.8, filled = false }: 
 export function ProviderIcon({ provider, size = 16, color }: { provider: Pick<ProviderInfo, 'id' | 'detail'>; size?: number; color: string }) {
   const mark = markOf(provider)
   return <Drawn d={mark.d} size={size} color={mark.color ?? color} fill={!mark.stroke} stroke={mark.stroke} />
+}
+
+/** A superpower's app icon with rounded corners, or its first letter when it has none. */
+export function SuperpowerIcon({ power, size = 28 }: { power: Pick<Superpower, 'icon' | 'name'>; size?: number }) {
+  const theme = useTheme()
+  const svg = useMemo(() => (power.icon ? Skia.SVG.MakeFromString(power.icon) : null), [power.icon])
+  return (
+    <View style={{ width: size, height: size, borderRadius: size * 0.24, overflow: 'hidden', backgroundColor: theme.side, alignItems: 'center', justifyContent: 'center' }}>
+      {svg ? (
+        <Canvas style={{ width: size, height: size }}><ImageSVG svg={svg} x={0} y={0} width={size} height={size} /></Canvas>
+      ) : (
+        <Text style={{ color: theme.muted, fontWeight: '600', fontSize: size * 0.45 }}>{power.name.slice(0, 1)}</Text>
+      )}
+    </View>
+  )
 }

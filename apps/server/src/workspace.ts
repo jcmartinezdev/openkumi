@@ -1,5 +1,5 @@
-// A bot's workspace: the one folder its file tools can reach, plus read-only access to the skills
-// switched on for it. Every change to the workspace is recorded in a git history so the owner can
+// A bot's workspace: the one folder its file tools can reach, plus read-only access to the
+// instructions of the superpowers switched on for it. Every change to the workspace is recorded in a git history so the owner can
 // see what the bot changed about itself and undo it. The history itself is kept in the bot's
 // private folder, so nothing the bot can write is ever read by git as configuration.
 import { execFile } from 'node:child_process'
@@ -7,8 +7,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { FileEntry, HistoryEntry } from '@openbot/shared'
-import { SKILLS, botDir, emit, privateDir, workspaceDir } from './config.ts'
+import { emit, privateDir, workspaceDir } from './config.ts'
 import { settings } from './settings.ts'
+import { SUPERPOWERS, enabledSuperpowers, superpowerDir } from './superpowers.ts'
 
 const MAX_FILE = 2_000_000
 const MAX_ENTRIES = 2000
@@ -18,8 +19,10 @@ interface Target {
   abs: string
   /** The path as the bot wrote it, cleaned up. */
   rel: string
-  /** Skills are shared between bots, so a bot may read them but never change them. */
+  /** A superpower's instructions are shared between bots, so a bot may read them but never change them. */
   readOnly: boolean
+  /** For "superpowers" itself: the ones this bot has, the only ones it is shown. */
+  only?: string[]
 }
 
 const inside = (parent: string, child: string) => child === parent || child.startsWith(parent + path.sep)
@@ -42,7 +45,7 @@ function realpath(abs: string): string {
 
 /**
  * Maps a path the bot (or the UI) gave to a real one. Paths are relative to the workspace;
- * "skills/<name>/…" reads a skill switched on for this bot. Anything else is refused.
+ * "superpowers/<id>/…" reads the folder of a superpower switched on for this bot. Anything else is refused.
  */
 export function resolve(botId: string, given: unknown): Target {
   const parts = String(given ?? '').replace(/\\/g, '/').split('/').filter((p) => p && p !== '.')
@@ -55,9 +58,10 @@ export function resolve(botId: string, given: unknown): Target {
     if (plain.startsWith('.git') || /^git~\d+$/.test(plain)) throw new Error('That path is not available.')
   }
   const rel = parts.join('/')
-  if (parts[0] === 'skills') {
-    const abs = path.join(botDir(botId), ...parts)
-    if (parts.length > 1 && !inside(realpath(SKILLS), realpath(abs))) throw new Error(`No file at ${rel}`)
+  if (parts[0] === 'superpowers') {
+    if (parts.length === 1) return { abs: SUPERPOWERS, rel, readOnly: true, only: enabledSuperpowers(botId) }
+    const abs = path.join(superpowerDir(parts[1]), ...parts.slice(2))
+    if (!enabledSuperpowers(botId).includes(parts[1]) || !inside(realpath(superpowerDir(parts[1])), realpath(abs))) throw new Error(`No file at ${rel}`)
     return { abs, rel, readOnly: true }
   }
   const root = workspaceDir(botId)
@@ -68,7 +72,7 @@ export function resolve(botId: string, given: unknown): Target {
 
 function writable(botId: string, given: unknown): Target {
   const target = resolve(botId, given)
-  if (target.readOnly) throw new Error('Skills are read-only. Write in your workspace instead (for example under memory/ or files/).')
+  if (target.readOnly) throw new Error('Superpowers are read-only. Write in your workspace instead (for example under memory/ or files/).')
   if (!target.rel) throw new Error('A file path is required.')
   return target
 }
@@ -86,8 +90,8 @@ function stat(target: Target): fs.Stats {
 
 // ---- reading
 
-/** Every file and folder under a path. Links are not followed, except a bot's own skill links. */
-function* walk(abs: string, rel: string, depth = 8): Generator<FileEntry & { abs: string }> {
+/** Every file and folder under a path. Links are not followed. */
+function* walk(abs: string, rel: string, depth = 8, only?: string[]): Generator<FileEntry & { abs: string }> {
   let names: fs.Dirent[]
   try {
     names = fs.readdirSync(abs, { withFileTypes: true })
@@ -96,11 +100,10 @@ function* walk(abs: string, rel: string, depth = 8): Generator<FileEntry & { abs
   }
   names.sort((a, b) => a.name.localeCompare(b.name))
   for (const entry of names) {
-    if (entry.name === '.git' || entry.name === '.DS_Store') continue
+    if (entry.name === '.git' || entry.name === '.DS_Store' || (only && !only.includes(entry.name))) continue
     const childAbs = path.join(abs, entry.name)
     const childRel = rel ? `${rel}/${entry.name}` : entry.name
-    const skillLink = entry.isSymbolicLink() && rel === 'skills' && inside(realpath(SKILLS), realpath(childAbs))
-    if (entry.isSymbolicLink() && !skillLink) continue
+    if (entry.isSymbolicLink()) continue
     let info: fs.Stats
     try {
       info = fs.statSync(childAbs)
@@ -126,17 +129,15 @@ export function list(botId: string, given: unknown, recursive: boolean): string 
   const target = resolve(botId, given)
   if (!stat(target).isDirectory()) throw new Error(`${target.rel} is a file, not a folder. Use read_file.`)
   const lines: string[] = []
-  for (const entry of walk(target.abs, target.rel, recursive ? 8 : 0)) {
+  for (const entry of walk(target.abs, target.rel, recursive ? 8 : 0, target.only)) {
     lines.push(entry.dir ? `${entry.path}/` : `${entry.path}  (${size(entry.size)})`)
     if (lines.length >= 400) {
       lines.push('… (more entries not shown; list a subfolder)')
       break
     }
   }
-  // The skill links sit beside the workspace, so the top level mentions them itself.
-  if (!target.rel && fs.existsSync(path.join(botDir(botId), 'skills')) && [...walk(path.join(botDir(botId), 'skills'), 'skills', 0)].length) {
-    lines.push('skills/  (read-only)')
-  }
+  // The superpowers are not in the workspace, so the top level mentions them itself.
+  if (!target.rel && enabledSuperpowers(botId).length) lines.push('superpowers/  (read-only)')
   return lines.join('\n') || '(empty)'
 }
 
@@ -174,7 +175,7 @@ export function search(botId: string, query: unknown, given: unknown): string {
   stat(target)
   const lower = needle.toLowerCase()
   const hits: string[] = []
-  for (const entry of walk(target.abs, target.rel)) {
+  for (const entry of walk(target.abs, target.rel, 8, target.only)) {
     if (hits.length >= 80) break
     if (entry.path.toLowerCase().includes(lower)) hits.push(entry.dir ? `${entry.path}/` : entry.path)
     if (entry.dir || entry.size > MAX_FILE) continue

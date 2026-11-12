@@ -16,6 +16,14 @@ ipcRenderer.on('desktop:state', (_event, state: DesktopState) => {
   listeners.forEach((listener) => listener(state))
 })
 
+// The way back from a sign-in in this computer's browser, kept until the page is there to take it.
+let returned: string | null = null
+const returns = new Set<(url: string) => void>()
+ipcRenderer.on('desktop:sign-in', (_event, url: string) => {
+  if (returns.size) returns.forEach((listener) => listener(url))
+  else returned = url
+})
+
 const bridge: DesktopBridge | null = initial && {
   initial,
   onState(listener) {
@@ -31,6 +39,15 @@ const bridge: DesktopBridge | null = initial && {
   update: (id, patch) => ipcRenderer.invoke('desktop:update', id, patch),
   remove: (id) => ipcRenderer.invoke('desktop:remove', id),
   showPage: (html) => ipcRenderer.invoke('desktop:page', html),
+  onSignIn(listener) {
+    returns.add(listener)
+    if (returned) {
+      const url = returned
+      returned = null
+      queueMicrotask(() => listener(url))
+    }
+    return () => void returns.delete(listener)
+  },
 }
 
 if (bridge) contextBridge.exposeInMainWorld('openbotDesktop', bridge)

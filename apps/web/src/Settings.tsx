@@ -1,23 +1,23 @@
 // The settings: a full-window view with its sections down the left and one page of settings on the
 // right. App-wide settings are kept by the environment; settings marked "this device" stay in the app.
 import { type ReactNode, useEffect, useState } from 'react'
-import type { Bot, Connection, PairedComputer, ProviderInfo, Settings } from '@openbot/shared'
+import type { Bot, PairedComputer, ProviderInfo, Settings } from '@openbot/shared'
 import type { EnvironmentStatus, LocalEnvironment } from '@openbot/shared/desktop'
 import qrcode from 'qrcode-generator'
 import { windowCount } from '@openbot/client/browser'
 import { pairingLink } from '@openbot/client/pair'
-import { BotPage, type BotTab } from './BotPage'
-import { PluginList, PluginPage } from './Plugins'
+import { BotPage, TABS } from './BotPage'
 import { Principles } from './Principles'
 import { Providers } from './Providers'
 import { desktop, reason, useDesktop } from './desktop'
 import { Icon } from './Icon'
 import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
-import { api, closeSettings, openSettings, refreshSkills, saveSettings, useStore } from './store'
+import { api, closeSettings, openSettings, saveSettings, useStore } from './store'
+import { SuperpowerList, SuperpowerPage } from './Superpowers'
 import { BotHead } from './Mascot'
 
-type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'principles' | 'browser' | 'plugins' | 'skills' | 'connections' | 'environments' | 'advanced' | 'about'
+type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'principles' | 'browser' | 'environments' | 'advanced' | 'about'
 type IconName = Parameters<typeof Icon>[0]['name']
 
 const PAGES: Record<PageId, { label: string; icon: IconName }> = {
@@ -26,11 +26,9 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   chat: { label: 'Chat', icon: 'message' },
   providers: { label: 'Providers', icon: 'cpu' },
   bots: { label: 'Bots', icon: 'bot' },
+  superpowers: { label: 'Superpowers', icon: 'sparkles' },
   principles: { label: 'Principles', icon: 'compass' },
   browser: { label: 'Browser', icon: 'globe' },
-  plugins: { label: 'Plugins', icon: 'download' },
-  skills: { label: 'Skills', icon: 'book' },
-  connections: { label: 'Connections', icon: 'plug' },
   environments: { label: 'Environments', icon: 'monitor' },
   advanced: { label: 'Advanced', icon: 'wrench' },
   about: { label: 'About', icon: 'info' },
@@ -38,8 +36,7 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
 
 const NAV: { heading: string | null; pages: PageId[] }[] = [
   { heading: null, pages: ['general', 'appearance', 'chat'] },
-  { heading: 'Agents', pages: ['providers', 'bots', 'principles', 'browser'] },
-  { heading: 'Tools', pages: ['plugins', 'skills', 'connections'] },
+  { heading: 'Agents', pages: ['providers', 'bots', 'superpowers', 'principles', 'browser'] },
   { heading: 'Network', pages: ['environments'] },
   { heading: null, pages: ['advanced', 'about'] },
 ]
@@ -68,10 +65,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
   { page: 'browser', id: 'browser-panel', title: 'Open the panel when a bot starts browsing' },
   { page: 'browser', id: 'browsers-running', title: 'Browsers running now', also: 'stop' },
-  { page: 'plugins', id: 'plugins', title: 'Plugins', also: 'marketplace install gmail google calendar drive notion linear email' },
-  { page: 'skills', id: 'skills', title: 'Skill catalog' },
-  { page: 'connections', id: 'connections', title: 'Connections', also: 'mcp server gmail calendar' },
-  { page: 'connections', id: 'add-connection', title: 'Add a connection', also: 'mcp' },
+  { page: 'superpowers', id: 'superpowers', title: 'Superpowers', also: 'plugins apps tools notion linear sign in' },
   { page: 'environments', id: 'local-environment', title: 'Local environment', also: 'run on this computer server' },
   { page: 'environments', id: 'remote-environments', title: 'Remote environments', also: 'add another computer connect server lan' },
   { page: 'environments', id: 'lan', title: 'Let other computers connect', also: 'lan remote network access sharing' },
@@ -181,7 +175,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
   const page: PageId = path[0] in PAGES ? (path[0] as PageId) : 'general'
   const bots = useStore((s) => s.bots)
   const bot = page === 'bots' && path[1] ? bots.find((b) => b.id === path[1]) : undefined
-  const plugin = useStore((s) => (page === 'plugins' && path[1] ? s.plugins.find((p) => p.id === path[1]) : undefined))
+  const power = useStore((s) => (page === 'superpowers' && path[1] ? s.superpowers.find((p) => p.id === path[1]) : undefined))
 
   // Escape closes the settings, unless a dialog on top of them is open (it closes itself).
   useEffect(() => {
@@ -200,11 +194,11 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           <nav className="crumbs" aria-label="Breadcrumb">
             <span className="crumb-root">Settings</span>
             <Icon name="chevron" size={12} />
-            {bot || plugin ? <a href={`#/settings/${page}`}>{PAGES[page].label}</a> : <span aria-current="page">{PAGES[page].label}</span>}
-            {(bot || plugin) && (
+            {bot || power ? <a href={`#/settings/${page}`}>{PAGES[page].label}</a> : <span aria-current="page">{PAGES[page].label}</span>}
+            {(bot || power) && (
               <>
                 <Icon name="chevron" size={12} />
-                <span aria-current="page">{bot ? `${bot.emoji} ${bot.name}` : plugin!.name}</span>
+                <span aria-current="page">{bot ? `${bot.emoji} ${bot.name}` : power!.name}</span>
               </>
             )}
           </nav>
@@ -213,17 +207,15 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           <button className="icon" title="Close" aria-label="Close settings" onClick={closeSettings}><Icon name="x" /></button>
         </header>
         {/* Keyed by page so each one starts scrolled to the top. */}
-        <div className="set-body" key={bot ? `bot:${bot.id}` : plugin ? `plugin:${plugin.id}` : page}>
+        <div className="set-body" key={bot ? `bot:${bot.id}` : power ? `superpower:${power.id}` : page}>
           {page === 'general' && <General />}
           {page === 'appearance' && <Appearance />}
           {page === 'chat' && <ChatPage />}
           {page === 'providers' && <Providers selected={path[1]} />}
           {page === 'principles' && <Principles />}
-          {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={(['bot', 'skills', 'connections', 'files'].includes(path[2]) ? path[2] : 'bot') as BotTab} file={path.slice(3).join('/') || undefined} /> : <Bots newBot={newBot} />)}
+          {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} /> : <Bots newBot={newBot} />)}
+          {page === 'superpowers' && (path[1] ? <SuperpowerPage id={path[1]} /> : <SuperpowerList />)}
           {page === 'browser' && <BrowserPage />}
-          {page === 'plugins' && (path[1] ? <PluginPage id={path[1]} /> : <PluginList />)}
-          {page === 'skills' && <SkillsCatalog />}
-          {page === 'connections' && <ConnectionsCatalog />}
           {page === 'environments' && <Environments />}
           {page === 'advanced' && <Advanced />}
           {page === 'about' && <AboutPage />}
@@ -332,7 +324,7 @@ function Bots({ newBot }: { newBot: () => void }) {
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
   return (
     <Page>
-      <p className="set-intro">Each bot is a folder with its own instructions, memory, files and browser. Open one to change its rules, model, skills and connections. What all of them are told is under <a href="#/settings/principles">Principles</a>.</p>
+      <p className="set-intro">Each bot is a folder with its own instructions, memory, files and browser. Open one to change its rules, model and superpowers. What all of them are told is under <a href="#/settings/principles">Principles</a>.</p>
       <Section title="Bots" action={<button onClick={newBot}><Icon name="plus" size={14} /> New bot</button>}>
         {bots.map((bot: Bot) => (
           <a key={bot.id} className="set-row set-link" id={bot.id === bots[0]?.id ? 'bots' : undefined} href={`#/settings/bots/${encodeURIComponent(bot.id)}`}>
@@ -341,7 +333,7 @@ function Bots({ newBot }: { newBot: () => void }) {
               <div className="set-row-text">
                 <h3>{bot.name}{bot.id === bots[0]?.id && <span className="pill" title="The first bot. It can schedule, change and delete tasks for every bot.">Main assistant</span>}</h3>
                 {bot.description && <p>{bot.description}</p>}
-                <p>Runs on {providers.find((p) => p.id === bot.provider)?.name ?? bot.provider} · {count(bot.skills.length, 'skill')} · {count(bot.connections.length, 'connection')}</p>
+                <p>Runs on {providers.find((p) => p.id === bot.provider)?.name ?? bot.provider} · {count(bot.superpowers.length, 'superpower')}</p>
               </div>
               <Icon name="chevron" size={14} />
             </div>
@@ -350,23 +342,6 @@ function Bots({ newBot }: { newBot: () => void }) {
         {!bots.length && <Row title="No bots yet" description="Create one to get started." />}
       </Section>
     </Page>
-  )
-}
-
-/** The bots that have something switched on, as links to where it is switched. */
-function UsedBy({ bots, tab }: { bots: Bot[]; tab: BotTab }) {
-  if (!bots.length) return <>Not switched on for any bot.</>
-  return (
-    <>
-      On for{' '}
-      {bots.map((bot, i) => (
-        <span key={bot.id}>
-          {i > 0 && ', '}
-          <a href={`#/settings/bots/${encodeURIComponent(bot.id)}/${tab}`}>{bot.name}</a>
-        </span>
-      ))}
-      .
-    </>
   )
 }
 
@@ -409,117 +384,6 @@ function BrowserPage() {
         {!running.length && <Row id="browsers-running" title="No browser is running" description="A bot’s browser starts when the bot needs it, or when you open its panel." />}
       </Section>
     </Page>
-  )
-}
-
-// ---- Skills (the catalog)
-
-function SkillsCatalog() {
-  const skills = useStore((s) => s.skills)
-  const bots = useStore((s) => s.bots)
-  const home = useStore((s) => s.home)
-  useEffect(() => {
-    refreshSkills().catch(() => {})
-  }, [])
-  return (
-    <Page>
-      <p className="set-intro">Skills are instructions a bot reads when a task calls for them. This is the catalog; switch a skill on for a bot in that bot’s settings.</p>
-      <Section title="Catalog">
-        {skills.map((skill, i) => (
-          <Row
-            key={skill.name}
-            id={i === 0 ? 'skills' : undefined}
-            title={<>{skill.title}{!skill.bundled && <span className="pill">Added by you</span>}</>}
-            description={skill.description}
-            status={<UsedBy bots={bots.filter((b) => b.skills.includes(skill.name))} tab="skills" />}
-          />
-        ))}
-        {!skills.length && <Row id="skills" title="The catalog is empty" />}
-      </Section>
-      <Section title="Adding skills">
-        <Row
-          title="Skills folder"
-          description={<>Put a skill’s folder, with a SKILL.md inside, in <code>{home}/skills</code>. It uses the same format as Claude Code and Codex skills. A skill is instructions the bot will follow, so add only ones you trust.</>}
-          control={onServer() && <button onClick={() => api('POST', '/api/reveal', { what: 'skills' }).catch((e) => alert(e.message))}><Icon name="folder" size={14} /> Open folder</button>}
-        />
-      </Section>
-    </Page>
-  )
-}
-
-// ---- Connections (the catalog)
-
-function ConnectionsCatalog() {
-  const connections = useStore((s) => s.connections)
-  const bots = useStore((s) => s.bots)
-  const [error, setError] = useState('')
-  const remove = (c: Connection) => {
-    if (!confirm(`Remove “${c.name}” for every bot?`)) return
-    api('DELETE', `/api/connections/${encodeURIComponent(c.name)}`).catch((e) => setError(e.message))
-  }
-  return (
-    <Page>
-      <p className="set-intro">Connections are services a bot can use through MCP, such as mail or a calendar. This is the catalog; switch a connection on, and sign in, in a bot’s settings.</p>
-      {error && <div className="notice error">{error}</div>}
-      <Section title="Connections">
-        {connections.map((c, i) => (
-          <Row
-            key={c.name}
-            id={i === 0 ? 'connections' : undefined}
-            title={<>{c.name}<span className="pill">{c.kind === 'url' ? 'Web address' : 'Program'}</span></>}
-            description={<span className="mono">{c.target}</span>}
-            status={<UsedBy bots={bots.filter((b) => b.connections.includes(c.name))} tab="connections" />}
-            control={<button className="icon" title="Remove for every bot" aria-label={`Remove ${c.name}`} onClick={() => remove(c)}><Icon name="trash" size={14} /></button>}
-          />
-        ))}
-        {!connections.length && <Row id="connections" title="No connections yet" description="Add one below." />}
-      </Section>
-      <AddConnection />
-    </Page>
-  )
-}
-
-function AddConnection() {
-  const local = onServer()
-  const [kind, setKind] = useState<'url' | 'command'>('url')
-  const [form, setForm] = useState({ name: '', url: '', token: '', command: '' })
-  const [error, setError] = useState('')
-  const field = (key: keyof typeof form) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [key]: e.target.value }))
-  const ready = form.name.trim() && (kind === 'url' ? form.url.trim() : form.command.trim())
-  const add = async () => {
-    setError('')
-    try {
-      const name = form.name.trim()
-      await api('POST', '/api/connections', kind === 'url' ? { name, url: form.url, token: form.token } : { name, command: form.command })
-      setForm({ name: '', url: '', token: '', command: '' })
-    } catch (e: any) {
-      setError(e.message)
-    }
-  }
-  const plain = { spellCheck: false, autoCapitalize: 'off', className: 'set-input' } as const
-  return (
-    <Section title="Add a connection">
-      {local && (
-        <Row
-          id="add-connection"
-          title="Kind"
-          description="A server on the web, or a program that runs on this computer."
-          control={<Pick label="Kind of connection" value={kind} options={[['url', 'Web address'], ['command', 'Program on this computer']]} onChange={setKind} />}
-        />
-      )}
-      <Row id={local ? undefined : 'add-connection'} title="Name" description="A short name, such as “calendar”." control={<input {...plain} aria-label="Name" value={form.name} placeholder="calendar" onChange={field('name')} />} />
-      {kind === 'url' ? (
-        <>
-          <Row title="Address" control={<input {...plain} aria-label="Address" value={form.url} placeholder="https://example.com/mcp" onChange={field('url')} />} />
-          <Row title="Access token" description="Only for servers that use a token instead of a sign-in." control={<input {...plain} type="password" aria-label="Access token" value={form.token} placeholder="Optional" onChange={field('token')} />} />
-        </>
-      ) : (
-        <Row title="Command" description="The program runs on this computer with your own access to it. Add only programs you trust." control={<input {...plain} aria-label="Command" value={form.command} placeholder="npx -y some-mcp-server" onChange={field('command')} />} />
-      )}
-      <Row title="" control={<button className="primary" disabled={!ready} onClick={add}>Add connection</button>}>
-        {error && <div className="notice error">{error}</div>}
-      </Row>
-    </Section>
   )
 }
 
@@ -838,7 +702,7 @@ function Advanced() {
         <Row
           id="data-folder"
           title="Data folder"
-          description={<>Everything Open Bot keeps is in <code>{home}</code>: bots, conversations, skills, connections and these settings.</>}
+          description={<>Everything Open Bot keeps is in <code>{home}</code>: bots, conversations and these settings.</>}
           control={onServer() && <button onClick={() => api('POST', '/api/reveal', {}).catch((e) => alert(e.message))}><Icon name="folder" size={14} /> Open folder</button>}
         />
         <Row id="delete-chats" title="Delete all conversations" description="Removes what was said with every bot, the earlier conversations included. Bots, their files and their memory are kept." control={<button className="danger" disabled={!chats} onClick={deleteChats}>Delete all conversations</button>} />

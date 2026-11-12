@@ -9,7 +9,7 @@ import { api, send, useStore, watch } from './store'
  * A live picture of one tab of a bot's browser. Only while `drive` is on does what is done to it
  * (clicks, keys, scrolling, typing on a touch screen) reach the page; otherwise it is only watched.
  */
-function PageView({ bot, tab, drive, onPress, children }: { bot: Bot; tab: BrowserTab | undefined; drive: boolean; onPress?: () => void; children?: ReactNode }) {
+export function PageView({ bot, tab, drive, onPress, children }: { bot: Bot; tab: BrowserTab | undefined; drive: boolean; onPress?: () => void; children?: ReactNode }) {
   const connected = useStore((s) => s.connected)
   const [hasFrame, setHasFrame] = useState(false)
   const img = useRef<HTMLCanvasElement>(null)

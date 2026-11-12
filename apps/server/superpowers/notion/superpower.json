@@ -1,20 +1,14 @@
 {
   "name": "Notion",
-  "icon": "📝",
-  "color": "#37352f",
-  "category": "Notes and documents",
-  "publisher": "Open Bot",
+  "category": "Your apps",
   "tagline": "Search your workspace, read pages and databases, and write new ones.",
+  "summary": "Search, read and write in the user's Notion workspace: pages, databases and their entries. Existing content is rewritten or archived only after the user approves.",
   "can": [
     "Search and read the pages and databases you share with it",
     "Create pages and add entries to databases",
     "Change or archive an existing page, only after you approve it"
   ],
-  "skills": [
-    "notion"
-  ],
-  "connection": {
-    "name": "notion",
+  "mcp": {
     "url": "https://mcp.notion.com/mcp"
   },
   "site": "https://www.notion.so/"

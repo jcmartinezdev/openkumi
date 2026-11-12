@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, type GestureResponderEvent, Keyboard, KeyboardAvoidingView, type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Canvas, Image } from '@shopify/react-native-skia'
-import { useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { BrowserInput } from '@openbot/shared'
 import { control, driverOf, hostOf, sessionName, windowOf } from '@openbot/client/browser'
@@ -23,6 +23,9 @@ export default function Browser() {
   const browser = useStore((s) => s.browsers[botId])
   const threads = useStore((s) => s.threads)
   const threadId = params.threadId || mainThread(threads, botId)?.id
+  const router = useRouter()
+  // A superpower's sign-in: its window closes once the bot is signed in, and leaving gives the sign-in up.
+  const signingIn = !!threadId?.startsWith('sign-in:')
   const [chosen, setChosen] = useState<string | null>(null)
   const [address, setAddress] = useState<string | null>(null)
   const [typed, setTyped] = useState('')
@@ -74,6 +77,13 @@ export default function Browser() {
     return () => control(botId, id, 'give')
   }, [win?.id])
   useEffect(() => setChosen(null), [win?.id])
+  const opened = useRef(false)
+  useEffect(() => {
+    if (!signingIn) return
+    if (win) opened.current = true
+    else if (opened.current && router.canGoBack()) router.back()
+  }, [win?.id])
+  useEffect(() => () => void (signingIn && api('DELETE', `/api/bots/${botId}/superpowers/${threadId!.slice('sign-in:'.length)}/login`).catch(() => {})), [])
 
   const { image, page } = useLivePage(botId, tabId)
   const input = (event: BrowserInput) => drive && tabId && send({ type: 'browser.input', botId, tabId, input: event })

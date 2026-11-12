@@ -825,25 +825,43 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .pair-code { font-size: 18px; font-weight: 600; letter-spacing: 0.08em; }
 .set-link-row > .faint { width: 58px; flex: none; font-size: 12px; }
 
-/* ---- plugins */
-.plugin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-.plugin-card { display: flex; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); text-decoration: none; transition: border-color 0.12s, background 0.12s; }
-.plugin-card:hover { border-color: var(--border-strong); background: var(--hover); }
-.plugin-card-text { min-width: 0; display: grid; gap: 4px; align-content: start; justify-items: start; }
-.plugin-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
-.plugin-card p { font-size: 12.5px; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
-.plugin-tile { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 11px; font-size: 22px; }
-.plugin-tile.big { width: 64px; height: 64px; border-radius: 16px; font-size: 32px; }
-.plugin-head { display: flex; align-items: center; gap: 18px; padding: 0 4px; }
-.plugin-head-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
-.plugin-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
-.plugin-head p { color: var(--muted); font-size: 13.5px; }
-.plugin-head .faint { font-size: 12px; }
-.plugin-about { padding: 0 16px; font-size: 14px; line-height: 1.6; }
+/* ---- superpowers */
+.power-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.power-card { display: flex; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); text-decoration: none; transition: border-color 0.12s, background 0.12s; }
+.power-card:hover { border-color: var(--border-strong); background: var(--hover); }
+.power-card-text { min-width: 0; display: grid; gap: 4px; align-content: start; justify-items: start; }
+.power-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.power-card p { font-size: 12.5px; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
+.power-tile { flex: none; position: relative; display: grid; place-items: center; overflow: hidden; background: var(--hover); color: var(--muted); font-weight: 600; }
+/* An edge, so an icon as light as the card it sits on still has a shape. */
+.power-tile::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); pointer-events: none; }
+.power-tile img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.power-tile.row { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; }
+.power-tile.card { width: 44px; height: 44px; border-radius: 11px; font-size: 20px; }
+.power-tile.big { width: 64px; height: 64px; border-radius: 16px; font-size: 28px; }
+.power-link { display: inline-flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; }
+.power-link:hover { text-decoration: underline; }
+.power-head { display: flex; align-items: center; gap: 18px; padding: 0 4px; }
+.power-head-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.power-head h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.power-head p { color: var(--muted); font-size: 13.5px; }
+.power-head .faint { font-size: 12px; }
+.power-head .faint a { color: inherit; }
+.power-about { padding: 0 16px; font-size: 14px; line-height: 1.6; }
+.sign-in-note { padding: 2px 20px 10px; font-size: 13px; color: var(--muted); }
+.activate-head { display: flex; align-items: center; gap: 14px; }
+.activate-head p { color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.form.activate { grid-template-columns: minmax(0, 1fr); }
+.sign-in-choices { display: grid; gap: 8px; }
+/* Buttons are a line of text elsewhere; these are a choice with a sentence under it. */
+.sign-in-choices > button { height: auto; display: grid; gap: 3px; padding: 12px 14px; text-align: left; justify-content: stretch; justify-items: start; white-space: normal; }
+.sign-in-choices > button strong { font-weight: 600; }
+.sign-in-choices > button span { font-size: 12.5px; font-weight: 400; opacity: 0.8; line-height: 1.4; }
+.activate-wait { display: flex; align-items: center; gap: 10px; }
+.activate-done { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.activate-done .ic { color: var(--ok); }
 .set-row h3 > .avatar { width: 22px; height: 22px; font-size: 13px; border-radius: 6px; }
-.choose-bot { display: grid; gap: 6px; }
-.choose-bot > button { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px; text-align: left; font-weight: 500; }
-@media (max-width: 560px) { .plugin-head { flex-wrap: wrap; } }
+@media (max-width: 560px) { .power-head { flex-wrap: wrap; } }
 
 .pair-qr { display: flex; align-items: center; gap: 16px; padding: 4px 0; }
 .qr { width: 148px; height: 148px; flex: none; border-radius: 8px; }

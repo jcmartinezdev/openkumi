@@ -11,18 +11,13 @@ export const ROOT = path.resolve(import.meta.dirname, '..')
 /** Started with --lan: serve other devices on the local network whatever the setting says. */
 export const LAN = process.argv.includes('--lan') || process.env.OPENBOT_LAN === '1'
 
-/** The shared skill catalog: one folder per skill. Bots link to the ones switched on for them. */
-export const SKILLS = path.join(HOME, 'skills')
-
 fs.mkdirSync(path.join(HOME, 'bots'), { recursive: true })
-fs.mkdirSync(SKILLS, { recursive: true })
 
 // A bot is a folder. Its owner's settings sit at the top; the bot can only reach `workspace`.
-//   bots/<id>/bot.md       name, model and rules
-//   bots/<id>/skills/      links to the catalog skills switched on for it
-//   bots/<id>/mcp.json     the connections switched on for it
-//   bots/<id>/workspace/   the bot's own: AGENTS.md, memory/, files/
-//   bots/<id>/private/     browser profile and account tokens, never visible to the bot
+//   bots/<id>/bot.md             name, model and rules
+//   bots/<id>/superpowers.json   the superpowers switched on for it
+//   bots/<id>/workspace/         the bot's own: AGENTS.md, memory/, files/
+//   bots/<id>/private/           browser profile and its accounts with services, never visible to the bot
 export const botDir = (botId: string) => path.join(HOME, 'bots', botId)
 export const workspaceDir = (botId: string) => path.join(botDir(botId), 'workspace')
 export const privateDir = (botId: string) => path.join(botDir(botId), 'private')

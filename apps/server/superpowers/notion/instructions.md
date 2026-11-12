@@ -1,12 +1,7 @@
----
-name: notion
-description: Search, read and write in the user's Notion workspace: pages, databases and their entries. Existing content is rewritten or archived only after the user approves.
----
-
 # Notion
 
-Use the tools whose names start with `mcp__notion__`. If there are none, the connection is
-not signed in: tell the user to press "Sign in" for Notion in this bot's Connections.
+Use the tools whose names start with `mcp__notion__`. If there are none, you are not signed in
+to Notion yet: ask the user to sign you in, under Superpowers in your settings.
 
 ## Finding things
 
