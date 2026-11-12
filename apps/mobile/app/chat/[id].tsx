@@ -1,7 +1,7 @@
 // A bot's conversation (or the thread of one of its subagents): what was said, what the bot did,
 // its reply as it is written, and a place to answer.
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, type NativeScrollEvent, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Item } from '@openbot/shared'
@@ -78,6 +78,9 @@ function CopyReply({ text, theme }: { text: string; theme: Theme }) {
   )
 }
 
+/** Whether a scroll left the newest line in view. */
+const atEnd = (e: NativeScrollEvent) => e.contentOffset.y + e.layoutMeasurement.height > e.contentSize.height - 80
+
 /** Whether the keyboard is up, so what sits above it can drop the room it keeps for the home indicator. */
 function useKeyboardUp() {
   const [up, setUp] = useState(false)
@@ -118,8 +121,15 @@ export default function Chat() {
   const [sending, setSending] = useState(false)
   const list = useRef<FlatList<Row>>(null)
   const keyboard = useKeyboardUp()
-  /** Whether the newest line is in view; if it is, the view follows what is written. */
+  /** Whether the newest line is in view; if it is, the view follows what is written. Only the user scrolling changes it. */
   const following = useRef(true)
+  /** While a finger is on the list, or it glides on after one: the scrolls the user makes, and the only ones that say where they want to be. */
+  const touching = useRef(false)
+  /** The height of the whole conversation and of the part of it on screen, as last measured. */
+  const size = useRef({ content: 0, frame: 0 })
+  // Goes by the measured height: the list's own scrollToEnd guesses where the end is from the lines
+  // drawn so far, and when a chat opens the newest ones are not drawn yet, so it stopped short.
+  const toEnd = () => following.current && list.current?.scrollToOffset({ offset: Math.max(0, size.current.content - size.current.frame), animated: false })
 
   useEffect(() => {
     // Asked again when the connection comes back, in case the chat was opened while it was away.
@@ -224,11 +234,16 @@ export default function Chat() {
           ListFooterComponent={tail}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}
           keyboardDismissMode="interactive"
-          onScroll={({ nativeEvent: e }) => (following.current = e.contentOffset.y + e.layoutMeasurement.height > e.contentSize.height - 80)}
+          onScroll={({ nativeEvent: e }) => touching.current && (following.current = atEnd(e))}
+          onScrollBeginDrag={() => (touching.current = true)}
+          onScrollEndDrag={({ nativeEvent: e }) => ((touching.current = false), (following.current = atEnd(e)))}
+          onMomentumScrollBegin={() => (touching.current = true)}
+          onMomentumScrollEnd={({ nativeEvent: e }) => ((touching.current = false), (following.current = atEnd(e)))}
+          onScrollToTop={() => (following.current = false)}
           scrollEventThrottle={100}
-          onContentSizeChange={() => following.current && list.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={(_, height) => ((size.current.content = height), toEnd())}
           // The keyboard coming up makes the list shorter; the newest line stays in view.
-          onLayout={() => following.current && list.current?.scrollToEnd({ animated: false })}
+          onLayout={(e) => ((size.current.frame = e.nativeEvent.layout.height), toEnd())}
         />
         </FileLinks.Provider>
       )}
