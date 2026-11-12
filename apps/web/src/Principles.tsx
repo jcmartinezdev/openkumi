@@ -38,7 +38,7 @@ export function Principles() {
         <Row
           id="team"
           title="The team"
-          description="Every bot is told the others’ names and these lines, so it knows when to hand a task over. It hands one over as a subagent: the other bot does the task as itself, with its own logins and connections, and reports back. A bot cannot change its own line."
+          description="Every bot is told the others’ names and these lines, so it knows when to hand a task over. It hands one over as a subagent: the other bot does the task as itself, with its own logins and superpowers, and reports back. A bot cannot change its own line."
         />
         {bots.map((bot, i) => (
           <Row key={bot.id} title={<><BotHead bot={bot} />{bot.name}{i === 0 && bots.length > 1 && <span className="pill">Main assistant</span>}</>}>

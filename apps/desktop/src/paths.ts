@@ -21,3 +21,5 @@ export const DEV_URL = process.env.OPENBOT_DEV_URL || ''
 export const HIDDEN = process.env.OPENBOT_DESKTOP_HIDDEN === '1'
 /** Tests answer the app's "are you sure?" dialogs with yes. */
 export const ASSUME_YES = !!process.env.OPENBOT_DESKTOP_YES
+/** Tests have the app say it catches sign-ins, which only an installed app really can. */
+export const CATCH_SIGN_INS = process.env.OPENBOT_DESKTOP_CATCH_SIGN_INS === '1'

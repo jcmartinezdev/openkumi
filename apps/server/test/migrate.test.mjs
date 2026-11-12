@@ -65,7 +65,7 @@ test('bots stored in the database become folders, keeping their id, logins and c
       assert.deepEqual([state.bots[1].id, state.bots[1].provider, state.bots[1].model], ['b_Old-2', 'codex', 'gpt-5.5'])
       assert.ok(!state.providers.some((p) => p.id === 'chatgpt'))
       assert.deepEqual([state.settings.defaultProvider, state.settings.disabledProviders], ['', ['mock']])
-      const { skills: _, connections: __, plugins: ___, look, ...bot } = state.bots[0]
+      const { superpowers: _, look, ...bot } = state.bots[0]
       // It had no look, so it is given one made from its id: the same on every start.
       looks.push(JSON.stringify(look))
       assert.deepEqual(Object.keys(look), ['creature', 'color', 'hat', 'extra', 'clothes'])
@@ -133,6 +133,44 @@ test('a bot that had several chats keeps the one used last as its conversation, 
         assert.deepEqual((await get('/api/bots/b_1/search?q=herons')).matches.map((m) => m.threadId), ['t_old'])
       })
     }
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('skills, connections and plugins become superpowers: what a bot had that is now one stays on, and the rest goes', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-migrate-'))
+  try {
+    const bot = (id, settings) => {
+      const dir = path.join(home, 'bots', id)
+      fs.mkdirSync(path.join(dir, 'private', 'mcp'), { recursive: true })
+      fs.writeFileSync(path.join(dir, 'bot.md'), `---\nname: ${id}\nprovider: mock\n---\n`)
+      for (const [file, value] of Object.entries(settings)) fs.writeFileSync(path.join(dir, file), JSON.stringify(value))
+      return dir
+    }
+    // The catalog of skills Open Bot used to keep, with copies of its own and one the owner added.
+    for (const name of ['deep-research', 'linear', 'gmail', 'mine']) {
+      fs.mkdirSync(path.join(home, 'skills', name), { recursive: true })
+      fs.writeFileSync(path.join(home, 'skills', name, 'SKILL.md'), `---\nname: ${name}\n---\n`)
+      if (name !== 'mine') fs.writeFileSync(path.join(home, 'skills', name, '.bundled'), '')
+    }
+    fs.writeFileSync(path.join(home, 'mcp.json'), JSON.stringify({ mcpServers: { notion: { url: 'https://mcp.notion.com/mcp' } } }))
+    fs.writeFileSync(path.join(home, 'auth.json'), JSON.stringify({ accessToken: 'keep-me', plugins: { google: { clientId: 'x', clientSecret: 'y' } } }))
+    const one = bot('one', { 'plugins.json': { installed: ['gmail', 'notion'] }, 'mcp.json': { enabled: ['gmail', 'notion'] } })
+    fs.mkdirSync(path.join(one, 'skills'))
+    for (const name of ['deep-research', 'linear']) fs.symlinkSync(path.join('..', '..', '..', 'skills', name), path.join(one, 'skills', name))
+    fs.writeFileSync(path.join(one, 'private', 'mcp', 'notion.json'), '{}')
+    const two = bot('two', {})
+
+    for (const run of [1, 2]) {
+      const state = await withServer(home, (get) => get('/api/state'))
+      assert.deepEqual(state.bots.map((b) => [b.id, b.superpowers]), [['one', ['linear', 'notion']], ['two', []]], `start ${run}`)
+    }
+    for (const gone of ['skills', 'mcp.json', 'plugins.json', 'private/mcp']) assert.ok(!fs.existsSync(path.join(one, gone)), gone)
+    assert.ok(!fs.existsSync(path.join(two, 'superpowers.json')), 'a bot that had nothing gets nothing')
+    assert.deepEqual(fs.readdirSync(path.join(home, 'skills')), ['mine'], 'a skill the owner added is not deleted')
+    assert.ok(!fs.existsSync(path.join(home, 'mcp.json')))
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')), { accessToken: 'keep-me' })
   } finally {
     fs.rmSync(home, { recursive: true, force: true })
   }

@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
-import { desktopState, inDesktopApp, onDesktopState } from './desktop'
+import { desktop, desktopState, inDesktopApp, onDesktopState } from './desktop'
+import { passSignIn } from './Superpowers'
 import { follow } from './store'
 import './styles.css'
 
@@ -20,5 +21,7 @@ if (!inDesktopApp) {
     chrome(state)
     follow(state.connection)
   })
+  // A superpower's sign-in in this computer's own browser comes back by way of the app.
+  desktop.onSignIn?.(passSignIn)
   createRoot(root).render(<App />)
 }

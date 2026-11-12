@@ -1,8 +1,8 @@
 // One bot's settings, as pages inside Settings. Each tab only reads and writes the bot's folder on
-// the server: the owner's settings (Bot), what the bot may use (Skills, Connections) and what the
-// bot itself keeps (Files).
+// the server: the owner's settings (Bot), what more the bot may do (Superpowers) and what the bot
+// itself keeps (Files).
 import { useEffect, useRef, useState } from 'react'
-import type { Bot, Connection, ConnectionStatus, Effort, FileEntry, HistoryEntry, Look, Skill } from '@openbot/shared'
+import type { Bot, Effort, FileEntry, HistoryEntry, Look } from '@openbot/shared'
 import { Icon } from './Icon'
 import { windowCount } from '@openbot/client/browser'
 import { describeLook } from '@openbot/client/mascot'
@@ -11,10 +11,11 @@ import { type Dress, LookEditor } from './LookEditor'
 import { Mascot } from './Mascot'
 import { ago } from './Sidebar'
 import { Field, Page, Pick, Row, Section, Switch, onServer } from './settingsUi'
-import { api, download, openSettings, refreshSkills, request, useStore } from './store'
+import { api, download, openSettings, request, useStore } from './store'
+import { BotSuperpowers } from './Superpowers'
 
-export type BotTab = 'bot' | 'skills' | 'connections' | 'files'
-const TABS: [BotTab, string][] = [['bot', 'Bot'], ['skills', 'Skills'], ['connections', 'Connections'], ['files', 'Files']]
+export type BotTab = 'bot' | 'superpowers' | 'files'
+export const TABS: [BotTab, string][] = [['bot', 'Bot'], ['superpowers', 'Superpowers'], ['files', 'Files']]
 
 /** Runs something that talks to the server and shows what went wrong, if anything did. */
 function useAction() {
@@ -61,7 +62,7 @@ export function BotPage({ botId, tab, file }: { botId: string; tab: BotTab; file
     if (!bot) openSettings('bots')
   }, [bot])
   if (!bot) return null
-  const counts: Partial<Record<BotTab, number>> = { skills: bot.skills.length, connections: bot.connections.length }
+  const counts: Partial<Record<BotTab, number>> = { superpowers: bot.superpowers.length }
   return (
     <>
       <div className="tabbar" role="tablist">
@@ -73,8 +74,7 @@ export function BotPage({ botId, tab, file }: { botId: string; tab: BotTab; file
         ))}
       </div>
       {tab === 'bot' && <General bot={bot} />}
-      {tab === 'skills' && <Skills bot={bot} />}
-      {tab === 'connections' && <Connections bot={bot} />}
+      {tab === 'superpowers' && <BotSuperpowers bot={bot} />}
       {tab === 'files' && <Files key={file} bot={bot} initial={file} />}
     </>
   )
@@ -179,98 +179,6 @@ function General({ bot }: { bot: Bot }) {
 
       <Section title="Danger zone">
         <Row title="Delete this bot" description="Removes its conversations, files, memory and saved logins. This cannot be undone." control={<button className="danger" onClick={remove}>Delete bot</button>} />
-      </Section>
-    </Page>
-  )
-}
-
-// ---- Skills: the catalog, switched on per bot
-
-function Skills({ bot }: { bot: Bot }) {
-  const skills = useStore((s) => s.skills)
-  const { run, note } = useAction()
-  useEffect(() => {
-    refreshSkills().catch(() => {})
-  }, [])
-
-  const set = (skill: Skill, on: boolean) => {
-    const warning = `“${skill.title}” did not come with Open Bot. The bot will follow its instructions with access to its browser and accounts. Switch it on?`
-    if (on && !skill.bundled && !confirm(warning)) return
-    run(() => api('PUT', `/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}`, { on }))
-  }
-
-  return (
-    <Page>
-      <p className="set-intro">Instructions the bot reads when a task calls for them. Only you can switch them on; the bot cannot change them. The catalog is under <a href="#/settings/skills">Skills</a>.</p>
-      {note}
-      <Section title="Skills">
-        {skills.map((skill) => (
-          <Row
-            key={skill.name}
-            title={<>{skill.title}{!skill.bundled && <span className="pill">Added by you</span>}</>}
-            description={skill.description}
-            control={<Switch label={`Use ${skill.title}`} checked={bot.skills.includes(skill.name)} onChange={(on) => set(skill, on)} />}
-          />
-        ))}
-        {!skills.length && <Row title="The catalog is empty" />}
-      </Section>
-    </Page>
-  )
-}
-
-// ---- Connections: MCP servers, switched on and signed in per bot
-
-export function statusPill(status: ConnectionStatus | undefined) {
-  if (!status || status.state === 'connecting') return <span className="pill">Connecting…</span>
-  if (status.state === 'connected') return <span className="pill good">{status.tools} {status.tools === 1 ? 'tool' : 'tools'}</span>
-  if (status.state === 'needs-login') return <span className="pill warn">Sign-in needed</span>
-  return <span className="pill bad">Not working</span>
-}
-
-function Connections({ bot }: { bot: Bot }) {
-  const connections = useStore((s) => s.connections)
-  const statuses = useStore((s) => s.connectionStatus[bot.id])
-  const { run, note } = useAction()
-  const local = onServer()
-
-  // Nothing connects until it is needed, so opening the page asks for the current state.
-  useEffect(() => {
-    api('POST', `/api/bots/${bot.id}/connections/check`).catch(() => {})
-  }, [bot.id])
-
-  const path = (c: Connection) => `/api/bots/${bot.id}/connections/${encodeURIComponent(c.name)}`
-  const signIn = (c: Connection) =>
-    run(async () => {
-      // The sign-in page opens in the computer's own browser, where the person's accounts already are.
-      const { url } = await api<{ url: string | null }>('POST', `${path(c)}/login`)
-      if (url) window.open(url)
-    })
-
-  return (
-    <Page>
-      <p className="set-intro">Services the bot can use through MCP, such as mail or a calendar. Each bot signs in with its own account. Add or remove connections under <a href="#/settings/connections">Connections</a>.</p>
-      {note}
-      <Section title="Connections">
-        {connections.map((c) => {
-          const on = bot.connections.includes(c.name)
-          const status = statuses?.[c.name]
-          return (
-            <Row
-              key={c.name}
-              title={<>{c.name}{on && statusPill(status)}</>}
-              description={<span className="mono">{c.target}</span>}
-              status={on && (status?.error ? <span className="err">{status.error}</span> : status?.state === 'needs-login' && !local ? 'Sign in from the computer that runs Open Bot.' : undefined)}
-              control={
-                <>
-                  {on && status?.state === 'needs-login' && local && <button className="primary" onClick={() => signIn(c)}>Sign in</button>}
-                  {on && status?.signedIn && <button className="ghost" onClick={() => run(() => api('POST', `${path(c)}/logout`))}>Sign out</button>}
-                  <Switch label={`Use ${c.name}`} checked={on} onChange={(next) => run(() => api('PUT', path(c), { on: next }))} />
-                </>
-              }
-            />
-          )
-        })}
-        {!connections.length && <Row title="No connections yet" description="Add one under Connections, then switch it on here." />}
       </Section>
     </Page>
   )

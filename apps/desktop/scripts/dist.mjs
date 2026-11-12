@@ -4,7 +4,7 @@
 // What goes into it:
 //   the app's own programs (dist/), packed
 //   Resources/web      the interface, built (apps/web/dist)
-//   Resources/server   the server as it is in apps/server (sources, skills, plugins, principles), with the packages it needs to run
+//   Resources/server   the server as it is in apps/server (sources, superpowers, principles), with the packages it needs to run
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -21,7 +21,7 @@ if (!fs.existsSync(path.join(web, 'index.html')) || !fs.existsSync(path.join(her
 // copied from this repository's node_modules, so what is shipped is what was tested.
 fs.rmSync(stage, { recursive: true, force: true })
 const server = path.join(stage, 'server')
-for (const part of ['src', 'skills', 'plugins', 'principles.md', 'package.json']) fs.cpSync(path.join(root, 'apps', 'server', part), path.join(server, part), { recursive: true })
+for (const part of ['src', 'superpowers', 'principles.md', 'package.json']) fs.cpSync(path.join(root, 'apps', 'server', part), path.join(server, part), { recursive: true })
 const modules = path.join(root, 'node_modules')
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const needed = execFileSync(npm, ['ls', '--omit=dev', '--all', '--parseable', '-w', '@openbot/server'], { cwd: root, encoding: 'utf8' })
@@ -49,6 +49,8 @@ await build({
     ],
     // Nothing here is compiled for a particular machine.
     npmRebuild: false,
+    // The way back from a superpower's sign-in in the computer's own browser (see src/main.ts).
+    protocols: [{ name: 'Open Bot sign-in', schemes: ['openbot'] }],
     // Runs once the app is put together and before it is signed.
     afterPack: ({ appOutDir, packager }) => {
       const resources = packager.platform.name === 'mac' ? path.join(appOutDir, `${packager.appInfo.productFilename}.app`, 'Contents', 'Resources') : path.join(appOutDir, 'resources')

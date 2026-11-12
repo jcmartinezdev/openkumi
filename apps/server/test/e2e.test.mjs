@@ -13,6 +13,17 @@ import { startOAuthServer } from './fixtures/mcp-oauth.mjs'
 const PORT = 4400 + Math.floor(Math.random() * 500)
 const BASE = `http://127.0.0.1:${PORT}`
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-test-'))
+/** The superpowers the server offers: the ones that ship, and any the tests add. */
+const powers = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-superpowers-'))
+fs.cpSync(path.resolve('superpowers'), powers, { recursive: true })
+function addPower(id, manifest, instructions) {
+  fs.mkdirSync(path.join(powers, id))
+  fs.writeFileSync(path.join(powers, id, 'superpower.json'), JSON.stringify({ category: 'Tests', tagline: 'For tests.', summary: `${manifest.name} for tests.`, can: [], ...manifest }))
+  if (instructions) fs.writeFileSync(path.join(powers, id, 'instructions.md'), instructions)
+}
+const removePower = (id) => fs.rmSync(path.join(powers, id), { recursive: true, force: true })
+// One with nothing to sign in to: instructions only.
+addPower('field-guide', { name: 'Field guide' }, '# Field guide\n\nLook at the beak first.\n')
 let server
 let bot
 /** The server's access code, which every request has to carry. */
@@ -103,6 +114,7 @@ before(async () => {
       OPENBOT_HOME: home,
       OPENBOT_PORT: String(PORT),
       OPENBOT_MOCK: '1',
+      OPENBOT_SUPERPOWERS: powers,
       // Scripted stand-ins for the Claude Code and Codex programs.
       OPENBOT_CLAUDE_BIN: path.resolve('test/fixtures/fake-claude.mjs'),
       OPENBOT_CODEX_BIN: path.resolve('test/fixtures/fake-codex.mjs'),
@@ -122,6 +134,7 @@ after(async () => {
   server.kill('SIGTERM')
   await new Promise((r) => server.on('exit', r))
   fs.rmSync(home, { recursive: true, force: true })
+  fs.rmSync(powers, { recursive: true, force: true })
 })
 
 test('seeds a default bot', async () => {
@@ -421,9 +434,9 @@ test('the other bots: each bot is told who the others are and what each is for, 
   assert.match(prompt, /To hand a task to one of them, call spawn_subagent with its bot_id\./)
   assert.match(await told('!system', 'assistant'), /# The other bots\nYou are the main assistant: the user comes to you first/)
   // What a bot may use is listed with it, and a bot with no description is said to have none.
-  await api('PUT', `/api/bots/travel/skills/deep-research`, { on: true })
+  await api('PUT', `/api/bots/travel/superpowers/field-guide`, { on: true })
   await api('PATCH', '/api/bots/travel', { description: '' })
-  assert.match(await told(), /- 🧳 Travel \(bot_id: travel\): \(no description yet\) Uses skills: deep-research\.\n/)
+  assert.match(await told(), /- 🧳 Travel \(bot_id: travel\): \(no description yet\) Superpowers: Field guide\.\n/)
   await api('PATCH', '/api/bots/travel', { description: 'Plans trips and books travel.' })
 
   // Handed a task, the other bot does it as itself, and knows who handed it over.
@@ -550,147 +563,134 @@ test('the owner edits, uploads and downloads files', async () => {
   await assert.rejects(api('GET', `/api/bots/${bot.id}/file?path=../bot.md`))
 })
 
-test('skills: switching one on links it into the bot\'s folder and tells the bot', async () => {
-  const { skills } = await api('GET', '/api/state')
-  assert.ok(skills.find((s) => s.name === 'deep-research' && s.bundled))
-  assert.doesNotMatch(await told(), /# Skills/)
-
-  const updated = await api('PUT', `/api/bots/${bot.id}/skills/deep-research`, { on: true })
-  assert.deepEqual(updated.skills, ['deep-research'])
-  assert.ok(fs.lstatSync(botPath('skills', 'deep-research')).isSymbolicLink())
-  assert.equal(fs.realpathSync(botPath('skills', 'deep-research')), fs.realpathSync(path.join(home, 'skills', 'deep-research')))
-  assert.match(await told(), /# Skills[\s\S]*- Deep research: .*\(skills\/deep-research\/SKILL\.md\)/)
-  assert.match(await tool('read_file', { path: 'skills/deep-research/SKILL.md' }), /^---\nname: deep-research/)
-  assert.match(await tool('list_files', {}), /skills\/ {2}\(read-only\)/)
-
-  // A bot can use a skill but not change it, switch one on, or reach skills it was not given.
-  assert.match(await tool('write_file', { path: 'skills/deep-research/SKILL.md', content: 'hacked' }), /^Error: Skills are read-only/)
-  assert.match(await tool('read_file', { path: 'skills/inbox-triage/SKILL.md' }), /^Error:/)
-  assert.match(fs.readFileSync(path.join(home, 'skills', 'deep-research', 'SKILL.md'), 'utf8'), /^---\nname: deep-research/)
-
-  // A skill the user drops into the catalog shows up as theirs, not as one that ships with the app.
-  fs.mkdirSync(path.join(home, 'skills', 'my-skill'))
-  fs.writeFileSync(path.join(home, 'skills', 'my-skill', 'SKILL.md'), '---\nname: my-skill\ndescription: >\n  Does a thing\n  across two lines.\n---\nBody')
-  const mine = (await api('GET', '/api/state')).skills.find((s) => s.name === 'my-skill')
-  assert.deepEqual(mine, { name: 'my-skill', title: 'My skill', description: 'Does a thing across two lines.', bundled: false })
-
-  await api('PUT', `/api/bots/${bot.id}/skills/deep-research`, { on: false })
-  assert.ok(!fs.lstatSync(botPath('skills', 'deep-research'), { throwIfNoEntry: false }), 'the link is gone')
-  assert.ok(fs.existsSync(path.join(home, 'skills', 'deep-research', 'SKILL.md')), 'the catalog skill is untouched')
-  await assert.rejects(api('PUT', `/api/bots/${bot.id}/skills/nope`, { on: true }))
-})
-
-test('plugins: one is installed for one bot, bringing its skill and, once set up, its connection', async () => {
-  const plugins = async () => Object.fromEntries((await api('GET', '/api/plugins')).map((p) => [p.id, p]))
+test('superpowers: one is switched on for one bot, which is told of it and reads its instructions but cannot change them', async () => {
+  const list = async () => Object.fromEntries((await api('GET', '/api/superpowers')).map((p) => [p.id, p]))
   const botNow = async (id) => (await api('GET', '/api/state')).bots.find((b) => b.id === id)
-  const other = await api('POST', '/api/bots', { name: 'No plugins', provider: 'mock' })
+  const other = await api('POST', '/api/bots', { name: 'No superpowers', provider: 'mock' })
 
-  // What ships: each with a page of its own, saying what it does and what it adds.
-  const before = await plugins()
-  assert.deepEqual(Object.keys(before), ['gmail', 'google-calendar', 'google-drive', 'linear', 'notion'])
-  const { gmail } = before
-  assert.deepEqual([gmail.name, gmail.category, gmail.skills, gmail.connection, gmail.installedOn], ['Gmail', 'Google', ['gmail'], { name: 'gmail', host: 'gmailmcp.googleapis.com' }, []])
-  assert.ok(gmail.tagline && gmail.can.length >= 3 && /## Two ways it can work/.test(gmail.description))
-  assert.deepEqual([gmail.setup.id, gmail.setup.done, gmail.setup.values], ['google', false, { clientId: '', clientSecret: '' }])
+  // What ships, each with a page of its own saying what it does and what it gives a bot; then the one the tests bring.
+  const all = await list()
+  assert.deepEqual(Object.keys(all), ['linear', 'notion', 'field-guide'], 'those that work in an app first')
+  const { linear, notion, 'field-guide': guide } = all
+  assert.deepEqual([notion.name, notion.category, notion.instructions, notion.service, notion.site, notion.onFor], ['Notion', 'Your apps', true, 'mcp.notion.com', 'https://www.notion.so/', []])
+  assert.deepEqual([guide.instructions, guide.service], [true, null])
+  for (const p of [linear, notion]) assert.ok(p.icon && p.tagline && p.about && p.can.length >= 3, p.id)
+  assert.doesNotMatch(await told(), /# Your superpowers/)
 
-  // Installing is for one bot. Google's direct connection needs a client of the owner's first, so
-  // until then the bot gets the skill and works through its browser.
-  await api('PUT', `/api/bots/${bot.id}/plugins/gmail`, { on: true })
-  assert.deepEqual([(await botNow(bot.id)).plugins, (await botNow(bot.id)).skills.includes('gmail'), (await botNow(bot.id)).connections.includes('gmail')], [['gmail'], true, false])
-  assert.deepEqual([(await botNow(other.id)).plugins, (await botNow(other.id)).skills], [[], []], 'no other bot is touched')
-  assert.deepEqual((await plugins()).gmail.installedOn, [bot.id])
-  assert.match(await told(), /- Gmail: Read, search and answer the user's Gmail\..*\(skills\/gmail\/SKILL\.md\)/)
-  assert.match(await tool('read_file', { path: 'skills/gmail/SKILL.md' }), /https:\/\/mail\.google\.com\//)
-  assert.equal(fs.readlinkSync(botPath('skills', 'gmail')), path.join('..', '..', '..', 'skills', 'gmail'))
+  // Switched on for one bot, and no other.
+  const updated = await api('PUT', `/api/bots/${bot.id}/superpowers/field-guide`, { on: true })
+  assert.deepEqual(updated.superpowers, ['field-guide'])
+  assert.deepEqual(JSON.parse(fs.readFileSync(botPath('superpowers.json'), 'utf8')), { on: ['field-guide'] })
+  assert.deepEqual([(await botNow(other.id)).superpowers, (await list())['field-guide'].onFor], [[], [bot.id]])
+  assert.match(await told(), /# Your superpowers\n[\s\S]*\n- Field guide: Field guide for tests\. Instructions: superpowers\/field-guide\/instructions\.md\.$/)
+  assert.match(await tool('read_file', { path: 'superpowers/field-guide/instructions.md' }), /^# Field guide\n/)
+  assert.match(await tool('list_files', {}), /\nsuperpowers\/ {2}\(read-only\)$/)
+  assert.equal(await tool('list_files', { path: 'superpowers' }), 'superpowers/field-guide/')
 
-  // The owner provides the client once; every Google plugin shares it, and the secret is never sent back.
-  await api('PUT', '/api/plugins/setup/google', { clientId: 'client-123', clientSecret: 'very-secret' })
-  const after = await plugins()
-  assert.deepEqual([after.gmail.setup.done, after['google-drive'].setup.done, after.gmail.setup.values], [true, true, { clientId: 'client-123', clientSecret: '••••••••' }])
-  assert.ok(!JSON.stringify(await api('GET', '/api/state')).includes('very-secret'))
-  // The connection that was waiting for it is now switched on, for the bot that has the plugin and no other.
-  assert.equal((await botNow(bot.id)).connections.includes('gmail'), true)
-  assert.equal((await botNow(other.id)).connections.includes('gmail'), false)
-  const catalog = JSON.parse(fs.readFileSync(path.join(home, 'mcp.json'), 'utf8')).mcpServers
-  assert.deepEqual([catalog.gmail.url, catalog.gmail.oauth.clientId, /gmail\.readonly/.test(catalog.gmail.oauth.scope)], ['https://gmailmcp.googleapis.com/mcp/v1', 'client-123', true])
-  assert.equal(fs.statSync(path.join(home, 'mcp.json')).mode & 0o777, 0o600)
-  // Changing the client ID alone keeps the secret that was saved.
-  await api('PUT', '/api/plugins/setup/google', { clientId: 'client-456' })
-  assert.deepEqual(Object.values(JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).plugins.google), ['client-456', 'very-secret'])
+  // A bot reads its superpowers but cannot change them, reach the ones it was not given, or give itself one.
+  assert.match(await tool('write_file', { path: 'superpowers/field-guide/instructions.md', content: 'hacked' }), /^Error: Superpowers are read-only/)
+  assert.match(await tool('read_file', { path: 'superpowers/notion/instructions.md' }), /^Error:/)
+  assert.equal(await tool('search_files', { query: 'Notion', path: 'superpowers' }), 'No matches for "Notion".')
+  assert.match(await tool('write_file', { path: '../superpowers.json', content: '{"on":["notion"]}' }), /^Error:/)
+  assert.match(fs.readFileSync(path.join(powers, 'field-guide', 'instructions.md'), 'utf8'), /^# Field guide\n/)
 
-  // A plugin that is installed after the setup gets its connection at once.
-  await api('PUT', `/api/bots/${other.id}/plugins/google-calendar`, { on: true })
-  assert.deepEqual([(await botNow(other.id)).skills, (await botNow(other.id)).connections], [['google-calendar'], ['google-calendar']])
-
-  // Removing takes away what it brought, from that bot only.
-  await api('PUT', `/api/bots/${bot.id}/plugins/gmail`, { on: false })
-  assert.deepEqual([(await botNow(bot.id)).plugins, (await botNow(bot.id)).skills.includes('gmail'), (await botNow(bot.id)).connections.includes('gmail')], [[], false, false])
-  assert.deepEqual((await botNow(other.id)).plugins, ['google-calendar'])
-  await assert.rejects(api('PUT', `/api/bots/${bot.id}/plugins/no-such`, { on: true }), /No such plugin/)
-  await assert.rejects(api('PUT', '/api/plugins/setup/nothing', {}), /No plugin asks for that/)
+  await api('PUT', `/api/bots/${bot.id}/superpowers/field-guide`, { on: false })
+  assert.deepEqual([(await botNow(bot.id)).superpowers, (await list())['field-guide'].onFor], [[], []])
+  assert.match(await tool('read_file', { path: 'superpowers/field-guide/instructions.md' }), /^Error:/)
+  await assert.rejects(api('PUT', `/api/bots/${bot.id}/superpowers/gmail`, { on: true }), /No such superpower/)
   await api('DELETE', `/api/bots/${other.id}`)
 })
 
-test('connections: a local MCP server gives the bot its tools', async () => {
-  await api('POST', '/api/connections', { name: 'echo', command: `"${process.execPath}" ${path.resolve('test/fixtures/mcp-stdio.mjs')}` })
-  assert.deepEqual((await api('GET', '/api/state')).connections.map((c) => [c.name, c.kind]), [['echo', 'command']])
-  assert.doesNotMatch(await told('!tools'), /mcp__/, 'in the catalog is not the same as switched on')
+test('superpowers: a service gives the bot its tools, named after the superpower', async () => {
+  addPower('echo', { name: 'Echo', mcp: { command: process.execPath, args: [path.resolve('test/fixtures/mcp-stdio.mjs')] } })
+  try {
+    const echo = (await api('GET', '/api/superpowers')).find((p) => p.id === 'echo')
+    assert.deepEqual([echo.instructions, echo.service], [false, 'a program on this computer'])
+    assert.doesNotMatch(await told('!tools'), /mcp__/, 'there is not the same as switched on')
 
-  assert.deepEqual((await api('PUT', `/api/bots/${bot.id}/connections/echo`, { on: true })).connections, ['echo'])
-  assert.deepEqual(JSON.parse(fs.readFileSync(botPath('mcp.json'), 'utf8')), { enabled: ['echo'] })
-  const status = await until(async () => {
-    const s = (await api('GET', '/api/state')).connectionStatus[bot.id]?.echo
-    return s?.state === 'connecting' ? null : s
-  })
-  assert.deepEqual(status, { state: 'connected', tools: 1, signedIn: false })
-  assert.match(await told('!tools'), /\bmcp__echo__say\b/)
-  assert.equal(await tool('mcp__echo__say', { text: 'hi' }), `said: hi (cwd ${bot.id}/workspace)`)
+    await api('PUT', `/api/bots/${bot.id}/superpowers/echo`, { on: true })
+    const status = await until(async () => {
+      const s = (await api('GET', '/api/state')).superpowerStatus[bot.id]?.echo
+      return s?.state === 'connecting' ? null : s
+    })
+    assert.deepEqual(status, { state: 'connected', tools: 1, signedIn: false })
+    assert.match(await told('!tools'), /\bmcp__echo__say\b/)
+    assert.equal(await tool('mcp__echo__say', { text: 'hi' }), `said: hi (cwd ${bot.id}/workspace)`)
+    assert.match(await told(), /\n- Echo: Echo for tests\. Its tools' names start with mcp__echo__\.$/)
 
-  // The bot cannot switch a connection on for itself: its own mcp.json is outside its workspace.
-  assert.match(await tool('write_file', { path: '../mcp.json', content: '{}' }), /^Error:/)
-
-  await api('PUT', `/api/bots/${bot.id}/connections/echo`, { on: false })
-  assert.doesNotMatch(await told('!tools'), /mcp__/)
-  await api('DELETE', '/api/connections/echo')
-  assert.deepEqual((await api('GET', '/api/state')).connections, [])
+    await api('PUT', `/api/bots/${bot.id}/superpowers/echo`, { on: false })
+    assert.doesNotMatch(await told('!tools'), /mcp__/)
+    assert.equal((await api('GET', '/api/state')).superpowerStatus[bot.id]?.echo, undefined)
+  } finally {
+    removePower('echo')
+  }
 })
 
-test('connections: each bot signs in to a server with its own account', async () => {
+test('superpowers: one with an app is activated by signing the bot in, in the owner\'s browser or the bot\'s, each bot with its own account', async () => {
   const vault = await startOAuthServer()
+  addPower('vault', { name: 'Vault', mcp: { url: vault.url } })
   try {
-    await api('POST', '/api/connections', { name: 'vault', url: vault.url })
-    await api('PUT', `/api/bots/${bot.id}/connections/vault`, { on: true })
-    const state = async (id = bot.id) => (await api('GET', '/api/state')).connectionStatus[id]?.vault?.state
-    await until(async () => (await state()) === 'needs-login')
-    assert.match(await told(), /# Connections that are not available[\s\S]*- vault: the user has to sign in first/)
+    const state = async (id = bot.id) => (await api('GET', '/api/state')).superpowerStatus[id]?.vault?.state
+    const powersOf = async (id) => (await api('GET', '/api/state')).bots.find((b) => b.id === id).superpowers
+    const other = await api('POST', '/api/bots', { name: 'Second', provider: 'mock' })
+    assert.equal((await api('GET', '/api/superpowers')).find((p) => p.id === 'vault').signIn, true)
 
-    // Sign in the way a browser would: open the page, get sent back to Open Bot with a code.
-    const { url } = await api('POST', `/api/bots/${bot.id}/connections/vault/login`)
-    const page = await fetch(url, { redirect: 'manual' })
-    const back = page.headers.get('location')
-    assert.ok(back.startsWith(`http://localhost:${PORT}/api/mcp/callback?`), back)
-    assert.match(await (await fetch(back)).text(), /Connected\./)
-    assert.equal(await state(), 'connected')
+    // Without a sign-in it is not active, and cannot be made so.
+    await assert.rejects(api('PUT', `/api/bots/${bot.id}/superpowers/vault`, { on: true }), /Vault becomes active once the bot is signed in to it/)
+    assert.deepEqual(await powersOf(bot.id), [])
+
+    // In the bot's own browser, which the owner uses from any device. The stand-in service approves
+    // at once and sends the browser back to Open Bot with a code, which the browser catches.
+    const { windowId } = await api('POST', `/api/bots/${bot.id}/superpowers/vault/login`, { via: 'bot' })
+    const windows = async () => (await api('GET', '/api/state')).browsers[bot.id]?.windows ?? []
+    assert.equal((await windows()).find((w) => w.id === windowId)?.threadId, 'sign-in:vault')
+    await until(async () => (await state()) === 'connected', 20_000)
+    assert.deepEqual(await powersOf(bot.id), ['vault'], 'signing in is what activates it')
     assert.equal(await tool('mcp__vault__whoami', {}), 'signed in with token-1')
+    assert.match(await told(), /\n- Vault: Vault for tests\. Its tools' names start with mcp__vault__\.$/)
+    await until(async () => !(await windows()).some((w) => w.id === windowId), 10_000)
 
-    // The account is kept where the bot's own tools cannot reach it, and belongs to this bot only.
-    const saved = botPath('private', 'mcp', 'vault.json')
+    // In the owner's own browser: the page to open there is given back. The service sends that
+    // browser to the desktop app's address, and the app passes it on.
+    const { url } = await api('POST', `/api/bots/${other.id}/superpowers/vault/login`, { via: 'app' })
+    const back = (await fetch(url, { redirect: 'manual' })).headers.get('location')
+    assert.ok(back.startsWith('openbot://sign-in/callback?'), back)
+    assert.deepEqual(await powersOf(other.id), [], 'not active until the sign-in has come back')
+    assert.deepEqual(await api('POST', '/api/superpowers/return', { url: back }), { botId: other.id, id: 'vault' })
+    assert.deepEqual(await powersOf(other.id), ['vault'])
+    assert.equal(await tool('mcp__vault__whoami', {}, other.id), 'signed in with token-2', 'each bot has an account of its own')
+    await assert.rejects(api('POST', '/api/superpowers/return', { url: back }), /expired/, 'a way back is used once')
+
+    // Nothing else finishes a sign-in: not Open Bot's own address over the network or from the
+    // bot's browser, not a way back that was made up, and not some other address.
+    const forged = `http://localhost:${PORT}/api/superpowers/callback?code=the-code&state=made-up`
+    assert.equal((await fetch(forged)).status, 401)
+    assert.match(await tool('browser_navigate', { url: forged }), /^Error:/)
+    await assert.rejects(api('POST', '/api/superpowers/return', { url: 'openbot://sign-in/callback?code=the-code&state=made-up' }), /expired/)
+    await assert.rejects(api('POST', '/api/superpowers/return', { url: 'https://example.com/?code=the-code' }), /not the way back/)
+
+    // The account is kept where the bot's own tools cannot reach it.
+    const saved = botPath('private', 'superpowers', 'vault.json')
     assert.equal(JSON.parse(fs.readFileSync(saved, 'utf8')).tokens.access_token, 'token-1')
     assert.equal(fs.statSync(saved).mode & 0o777, 0o600)
-    assert.match(await tool('read_file', { path: '../private/mcp/vault.json' }), /^Error:/)
-    const other = await api('POST', '/api/bots', { name: 'Second', provider: 'mock' })
-    await api('PUT', `/api/bots/${other.id}/connections/vault`, { on: true })
-    await until(async () => (await state(other.id)) === 'needs-login')
+    assert.match(await tool('read_file', { path: '../private/superpowers/vault.json' }), /^Error:/)
 
-    // A sign-in that was never started here cannot be finished.
-    assert.match(await (await fetch(`${BASE}/api/mcp/callback?code=the-code&state=made-up`)).text(), /Sign-in failed/)
+    // Giving up on activating leaves nothing behind, and the way back no longer works.
+    const third = await api('POST', '/api/bots', { name: 'Third', provider: 'mock' })
+    const { url: begun } = await api('POST', `/api/bots/${third.id}/superpowers/vault/login`, { via: 'app' })
+    const late = (await fetch(begun, { redirect: 'manual' })).headers.get('location')
+    await api('DELETE', `/api/bots/${third.id}/superpowers/vault/login`)
+    await assert.rejects(api('POST', '/api/superpowers/return', { url: late }), /expired/)
+    assert.deepEqual(await powersOf(third.id), [])
+    assert.ok(!fs.existsSync(path.join(home, 'bots', third.id, 'private', 'superpowers', 'vault.json')))
 
-    await api('POST', `/api/bots/${bot.id}/connections/vault/logout`)
-    assert.equal(await state(), 'needs-login')
-    assert.equal(JSON.parse(fs.readFileSync(saved, 'utf8')).tokens, undefined, 'the account is forgotten')
-    await api('DELETE', '/api/connections/vault')
-    assert.deepEqual((await api('GET', '/api/state')).bots.map((b) => b.connections).flat(), [], 'removing a connection switches it off everywhere')
+    // Deactivating forgets the sign-in.
+    await api('PUT', `/api/bots/${bot.id}/superpowers/vault`, { on: false })
+    assert.ok(!fs.existsSync(saved), 'deactivating forgets everything the bot kept for it')
+    assert.equal(await state(), undefined)
+    for (const b of [other, third]) await api('DELETE', `/api/bots/${b.id}`)
   } finally {
+    removePower('vault')
     await vault.close()
   }
 })

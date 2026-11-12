@@ -62,7 +62,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     '-c', `developer_instructions=${toml(instructions)}`,
     // Open Bot passes the bot's AGENTS.md itself, fresh on every turn.
     '-c', 'project_doc_max_bytes=0',
-    // Codex has its own skills (and finds the user's); the bot's skills are the ones in its instructions.
+    // Codex has skills of its own (and finds the user's); the bot's superpowers are the ones in its instructions.
     '-c', 'skills.include_instructions=false',
     '-c', 'skills.bundled.enabled=false',
     ...(req.toolsUrl

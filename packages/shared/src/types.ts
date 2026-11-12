@@ -20,7 +20,7 @@ export interface ModelInfo {
 
 /**
  * A bot is a folder (see server/bots.ts). These fields are what its owner controls: they live in
- * bot.md, next to the skill links and connection list, where the bot itself cannot write.
+ * bot.md, next to the list of its superpowers, where the bot itself cannot write.
  * What the bot knows (its instructions, memory and files) lives in its workspace instead.
  */
 export interface Bot {
@@ -42,12 +42,8 @@ export interface Bot {
   webSearch: boolean
   /** Run this bot's browser without a visible window (it is still viewable in the UI). */
   headless: boolean
-  /** Names of the catalog skills switched on for this bot. */
-  skills: string[]
-  /** Names of the catalog connections switched on for this bot. */
-  connections: string[]
-  /** Ids of the plugins installed for this bot. */
-  plugins: string[]
+  /** Ids of the superpowers switched on for this bot. */
+  superpowers: string[]
   /** How its mascot looks. The mascot holds a sign with `emoji` on it. */
   look: Look
   /** Set while the bot's model is choosing its look, just after the bot was made. */
@@ -70,55 +66,40 @@ export interface Look {
   clothes: ClothesColor
 }
 
-/** A skill in the shared catalog: a folder with a SKILL.md the bot reads when the task calls for it. */
-export interface Skill {
-  /** Folder name; what a bot's skill link points at. */
-  name: string
-  title: string
-  description: string
-  /** Ships with Open Bot, as opposed to one the user added to the catalog. */
-  bundled: boolean
-}
-
-/** A ready-made ability that can be installed for one bot: its skills, and usually a connection to a service. */
-export interface Plugin {
+/**
+ * Something a bot can do beyond its own tools, such as working in the user's Notion. Every one ships
+ * with Open Bot, and the owner switches it on for one bot at a time. It brings instructions the bot
+ * reads when a task calls for them, a service the bot signs in to and works in, or both.
+ */
+export interface Superpower {
   id: string
   name: string
-  /** An emoji, shown on a tile of `color`. */
+  /** Its app icon, as SVG markup on a square, or empty when it has none. Each app rounds its corners. */
   icon: string
-  color: string
   category: string
-  publisher: string
   tagline: string
-  /** The plugin's own page, in Markdown. */
-  description: string
-  /** What a bot with the plugin is able to do, in plain words. */
+  /** Its own page, in Markdown. */
+  about: string
+  /** What a bot with it is able to do, in plain words. */
   can: string[]
-  /** Names of the catalog skills it switches on. */
-  skills: string[]
-  /** The connection it switches on, and the service it leads to. */
-  connection: { name: string; host: string } | null
+  /** It comes with instructions the bot reads when a task calls for them. */
+  instructions: boolean
+  /** It works in an app the bot signs in to, and is active only once the bot is signed in. */
+  signIn: boolean
+  /** Where its tools come from, for display ("mcp.notion.com"), when it brings a service. */
+  service: string | null
   /** Where the service is on the web. */
   site: string
-  /** Something the owner provides once before the connection can be used. Secrets are never sent back. */
-  setup: { id: string; title: string; fields: { key: string; label: string; secret?: boolean }[]; done: boolean; values: Record<string, string> } | null
-  /** Ids of the bots it is installed for. */
-  installedOn: string[]
+  /** Ids of the bots it is switched on for. */
+  onFor: string[]
 }
 
-/** An MCP server in the shared catalog. Secrets (headers, environment) never leave the server. */
-export interface Connection {
-  name: string
-  kind: 'url' | 'command'
-  /** The URL, or the command line, for display. */
-  target: string
-}
-
-export interface ConnectionStatus {
+/** How a bot's connection to a superpower's service stands. */
+export interface SuperpowerStatus {
   state: 'connecting' | 'connected' | 'needs-login' | 'error'
-  /** How many tools the server offers, once connected. */
+  /** How many tools the service offers, once connected. */
   tools: number
-  /** This bot has an account saved for the server (so it can be signed out). */
+  /** This bot has an account saved for the service (so it can be signed out). */
   signedIn?: boolean
   error?: string
 }
@@ -362,10 +343,8 @@ export type ServerEvent =
   | { type: 'providers'; providers: ProviderInfo[] }
   | { type: 'settings'; settings: Settings }
   | { type: 'principles'; principles: Principles }
-  | { type: 'skills'; skills: Skill[] }
-  | { type: 'connections'; connections: Connection[] }
-  | { type: 'plugins'; plugins: Plugin[] }
-  | { type: 'connection.status'; botId: string; name: string; status: ConnectionStatus | null }
+  | { type: 'superpowers'; superpowers: Superpower[] }
+  | { type: 'superpower.status'; botId: string; id: string; status: SuperpowerStatus | null }
   | { type: 'files.changed'; botId: string }
   | { type: 'browser.state'; botId: string; state: BrowserState }
 
@@ -400,11 +379,9 @@ export interface AppState {
   tasks: ScheduledTask[]
   providers: ProviderInfo[]
   browsers: Record<string, BrowserState>
-  skills: Skill[]
-  connections: Connection[]
-  plugins: Plugin[]
-  /** Live state of each bot's switched-on connections, by bot id then connection name. */
-  connectionStatus: Record<string, Record<string, ConnectionStatus>>
+  superpowers: Superpower[]
+  /** How each bot's superpowers with a service stand, by bot id then superpower id. */
+  superpowerStatus: Record<string, Record<string, SuperpowerStatus>>
   /** Where everything is stored, for display (e.g. "~/.openbot"). */
   home: string
   settings: Settings

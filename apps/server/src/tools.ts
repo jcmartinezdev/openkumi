@@ -5,7 +5,7 @@ import { createBot, listBots } from './bots.ts'
 import { browserFor, byRef, isWebPage, snapshot } from './browser.ts'
 import { PORT } from './config.ts'
 import { settings } from './settings.ts'
-import { connectionTools } from './connections.ts'
+import { serviceTools } from './mcp.ts'
 import * as db from './db.ts'
 import { PAGE_GUIDE, makePage } from './pages.ts'
 import * as tasks from './tasks.ts'
@@ -108,7 +108,7 @@ const fileTools: Tool[] = [
   {
     name: 'read_file',
     description:
-      'Read a text file from your workspace, or from one of your skills (skills/<name>/SKILL.md). ' +
+      'Read a text file from your workspace, or the instructions of one of your superpowers (superpowers/<id>/instructions.md). ' +
       'Long files come back a window of lines at a time.',
     parameters: params(
       {
@@ -230,7 +230,7 @@ const spawnTool: Tool = {
     'Start a subagent that works on a task in the background, in parallel with you. Returns immediately with its id. ' +
     'The subagent has the same tools as you but none of this conversation, so the task must be fully self-contained. ' +
     'Pass bot_id to hand the task to another of the user\'s bots instead: it does it as itself, with its own ' +
-    'instructions, files, browser logins and connections.',
+    'instructions, files, browser logins and superpowers.',
   parameters: params(
     {
       name: str('Short label shown in the UI, e.g. "Compare prices"'),
@@ -602,14 +602,14 @@ const webTools: Tool[] = [
   },
 ]
 
-/** Everything a thread's bot can call right now, plus a line for each connection that could not be reached. */
-export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; notes: string[] }> {
+/** Everything a thread's bot can call right now, and why any of its superpowers' services cannot be used. */
+export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problems: Record<string, string> }> {
   const canSpawn = agent.depthOf(thread) < settings().maxDepth
-  const connected = await connectionTools(thread.botId)
+  const services = await serviceTools(thread.botId)
   // Nobody watches a scheduled run, so there is nobody to ask to take over its browser.
   const browsing = thread.kind === 'task' ? browserTools.filter((t) => t.name !== 'browser_ask_user') : browserTools
   const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...taskTools, ...browsing, ...webTools, pageTool]
-  return { tools: [...own, ...connected.tools], notes: connected.notes }
+  return { tools: [...own, ...services.tools], problems: services.problems }
 }
 
 export async function runTool(tools: Tool[], call: Extract<ItemData, { type: 'function_call' }>, ctx: ToolContext): Promise<string> {

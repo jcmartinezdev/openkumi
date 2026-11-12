@@ -1,4 +1,4 @@
-// The small subset of YAML front matter that bot.md and SKILL.md files use: top-level
+// The small subset of YAML front matter that bot.md files use: top-level
 // `key: value` pairs, quoted strings, and folded or literal blocks. No dependency needed.
 
 export interface Parsed {

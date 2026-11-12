@@ -43,6 +43,11 @@ export interface DesktopState {
   current: string | null
   /** Null while there is nothing to connect to: no environment turned on, or the local one still starting. */
   connection: Link | null
+  /**
+   * This app is what the computer opens the way back from a sign-in in its own browser with, so a
+   * superpower's sign-in can happen there. Only an installed app can be. Missing from older apps.
+   */
+  catchesSignIns?: boolean
 }
 
 export type EnvironmentStatus = 'connected' | 'unreachable' | 'refused' | 'off'
@@ -71,4 +76,10 @@ export interface DesktopBridge {
    * The address is a site of its own, so the page cannot reach the window.
    */
   showPage(html: string): Promise<string>
+  /**
+   * Called with the address a sign-in in this computer's own browser came back to, for the window
+   * to pass on to its environment. One that came before anything listened goes to the first listener.
+   * Missing from older apps.
+   */
+  onSignIn?(listener: (url: string) => void): () => void
 }

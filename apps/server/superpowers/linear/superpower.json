@@ -1,20 +1,14 @@
 {
   "name": "Linear",
-  "icon": "📐",
-  "color": "#5e6ad2",
-  "category": "Work",
-  "publisher": "Open Bot",
+  "category": "Your apps",
   "tagline": "Look up issues and projects, file new ones, and keep them up to date.",
+  "summary": "Look up, file and update issues, projects and cycles in the user's Linear workspace. Existing issues are changed only after the user approves.",
   "can": [
     "Read the issues, projects and cycles your account can see",
     "Create issues and comments",
     "Change an issue's status, assignee or priority, only after you approve it"
   ],
-  "skills": [
-    "linear"
-  ],
-  "connection": {
-    "name": "linear",
+  "mcp": {
     "url": "https://mcp.linear.app/mcp"
   },
   "site": "https://linear.app/"

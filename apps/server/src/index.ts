@@ -3,15 +3,13 @@ import path from 'node:path'
 import { createBot, importLegacyBots, listBots, moveOffChatGPTSignIn } from './bots.ts'
 import { stopAllBrowsers } from './browser.ts'
 import { workspaceDir } from './config.ts'
-import { closeAllConnections } from './connections.ts'
+import { closeAll } from './mcp.ts'
 import * as db from './db.ts'
 import { startServer } from './http.ts'
 import { refreshProviders } from './providers/index.ts'
-import { syncBundledSkills } from './skills.ts'
+import { moveToSuperpowers } from './superpowers.ts'
 import { startScheduler } from './tasks.ts'
 import { commit, scaffold } from './workspace.ts'
-
-syncBundledSkills()
 
 // Bots used to live in the database; write them out as folders once.
 const legacy = db.legacyBots()
@@ -21,6 +19,7 @@ if (legacy) {
 }
 
 moveOffChatGPTSignIn()
+moveToSuperpowers()
 
 for (const bot of listBots()) {
   // A bot folder made by hand may have nothing but bot.md in it.
@@ -52,7 +51,7 @@ async function shutdown() {
   if (closing) return
   closing = true
   server.close()
-  await Promise.all([stopAllBrowsers(), closeAllConnections()])
+  await Promise.all([stopAllBrowsers(), closeAll()])
   db.closeDb()
   process.exit(0)
 }

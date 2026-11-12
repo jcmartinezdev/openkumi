@@ -29,8 +29,12 @@ export function browsingThread(threads: Thread[], thread: Thread | undefined): T
   return thread?.archivedAt ? mainThread(threads, thread.botId) : thread
 }
 
+/** The window a superpower's sign-in happens in: a window of the bot's browser that belongs to no thread. */
+export const signInThread = (superpowerId: string) => `sign-in:${superpowerId}`
+
 /** Whose session a window is, in a few words. */
 export function sessionName(threads: Thread[], threadId: string | null | undefined): string {
+  if (threadId?.startsWith('sign-in:')) return 'Signing in'
   const thread = threads.find((t) => t.id === threadId)
   if (!thread || thread.kind === 'chat') return 'Conversation'
   return thread.kind === 'task' ? `Scheduled: ${thread.title}` : thread.title

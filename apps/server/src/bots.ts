@@ -1,18 +1,16 @@
 // Bots are folders under ~/.openbot/bots. bot.md holds what the owner controls (name, description,
-// model, rules); the skill links and mcp.json beside it say what the bot may use. Nothing here is
+// model, rules); superpowers.json beside it says what more the bot may do. Nothing here is
 // reachable by the bot's own file tools, which are confined to its workspace.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { Bot, Effort, Look } from '@openbot/shared'
 import { HOME, botDir, emit, privateDir, readSecrets, workspaceDir, writeSecret } from './config.ts'
-import { enabledConnections } from './connections.ts'
 import { formatFrontMatter, parseFrontMatter } from './frontmatter.ts'
 import { CHOOSE_LOOK, cleanLook, lookFrom, lookQuestion, readChoice, readLook, writeLook } from './look.ts'
 import { askOnce, getProvider, providerInfos } from './providers/index.ts'
 import { settings as appSettings, updateSettings } from './settings.ts'
-import { installedPlugins } from './plugins.ts'
-import { enabledSkills } from './skills.ts'
+import { enabledSuperpowers } from './superpowers.ts'
 import { scaffold } from './workspace.ts'
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
@@ -21,8 +19,8 @@ const EFFORTS = ['', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 const FALLBACK = 'codex'
 const file = (id: string) => path.join(botDir(id), 'bot.md')
 
-/** Settings as stored in bot.md; the lists of skills and connections are read from their own places. */
-type Settings = Omit<Bot, 'skills' | 'connections' | 'plugins' | 'choosingLook'>
+/** Settings as stored in bot.md; the list of superpowers is read from its own file. */
+type Settings = Omit<Bot, 'superpowers' | 'choosingLook'>
 /** A look can be changed a part at a time. */
 export type BotPatch = Partial<Omit<Settings, 'id' | 'createdAt' | 'look'>> & { look?: Partial<Look> }
 
@@ -75,9 +73,7 @@ const choosing = new Set<string>()
 
 const full = (s: Settings): Bot => ({
   ...s,
-  skills: enabledSkills(s.id),
-  connections: enabledConnections(s.id),
-  plugins: installedPlugins(s.id),
+  superpowers: enabledSuperpowers(s.id),
   ...(choosing.has(s.id) ? { choosingLook: true } : {}),
 })
 

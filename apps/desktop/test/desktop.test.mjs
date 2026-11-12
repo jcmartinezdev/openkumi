@@ -11,12 +11,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { after, before, test } from 'node:test'
 import { _electron } from 'playwright-core'
+import { startOAuthServer } from '../../server/test/fixtures/mcp-oauth.mjs'
 
 const LOCAL_PORT = 4950 + Math.floor(Math.random() * 20)
 const REMOTE_PORT = LOCAL_PORT + 25
 const SERVER = path.resolve(import.meta.dirname, '../../server/src/index.ts')
 const packaged = process.env.OPENBOT_DESKTOP_APP
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-desktop-'))
+// A copy of the superpowers that ship, so a test can point their services somewhere that is not the real one.
+fs.cpSync(path.resolve(import.meta.dirname, '../../server/superpowers'), `${tmp}/superpowers`, { recursive: true })
 // OPENBOT_DESKTOP_YES answers the app's own confirmation dialogs, which a test cannot click.
 const env = {
   ...process.env,
@@ -26,6 +29,9 @@ const env = {
   OPENBOT_HOME: `${tmp}/local-home`,
   OPENBOT_PORT: String(LOCAL_PORT),
   OPENBOT_MOCK: '1',
+  OPENBOT_SUPERPOWERS: `${tmp}/superpowers`,
+  // The app run from the source cannot be what the computer opens sign-ins with; the tests hand it them.
+  OPENBOT_DESKTOP_CATCH_SIGN_INS: '1',
   // Scripted stand-ins for the Claude Code, Codex and Grok programs, so the tests do not depend on what is installed here.
   OPENBOT_CLAUDE_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-claude.mjs'),
   OPENBOT_CODEX_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-codex.mjs'),
@@ -510,44 +516,82 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
   }
 })
 
-test('plugins: browse them, open one, and install it for one bot', async () => {
+test('superpowers: browse them, open one, activate it for one bot here or in the bot\'s settings, and sign the bot in', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
-  const win = await launch()
-  await showsBot(win, 'Assistant')
-  win.on('dialog', (dialog) => dialog.accept())
-  await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Second bot', provider: 'mock' })
+  // Notion and Linear are reached at a stand-in that asks for a sign-in the way they do, and approves it at once.
+  const service = await startOAuthServer()
+  try {
+    for (const id of ['notion', 'linear']) {
+      const file = `${tmp}/superpowers/${id}/superpower.json`
+      fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), mcp: { url: service.url } }))
+    }
+    const win = await launch()
+    await showsBot(win, 'Assistant')
+    win.on('dialog', (dialog) => dialog.accept())
+    await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Second bot', provider: 'mock' })
+    const powersOf = async () => Object.fromEntries((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.map((b) => [b.name, b.superpowers]))
 
-  // The list: every plugin with what it is for.
-  await win.evaluate(() => (location.hash = '/settings/plugins'))
-  await win.locator('.plugin-card').first().waitFor()
-  assert.deepEqual(await win.locator('.plugin-card h3').allInnerTexts(), ['Gmail', 'Google Calendar', 'Google Drive', 'Linear', 'Notion'])
+    // The list: every superpower with what it is for, in the sidebar where skills, connections and plugins used to be.
+    await win.evaluate(() => (location.hash = '/settings/superpowers'))
+    await win.locator('.power-card').first().waitFor()
+    assert.deepEqual(await win.locator('.power-card h3').allInnerTexts(), ['Linear', 'Notion'])
+    const nav = await win.locator('.set-nav').innerText()
+    assert.match(nav, /Superpowers/)
+    assert.doesNotMatch(nav, /Skills|Connections|Plugins/)
 
-  // A plugin's own page says what it does, what a bot can do with it and what installing adds.
-  await win.locator('.plugin-card', { hasText: 'Gmail' }).click()
-  await win.locator('.plugin-head h1', { hasText: 'Gmail' }).waitFor()
-  assert.match(await win.locator('.plugin-about').innerText(), /Gives a bot your inbox[\s\S]*Two ways it can work/)
-  assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['What a bot can do with it', 'What installing adds to the bot', 'Direct connection'])
+    // Its own page says what it does and what it gives a bot, and each bot has a button to activate it.
+    await win.locator('.power-card', { hasText: 'Notion' }).click()
+    await win.locator('.power-head h1', { hasText: 'Notion' }).waitFor()
+    assert.match(await win.locator('.power-about').innerText(), /Lets a bot work in your Notion workspace/)
+    assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['What a bot can do with it', 'Your bots', 'What it gives a bot'])
+    assert.match(await win.locator('.set-section', { hasText: 'What it gives a bot' }).innerText(), /Instructions[\s\S]*Tools from 127\.0\.0\.1/)
+    const row = win.locator('.set-row', { hasText: 'Second bot' })
+    assert.match(await row.innerText(), /Not active/)
 
-  // Install asks which bot it is for, and only that bot gets it.
-  await win.getByRole('button', { name: 'Install' }).click()
-  await win.locator('.choose-bot button', { hasText: 'Second bot' }).click()
-  const row = win.locator('.set-section', { hasText: 'Installed for' }).locator('.set-row')
-  await row.waitFor()
-  assert.match(await row.innerText(), /Second bot\s*Works through the bot’s browser/)
-  const bots = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots
-  assert.deepEqual(bots.map((b) => [b.name, b.plugins, b.skills.includes('gmail')]), [['Assistant', [], false], ['Second bot', ['gmail'], true]])
-  // It cannot be installed twice for the same bot.
-  await win.getByRole('button', { name: 'Install' }).click()
-  assert.equal(await win.locator('.choose-bot button', { hasText: 'Second bot' }).isDisabled(), true)
-  await win.keyboard.press('Escape')
+    // Activating asks how the bot should sign in; it is active only once it has. With the browser on
+    // this computer, the page opens there, and the service sends that browser back to the app.
+    await app.evaluate(({ shell }) => {
+      globalThis.opened = []
+      shell.openExternal = async (url) => void globalThis.opened.push(url)
+    })
+    await win.getByRole('button', { name: 'Activate superpower: Notion for Second bot' }).click()
+    const popup = win.locator('.dialog', { hasText: 'Activate Notion for Second bot' })
+    await popup.getByRole('button', { name: /Sign in with your browser/ }).click()
+    await popup.locator('p', { hasText: 'Finish signing in to Notion in your browser' }).waitFor()
+    await until(() => app.evaluate(() => globalThis.opened.length > 0))
+    const [page] = await app.evaluate(() => globalThis.opened)
+    assert.deepEqual((await powersOf())['Second bot'], [], 'not active before the sign-in is done')
+    const back = (await fetch(page, { redirect: 'manual' })).headers.get('location')
+    await app.evaluate(({ app }, url) => app.emit('open-url', { preventDefault() {} }, url), back)
+    await popup.locator('p', { hasText: 'Notion is active for Second bot.' }).waitFor()
+    await popup.getByRole('button', { name: 'Done' }).click()
+    await row.locator('p', { hasText: 'Signed in · 1 tool' }).waitFor({ timeout: 30_000 })
+    assert.deepEqual(await powersOf(), { Assistant: [], 'Second bot': ['notion'] }, 'only that bot gets it')
 
-  // The list shows where it is installed, and removing it takes it away again.
-  await win.locator('.crumbs a', { hasText: 'Plugins' }).click()
-  await win.locator('.plugin-card', { hasText: 'Installed for 1 bot' }).click()
-  await win.locator('.set-row', { hasText: 'Second bot' }).getByRole('button', { name: 'Remove' }).click()
-  await win.locator('.set-section', { hasText: 'Installed for' }).waitFor({ state: 'detached' })
+    // The bot's own settings have the same buttons. Signing in inside the bot's browser shows that
+    // browser in the popup; the stand-in approves at once.
+    const second = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Second bot')
+    await win.evaluate((id) => (location.hash = `/settings/bots/${id}/superpowers`), second.id)
+    await win.locator('.tabbar a[aria-selected="true"]', { hasText: 'Superpowers' }).waitFor()
+    assert.equal(await win.locator('.tabbar a', { hasText: 'Superpowers' }).locator('.count').innerText(), '1')
+    await win.getByRole('button', { name: 'Activate superpower: Linear for Second bot' }).click()
+    const again = win.locator('.dialog', { hasText: 'Activate Linear for Second bot' })
+    await again.getByRole('button', { name: /Sign in inside Second bot’s browser/ }).click()
+    await again.locator('p', { hasText: 'Linear is active for Second bot.' }).waitFor({ timeout: 30_000 })
+    await again.getByRole('button', { name: 'Done' }).click()
+    assert.deepEqual((await powersOf())['Second bot'], ['linear', 'notion'])
+    // Notion is signed in, so deactivating it asks first (the test answers yes) and forgets the sign-in.
+    await win.getByRole('button', { name: 'Deactivate superpower: Notion for Second bot' }).click()
+    await until(async () => (await powersOf())['Second bot'].join() === 'linear')
 
-  await app.close()
+    // The list shows where each one is active.
+    await win.evaluate(() => (location.hash = '/settings/superpowers'))
+    await win.locator('.power-card', { hasText: 'Linear' }).locator('.pill', { hasText: 'Active for 1 bot' }).waitFor()
+    await win.locator('.power-card', { hasText: 'Notion' }).locator('.pill').waitFor({ state: 'detached' })
+  } finally {
+    await app?.close().catch(() => {})
+    await service.close()
+  }
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 

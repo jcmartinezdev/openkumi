@@ -19,7 +19,7 @@ const toolIcon = (name: string) =>
   : name.includes('subagent') ? 'agents'
   : name.includes('scheduled_task') || name === 'schedule_task' ? 'clock'
   : FILE_TOOLS.has(name) ? 'file'
-  : name.startsWith('mcp__') ? 'plug'
+  : name.startsWith('mcp__') ? 'sparkles'
   : 'bolt'
 
 /** Opens a file of the bot's workspace in its settings; set by the chat that is showing. */

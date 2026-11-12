@@ -10,10 +10,32 @@ import os from 'node:os'
 import { pair, parseAddress } from '@openbot/client/pair'
 import { config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
-import { ASSUME_YES, HIDDEN, PRELOAD } from './paths.ts'
+import { ASSUME_YES, CATCH_SIGN_INS, HIDDEN, PRELOAD } from './paths.ts'
 import { APP_URL, keepPage, serveInterface } from './protocol.ts'
 
 let win: BrowserWindow | null = null
+
+// ---- sign-ins in this computer's own browser
+// A superpower's sign-in can happen in the browser on this computer, where the person's accounts
+// already are. The service then sends that browser back to an openbot:// address, which the
+// computer opens with this app, and the app hands it to the window to pass on to its environment.
+
+/** The way back from a sign-in (the server's APP_RETURN, apps/server/src/mcp.ts). Nothing else opened with this app is acted on. */
+const SIGN_IN_RETURN = 'openbot://sign-in/callback?'
+/** This app is what the computer opens that address with. Only an installed app can be. */
+let catchesSignIns = CATCH_SIGN_INS
+/** A way back that arrived before the window could take it. */
+let waitingReturn: string | null = null
+
+function signInReturned(url: string) {
+  if (!url.startsWith(SIGN_IN_RETURN)) return
+  if (win && !win.isDestroyed() && !win.webContents.isLoading()) win.webContents.send('desktop:sign-in', url)
+  else waitingReturn = url
+  // The person was in their browser; they carry on here.
+  if (win?.isMinimized()) win.restore()
+  win?.show()
+  app.focus({ steal: true })
+}
 
 // ---- what the window is told
 
@@ -34,6 +56,7 @@ function state(): DesktopState {
     environments: config.environments.map(({ id, name, url, enabled }) => ({ id, name, url, enabled })),
     current: showing(),
     connection: connection(),
+    catchesSignIns,
   }
 }
 
@@ -159,6 +182,11 @@ function createWindow() {
   created.on('closed', () => {
     if (win === created) win = null
   })
+  created.webContents.on('did-finish-load', () => {
+    if (!waitingReturn) return
+    created.webContents.send('desktop:sign-in', waitingReturn)
+    waitingReturn = null
+  })
   created.on('enter-full-screen', announce)
   created.on('leave-full-screen', announce)
 
@@ -209,11 +237,21 @@ function buildMenu() {
 
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
-  app.on('second-instance', () => {
+  // A Mac hands the app the addresses it opens with it; Windows and Linux start it again with one.
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    signInReturned(url)
+  })
+  app.on('second-instance', (_event, argv) => {
     if (win?.isMinimized()) win.restore()
     win?.focus()
+    const url = argv.find((arg) => arg.startsWith(SIGN_IN_RETURN))
+    if (url) signInReturned(url)
   })
   void app.whenReady().then(() => {
+    if (app.isPackaged) catchesSignIns = app.setAsDefaultProtocolClient('openbot')
+    const started = process.argv.find((arg) => arg.startsWith(SIGN_IN_RETURN))
+    if (started) waitingReturn = started
     // Tests run the app without a window, so it should not sit in the Dock either.
     if (HIDDEN) app.dock?.hide()
     serveInterface()

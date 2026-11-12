@@ -2,7 +2,7 @@
 
 Open-source, local-first AI bots, as a desktop app. Bots run on your own computer, or on another
 computer of yours that the app connects to. Each bot is a folder with its own instructions,
-memory, files, skills and connections, plus its own conversation, subagents and a private web browser
+memory, files and superpowers, plus its own conversation, subagents and a private web browser
 that stays logged in.
 
 - **Bring the subscription you already have.** Bots run on Codex (your ChatGPT plan), Claude Code
@@ -29,12 +29,10 @@ that stays logged in.
 - **Bots that write their own instructions.** A bot keeps an `AGENTS.md` and a `memory/` folder
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone.
-- **Skills and connections you switch on.** A catalog of skills (the `SKILL.md` format Claude Code
-  and Codex use) and MCP servers, toggled per bot. Each bot signs in to a server with its own
-  account. A bot can use what you give it but cannot change it or give itself more.
-- **Plugins.** Ready-made abilities you install for one bot at a time: Gmail, Google Calendar,
-  Google Drive, Notion and Linear to start with. Each has a page that says what it does; installing
-  gives that bot the skill and the connection it needs.
+- **Superpowers.** What a bot can do beyond chatting and browsing, switched on by you for one bot
+  at a time: working in Notion or Linear to start with. Each has a page that says what it does, and
+  signs in with an account of the bot's own. A bot can use what you give it but cannot
+  change it or give itself more.
 - **Replies you can look at.** Replies are drawn with code in colour (with a copy button), tables
   that scroll sideways, ```` ```mermaid ```` diagrams and formulas. A bot can also show a page in
   the conversation (a chart, a dashboard, a timeline), drawn in the app's light or dark colours,
@@ -105,7 +103,7 @@ npm run pair       # a code for pairing one more computer with it
 
 There is an iPhone app (`apps/mobile`, Expo and React Native) for chatting with your bots,
 watching and steering their browsers, and looking after them: its Settings (the gear on the list
-of bots) change each bot's name, rules, model, browser and skills, switch providers on and off,
+of bots) change each bot's name, rules, model, browser and superpowers, switch providers on and off,
 set what new bots start with, and choose light or dark and the size of messages on the phone.
 Scheduled tasks are at the bottom of the list of bots, as on the computer: turn them on and off,
 run them, read their runs, and make or change them. It pairs with a server the way another computer does: on
@@ -118,7 +116,7 @@ npm run mobile     # builds it and opens it in the iPhone simulator (needs Xcode
 ```
 
 The phone reaches the server over your network, so it works at home, or anywhere with a private
-network such as Tailscale on both. Signing in to providers, plugins, connections, files and
+network such as Tailscale on both. Signing in to providers and to a superpower's app, files and
 the Advanced settings are managed in the desktop app.
 
 There is no web version: the server has no pages, and opening its address in a browser shows a
@@ -138,11 +136,10 @@ Everything is set from the Settings page, which saves each change as you make it
 | General | what a new bot starts with; sidebar and confirmation preferences |
 | Appearance, Chat | theme, text size, how Enter behaves, how much detail a step shows (kept per device) |
 | Providers | Codex and Claude Code (status, program path), other models; switch any of them off |
-| Bots | every bot: what it is for, its rules, model, skills, connections and files |
+| Bots | every bot: what it is for, its rules, model, superpowers and files |
+| Superpowers | what bots can do beyond their own tools: what each does, and which bots have it |
 | Principles | what every bot is told first; what each bot is for; everything a bot is told, to read |
 | Browser | which browser program the bots drive, and which bots have one running |
-| Plugins | ready-made abilities to browse and install for a bot |
-| Skills, Connections | the two catalogs, and which bots use what |
 | Environments | the local environment (on or off) and remote ones; letting other computers connect to the one being shown, its link and access code |
 | Advanced | limits (steps per turn, subagents), troubleshooting, the data folder |
 
@@ -171,8 +168,8 @@ apps/
       tools.ts         tools the model can call (bots, files, subagents, browser, web)
       bots.ts          bots as folders: bot.md and what sits beside it
       workspace.ts     a bot's own files: path confinement, file operations, git history
-      skills.ts        the skill catalog and each bot's links into it
-      connections.ts   MCP servers: catalog, per-bot connections and sign-in
+      superpowers.ts   the superpowers that ship, which bot has which, and what a bot is told of them
+      mcp.ts           the services superpowers bring: each bot's connection and sign-in
       browser.ts       one persistent Chrome profile per bot, a window per thread; live view via CDP screencast
       providers/       what bots run on: the Codex and Claude Code engines (codex.ts,
                        claude-code.ts, grok.ts), local models, OpenAI-compatible APIs, a mock for tests
@@ -181,7 +178,7 @@ apps/
       http.ts          the API and the stream of events. No pages
       history.ts       what a model is shown of a long conversation: trimming, and the summary of its older part
       db.ts            SQLite (conversations and messages)
-    skills/            the skills that ship with Open Bot
+    superpowers/       the superpowers that ship with Open Bot
   web/               the interface (React, Vite). Built into the desktop app; nothing serves it
     src/
       store.ts               the window's copy of the environment it shows
@@ -227,29 +224,25 @@ screens only read and write these files, so you can also edit them by hand.
 
 ```
 ~/.openbot/
-  skills/<name>/SKILL.md     the skill catalog; add a skill by dropping its folder here
-  mcp.json                   the connection catalog (same "mcpServers" format other MCP clients use)
   principles.md              yours: what every bot is told first (only once you change the ones Open Bot comes with)
   bots/<id>/
     bot.md                   yours: name, what it is for, model and the rules the bot must follow
-    skills/                  links to the catalog skills switched on for this bot
-    mcp.json                 the connections switched on for this bot
-    plugins.json             the plugins installed for this bot
+    superpowers.json         yours: the superpowers switched on for this bot
     workspace/               the bot's own, and the only place its file tools reach
       AGENTS.md              its instructions, which it writes and updates itself
       memory/                its notes; only the list is loaded, it reads a note when needed
       files/                 working files and browser downloads (not in the history)
     private/                 never visible to the bot
       browser-profile/       its Chrome profile: cookies, logins
-      mcp/<name>.json        its account with each connection
+      superpowers/<id>.json  its account with the app a superpower works in
       history.git/           the record of every change to the workspace
   openbot.db                 conversations, messages and scheduled tasks
   settings.json              app-wide settings that differ from the defaults
-  auth.json                  API keys, the access code, and what plugins were set up with (owner-readable only)
+  auth.json                  API keys and the access code (owner-readable only)
   clients.json               the computers paired with this one (owner-readable only)
 ```
 
-The split is deliberate. **What a bot can do is yours:** its model, rules, skills and connections
+The split is deliberate. **What a bot can do is yours:** its model, rules and superpowers
 sit outside its workspace, so it cannot grant itself anything. **What a bot knows is its own:** it
 rewrites `AGENTS.md` and `memory/` freely. Each change is a commit in a git history kept in
 `private/history.git`, labelled with who made it (the bot or you), and the Files tab can show and
@@ -263,8 +256,8 @@ Before each turn a bot is given, in this order:
    comes with a short set (`apps/server/principles.md`); change them under **Settings →
    Principles**, and they are kept in `~/.openbot/principles.md` from then on. Restore default
    deletes that file, so later improvements to the ones Open Bot comes with reach you again.
-2. **The other bots**: each one's name, its `bot_id`, the line saying what it is for, the skills and
-   connections it has, and which is the main assistant. The line is set by you, in the bot's
+2. **The other bots**: each one's name, its `bot_id`, the line saying what it is for, the
+   superpowers it has, and which is the main assistant. The line is set by you, in the bot's
    settings or on the Principles page; no bot can change it, its own included, so one bot that has
    been talked into something by a web page cannot pass that on to the others through how it is
    described. A new bot's line starts as what its maker gave: the description a bot passes to
@@ -273,7 +266,7 @@ Before each turn a bot is given, in this order:
    never instructions), then the bot's **rules from you**, which win where they and the principles
    disagree.
 4. Its conversation, scheduled tasks, workspace, its own `AGENTS.md`, the list of its notes, and
-   its skills.
+   its superpowers.
 
 **Settings → Principles → What a bot is told** shows all of it for any bot.
 
@@ -352,25 +345,43 @@ web (a chart library from a CDN), but it cannot reach the app or its keys, fetch
 or go to another site. Links in it open in your browser when you click them, and only then. On the
 phone, Mermaid and KaTeX are loaded from jsDelivr when a diagram or formula is drawn.
 
-### Plugins
+### Superpowers
 
-A plugin is a folder in `apps/server/plugins/<id>`:
+A superpower is what a bot can do beyond its own tools. Every one ships with Open Bot, as a folder
+in `apps/server/superpowers/<id>`:
 
 ```
-plugin.json     name, tagline, category, what a bot can do with it, the skills and the connection it brings
-README.md       the plugin's page in the app
-skills/<name>/SKILL.md
+superpower.json   name, tagline, category, what a bot can do with it, the line the bot is told,
+                  and its service (an MCP server), when it has one
+icon.svg          its app icon, on a square with only a viewBox (each app rounds the corners)
+README.md         its page in the app
+instructions.md   how the bot goes about it; the bot reads it when a task calls for it
 ```
 
-Installing one for a bot switches its skills on for that bot and, when it has one, switches its
-connection on for that bot; the bot then signs in to the service with its own account. Nothing is
-installed for all bots at once. A plugin adds nothing a skill and a connection could not be set
-up to do by hand; it is the two put together, with an explanation.
+A superpower has instructions, a service, or both. Notion and Linear, the two that ship for now,
+are both: instructions, and the app's own MCP server, which the bot signs in to with an account of
+its own (two bots can use two different accounts). A service can also be a program run on this
+computer, which is how a superpower with code of its own would work.
 
-The Google plugins work in two ways. With nothing set up, the bot uses the service through its
-own browser, signed in there by you. Google also offers a direct connection (in developer
-preview), which needs a client you create once in Google Cloud; each plugin's page has the steps,
-and the three share the client. Notion and Linear need no setup: install, then sign in.
+You activate a superpower for one bot at a time, on its page or in the bot's settings; nothing is
+activated for all bots at once. Deactivating one for a bot forgets that bot's sign-in.
+
+One that works in an app is active only once the bot has signed in to it, so **Activate
+superpower** opens a popup that asks how:
+
+- **With your browser** (the desktop app, installed): the service's page opens in the browser on
+  your computer, with the accounts you already have there. The service sends that browser back to
+  `openbot://sign-in/callback`, which the computer opens with Open Bot, and the app passes it to
+  the environment it shows, so this works whichever computer the bots run on.
+- **Inside the bot's browser**: the page opens in a window of the bot's own browser, which you use
+  from the app on any computer or the phone, as you would any window you take control of. It suits
+  giving a bot an account other than yours. The service sends that browser back to an Open Bot
+  address it cannot reach; the browser reads the result from that address on the way.
+
+Either way the bot gets an account of its own, and cancelling leaves the superpower as it was,
+with nothing kept. A bot that is signed out later shows **Sign in again**. A bot is
+told one line about each of its superpowers, with where to read the instructions; it can read
+them but not change them, and it cannot switch a superpower on for itself.
 
 ### Tools available to a bot
 
@@ -384,14 +395,13 @@ and the three share the client. Notion and Linear need no setup: install, then s
 | Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval`, `browser_ask_user` |
 | Web | `web_fetch`, plus the provider's built-in web search |
 | The conversation | `show_page` |
-| Connections | every tool of each MCP server switched on for the bot, named `mcp__<connection>__<tool>` |
+| Superpowers | every tool of the services its superpowers bring, named `mcp__<superpower>__<tool>` |
 
-There is no shell tool. Skills are instructions: a skill that ships scripts can be read, but its
-scripts are not run.
+There is no shell tool.
 
 A subagent can run as a different bot (`spawn_subagent` with `bot_id`), which is how bots hand
 work to each other: the other bot does the task as itself, with its own instructions, logins and
-connections, is told which bot handed it over, and reports back to that bot. Subagents can nest
+superpowers, is told which bot handed it over, and reports back to that bot. Subagents can nest
 two levels deep; each gets its own browser window.
 
 While you have control of a window, the bot's `browser_snapshot` and `browser_read` still work, and
@@ -466,7 +476,7 @@ and from its own format.
   network could copy it. Use it only on networks you trust, and remove a computer you no longer
   use. There are no user accounts: anyone with access to your OS user account can use it.
 - The app's window only ever loads the app's own page, and that page runs scripts only from the
-  app's own files. Links, and sign-in pages for connections, open in your browser. Pages that
+  app's own files. Links, and the sign-in pages of a superpower's app, open in your browser. Pages that
   bots show run in frames that are sites of their own and cannot reach the app (see *Replies and
   pages*).
 - A bot's browser holds real logins. Web pages can contain text written to manipulate an AI
@@ -480,16 +490,19 @@ and from its own format.
   so a view that is only watching cannot press anything by accident.
 - A bot's browser and `web_fetch` cannot open files on the computer or Open Bot's own address.
   Without that, a bot could read your keys, or open the app as you and change its own rules.
-- A skill is instructions the bot will follow with its browser and accounts, and a connection that
-  runs a local program runs it as you. Switch on only ones you trust. Local programs can be added
-  only from the computer running Open Bot, not from another computer on the network.
-- Signing in to a connection finishes at `http://localhost:<port>`, so it has to be done in a
-  browser on the computer running Open Bot.
+- Superpowers come only with Open Bot; there is no way to add one from the app. A superpower's
+  instructions are followed with the bot's browser and accounts, so each is written to ask before
+  anything is sent, changed or paid.
+- A superpower's sign-in finishes only the way it was started, once, for the bot it was started
+  for: the way back from your own browser is checked against the sign-in the app began, and in the
+  bot's browser only the window it was started in counts. Open Bot's own address cannot finish one
+  over the network or from a bot's own windows. Signing in inside the bot's browser also leaves that
+  browser signed in to the service's website; signing in with your own browser does not.
 
 ## Not built yet
 
-Image attachments, running commands in a sandbox (and with it, skills that ship
-scripts), and native Anthropic/Gemini providers.
+Image attachments, running commands in a sandbox, superpowers with code of their own, Google
+(Gmail, Calendar, Drive) as superpowers, and native Anthropic/Gemini providers.
 
 ## License
 

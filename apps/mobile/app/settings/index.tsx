@@ -49,7 +49,7 @@ export default function Settings() {
       </Section>
 
       {loaded && (
-        <Section title="Bots" inset={60} footer={bots.length ? 'Name, what it is for, rules, model, browser and skills of each bot.' : 'There are no bots on this server yet. Create one in the app on your computer, or ask a bot to make one.'}>
+        <Section title="Bots" inset={60} footer={bots.length ? 'Name, what it is for, rules, model, browser and superpowers of each bot.' : 'There are no bots on this server yet. Create one in the app on your computer, or ask a bot to make one.'}>
           {bots.map((bot, i) => <BotRow key={bot.id} bot={bot} main={i === 0 && bots.length > 1} />)}
         </Section>
       )}

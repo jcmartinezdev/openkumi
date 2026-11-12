@@ -1,14 +1,14 @@
 // One bot's settings, as its owner sets them: the computer's page for the bot (Settings › Bots),
-// without its files and connections, which need the computer. What the bot knows (its AGENTS.md
+// without its files, which need the computer. What the bot knows (its AGENTS.md
 // and memory) it writes itself; this is what it can do.
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import type { Bot, Skill } from '@openbot/shared'
-import { windowCount } from '@openbot/client/browser'
-import { api, refreshSkills, useStore } from '@openbot/client/store'
+import type { Bot, Superpower, SuperpowerStatus } from '@openbot/shared'
+import { signInThread, windowCount } from '@openbot/client/browser'
+import { api, useStore } from '@openbot/client/store'
 import { scheduleLabel } from '@openbot/client/tasks'
-import { ProviderIcon } from '../../../src/icons'
+import { ProviderIcon, SuperpowerIcon } from '../../../src/icons'
 import { useBotModel } from '../../../src/ModelChip'
 import { Field, ICON_INSET, Row, Section, SettingsPage, Slot, SwitchRow } from '../../../src/SettingsUi'
 import { useTheme } from '../../../src/theme'
@@ -22,13 +22,14 @@ export default function BotSettings() {
   const stored = useStore((s) => s.bots.find((b) => b.id === botId))
   const main = useStore((s) => s.bots[0]?.id === botId && s.bots.length > 1)
   const browser = useStore((s) => s.browsers[botId])
-  const skills = useStore((s) => s.skills)
+  const powers = useStore((s) => s.superpowers)
+  const statuses = useStore((s) => s.superpowerStatus[botId])
   const zone = useStore((s) => s.about.timeZone)
   const allTasks = useStore((s) => s.tasks)
   /** What was just changed, shown at once instead of when the server has said so. */
   const [changed, setChanged] = useState<Partial<Bot> | null>(null)
-  // The skill catalog is a folder the owner can add to by hand, so it is asked for afresh.
-  useEffect(() => void refreshSkills().catch(() => {}), [])
+  // Nothing connects until it is needed, so how the bot's services stand is asked for here.
+  useEffect(() => void api('POST', `/api/bots/${botId}/superpowers/check`).catch(() => {}), [botId])
   useEffect(() => setChanged(null), [stored])
 
   // Gone, because it was deleted here or elsewhere.
@@ -40,14 +41,36 @@ export default function BotSettings() {
     setChanged((before) => ({ ...before, ...patch }))
     api('PATCH', `/api/bots/${bot.id}`, patch).catch((e) => (setChanged(null), Alert.alert('Not saved', (e as Error).message)))
   }
-  const setSkill = (skill: Skill, on: boolean) => {
-    const turn = () => api('PUT', `/api/bots/${bot.id}/skills/${encodeURIComponent(skill.name)}`, { on }).catch((e) => Alert.alert('Not saved', (e as Error).message))
-    if (!on || skill.bundled) return void turn()
-    // Skills the owner added did not come with Open Bot; the bot would follow whatever they say.
-    Alert.alert(`Switch on “${skill.title}”?`, `It did not come with Open Bot. ${bot.name} will follow its instructions with access to its browser and accounts.`, [
+  const deactivate = (power: Superpower) => {
+    const turn = () => api('PUT', `/api/bots/${bot.id}/superpowers/${power.id}`, { on: false }).catch((e) => Alert.alert('Not saved', (e as Error).message))
+    if (!statuses?.[power.id]?.signedIn) return void turn()
+    Alert.alert(`Deactivate ${power.name}?`, `${bot.name}’s sign-in to ${power.name} is forgotten.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Switch on', onPress: () => void turn() },
+      { text: 'Deactivate', style: 'destructive', onPress: () => void turn() },
     ])
+  }
+  // One that works in an app is active once the bot has signed in to it. On the phone that happens
+  // in the bot's own browser, on the browser screen, with the phone in control.
+  const signIn = (power: Superpower) =>
+    api<{ windowId?: string }>('POST', `/api/bots/${bot.id}/superpowers/${power.id}/login`, { via: 'bot' }).then(
+      ({ windowId }) => windowId && router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: signInThread(power.id), take: '1' } }),
+      (e) => Alert.alert('Could not start the sign-in', (e as Error).message),
+    )
+  const activate = (power: Superpower, again = false) => {
+    if (!power.signIn) {
+      return Alert.alert(`Activate ${power.name}?`, `${bot.name} can use ${power.name} as soon as it is active. There is nothing to sign in to.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Activate', onPress: () => void api('PUT', `/api/bots/${bot.id}/superpowers/${power.id}`, { on: true }).catch((e) => Alert.alert('Not activated', (e as Error).message)) },
+      ])
+    }
+    Alert.alert(
+      again ? `Sign ${bot.name} in to ${power.name} again?` : `Activate ${power.name}?`,
+      `${bot.name} signs in to ${power.name} with an account of its own, in its own browser, which opens next.${again ? '' : ` Once it is signed in, ${power.name} is active.`}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign in', onPress: () => void signIn(power) },
+      ],
+    )
   }
   const openLook = () => router.push({ pathname: '/settings/look/[botId]', params: { botId: bot.id } })
   const remove = () =>
@@ -101,16 +124,32 @@ export default function BotSettings() {
         {browser?.running && <Row label="Stop its browser" tone="action" onPress={() => api('POST', `/api/bots/${bot.id}/browser/stop`).catch((e) => Alert.alert('Not stopped', (e as Error).message))} />}
       </Section>
 
-      <Section title="Skills" footer={skills.length ? 'Instructions the bot reads when a task calls for them. The catalog is kept on the computer; the bot cannot switch skills on itself.' : 'The skill catalog is empty.'}>
-        {skills.map((skill) => (
-          <SwitchRow
-            key={skill.name}
-            label={skill.title}
-            detail={<Text style={{ color: theme.faint, fontSize: 13.5, lineHeight: 18 }} numberOfLines={2}>{skill.bundled ? skill.description : `Added by you · ${skill.description}`}</Text>}
-            value={bot.skills.includes(skill.name)}
-            onChange={(on) => setSkill(skill, on)}
-          />
-        ))}
+      <Section
+        title="Superpowers"
+        inset={ICON_INSET}
+        footer="What the bot can do beyond its own tools. Only you can activate one; the bot cannot. Each bot signs in to an app in its own browser, so each can use a different account."
+      >
+        {powers.map((power) => {
+          const on = bot.superpowers.includes(power.id)
+          return (
+            <Fragment key={power.id}>
+              <Row
+                leading={<Slot><SuperpowerIcon power={power} /></Slot>}
+                label={power.name}
+                detail={<Text style={{ color: theme.faint, fontSize: 13.5, lineHeight: 18 }} numberOfLines={2}>{(on && standing(power, statuses?.[power.id])) || power.tagline}</Text>}
+                value={on ? 'Active' : undefined}
+              />
+              {on && statuses?.[power.id]?.state === 'needs-login' && (
+                <Row icon="globe" label="Sign in again" tone="action" onPress={() => activate(power, true)} />
+              )}
+              {on ? (
+                <Row icon="x" label="Deactivate superpower" tone="destructive" accessibilityHint={`Takes ${power.name} away from ${bot.name}`} onPress={() => deactivate(power)} />
+              ) : (
+                <Row icon="plus" label="Activate superpower" tone="action" accessibilityHint={`Gives ${bot.name} ${power.name}`} onPress={() => activate(power)} />
+              )}
+            </Fragment>
+          )
+        })}
       </Section>
 
       <Section title="Scheduled tasks" inset={ICON_INSET}>
@@ -132,6 +171,15 @@ export default function BotSettings() {
       </Section>
     </SettingsPage>
   )
+}
+
+/** How a superpower with a service stands for a bot that has it, when that is worth saying instead of what it is for. */
+function standing(power: Superpower, status: SuperpowerStatus | undefined): string {
+  if (!power.service || !status) return ''
+  if (status.state === 'connected') return `${status.signedIn ? 'Signed in' : 'Connected'} · ${status.tools} ${status.tools === 1 ? 'tool' : 'tools'}`
+  if (status.state === 'needs-login') return 'Not signed in any more.'
+  if (status.state === 'error') return status.error ?? 'Not working.'
+  return ''
 }
 
 /** What the bot runs on; opens the same sheet as the model chip in the conversation. */

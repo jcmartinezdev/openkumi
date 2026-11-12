@@ -5,7 +5,7 @@
 // and, once the owner takes control of it, drives them; agent tools drive them through Playwright.
 import crypto from 'node:crypto'
 import path from 'node:path'
-import { type BrowserContext, type CDPSession, type Page, chromium } from 'playwright-core'
+import { type BrowserContext, type CDPSession, type Page, type Request, chromium } from 'playwright-core'
 import type { BrowserInput, BrowserState } from '@openbot/shared'
 import { PORT, emit, privateDir } from './config.ts'
 import { settings } from './settings.ts'
@@ -14,9 +14,23 @@ import { incoming, resolve } from './workspace.ts'
 const VIEWPORT = { width: 1280, height: 800 }
 
 // A bot's browser must not be able to open Open Bot itself: coming from this computer it would be
-// trusted like the owner, and could change the bot's rules, skills and connections. These rules
+// trusted like the owner, and could change the bot's rules and superpowers. These rules
 // make Chrome send any request for this server's address somewhere that refuses it.
 const NO_SELF_ACCESS = `--host-rules=${['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${PORT} 0.0.0.0:1`).join(', ')}`
+
+/**
+ * Where a service sends the browser back to after a superpower's sign-in. It is Open Bot's own
+ * address, which a bot's browser cannot reach; what matters is the address itself, which carries
+ * the result, and which the browser hands over on the way (see signIn).
+ */
+export const SIGN_IN_RETURN = `http://localhost:${PORT}/api/superpowers/callback`
+/** The made-up thread a sign-in's window belongs to, so it is a window of its own. */
+const signInThread = (key: string) => `sign-in:${key}`
+
+/** The page a sign-in ends on, in the bot's browser. */
+const ending = (message: string) =>
+  `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Open Bot</title>
+<body style="font:16px system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0c0c0d;color:#ededef"><p style="max-width:420px;padding:24px;text-align:center">${message.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)}</p>`
 
 /** What the bot is told when it tries to act in a window the owner has taken control of. */
 export const OWNER_HAS_CONTROL =
@@ -87,6 +101,8 @@ class BotBrowser {
   private expected = new Map<string, (tab: Tab) => void>()
   /** Windows being opened, by the thread they are for. */
   private opening = new Map<string, Promise<Win>>()
+  /** Sign-ins under way, by the window they are in: what finishes one when the service sends the browser back. */
+  private signIns = new Map<string, (back: URL) => Promise<void>>()
   private starting: Promise<void> | null = null
   private stateTimer: NodeJS.Timeout | null = null
 
@@ -157,6 +173,8 @@ class BotBrowser {
     }
     this.context = context
     this.headless = headless
+    // Seen however the browser gets there: services usually send it back with a redirect.
+    context.on('request', (request) => request.url().startsWith(`${SIGN_IN_RETURN}?`) && void this.signInReturned(request))
     context.on('page', (page) => void this.adopt(page))
     context.on('close', () => {
       if (this.context === context) this.forget()
@@ -234,6 +252,7 @@ class BotBrowser {
     if (win.active === tab) win.active = win.tabs.at(-1) ?? null
     if (!win.tabs.length) {
       this.windows.delete(win.id)
+      this.signIns.delete(win.id)
       clearTimeout(win.retiring)
       win.request?.settle('closed')
     }
@@ -427,6 +446,54 @@ class BotBrowser {
       this.keep(win)
       this.announce()
     })
+  }
+
+  /**
+   * Opens a service's sign-in page in a window of its own, for the owner to take control of. It is
+   * the bot's own browser, so whoever signs in there is signed in for this bot alone. When the
+   * service sends the browser back, `finish` completes the sign-in and the window closes.
+   */
+  async signIn(key: string, url: string, headless: boolean, finish: (back: URL) => Promise<void>): Promise<string> {
+    await this.start(headless)
+    const win = await this.windowFor(signInThread(key))
+    this.signIns.set(win.id, finish)
+    if (!win.active) throw new Error('That browser window was closed.')
+    // A service that knows the bot already may send the browser straight back, which goes nowhere
+    // as a page; whatever went wrong otherwise is on the page, for the owner to see.
+    await win.active.page.goto(url, { waitUntil: 'commit', timeout: 30_000 }).catch(() => {})
+    return win.id
+  }
+
+  /** Closes the window of a sign-in that was given up. */
+  endSignIn(key: string) {
+    for (const tab of [...(this.windowOf(signInThread(key))?.tabs ?? [])]) tab.page.close().catch(() => {})
+  }
+
+  /**
+   * A service sent the browser back to Open Bot. The request itself goes nowhere; only in a
+   * sign-in's own window does its address finish the sign-in, once.
+   */
+  private async signInReturned(request: Request) {
+    let tab: Tab | undefined
+    try {
+      const page = request.frame().page()
+      tab = request.isNavigationRequest() ? [...this.tabs.values()].find((t) => t.page === page) : undefined
+    } catch {
+      // Not a page's request (a worker's, say): it is no one's sign-in.
+    }
+    const finish = tab && this.signIns.get(tab.win.id)
+    if (!tab || !finish) return
+    const win = tab.win
+    this.signIns.delete(win.id)
+    let message = 'Signed in. This window closes by itself.'
+    try {
+      await finish(new URL(request.url()))
+    } catch (e: any) {
+      message = `Sign-in failed: ${String(e?.message ?? e).split('\n')[0]}`
+    }
+    await tab.page.goto(`data:text/html;charset=utf-8,${encodeURIComponent(ending(message))}`).catch(() => {})
+    // Long enough to read; the app has moved on by then. A failed one stays, to read and try again.
+    if (message.startsWith('Signed in')) setTimeout(() => win.tabs.forEach((t) => t.page.close().catch(() => {})), 1500).unref()
   }
 
   /** Closes the window of a thread that finished, after a while, unless the owner is using it or the thread browses again. */

@@ -8,6 +8,9 @@ export function parse(json: string): Record<string, any> {
   }
 }
 
+/** A superpower's id as words: "notion" is "Notion". */
+const title = (id = '') => id.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase())
+
 export const site = (url: unknown) => String(url ?? '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 
 /** A short human description of a tool call, e.g. "Open example.com". */
@@ -39,7 +42,7 @@ export function describe(call: { name: string; arguments: string }): string {
     case 'create_bot': return `Create bot “${a.name ?? ''}”`
     case 'list_bots': return 'List bots'
     case 'list_files': return `Look in ${a.path || 'its folder'}`
-    case 'read_file': return String(a.path ?? '').startsWith('skills/') ? `Read the skill “${String(a.path).split('/')[1]}”` : `Read ${a.path ?? 'a file'}`
+    case 'read_file': return String(a.path ?? '').startsWith('superpowers/') ? `Read how to use ${title(String(a.path).split('/')[1])}` : `Read ${a.path ?? 'a file'}`
     case 'write_file':
     case 'edit_file':
       // The bot changing how it will behave from now on is worth saying plainly.
@@ -48,9 +51,9 @@ export function describe(call: { name: string; arguments: string }): string {
     case 'move_file': return `Move ${a.from ?? ''} to ${a.to ?? ''}`
     case 'delete_file': return `Delete ${a.path ?? 'a file'}`
     default: {
-      // Tools from a connection are named mcp__<connection>__<tool>.
-      const [, connection, tool] = call.name.match(/^mcp__(.+?)__(.+)$/) ?? []
-      return connection ? `${connection}: ${tool.replace(/_/g, ' ')}` : call.name
+      // Tools from a superpower's service are named mcp__<superpower>__<tool>.
+      const [, power, tool] = call.name.match(/^mcp__(.+?)__(.+)$/) ?? []
+      return power ? `${title(power)}: ${tool.replace(/_/g, ' ')}` : call.name
     }
   }
 }

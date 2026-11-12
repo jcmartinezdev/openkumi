@@ -2,7 +2,7 @@
 // the server's events. Shared by the desktop app's window and the phone app; each brings its own
 // connection (see connection.ts) and hands it over with `useTransport`.
 import { useSyncExternalStore } from 'react'
-import type { AppState, ClientEvent, Item, Partial, Principles, ServerEvent, Settings, Skill, Thread } from '@openbot/shared'
+import type { AppState, ClientEvent, Item, Partial, Principles, ServerEvent, Settings, Thread } from '@openbot/shared'
 import type { Link } from '@openbot/shared/desktop'
 import type { Command, Report } from './connection'
 
@@ -27,10 +27,8 @@ const EMPTY: State = {
   tasks: [],
   providers: [],
   browsers: {},
-  skills: [],
-  connections: [],
-  plugins: [],
-  connectionStatus: {},
+  superpowers: [],
+  superpowerStatus: {},
   home: '',
   settings: {} as Settings,
   defaults: {} as Settings,
@@ -121,13 +119,6 @@ export async function savePrinciples(text: string | null) {
   if (asked === epoch) set({ principles: saved })
 }
 
-/** The skill catalog is a folder the user can add to by hand, so views of it ask again when they open. */
-export async function refreshSkills() {
-  const asked = epoch
-  const skills = await api<Skill[]>('GET', '/api/skills')
-  if (asked === epoch) set({ skills })
-}
-
 const upsert = <T extends { id: string }>(list: T[], value: T) =>
   list.some((x) => x.id === value.id) ? list.map((x) => (x.id === value.id ? value : x)) : [...list, value]
 
@@ -204,15 +195,11 @@ function handle(ev: ServerEvent) {
       return set({ settings: ev.settings })
     case 'principles':
       return set({ principles: ev.principles })
-    case 'skills':
-      return set({ skills: ev.skills })
-    case 'connections':
-      return set({ connections: ev.connections })
-    case 'plugins':
-      return set({ plugins: ev.plugins })
-    case 'connection.status': {
-      const { [ev.name]: _, ...rest } = state.connectionStatus[ev.botId] ?? {}
-      return set({ connectionStatus: { ...state.connectionStatus, [ev.botId]: ev.status ? { ...rest, [ev.name]: ev.status } : rest } })
+    case 'superpowers':
+      return set({ superpowers: ev.superpowers })
+    case 'superpower.status': {
+      const { [ev.id]: _, ...rest } = state.superpowerStatus[ev.botId] ?? {}
+      return set({ superpowerStatus: { ...state.superpowerStatus, [ev.botId]: ev.status ? { ...rest, [ev.id]: ev.status } : rest } })
     }
     case 'files.changed':
       return set({ filesVersion: { ...state.filesVersion, [ev.botId]: (state.filesVersion[ev.botId] ?? 0) + 1 } })

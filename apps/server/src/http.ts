@@ -11,15 +11,14 @@ import type { AppState, ClientEvent, ServerEvent } from '@openbot/shared'
 import * as agent from './agent.ts'
 import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
 import { type Frame, browserFor, browserStates, isWebPage, letGo, stopBrowser } from './browser.ts'
-import { HOME, HOME_LABEL, LAN, PORT, ROOT, SKILLS, accessToken, botDir, emit, onEvent, readSecrets, writeSecret } from './config.ts'
+import { HOME, HOME_LABEL, LAN, PORT, ROOT, accessToken, botDir, onEvent, readSecrets, writeSecret } from './config.ts'
 import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, removeComputer } from './clients.ts'
-import * as mcp from './connections.ts'
-import { installPlugin, installedPlugins, listPlugins, removePlugin, saveSetup } from './plugins.ts'
+import * as mcp from './mcp.ts'
 import * as db from './db.ts'
 import { principles, setPrinciples } from './principles.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
-import { listSkills, setSkill } from './skills.ts'
+import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower } from './superpowers.ts'
 import * as tasks from './tasks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
 import * as ws from './workspace.ts'
@@ -142,10 +141,8 @@ route('GET', '/api/state', (): AppState => ({
   tasks: db.listTasks(),
   providers: providerInfos(),
   browsers: browserStates(),
-  skills: listSkills(),
-  connections: mcp.listConnections(),
-  plugins: listPlugins(),
-  connectionStatus: mcp.connectionStatuses(),
+  superpowers: listSuperpowers(),
+  superpowerStatus: mcp.superpowerStatuses(),
   home: HOME_LABEL,
   settings: settings(),
   defaults: DEFAULTS,
@@ -172,7 +169,7 @@ route('DELETE', '/api/computers/:id', ([id], _, call) => {
 // Opens a folder in the file manager of the computer running Open Bot, so only that computer may ask.
 route('POST', '/api/reveal', (_, body, { req }) => {
   if (!LOOPBACK.has(req.socket.remoteAddress ?? '')) fail(403, 'Folders can only be opened from the computer running Open Bot.')
-  const dir = body.botId ? botDir(needBot(String(body.botId)).id) : body.what === 'skills' ? SKILLS : HOME
+  const dir = body.botId ? botDir(needBot(String(body.botId)).id) : HOME
   const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
   spawn(opener, [dir], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
 })
@@ -194,65 +191,32 @@ route('DELETE', '/api/bots/:id', async ([id]) => {
   needBot(id)
   for (const t of db.listThreads().filter((t) => t.botId === id)) agent.stop(t.id)
   await stopBrowser(id)
-  // Its plugins go first, so nothing they brought is left behind for no bot.
-  for (const plugin of installedPlugins(id)) await removePlugin(id, plugin)
-  await mcp.closeBotConnections(id)
+  const had = enabledSuperpowers(id).length
+  await mcp.closeBot(id)
   tasks.forgetBot(id)
   db.deleteBotThreads(id)
   deleteBot(id)
-  emit({ type: 'plugins', plugins: listPlugins() })
+  if (had) announceSuperpowers()
 })
 
-// ---- skills and connections: what a bot may use, set by its owner
-route('GET', '/api/skills', () => listSkills())
-route('PUT', '/api/bots/:id/skills/:name', ([id, name], body) => {
-  setSkill(needBot(id).id, name, !!body.on)
+// ---- superpowers: what a bot can do beyond its own tools. Only the owner switches one on, for one bot at a time.
+route('GET', '/api/superpowers', () => listSuperpowers())
+route('PUT', '/api/bots/:id/superpowers/:power', async ([id, power], body) => {
+  const bot = needBot(id)
+  await setSuperpower(bot.id, power, !!body.on).catch((e) => fail(400, e.message))
+  announceSuperpowers()
   return announce(id)
 })
-// ---- plugins: ready-made abilities, installed for one bot at a time
-const announcePlugins = () => emit({ type: 'plugins', plugins: listPlugins() })
-route('GET', '/api/plugins', () => listPlugins())
-route('PUT', '/api/bots/:id/plugins/:plugin', async ([id, plugin], body) => {
-  if (body.on === false) await removePlugin(needBot(id).id, plugin)
-  else await installPlugin(needBot(id).id, plugin)
-  announcePlugins()
-  return announce(id)
+// Nothing connects until it is needed, so a view that shows how a bot's services stand asks for this first.
+route('POST', '/api/bots/:id/superpowers/check', ([id]) => mcp.checkServices(needBot(id).id))
+// A superpower with an app becomes active by signing the bot in to it: in the owner's own browser
+// ("app"), whose way back the desktop app passes on, or in the bot's browser, from any device.
+route('POST', '/api/bots/:id/superpowers/:power/login', ([id, power], body) => {
+  const bot = needBot(id)
+  return mcp.login(bot.id, power, bot.headless, body.via === 'app' ? 'app' : 'bot').catch((e) => fail(400, e.message))
 })
-// What the owner provides once for the plugins that need it, such as a client created with Google.
-route('PUT', '/api/plugins/setup/:id', async ([id], body) => {
-  for (const botId of await saveSetup(id, body)) announce(botId)
-  announcePlugins()
-})
-
-route('POST', '/api/connections', (_, body, { req }) => {
-  // A local program runs with the user's full rights, so only this computer may add one.
-  if (body.command && !LOOPBACK.has(req.socket.remoteAddress ?? '')) fail(403, 'A local program can only be added from the computer running Open Bot.')
-  mcp.addConnection(body)
-})
-route('DELETE', '/api/connections/:name', async ([name]) => {
-  for (const id of await mcp.removeConnection(name)) announce(id)
-})
-route('PUT', '/api/bots/:id/connections/:name', async ([id, name], body) => {
-  await mcp.setConnection(needBot(id).id, name, !!body.on)
-  return announce(id)
-})
-route('POST', '/api/bots/:id/connections/check', ([id]) => mcp.checkConnections(needBot(id).id))
-route('POST', '/api/bots/:id/connections/:name/login', ([id, name]) => mcp.login(needBot(id).id, name))
-route('POST', '/api/bots/:id/connections/:name/logout', ([id, name]) => mcp.logout(needBot(id).id, name))
-// Where a connection's sign-in page sends the browser back to.
-route('GET', '/api/mcp/callback', async (_, __, { url, res }) => {
-  let message = 'Connected. You can close this tab and go back to Open Bot.'
-  try {
-    await mcp.finishLogin(url.searchParams)
-  } catch (e: any) {
-    message = `Sign-in failed: ${String(e?.message ?? e).split('\n')[0]}`
-  }
-  const safe = message.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
-  res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Open Bot</title>
-<body style="font:16px system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0c0c0d;color:#ededef"><p style="max-width:420px;padding:24px;text-align:center">${safe}</p>`)
-  return SENT
-})
+route('DELETE', '/api/bots/:id/superpowers/:power/login', ([id, power]) => mcp.cancelLogin(needBot(id).id, power))
+route('POST', '/api/superpowers/return', (_, body) => mcp.finishAppSignIn(String(body.url ?? '')).catch((e) => fail(400, e.message)))
 
 // ---- files: the bot's workspace, as its owner sees it
 const filePath = (url: URL) => url.searchParams.get('path') ?? ''
@@ -442,9 +406,7 @@ function createServer() {
     } catch (e: any) {
       return void json(e instanceof HttpError ? e.status : 500, { error: String(e?.message ?? e).split('\n')[0] })
     }
-    // Where a connection's sign-in page sends the browser back to. It proves itself with the
-    // one-time state the sign-in was started with, not with a key.
-    if (url.pathname !== '/api/mcp/callback' && !isAllowed(req, url)) return void json(401, { error: 'The access code was not accepted.' })
+    if (!isAllowed(req, url)) return void json(401, { error: 'The access code was not accepted.' })
     try {
       for (const [method, pattern, handler, raw] of routes) {
         const match = req.method === method && url.pathname.match(pattern)

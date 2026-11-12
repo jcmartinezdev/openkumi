@@ -1,12 +1,7 @@
----
-name: linear
-description: Look up, file and update issues, projects and cycles in the user's Linear workspace. Existing issues are changed only after the user approves.
----
-
 # Linear
 
-Use the tools whose names start with `mcp__linear__`. If there are none, the connection is
-not signed in: tell the user to press "Sign in" for Linear in this bot's Connections.
+Use the tools whose names start with `mcp__linear__`. If there are none, you are not signed in
+to Linear yet: ask the user to sign you in, under Superpowers in your settings.
 
 ## Looking things up
 
