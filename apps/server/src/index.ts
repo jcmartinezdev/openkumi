@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import * as agent from './agent.ts'
 import { createBot, importLegacyBots, listBots, moveOffChatGPTSignIn } from './bots.ts'
 import { stopAllBrowsers } from './browser.ts'
 import { workspaceDir } from './config.ts'
@@ -51,6 +52,8 @@ async function shutdown() {
   if (closing) return
   closing = true
   server.close()
+  // Replies being written are stopped first, so that what they had is saved before the database closes.
+  await agent.stopAll()
   await Promise.all([stopAllBrowsers(), closeAll()])
   db.closeDb()
   process.exit(0)

@@ -126,9 +126,11 @@ test('a bot that had several chats keeps the one used last as its conversation, 
         const { threads } = await get('/api/state')
         assert.deepEqual(
           threads.map((t) => [t.id, t.archivedAt]),
-          [['t_old', 1700000000010], ['t_last', null], ['t_mid', 1700000000050], ['t_sub', null], ['t_only', null]],
+          [['t_old', 1700000000010], ['t_last', null], ['t_mid', 1700000000050], ['t_only', null]],
           `start ${run}`,
         )
+        // The subagent finished long ago, so the apps' list leaves it out; it is still there, as it was.
+        assert.equal((await get('/api/threads/t_sub')).thread.archivedAt, null)
         // Nothing was deleted: what was said in an archived chat is still read and found.
         assert.equal((await get('/api/threads/t_old')).items[0].data.text, 'an old question about herons')
         assert.deepEqual((await get('/api/bots/b_1/search?q=herons')).matches.map((m) => m.threadId), ['t_old'])

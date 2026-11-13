@@ -10,7 +10,7 @@ import { PageFrame, PageViewer } from './PageFrame'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
 import { describe, parse, site } from '@openkumi/client/steps'
-import { api, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, openTasks, recentSubagents, rootOf, useStore } from './store'
+import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, openTasks, openThread, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
 
 type Call = Extract<ItemData, { type: 'function_call' }>
@@ -72,13 +72,14 @@ function ToolStep({ call, output, running, openFile }: { call: Call; output?: st
 
 function SubagentLink({ id }: { id: string }) {
   const child = useStore((s) => s.threads).find((t) => t.id === id)
-  if (!child) return null
   return (
     <button
       className="pill link"
       onClick={(e) => {
         e.preventDefault()
-        navigate(child.botId, child.id)
+        if (child) return navigate(child.botId, child.id)
+        // Older subagents and runs are not in the list: the thread is fetched to see whose it is.
+        loadThread(id).then((t) => t && navigate(t.botId, t.id), () => {})
       }}
     >
       Open
@@ -287,6 +288,7 @@ onEnvironmentChange(() => drafts.clear())
 
 export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }: Props) {
   const items = useStore((s) => (thread ? s.items[thread.id] : undefined))
+  const older = useStore((s) => (thread ? !!s.older[thread.id] : false))
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
   const threads = useStore((s) => s.threads)
   const provider = useStore((s) => s.providers).find((p) => p.id === bot.provider)
@@ -326,31 +328,60 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
 
   const connected = useStore((s) => s.connected)
   useEffect(() => {
-    // Asked again when the connection comes back, in case the chat was opened while it was away.
-    if (thread && !items && connected) loadThread(thread.id).then(() => setError(''), (e) => setError(e.message))
-  }, [thread?.id, items, connected])
+    // Shows what is kept of the chat at once, then brings it up to date; again when the connection comes back.
+    if (thread) openThread(thread.id).then(() => setError(''), (e) => setError(e.message))
+  }, [thread?.id, connected])
 
   // On touch devices focusing would pop up the keyboard on every navigation.
   useEffect(() => {
     if (matchMedia('(hover: hover)').matches) input.current?.focus()
   }, [thread?.id])
 
+  // Earlier messages are fetched a page at a time as the reader nears the top. While they are put
+  // in above, what was on screen is kept where it was.
+  const [fetchingOlder, setFetchingOlder] = useState(false)
+  const fetching = useRef(false)
+  const anchor = useRef<{ first: number; height: number; top: number } | null>(null)
+  const showOlder = (to?: number) => {
+    const el = scroller.current
+    if (!thread || !items?.length || !el || fetching.current) return
+    fetching.current = true
+    anchor.current = { first: items[0].id, height: el.scrollHeight, top: el.scrollTop }
+    setFetchingOlder(true)
+    loadOlder(thread.id, to)
+      .then(
+        (added) => !added && (anchor.current = null),
+        (e) => ((anchor.current = null), setError(e.message)),
+      )
+      .finally(() => ((fetching.current = false), setFetchingOlder(false)))
+  }
+
   // A message that was asked for (found by searching) is brought into view and marked for a moment.
-  const loaded = !!items
+  // If it is older than what is held, everything back to it is fetched first.
+  const first = items?.[0]?.id
   useEffect(() => {
-    const found = focus && loaded ? scroller.current?.querySelector(`[data-item="${focus}"]`) : null
+    if (!focus || !items) return
+    if (older && !items.some((i) => i.id === focus)) return showOlder(focus)
+    const found = scroller.current?.querySelector(`[data-item="${focus}"]`)
     if (!found) return
     stick.current = false
     found.scrollIntoView({ block: 'center' })
     found.classList.add('found')
     const fade = setTimeout(() => found.classList.remove('found'), 2400)
     return () => clearTimeout(fade)
-  }, [focus, loaded, thread?.id])
+  }, [focus, first, thread?.id])
 
   // Follow new output only while the reader is already at the bottom.
   useLayoutEffect(() => {
     const el = scroller.current
-    if (el && stick.current) el.scrollTop = el.scrollHeight
+    if (!el) return
+    const kept = anchor.current
+    if (kept && first !== kept.first) {
+      anchor.current = null
+      el.scrollTop = kept.top + el.scrollHeight - kept.height
+    } else if (stick.current) el.scrollTop = el.scrollHeight
+    // A first page too short to scroll could never reach the top by scrolling.
+    if (older && el.scrollHeight <= el.clientHeight) showOlder()
   }, [items, partial])
 
   // The conversation area changes height when the browser docks or the keyboard opens.
@@ -378,7 +409,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
     const text = value.trim()
     // The files go once they are all on the server; any that failed stay behind in the composer.
     const attached = files.filter((f) => f.staged && !going.current.has(f.id))
-    if ((!text && !attached.length) || uploading) return
+    if ((!text && !attached.length) || uploading || !connected) return
     const ids = attached.map((f) => f.id)
     ids.forEach((id) => going.current.add(id))
     setDraft('')
@@ -472,10 +503,16 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
         onScroll={(e) => {
           const el = e.currentTarget
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+          if (older && el.scrollTop < 600) showOlder()
         }}
       >
         <FileLinks.Provider value={openLink}>
         <div className="column">
+          {older && (
+            <div className="older">
+              {fetchingOlder ? <span className="spinner" aria-label="Loading earlier messages" /> : <button className="quiet" onClick={() => showOlder()}>Show earlier messages</button>}
+            </div>
+          )}
           {main && (!thread || items?.length === 0) && (
             <div className="empty">
               <div className="empty-mascot"><Mascot look={bot.look} emoji={bot.emoji} live /></div>
@@ -531,7 +568,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               ref={input}
               value={draft}
               rows={1}
-              placeholder={thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'task' ? 'Message this run' : `Message ${bot.name}`}
+              placeholder={!connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'task' ? 'Message this run' : `Message ${bot.name}`}
               aria-label="Message"
               onChange={(e) => setDraft(e.target.value)}
               // Files pasted (a screenshot, a picture copied from a page, a file copied in Finder)
@@ -570,9 +607,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
                 // Not taking focus keeps the phone keyboard up after sending.
                 <button
                   className="send"
-                  title={uploading ? 'Waiting for the files' : 'Send'}
+                  title={!connected ? 'Offline' : uploading ? 'Waiting for the files' : 'Send'}
                   aria-label="Send"
-                  disabled={(!draft.trim() && !sendable) || uploading}
+                  disabled={(!draft.trim() && !sendable) || uploading || !connected}
                   onPointerDown={(e) => e.preventDefault()}
                   onClick={() => submit()}
                 >

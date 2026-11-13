@@ -8,7 +8,7 @@ import DateTimePicker from '@react-native-community/datetimepicker'
 import * as Haptics from 'expo-haptics'
 import type { Schedule, ScheduledTask } from '@openkumi/shared'
 import { api, useStore } from '@openkumi/client/store'
-import { DAY_LETTERS, DAY_NAMES, STATUS_LABEL, WEEK, localZone, madeBy, moment, nextRun, runStatus, runTime, runsOf, trouble } from '@openkumi/client/tasks'
+import { DAY_LETTERS, DAY_NAMES, STATUS_LABEL, WEEK, localZone, madeBy, moment, nextRun, runStatus, runTime, trouble, useRuns } from '@openkumi/client/tasks'
 import { Avatar, Field, Note, Row, Section, Segments, SettingsPage, SwitchRow } from '../../src/SettingsUi'
 import { useAppearance, useTheme } from '../../src/theme'
 
@@ -74,7 +74,6 @@ export default function TaskPage() {
   const { id, botId } = useLocalSearchParams<{ id: string; botId?: string }>()
   const task = useStore((s) => s.tasks.find((t) => t.id === id))
   const bots = useStore((s) => s.bots)
-  const threads = useStore((s) => s.threads)
   const zone = useStore((s) => s.about.timeZone)
   const [draft, setDraft] = useState(() => draftOf(task, botId || (bots[0]?.id ?? '')))
   const [busy, setBusy] = useState(false)
@@ -90,8 +89,8 @@ export default function TaskPage() {
   const saved = task && bodyOf(draftOf(task, task.botId))
   const changed = saved ? (Object.keys(body) as (keyof typeof body)[]).filter((k) => JSON.stringify(body[k]) !== JSON.stringify(saved[k])) : []
   const ready = !!body.title && !!body.prompt && !!bot && (draft.kind !== 'interval' || Number(draft.every) > 0)
-  const runs = task ? runsOf(threads, task.id) : []
-  const running = runs[0]?.status === 'running'
+  const { runs, more, showOlder, error: runsError } = useRuns(task?.id)
+  const running = task?.lastStatus === 'running'
   const otherZone = !!zone && zone !== localZone()
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -145,7 +144,7 @@ export default function TaskPage() {
       {task && !!trouble(task) && <Note tone="error">{trouble(task)}</Note>}
 
       {task && (
-        <Section title="Runs" inset={40} footer={runs.length >= 50 ? 'The latest 50 runs are kept.' : runs.length ? undefined : 'Each run will be listed here, and opens like a conversation.'}>
+        <Section title="Runs" inset={40} footer={runsError ? `The runs could not be fetched: ${runsError}` : runs.length ? undefined : 'Each run will be listed here, and opens like a conversation.'}>
           {runs.map((r) => (
             <Row
               key={r.id}
@@ -156,6 +155,7 @@ export default function TaskPage() {
               onPress={() => router.push({ pathname: '/chat/[id]', params: { id: r.id } })}
             />
           ))}
+          {more && <Row label="Show older runs" tone="action" onPress={showOlder} />}
         </Section>
       )}
 

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@legendapp/list": "3.7.0",
     "@openkumi/client": "*",
     "@openkumi/shared": "*",
     "@react-native-community/datetimepicker": "9.2.1",
@@ -19,6 +20,7 @@
     "expo-linking": "~58.0.17",
     "expo-router": "~58.0.31",
     "expo-secure-store": "~58.0.3",
+    "expo-sqlite": "~58.0.17",
     "expo-status-bar": "~58.0.5",
     "expo-web-browser": "~58.0.8",
     "punycode": "^2.3.1",

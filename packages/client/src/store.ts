@@ -8,8 +8,10 @@ import { reach } from './addresses'
 import type { Command, Report } from './connection'
 
 export interface State extends AppState {
-  /** Items of threads that have been opened, by thread id. */
+  /** Items of threads that have been opened, by thread id: the newest pages of each, not all of it. */
   items: Record<string, Item[]>
+  /** Whether a thread that has been opened has older items than the ones held, to load with `loadOlder`. */
+  older: Record<string, boolean>
   partial: Record<string, Partial>
   /** Counts changes to each bot's workspace, so views of its files know when to refetch. */
   filesVersion: Record<string, number>
@@ -36,11 +38,14 @@ const EMPTY: State = {
   superpowerCategories: [],
   superpowerStatus: {},
   home: '',
+  database: '',
+  seq: 0,
   settings: {} as Settings,
   defaults: {} as Settings,
   principles: { text: '', custom: false, default: '' },
   about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '' },
   items: {},
+  older: {},
   partial: {},
   filesVersion: {},
   connected: false,
@@ -65,6 +70,13 @@ function set(patch: globalThis.Partial<State>) {
 function subscribe(fn: () => void) {
   subscribers.add(fn)
   return () => subscribers.delete(fn)
+}
+
+/** Calls `fn` with the state each time it changes, outside of any view. Returns the way to stop. */
+export function onState(fn: (s: State) => void): () => void {
+  const call = () => fn(state)
+  subscribers.add(call)
+  return () => void subscribers.delete(call)
 }
 
 /** Selectors must return a value that is stable while the state is unchanged (a slice, not a new object). */
@@ -161,31 +173,36 @@ function handle(ev: ServerEvent) {
     case 'bot.delete':
       return set({ bots: state.bots.filter((b) => b.id !== ev.id) })
     case 'thread.upsert': {
+      // Older than what is held: it was already in what the server sent when the connection opened.
+      if (ev.seq <= state.seq) return
       const during = loading.get(ev.thread.id)
       if (during) during.upserted = true
-      const patch: globalThis.Partial<State> = { threads: upsert(state.threads, ev.thread) }
+      const patch: globalThis.Partial<State> = { threads: upsert(state.threads, ev.thread), seq: ev.seq }
       if (ev.thread.status !== 'running') patch.partial = omit(state.partial, ev.thread.id)
       return set(patch)
     }
     case 'thread.delete':
-      return set({ threads: state.threads.filter((t) => t.id !== ev.id), items: omit(state.items, ev.id) })
+      if (ev.seq <= state.seq) return
+      return set({ threads: state.threads.filter((t) => t.id !== ev.id), items: omit(state.items, ev.id), older: omit(state.older, ev.id), seq: ev.seq })
     case 'task.upsert':
       return set({ tasks: upsert(state.tasks, ev.task) })
     case 'task.delete':
       return set({ tasks: state.tasks.filter((t) => t.id !== ev.id) })
     case 'item.add': {
       const { threadId, data } = ev.item
-      const list = state.items[threadId]
-      if (!list) {
-        // The thread may be loading right now; keep the item so the load can merge it in.
-        const during = loading.get(threadId)
-        if (during) {
-          during.items.push(ev.item)
-          if (data.type === 'message' && data.role === 'assistant') (during.text = ''), (during.cutText = true)
-          if (data.type === 'reasoning') (during.reasoning = ''), (during.cutReasoning = true)
-        }
+      // The thread is being fetched, or caught up, right now: the item is kept for that to put in place.
+      const during = loading.get(threadId)
+      if (during) {
+        during.items.push(ev.item)
+        if (data.type === 'message' && data.role === 'assistant') (during.text = ''), (during.cutText = true)
+        if (data.type === 'reasoning') (during.reasoning = ''), (during.cutReasoning = true)
         return
       }
+      const list = state.items[threadId]
+      // Not held, or held but not caught up since the connection opened (a copy kept on the
+      // device, or one from before a drop): put after what is held it would leave a gap, and
+      // catching the thread up when it is shown fetches it anyway.
+      if (!list || !current.has(threadId)) return
       if ((list.at(-1)?.id ?? 0) >= ev.item.id) return
       const partial = state.partial[threadId]
       const cleared =
@@ -262,7 +279,9 @@ export function onLearn(fn: typeof learn) {
  * window stays as it is; only what it is connected to changes.
  */
 export function follow(next: Link | null) {
-  if (next && link && next.id === link.id) {
+  // An environment whose server turned out to be another one (the phone paired with another computer) is another environment.
+  const same = next && link && next.id === link.id && (!next.serverId || !link.serverId || next.serverId === link.serverId)
+  if (next && link && same) {
     // The same environment with its addresses brought up to date, or with a new access code: what
     // is on screen stays. An address it no longer has is left; a new code is used from now on.
     const renewed = next.token !== link.token
@@ -279,11 +298,38 @@ export function follow(next: Link | null) {
   clearTimeout(again)
   // Whatever was being fetched belonged to the environment that is being left.
   loading.clear()
+  current.clear()
   leaving.forEach((fn) => fn())
   set(EMPTY)
   link = next
-  if (next) void find()
+  if (next) void begin(next)
   else tell({ type: 'disconnect' })
+}
+
+/**
+ * Where an app keeps its copy of what an environment sent it, to show at once the next time and
+ * while it cannot be reached (see copies.ts). Only environments on other computers have one.
+ */
+export interface Copies {
+  /** The copy of the environment's state, or null when there is none to use. */
+  restore(link: Link): Promise<globalThis.Partial<State> | null>
+  /** The copy of one of its threads, or null. */
+  thread(link: Link, id: string): Promise<{ items: Item[]; older: boolean } | null>
+}
+let copies: Copies | null = null
+export function useCopies(kept: Copies) {
+  copies = kept
+}
+
+/** Shows the copy kept of the environment, if there is one, and then connects to it. */
+async function begin(next: Link) {
+  const asked = epoch
+  if (copies && !next.local) {
+    const copy = await copies.restore(next).catch(() => null)
+    if (asked !== epoch) return
+    if (copy) set({ ...copy, loaded: true })
+  }
+  void find()
 }
 
 // ---- finding the address to connect to
@@ -390,8 +436,11 @@ let waiting: ServerEvent[] | null = null
 async function opened() {
   const mine = ++opens
   waiting = []
-  // Anything may have changed while disconnected: refetch, and drop cached threads so they reload.
-  const snapshot = await api<AppState>('GET', '/api/state').catch((e: unknown) => (e instanceof ApiError ? e.status : 0))
+  current.clear()
+  // What is held is kept, and only what changed since it is asked for. Without anything held (or
+  // from another database), everything comes.
+  const since = state.database ? `?since=${state.seq}&db=${encodeURIComponent(state.database)}` : ''
+  const snapshot = await api<AppState>('GET', `/api/state${since}`).catch((e: unknown) => (e instanceof ApiError ? e.status : 0))
   if (mine !== opens) return
   if (typeof snapshot === 'number') {
     // A failed snapshot means the connection is not usable; dropping it triggers the normal retry.
@@ -406,9 +455,22 @@ async function opened() {
   const events = waiting ?? []
   waiting = null
   batching = true
-  set({ ...snapshot, items: {}, partial: {}, connected: true, loaded: true, failures: 0, refused: false, outdated: false })
-  apply(events)
-  for (const id of interrupted) loadThread(id).catch(() => {})
+  const { removed, ...fresh } = snapshot
+  const live = { connected: true, loaded: true, failures: 0, refused: false, outdated: false }
+  if (removed) {
+    // Only what changed: laid over the threads held. What is held of each chat stays, and the
+    // chats catch up on what was said meanwhile as views show them (see openThread).
+    const gone = new Set(removed)
+    const threads = fresh.threads.reduce(upsert, state.threads.filter((t) => !gone.has(t.id)))
+    const items = Object.fromEntries(Object.entries(state.items).filter(([id]) => !gone.has(id)))
+    set({ ...fresh, threads: trimmed(threads, items), items, partial: {}, ...live })
+    apply(events)
+    for (const id of interrupted) if (!state.items[id]) loadThread(id).catch(() => {})
+  } else {
+    set({ ...fresh, items: {}, older: {}, partial: {}, ...live })
+    apply(events)
+    for (const id of interrupted) loadThread(id).catch(() => {})
+  }
   // The server says where else it can be reached; the app keeps that, for when this address stops answering.
   const shown = link
   if (shown && !shown.local)
@@ -426,6 +488,7 @@ export function receive(data: Report) {
   // Closed, or never opened. Before connecting again, the address is asked who it is again.
   opens++
   waiting = null
+  current.clear()
   at = null
   set({ connected: false, address: null, failures: state.connected ? 0 : state.failures + 1 })
   clearTimeout(again)
@@ -440,7 +503,12 @@ function join(server: string, live: string): string {
   return server + live
 }
 
-export async function loadThread(id: string) {
+/**
+ * Fetches a thread with its newest page of items, and adds the thread to the list if it was not
+ * in it (the list holds only recent subagents and runs). With `after`, the last item held, only
+ * what came after it is fetched and put on the end. Resolves with the thread.
+ */
+export async function loadThread(id: string, after?: number): Promise<Thread | undefined> {
   // One request per thread at a time: a second, overlapping one could finish first and then be
   // overwritten by the older response. The request already in flight will deliver the result.
   if (loading.has(id)) return
@@ -448,11 +516,15 @@ export async function loadThread(id: string) {
   const during: Loading = { items: [], text: '', reasoning: '', cutText: false, cutReasoning: false, upserted: false }
   loading.set(id, during)
   try {
-    const res = await api<{ thread: Thread; items: Item[]; partial: Partial }>('GET', `/api/threads/${id}`)
+    const res = await api<{ thread: Thread; items: Item[]; more?: boolean; gap?: boolean; partial: Partial }>('GET', `/api/threads/${id}${after === undefined ? '' : `?after=${after}`}`)
     // Abandoned by a reconnect or a change of environment: a fresh load has replaced this one.
     if (loading.get(id) !== during) return
+    // Caught up: what was held, then what came after it. Unless so much came that the server sent
+    // the newest page instead, which does not meet what was held.
+    const fresh = after === undefined || !!res.gap
+    const got = fresh ? res.items : [...(state.items[id] ?? []).filter((i) => i.id <= after), ...res.items]
     // Items are append-only, so any that arrived meanwhile can simply be added on.
-    const last = res.items.at(-1)?.id ?? 0
+    const last = got.at(-1)?.id ?? 0
     const extra = during.items.filter((i) => i.id > last)
     // A status the socket reported is newer than the response's.
     const thread = (during.upserted && state.threads.find((t) => t.id === id)) || res.thread
@@ -464,13 +536,90 @@ export async function loadThread(id: string) {
     }
     set({
       threads: upsert(state.threads, thread),
-      items: { ...state.items, [id]: [...res.items, ...extra] },
+      items: { ...state.items, [id]: [...got, ...extra] },
+      older: fresh ? { ...state.older, [id]: !!res.more } : state.older,
       partial: { ...state.partial, [id]: partial },
     })
+    current.add(id)
+    return thread
   } finally {
     if (loading.get(id) === during) loading.delete(id)
   }
 }
+
+/** Threads whose items are up to date: fetched, or caught up, since the connection opened. */
+const current = new Set<string>()
+/** Threads whose kept copy is being read. */
+const reading = new Set<string>()
+
+/**
+ * What a view calls when it shows a thread, and again when the connection comes back: shows the
+ * copy kept on the device if nothing of the thread is held yet, then brings it up to date, with
+ * its newest page or with what came after what is held.
+ */
+export async function openThread(id: string): Promise<void> {
+  const shown = link
+  if (copies && shown && !shown.local && !state.items[id] && !reading.has(id)) {
+    const asked = epoch
+    reading.add(id)
+    const kept = await copies.thread(shown, id).catch(() => null)
+    reading.delete(id)
+    if (asked !== epoch) return
+    if (kept && !state.items[id]) set({ items: { ...state.items, [id]: kept.items }, older: { ...state.older, [id]: kept.older } })
+  }
+  if (!state.connected || current.has(id)) return
+  const held = state.items[id]
+  await loadThread(id, held ? (held.at(-1)?.id ?? 0) : undefined)
+}
+
+/** Threads whose older items are being fetched: one page at a time each. */
+const fetchingOlder = new Set<string>()
+
+/**
+ * Fetches the page that comes before the oldest item held of an opened thread, or with `to`
+ * everything back to that item (a message found by searching). An answer that arrives after the
+ * thread was loaded afresh (the connection came back meanwhile) is dropped. Resolves with whether
+ * anything was put in front of what was held.
+ */
+export async function loadOlder(id: string, to?: number): Promise<boolean> {
+  const held = state.items[id]
+  if (!held?.length || !state.older[id] || fetchingOlder.has(id)) return false
+  const first = held[0].id
+  const asked = epoch
+  fetchingOlder.add(id)
+  try {
+    const res = await api<{ items: Item[]; more: boolean }>('GET', `/api/threads/${id}?before=${first}${to ? `&from=${to}` : ''}`)
+    if (asked !== epoch || state.items[id]?.[0]?.id !== first) return false
+    const earlier = res.items.filter((i) => i.id < first)
+    set({ items: { ...state.items, [id]: [...earlier, ...state.items[id]] }, older: { ...state.older, [id]: res.more } })
+    return earlier.length > 0
+  } finally {
+    fetchingOlder.delete(id)
+  }
+}
+
+/** How long a subagent or run stays in the list after it last changed, as on the server (db.RECENT). */
+const RECENT = 60 * 60_000
+
+/**
+ * The list as the server would make it now: every conversation, the subagents and runs at work or
+ * changed in the last hour, the ones open in a view (their items are held), and the ones above all those.
+ */
+function trimmed(threads: Thread[], items = state.items, now = Date.now()): Thread[] {
+  const byId = new Map(threads.map((t) => [t.id, t]))
+  const keep = new Set<string>()
+  for (const t of threads) {
+    if (t.parentId && t.status !== 'running' && now - t.updatedAt > RECENT && !items[t.id]) continue
+    for (let up: Thread | undefined = t; up && !keep.has(up.id); up = up.parentId ? byId.get(up.parentId) : undefined) keep.add(up.id)
+  }
+  return keep.size === threads.length ? threads : threads.filter((t) => keep.has(t.id))
+}
+
+// A connection that stays open for days is not sent the list again, so it lets go of old threads itself.
+setInterval(() => {
+  const threads = trimmed(state.threads)
+  if (threads !== state.threads) set({ threads })
+}, 10 * 60_000)
 
 /** A bot's conversation with its owner: its one chat that is not archived. There is none until something has been said. */
 export function mainThread(threads: Thread[], botId: string): Thread | undefined {

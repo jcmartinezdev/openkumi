@@ -1,13 +1,14 @@
 // A bot's conversation (or the thread of one of its subagents): what was said, what the bot did,
 // its reply as it is written, and a place to answer.
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, type NativeScrollEvent, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { LegendList, type LegendListRef } from '@legendapp/list/react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Attachment, Item } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { describe } from '@openkumi/client/steps'
-import { api, loadThread, mainThread, recentSubagents, useStore } from '@openkumi/client/store'
+import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
@@ -80,9 +81,6 @@ function CopyReply({ text, theme }: { text: string; theme: Theme }) {
   )
 }
 
-/** Whether a scroll left the newest line in view. */
-const atEnd = (e: NativeScrollEvent) => e.contentOffset.y + e.layoutMeasurement.height > e.contentSize.height - 80
-
 /** Whether the keyboard is up, so what sits above it can drop the room it keeps for the home indicator. */
 function useKeyboardUp() {
   const [up, setUp] = useState(false)
@@ -131,6 +129,7 @@ export default function Chat() {
   const thread = useStore((s) => (forBot ? mainThread(s.threads, forBot) : s.threads.find((t) => t.id === id)))
   const bot = useStore((s) => s.bots.find((b) => b.id === (forBot ?? thread?.botId)))
   const items = useStore((s) => (thread ? s.items[thread.id] : undefined))
+  const older = useStore((s) => (thread ? !!s.older[thread.id] : false))
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
   const connected = useStore((s) => s.connected)
   const threads = useStore((s) => s.threads)
@@ -139,22 +138,30 @@ export default function Chat() {
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
-  const list = useRef<FlatList<Row>>(null)
+  const list = useRef<LegendListRef>(null)
   const keyboard = useKeyboardUp()
-  /** Whether the newest line is in view; if it is, the view follows what is written. Only the user scrolling changes it. */
-  const following = useRef(true)
-  /** While a finger is on the list, or it glides on after one: the scrolls the user makes, and the only ones that say where they want to be. */
-  const touching = useRef(false)
-  /** The height of the whole conversation and of the part of it on screen, as last measured. */
-  const size = useRef({ content: 0, frame: 0 })
-  // Goes by the measured height: the list's own scrollToEnd guesses where the end is from the lines
-  // drawn so far, and when a chat opens the newest ones are not drawn yet, so it stopped short.
-  const toEnd = () => following.current && list.current?.scrollToOffset({ offset: Math.max(0, size.current.content - size.current.frame), animated: false })
 
   useEffect(() => {
-    // Asked again when the connection comes back, in case the chat was opened while it was away.
-    if (thread && !items && connected) loadThread(thread.id).then(() => setError(''), (e) => setError(e.message))
-  }, [thread?.id, items, connected])
+    // Shows what is kept of the chat at once, then brings it up to date; again when the connection comes back.
+    if (thread) openThread(thread.id).then(() => setError(''), (e) => setError(e.message))
+  }, [thread?.id, connected])
+  // A subagent or run older than what the list holds is fetched, which puts it in the list.
+  useEffect(() => {
+    if (!forBot && !thread && connected) loadThread(id).catch((e) => setError(e.message))
+  }, [id, !!thread, connected])
+
+  // Earlier messages are fetched a page at a time as the reader nears the top; the list keeps what
+  // was on screen in its place while they are put in above.
+  const [fetchingOlder, setFetchingOlder] = useState(false)
+  const fetching = useRef(false)
+  const showOlder = () => {
+    if (!thread || !older || fetching.current) return
+    fetching.current = true
+    setFetchingOlder(true)
+    loadOlder(thread.id)
+      .catch((e) => setError(e.message))
+      .finally(() => ((fetching.current = false), setFetchingOlder(false)))
+  }
 
   const shown = useMemo(() => rows(items ?? []), [items])
   const running = thread?.status === 'running'
@@ -182,14 +189,14 @@ export default function Chat() {
     const message = text.trim()
     // The files go once they are all on the server; any that failed stay behind in the composer.
     const going = files.filter((f) => f.staged)
-    if ((!message && !going.length) || uploading || !bot) return
+    if ((!message && !going.length) || uploading || !bot || !connected) return
     setError('')
     setSending(true)
     try {
       await api('POST', forBot ? `/api/bots/${forBot}/messages` : `/api/threads/${thread!.id}/messages`, { text: message, attachments: going.map((f) => f.staged) })
       setText('')
       sent(id, going.map((f) => f.id))
-      following.current = true
+      void list.current?.scrollToEnd({ animated: true })
     } catch (e) {
       setError((e as Error).message)
     }
@@ -247,14 +254,25 @@ export default function Chat() {
       ) : (
         <FileLinks.Provider value={openFile}>
         <ShowText.Provider value={showText}>
-        <FlatList
+        <LegendList
           ref={list}
           data={shown}
           keyExtractor={(row) => row.key}
           renderItem={({ item }) => <Line row={item} theme={theme} scale={scale} />}
           extraData={scale}
+          estimatedItemSize={64}
+          // Lines differ too much (pages, tables, a word or two) to be drawn into one another's places.
+          recycleItems={false}
+          // Opens at the newest line, and stays there as the reply is written, the keyboard comes up or
+          // more arrives, until the reader scrolls away from it.
+          initialScrollAtEnd
+          maintainScrollAtEnd
+          maintainVisibleContentPosition={{ data: true }}
+          onStartReached={showOlder}
           ListHeaderComponent={
-            // A run leads back to its task, as on the computer.
+            older ? (
+              <View style={styles.older}>{fetchingOlder ? <ActivityIndicator size="small" color={theme.muted} /> : <Pressable accessibilityRole="button" hitSlop={8} onPress={showOlder}><Text style={{ color: theme.faint, fontSize: 13 }}>Show earlier messages</Text></Pressable>}</View>
+            ) : // A run leads back to its task, as on the computer.
             task ? (
               <Pressable accessibilityRole="link" hitSlop={6} onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: task.id } })}>
                 <Text style={[styles.notice, { color: theme.faint }]}>A run of the scheduled task <Text style={{ color: theme.text, textDecorationLine: 'underline' }}>{task.title}</Text></Text>
@@ -264,16 +282,6 @@ export default function Chat() {
           ListFooterComponent={tail}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}
           keyboardDismissMode="interactive"
-          onScroll={({ nativeEvent: e }) => touching.current && (following.current = atEnd(e))}
-          onScrollBeginDrag={() => (touching.current = true)}
-          onScrollEndDrag={({ nativeEvent: e }) => ((touching.current = false), (following.current = atEnd(e)))}
-          onMomentumScrollBegin={() => (touching.current = true)}
-          onMomentumScrollEnd={({ nativeEvent: e }) => ((touching.current = false), (following.current = atEnd(e)))}
-          onScrollToTop={() => (following.current = false)}
-          scrollEventThrottle={100}
-          onContentSizeChange={(_, height) => ((size.current.content = height), toEnd())}
-          // The keyboard coming up makes the list shorter; the newest line stays in view.
-          onLayout={(e) => ((size.current.frame = e.nativeEvent.layout.height), toEnd())}
         />
         </ShowText.Provider>
         </FileLinks.Provider>
@@ -302,7 +310,7 @@ export default function Chat() {
             style={[styles.input, { color: theme.text }]}
             value={text}
             onChangeText={setText}
-            placeholder={thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
+            placeholder={!connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
             placeholderTextColor={theme.faint}
             multiline
           />
@@ -327,9 +335,9 @@ export default function Chat() {
             ) : (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={uploading ? 'Send, once the files are added' : 'Send'}
-                disabled={sending || uploading || (!text.trim() && !sendable)}
-                style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || (!text.trim() && !sendable) ? 0.35 : 1 }]}
+                accessibilityLabel={!connected ? 'Send, once the connection is back' : uploading ? 'Send, once the files are added' : 'Send'}
+                disabled={sending || uploading || !connected || (!text.trim() && !sendable)}
+                style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || !connected || (!text.trim() && !sendable) ? 0.35 : 1 }]}
                 onPress={send}
               >
                 <Glyph name="up" size={19} color={theme.onPrimary} weight={2.4} />
@@ -344,6 +352,7 @@ export default function Chat() {
 
 const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  older: { alignItems: 'center', justifyContent: 'center', minHeight: 32 },
   said: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '86%', marginVertical: 6, gap: 6 },
   user: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18 },
   bot: { marginVertical: 4 },

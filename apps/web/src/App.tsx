@@ -11,7 +11,7 @@ import { usePrefs } from './prefs'
 import { SettingsView } from './Settings'
 import { Sidebar } from './Sidebar'
 import { Tasks } from './Tasks'
-import { type Route, mainThread, navigate, openSettings, useRoute, useStore } from './store'
+import { type Route, loadThread, mainThread, navigate, openSettings, useRoute, useStore } from './store'
 
 export type Modal = { kind: 'new-bot' } | null
 
@@ -66,6 +66,11 @@ export function App() {
 
   // A bot's address shows its conversation; a longer one shows a subagent's thread or an earlier conversation.
   const thread = threads.find((t) => t.id === route.threadId) ?? mainThread(threads, route.botId)
+  // A subagent or run older than what the list holds is fetched, which puts it in the list.
+  const missing = !!route.threadId && !threads.some((t) => t.id === route.threadId)
+  useEffect(() => {
+    if (missing && connected) loadThread(route.threadId).catch(() => {})
+  }, [missing, connected, route.threadId])
   const bot = bots.find((b) => b.id === (thread?.botId ?? route.botId))
 
   // Land on the first bot when the URL names nothing that exists.

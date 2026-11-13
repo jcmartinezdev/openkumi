@@ -3,7 +3,7 @@
 // opens like any other. Unlike the settings, a task is a form: it is saved when it is whole.
 import { useState } from 'react'
 import type { Bot, Schedule, ScheduledTask, Thread } from '@openkumi/shared'
-import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, madeBy, nextRun, runStatus, runTime, runsOf, scheduleLabel, standing, trouble } from '@openkumi/client/tasks'
+import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, madeBy, nextRun, runStatus, runTime, scheduleLabel, standing, trouble, useRuns } from '@openkumi/client/tasks'
 import { Icon } from './Icon'
 import { Page, Pick, Row, Section, Switch } from './settingsUi'
 import { api, openTasks, useStore } from './store'
@@ -69,13 +69,12 @@ function RunRow({ run, task }: { run: Thread; task: ScheduledTask }) {
 
 function TaskCard({ task }: { task: ScheduledTask }) {
   const bots = useStore((s) => s.bots)
-  const threads = useStore((s) => s.threads)
   const zone = useStore((s) => s.about.timeZone)
   const [error, setError] = useState('')
   const bot = bots.find((b) => b.id === task.botId)
-  const runs = runsOf(threads, task.id)
+  const { runs } = useRuns(task.id)
   const act = (fn: () => Promise<unknown>) => fn().then(() => setError(''), (e) => setError(e.message))
-  const running = runs[0]?.status === 'running'
+  const running = task.lastStatus === 'running'
   return (
     <div className="set-group task-card">
       <div className="set-row task-head">
@@ -98,7 +97,7 @@ function TaskCard({ task }: { task: ScheduledTask }) {
         {error && <p className="err">{error}</p>}
       </div>
       {runs.slice(0, 3).map((run) => <RunRow key={run.id} run={run} task={task} />)}
-      {runs.length > 3 && <a className="task-run task-more" href={`#/tasks/${encodeURIComponent(task.id)}`}>All {runs.length} runs</a>}
+      {runs.length > 3 && <a className="task-run task-more" href={`#/tasks/${encodeURIComponent(task.id)}`}>All runs</a>}
     </div>
   )
 }
@@ -155,7 +154,6 @@ function bodyOf(d: Draft) {
 
 function Editor({ task }: { task?: ScheduledTask }) {
   const bots = useStore((s) => s.bots)
-  const threads = useStore((s) => s.threads)
   const zone = useStore((s) => s.about.timeZone)
   const [draft, setDraft] = useState(() => draftOf(task, bots[0]?.id ?? ''))
   const [busy, setBusy] = useState(false)
@@ -196,7 +194,7 @@ function Editor({ task }: { task?: ScheduledTask }) {
     })
   }
   const toggleDay = (day: number) => change({ days: draft.days.includes(day) ? draft.days.filter((d) => d !== day) : [...draft.days, day].sort((a, b) => a - b) })
-  const runs = task ? runsOf(threads, task.id) : []
+  const { runs, more, showOlder, error: runsError } = useRuns(task?.id)
 
   return (
     <Page>
@@ -212,8 +210,9 @@ function Editor({ task }: { task?: ScheduledTask }) {
           <div className="set-section-head"><h2>Runs</h2></div>
           <div className="set-group">
             {runs.map((r) => <RunRow key={r.id} run={r} task={task} />)}
-            {!runs.length && <Row title="No runs yet" description="Each run will be listed here, and opens like a conversation." />}
-            {runs.length >= 50 && <Row title="" description="The latest 50 runs are kept." />}
+            {!runs.length && !runsError && <Row title="No runs yet" description="Each run will be listed here, and opens like a conversation." />}
+            {runsError && <Row title="The runs could not be fetched" status={runsError} />}
+            {more && <button className="task-run task-more" onClick={showOlder}>Show older runs</button>}
           </div>
         </section>
       )}
@@ -277,7 +276,7 @@ function Editor({ task }: { task?: ScheduledTask }) {
       <div className="task-actions">
         <button className="primary" disabled={busy || !ready || (!!task && !changed.length)} onClick={save}>{task ? (changed.length ? 'Save' : 'Saved') : 'Create task'}</button>
         {task && (
-          <button disabled={busy || runs[0]?.status === 'running'} onClick={() => run(() => api('POST', `/api/tasks/${task.id}/run`))}>
+          <button disabled={busy || task.lastStatus === 'running'} onClick={() => run(() => api('POST', `/api/tasks/${task.id}/run`))}>
             <Icon name="play" size={13} /> Run now
           </button>
         )}

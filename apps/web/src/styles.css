@@ -327,7 +327,9 @@ a.row { text-decoration: none; }
 .heading .faint { white-space: nowrap; }
 .menu { display: none; margin-left: -8px; }
 
-.scroller { grid-area: scroll; overflow-y: auto; padding: 24px 20px 8px; scrollbar-gutter: stable both-edges; }
+.scroller { grid-area: scroll; overflow-y: auto; padding: 24px 20px 8px; scrollbar-gutter: stable both-edges; overflow-anchor: none; }
+/* At the top of a conversation that has more before it: earlier messages are fetched as the reader nears it. */
+.older { display: flex; justify-content: center; min-height: 28px; align-items: center; }
 .column { max-width: var(--chat-width, 740px); margin: 0 auto; width: 100%; }
 .scroller .column { display: flex; flex-direction: column; gap: 14px; min-height: 100%; font-size: var(--chat-text, 14px); }
 
@@ -781,11 +783,12 @@ a.set-link:hover { background: var(--hover); }
 .task-open:hover h3 { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 .task-head .set-control { flex: none; }
 .task-head .err { margin-top: 8px; font-size: 12px; }
-a.task-run { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 16px 6px 60px; font-size: 13px; color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums; }
+a.task-run, button.task-run { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 16px 6px 60px; font-size: 13px; color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums; }
 .set-group > a.task-run:first-child { padding-left: 16px; }
-a.task-run:hover { background: var(--hover); color: var(--text); }
+a.task-run:hover, button.task-run:hover { background: var(--hover); color: var(--text); }
+button.task-run { width: 100%; border: 0; border-radius: 0; background: none; text-align: left; font-family: inherit; cursor: pointer; }
 a.task-run .ic:last-child { color: var(--faint); }
-a.task-more { color: var(--faint); font-size: 12px; }
+.task-run.task-more { color: var(--faint); font-size: 12px; }
 .set-input.time { width: 120px; }
 .days { display: flex; gap: 4px; }
 button.day { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 12px; font-weight: 500; }

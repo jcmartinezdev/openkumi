@@ -1,5 +1,7 @@
 // Scheduled tasks in words, the same in every app: when one runs, and how its runs went.
+import { useEffect, useRef, useState } from 'react'
 import type { Schedule, ScheduledTask, Thread } from '@openkumi/shared'
+import { api, useStore } from './store'
 
 export const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -73,8 +75,40 @@ export function runStatus(run: Thread, task: ScheduledTask): string {
   return run.id === task.lastThreadId && task.lastStatus ? STATUS_LABEL[task.lastStatus] : 'Done'
 }
 
-/** The runs of a task, newest first. */
-export const runsOf = (threads: Thread[], taskId: string) => threads.filter((t) => t.taskId === taskId).sort((a, b) => b.createdAt - a.createdAt)
+/**
+ * A task's runs, newest first. The server keeps every run, so they are fetched a page at a time:
+ * the newest when the view opens, older ones with `showOlder`. What the environment reports while
+ * the view is open (a run starting, or finishing) is laid over them.
+ */
+export function useRuns(taskId: string | undefined): { runs: Thread[]; more: boolean; showOlder: () => void; error: string } {
+  const threads = useStore((s) => s.threads)
+  const connected = useStore((s) => s.connected)
+  const [fetched, setFetched] = useState<{ taskId: string; runs: Thread[]; more: boolean } | null>(null)
+  const [error, setError] = useState('')
+  /** Counts the requests, so that an answer to one made before the last is dropped. */
+  const asked = useRef(0)
+  const fetchPage = (id: string, before?: number) => {
+    const mine = ++asked.current
+    api<{ runs: Thread[]; more: boolean }>('GET', `/api/tasks/${encodeURIComponent(id)}/runs${before ? `?before=${before}` : ''}`).then(
+      (page) => {
+        if (mine !== asked.current) return
+        setError('')
+        setFetched((had) => ({ taskId: id, runs: before && had?.taskId === id ? [...had.runs, ...page.runs] : page.runs, more: page.more }))
+      },
+      (e: Error) => mine === asked.current && setError(e.message),
+    )
+  }
+  // Fetched again when the connection comes back: runs may have started and finished meanwhile.
+  useEffect(() => {
+    if (taskId && connected) fetchPage(taskId)
+  }, [taskId, connected])
+  const own = fetched && fetched.taskId === taskId ? fetched : null
+  const byId = new Map((own?.runs ?? []).map((r) => [r.id, r]))
+  for (const t of threads) if (taskId && t.taskId === taskId) byId.set(t.id, t)
+  const runs = [...byId.values()].sort((a, b) => b.createdAt - a.createdAt)
+  const showOlder = () => taskId && own?.more && fetchPage(taskId, own.runs.at(-1)?.createdAt)
+  return { runs, more: !!own?.more, showOlder, error }
+}
 
 /** Who made a task, in words: "you", or the bot's name. */
 export function madeBy(task: ScheduledTask, bots: { id: string; name: string }[]): string {

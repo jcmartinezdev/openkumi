@@ -39,7 +39,8 @@
           "cameraPermission": "OpenKumi uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-sqlite"
     ]
   }
 }

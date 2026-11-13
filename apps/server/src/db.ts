@@ -24,7 +24,32 @@ db.exec(`
     enabled INTEGER NOT NULL, created_by TEXT NOT NULL, next_run_at INTEGER, last_run_at INTEGER,
     last_status TEXT, last_error TEXT, last_thread_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
   );
+  -- The number of each thread's latest change, from one count for all of them, and whether that
+  -- change removed it. An app that has seen everything up to a change asks for what came after it.
+  CREATE TABLE IF NOT EXISTS changes (thread_id TEXT PRIMARY KEY, seq INTEGER NOT NULL, removed INTEGER NOT NULL DEFAULT 0);
+  CREATE INDEX IF NOT EXISTS changes_seq ON changes (seq);
+  CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `)
+
+/**
+ * This database's own id. A copy an app keeps of what it was sent from another database (the
+ * server's data was started afresh) has change numbers that mean nothing here.
+ */
+db.prepare(`INSERT OR IGNORE INTO meta (key, value) VALUES ('database', ?)`).run(`db_${crypto.randomBytes(9).toString('base64url')}`)
+export const DATABASE_ID = (db.prepare(`SELECT value FROM meta WHERE key = 'database'`).get() as { value: string }).value
+
+const nextChange = db.prepare(`
+  INSERT INTO changes (thread_id, seq, removed) VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM changes), ?)
+  ON CONFLICT (thread_id) DO UPDATE SET seq = excluded.seq, removed = excluded.removed
+  RETURNING seq
+`)
+/** Notes that a thread changed, or was removed, and gives the number of that change. */
+function changed(threadId: string, removed = false): number {
+  return (nextChange.get(threadId, removed ? 1 : 0) as { seq: number }).seq
+}
+
+/** The number of the latest change to any thread. */
+export const latestChange = () => (db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM changes').get() as { seq: number }).seq
 
 const hasColumn = (name: string) => !!db.prepare(`SELECT 1 FROM pragma_table_info('threads') WHERE name = ?`).get(name)
 
@@ -47,9 +72,15 @@ if (!hasColumn('archived_at')) {
 
 // A run of a scheduled task works in a thread of its own, which knows which task it is for.
 if (!hasColumn('task_id')) db.exec('ALTER TABLE threads ADD COLUMN task_id TEXT')
+// Every run is kept, so a task's are found by an index rather than by reading them all.
+db.exec('CREATE INDEX IF NOT EXISTS threads_task ON threads (task_id, created_at)')
 
-// Nothing survives a restart mid-run, so no thread can still be running.
-db.exec(`UPDATE threads SET status = 'idle' WHERE status = 'running'`)
+// Nothing survives a restart mid-run, so no thread can still be running. That is a change like any
+// other, or an app's copy would show those threads at work for good.
+for (const { id } of db.prepare(`SELECT id FROM threads WHERE status = 'running'`).all() as { id: string }[]) {
+  db.prepare(`UPDATE threads SET status = 'idle' WHERE id = ?`).run(id)
+  changed(id)
+}
 db.exec(`UPDATE tasks SET last_status = 'stopped' WHERE last_status = 'running'`)
 
 /** What a conversation is called until its first message names it. */
@@ -97,6 +128,44 @@ export function listThreads(): Thread[] {
   return db.prepare('SELECT * FROM threads ORDER BY created_at').all().map(toThread)
 }
 
+/** How long a subagent or a scheduled run stays in the apps' list after it last changed. */
+export const RECENT = 60 * 60_000
+
+/**
+ * The threads the apps keep a list of: every conversation (the current ones, and the ones set
+ * aside, which only the owner makes), and the subagents and scheduled runs that are at work or
+ * changed in the last hour, with the threads above them. Everything else stays here until it is
+ * opened: a bot can leave thousands of runs and subagents behind.
+ */
+export function listedThreads(now = Date.now()): Thread[] {
+  return withParents(db.prepare(`SELECT * FROM threads WHERE ${LISTED}`).all(now - RECENT).map(toThread))
+}
+
+const LISTED = `(parent_id IS NULL OR status = 'running' OR updated_at > ?)`
+
+/** The threads of the list that changed after change `since`, and the ones removed since. */
+export function changesSince(since: number, now = Date.now()): { threads: Thread[]; removed: string[] } {
+  const threads = db
+    .prepare(`SELECT t.* FROM changes c JOIN threads t ON t.id = c.thread_id WHERE c.seq > ? AND c.removed = 0 AND ${LISTED}`)
+    .all(since, now - RECENT)
+    .map(toThread)
+  const removed = db.prepare('SELECT thread_id FROM changes WHERE seq > ? AND removed = 1').all(since) as { thread_id: string }[]
+  return { threads: withParents(threads), removed: removed.map((r) => r.thread_id) }
+}
+
+/** The threads, with the ones above them that are not among them: a recent subagent of an older one is shown beneath it. */
+function withParents(listed: Thread[]): Thread[] {
+  const have = new Set(listed.map((t) => t.id))
+  for (let i = 0; i < listed.length; i++) {
+    const above = listed[i].parentId
+    const parent = above && !have.has(above) ? getThread(above) : undefined
+    if (!parent) continue
+    have.add(parent.id)
+    listed.push(parent)
+  }
+  return listed.sort((a, b) => a.createdAt - b.createdAt)
+}
+
 export function getThread(id: string): Thread | undefined {
   const r = db.prepare('SELECT * FROM threads WHERE id = ?').get(id)
   return r && toThread(r)
@@ -132,7 +201,7 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     `INSERT INTO threads (id, bot_id, parent_id, title, kind, task_id, status, model, reported, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(t.id, t.botId, t.parentId, t.title, t.kind, t.taskId, t.status, t.model, t.reported ? 1 : 0, t.createdAt, t.updatedAt)
-  emit({ type: 'thread.upsert', thread: t })
+  emit({ type: 'thread.upsert', thread: t, seq: changed(t.id) })
   return t
 }
 
@@ -143,7 +212,7 @@ export function updateThread(id: string, patch: Partial<Pick<Thread, 'title' | '
   db.prepare('UPDATE threads SET title = ?, status = ?, reported = ?, archived_at = ?, updated_at = ? WHERE id = ?').run(
     next.title, next.status, next.reported ? 1 : 0, next.archivedAt, next.updatedAt, id,
   )
-  emit({ type: 'thread.upsert', thread: next })
+  emit({ type: 'thread.upsert', thread: next, seq: changed(id) })
   return next
 }
 
@@ -183,13 +252,60 @@ export function deleteThread(id: string) {
   if (botId) fs.rmSync(path.join(privateDir(botId), 'attachments', id), { recursive: true, force: true })
   db.prepare('DELETE FROM items WHERE thread_id = ?').run(id)
   db.prepare('DELETE FROM threads WHERE id = ?').run(id)
-  emit({ type: 'thread.delete', id })
+  emit({ type: 'thread.delete', id, seq: changed(id, true) })
 }
 
 // ---- items
 
 export function listItems(threadId: string): Item[] {
   return db.prepare('SELECT * FROM items WHERE thread_id = ? ORDER BY id').all(threadId).map(toItem)
+}
+
+/**
+ * How much of a thread an app is sent at a time. A page ends up a little past `items` or `bytes`,
+ * so that it begins at something said to the bot and no turn is split; a single turn longer than
+ * `most` items or `mostBytes` is cut where it reaches them.
+ */
+export const PAGE = { items: 100, bytes: 1_000_000, most: 400, mostBytes: 4_000_000 }
+
+const ASKED = `json_extract(data, '$.type') = 'message' AND json_extract(data, '$.role') = 'user'`
+
+/**
+ * The newest page of a thread, or with `before` the page that comes before that item. With `from`
+ * the page reaches back to that item at least, however far that is (a message found by searching).
+ * `more` says whether anything older is left.
+ */
+export function pageOf(threadId: string, { before, from }: { before?: number; from?: number } = {}): { items: Item[]; more: boolean } {
+  const next = db.prepare(`SELECT *, length(data) AS size, ${ASKED} AS asked FROM items WHERE thread_id = ? AND id < ? ORDER BY id DESC LIMIT 200`)
+  const rows: any[] = []
+  let bytes = 0
+  let cursor = before ?? Number.MAX_SAFE_INTEGER
+  read: for (;;) {
+    const batch = next.all(threadId, cursor) as any[]
+    for (const row of batch) {
+      rows.push(row)
+      bytes += row.size
+      cursor = row.id
+      if (from !== undefined && row.id > from) continue
+      const full = rows.length >= PAGE.items || bytes >= PAGE.bytes
+      if (full && (row.asked || rows.length >= PAGE.most || bytes >= PAGE.mostBytes)) break read
+    }
+    if (batch.length < 200) break
+  }
+  const oldest = rows.at(-1)?.id
+  const more = oldest !== undefined && !!db.prepare('SELECT 1 FROM items WHERE thread_id = ? AND id < ? LIMIT 1').get(threadId, oldest)
+  return { items: rows.reverse().map(toItem), more }
+}
+
+/**
+ * The items of a thread after item `after`, for an app that holds the thread up to there. When more
+ * came than a page holds, it gets the newest page instead, and `gap` says that it does not meet
+ * what the app holds.
+ */
+export function itemsAfter(threadId: string, after: number): { items: Item[]; gap: boolean; more?: boolean } {
+  const { n, bytes } = db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(length(data)), 0) AS bytes FROM items WHERE thread_id = ? AND id > ?').get(threadId, after) as { n: number; bytes: number }
+  if (n > PAGE.most || bytes > PAGE.mostBytes) return { ...pageOf(threadId), gap: true }
+  return { items: db.prepare('SELECT * FROM items WHERE thread_id = ? AND id > ? ORDER BY id').all(threadId, after).map(toItem), gap: false }
 }
 
 export function hasItems(threadId: string): boolean {
@@ -301,9 +417,13 @@ export function dueTasks(time: number): ScheduledTask[] {
   return db.prepare('SELECT * FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(time).map(toTask)
 }
 
-/** The runs of a task, newest first. */
-export function runsOf(taskId: string): Thread[] {
-  return db.prepare('SELECT * FROM threads WHERE task_id = ? ORDER BY created_at DESC').all(taskId).map(toThread)
+/** The runs of a task, newest first, `limit` at a time: the ones that started before `before`. `more` says whether older ones are left. */
+export function runsOf(taskId: string, { before, limit = 20 }: { before?: number; limit?: number } = {}): { runs: Thread[]; more: boolean } {
+  const rows = db
+    .prepare('SELECT * FROM threads WHERE task_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?')
+    .all(taskId, before ?? Number.MAX_SAFE_INTEGER, limit + 1)
+    .map(toThread)
+  return { runs: rows.slice(0, limit), more: rows.length > limit }
 }
 
 /** When the next task is due, or null when none is. */
