@@ -1,0 +1,12 @@
+{
+  "name": "Exchange rates",
+  "categories": ["Everyday", "Travel"],
+  "tagline": "Today's and past exchange rates for 300 currencies, conversions and rate alerts.",
+  "summary": "Exchange rates with no sign-in: the European Central Bank's reference rates for 30 major currencies back to 1999, and daily rates for over 300 more, crypto included; conversions, history and charts, and alerts when a rate crosses a level.",
+  "can": [
+    "Convert any amount, at today's rate or on a past date",
+    "Show how a rate moved over weeks or years, as a chart",
+    "Tell you when a rate goes above or below a level you choose"
+  ],
+  "site": "https://frankfurter.dev/"
+}

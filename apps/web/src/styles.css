@@ -837,9 +837,24 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .set-addresses .set-link-row > input { flex: 1; min-width: 0; width: auto; }
 
 /* ---- superpowers */
+/* The catalog: a search and the groups to pick from, kept in view while the cards scroll under them. */
+.set-column.wide { max-width: 980px; }
+.catalog-bar { position: sticky; top: 0; z-index: 2; display: grid; gap: 10px; margin: -12px 0; padding: 12px 0; background: var(--bg); }
+.catalog-search { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--muted); }
+.catalog-search:focus-within { border-color: var(--border-strong); }
+.catalog-search input { height: 100%; padding: 0; border: none; font-size: 14px; color: var(--text); }
+.catalog-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.catalog-chips button { height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; color: var(--muted); }
+.catalog-chips button:hover:not(:disabled) { color: var(--text); }
+.catalog-chips button.active, .catalog-chips button.active:hover { background: var(--text); border-color: var(--text); color: var(--bg); }
+.catalog-chips button.active .count { color: inherit; opacity: 0.7; }
 .power-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
 .power-card { display: flex; gap: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); text-decoration: none; transition: border-color 0.12s, background 0.12s; }
 .power-card:hover { border-color: var(--border-strong); background: var(--hover); }
+/* Active: for the bot whose settings these are, or for any bot. */
+.power-card.on { border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); background: color-mix(in srgb, var(--ok) 5%, var(--card)); }
+.power-card.on:hover { border-color: color-mix(in srgb, var(--ok) 60%, var(--border)); background: color-mix(in srgb, var(--ok) 8%, var(--card)); }
+.power-card .pill { display: inline-flex; align-items: center; gap: 4px; }
 .power-card-text { min-width: 0; display: grid; gap: 4px; align-content: start; justify-items: start; }
 .power-card h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .power-card p { font-size: 12.5px; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
@@ -858,7 +873,30 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .power-head p { color: var(--muted); font-size: 13.5px; }
 .power-head .faint { font-size: 12px; }
 .power-head .faint a { color: inherit; }
+/* Its groups and its site, each a link, one after the other. */
+.power-groups a { text-decoration: none; }
+.power-groups a:hover { text-decoration: underline; }
+.power-groups a + a::before { content: '·'; display: inline-block; padding: 0 6px; }
 .power-about { padding: 0 16px; font-size: 14px; line-height: 1.6; }
+/* From a bot's settings, its buttons sit by the superpower's name. */
+.power-head-action { flex: none; display: grid; justify-items: end; gap: 6px; max-width: 45%; }
+.power-standing { font-size: 12px; color: var(--faint); text-align: right; }
+.power-standing.on { color: var(--muted); }
+@media (max-width: 560px) { .power-head-action { justify-items: start; max-width: none; } .power-standing { text-align: left; } }
+/* What a superpower gives a bot to read: its files, then the one open, read-only. */
+.skill { display: grid; gap: 10px; margin-top: 12px; }
+.skill-files { display: flex; flex-wrap: wrap; gap: 4px; }
+.skill-files .file-row { width: auto; max-width: 100%; padding: 0 10px; border: 1px solid var(--border); }
+.skill-view { min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); overflow: hidden; }
+.skill-view-head { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 5px 6px 5px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+.skill-view-head .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skill-text, .skill-source { max-height: 70vh; overflow: auto; }
+.skill-text { padding: 14px 16px; font-size: 13px; line-height: 1.6; }
+/* It sits in a settings row, whose own lines of text are small and faint. */
+.set-row .skill-text p { max-width: none; font-size: inherit; line-height: inherit; color: var(--text); }
+/* As written: its own lines, scrolled sideways when they are longer than the box. */
+.skill-source { margin: 0; padding: 14px 16px; font: 12.5px/1.6 var(--mono); white-space: pre; tab-size: 2; }
+.skill-view > .notice, .skill-view > .muted { margin: 12px; }
 .sign-in-note { padding: 2px 20px 10px; font-size: 13px; color: var(--muted); }
 .activate-head { display: flex; align-items: center; gap: 14px; }
 .activate-head p { color: var(--muted); font-size: 13.5px; line-height: 1.45; }

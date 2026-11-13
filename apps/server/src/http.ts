@@ -19,7 +19,7 @@ import { homeAddresses, nearby, tailscaleAddresses } from './network.ts'
 import { principles, setPrinciples } from './principles.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
-import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower } from './superpowers.ts'
+import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower, superpowerCategories, superpowerFile } from './superpowers.ts'
 import * as tasks from './tasks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
 import * as ws from './workspace.ts'
@@ -144,6 +144,7 @@ route('GET', '/api/state', (): AppState => ({
   providers: providerInfos(),
   browsers: browserStates(),
   superpowers: listSuperpowers(),
+  superpowerCategories: superpowerCategories(),
   superpowerStatus: mcp.superpowerStatuses(),
   home: HOME_LABEL,
   settings: settings(),
@@ -208,6 +209,14 @@ route('DELETE', '/api/bots/:id', async ([id]) => {
 
 // ---- superpowers: what a bot can do beyond its own tools. Only the owner switches one on, for one bot at a time.
 route('GET', '/api/superpowers', () => listSuperpowers())
+// What a superpower gives a bot to read, which its owner can read too (and never change).
+route('GET', '/api/superpowers/:id/file', ([id], _, { url }) => {
+  try {
+    return superpowerFile(id, filePath(url))
+  } catch (e: any) {
+    fail(404, e.message)
+  }
+})
 route('PUT', '/api/bots/:id/superpowers/:power', async ([id, power], body) => {
   const bot = needBot(id)
   await setSuperpower(bot.id, power, !!body.on).catch((e) => fail(400, e.message))

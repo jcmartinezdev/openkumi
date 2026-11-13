@@ -1,0 +1,11 @@
+{
+  "name": "Launch",
+  "categories": ["Marketing"],
+  "tagline": "A dated launch plan for Product Hunt, Hacker News, Reddit and more, every post drafted.",
+  "summary": "Plan a product or feature launch with dates: the channels that fit (Product Hunt, Show HN, Reddit, launch directories, the user's own list and accounts), each one's current rules, every post and email drafted, reminders as scheduled tasks, and a look at how it went. Works from the shared marketing brief in files/marketing/brief.md. Never posts.",
+  "can": [
+    "Plan a launch with dates, from the weeks before to the week after",
+    "Draft every post and email, to each channel's rules",
+    "Remind you of each step on the day, and gather how it went"
+  ]
+}

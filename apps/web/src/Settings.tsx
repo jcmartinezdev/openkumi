@@ -15,7 +15,7 @@ import { Icon } from './Icon'
 import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
 import { api, closeSettings, openSettings, saveSettings, useStore } from './store'
-import { SuperpowerList, SuperpowerPage } from './Superpowers'
+import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
 import { BotHead } from './Mascot'
 
 type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'principles' | 'browser' | 'environments' | 'advanced' | 'about'
@@ -66,7 +66,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
   { page: 'browser', id: 'browser-panel', title: 'Open the panel when a bot starts browsing' },
   { page: 'browser', id: 'browsers-running', title: 'Browsers running now', also: 'stop' },
-  { page: 'superpowers', id: 'superpowers', title: 'Superpowers', also: 'plugins apps tools notion linear atlassian jira confluence todoist granola otter readwise typefully sign in' },
+  { page: 'superpowers', id: 'superpowers', title: 'Superpowers', also: 'plugins skills apps tools productivity work creative marketing travel everyday notion linear atlassian jira confluence todoist granola otter readwise typefully weather exchange rates currency holidays watch seo social posts launch landing pages competitors sign in' },
   { page: 'environments', id: 'local-environment', title: 'Local environment', also: 'run on this computer server' },
   { page: 'environments', id: 'remote-environments', title: 'Remote environments', also: 'add another computer connect server lan' },
   { page: 'environments', id: 'lan', title: 'Let other computers connect', also: 'lan remote network access sharing' },
@@ -177,6 +177,8 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
   const bots = useStore((s) => s.bots)
   const bot = page === 'bots' && path[1] ? bots.find((b) => b.id === path[1]) : undefined
   const power = useStore((s) => (page === 'superpowers' && path[1] ? s.superpowers.find((p) => p.id === path[1]) : undefined))
+  // A superpower's page opened from a bot's settings, which is about that bot.
+  const botPower = useStore((s) => (bot && path[2] === 'superpowers' && path[3] ? s.superpowers.find((p) => p.id === path[3]) : undefined))
 
   // Escape closes the settings, unless a dialog on top of them is open (it closes itself).
   useEffect(() => {
@@ -199,7 +201,17 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
             {(bot || power) && (
               <>
                 <Icon name="chevron" size={12} />
-                <span aria-current="page">{bot ? `${bot.emoji} ${bot.name}` : power!.name}</span>
+                {botPower ? (
+                  <a href={`#/settings/bots/${encodeURIComponent(bot!.id)}/superpowers`}>{bot!.emoji} {bot!.name}</a>
+                ) : (
+                  <span aria-current="page">{bot ? `${bot.emoji} ${bot.name}` : power!.name}</span>
+                )}
+              </>
+            )}
+            {botPower && (
+              <>
+                <Icon name="chevron" size={12} />
+                <span aria-current="page">{botPower.name}</span>
               </>
             )}
           </nav>
@@ -208,14 +220,14 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           <button className="icon" title="Close" aria-label="Close settings" onClick={closeSettings}><Icon name="x" /></button>
         </header>
         {/* Keyed by page so each one starts scrolled to the top. */}
-        <div className="set-body" key={bot ? `bot:${bot.id}` : power ? `superpower:${power.id}` : page}>
+        <div className="set-body" key={bot ? `bot:${bot.id}${botPower ? `:${botPower.id}` : ''}` : power ? `superpower:${power.id}` : page}>
           {page === 'general' && <General />}
           {page === 'appearance' && <Appearance />}
           {page === 'chat' && <ChatPage />}
           {page === 'providers' && <Providers selected={path[1]} />}
           {page === 'principles' && <Principles />}
-          {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} /> : <Bots newBot={newBot} />)}
-          {page === 'superpowers' && (path[1] ? <SuperpowerPage id={path[1]} /> : <SuperpowerList />)}
+          {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} power={path[2] === 'superpowers' ? path[3] : undefined} /> : <Bots newBot={newBot} />)}
+          {page === 'superpowers' && (path[1] ? <SuperpowerPage id={path[1]} /> : <SuperpowerCatalog />)}
           {page === 'browser' && <BrowserPage />}
           {page === 'environments' && <Environments />}
           {page === 'advanced' && <Advanced />}

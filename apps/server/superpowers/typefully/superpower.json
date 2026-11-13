@@ -1,6 +1,6 @@
 {
   "name": "Typefully",
-  "category": "Your apps",
+  "categories": ["Creative", "Marketing"],
   "tagline": "Draft posts and threads for X, LinkedIn, Threads, Bluesky and Mastodon.",
   "summary": "Write, edit and organise drafts in the user's Typefully, for X, LinkedIn, Threads, Bluesky and Mastodon, and see what is queued or published. Nothing is scheduled or published without the user's approval.",
   "can": [

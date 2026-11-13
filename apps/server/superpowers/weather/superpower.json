@@ -1,0 +1,12 @@
+{
+  "name": "Weather",
+  "categories": ["Everyday", "Travel"],
+  "tagline": "Forecasts hour by hour, past weather, air quality and rain alerts, for anywhere.",
+  "summary": "Exact weather for any place from Open-Meteo, with no sign-in: the forecast up to 16 days ahead hour by hour, past weather back to 1940, air quality, pollen and waves, and regular reports or alerts.",
+  "can": [
+    "Give the forecast for any place, up to 16 days ahead, hour by hour",
+    "Look up past weather back to 1940, and what a place is usually like on given dates",
+    "Send you a morning forecast, or tell you only when rain, frost or wind is coming"
+  ],
+  "site": "https://open-meteo.com/"
+}

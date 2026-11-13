@@ -1,6 +1,6 @@
 {
   "name": "Otter.ai",
-  "category": "Your apps",
+  "categories": ["Work", "Productivity"],
   "tagline": "Search your Otter recordings and read what was said.",
   "summary": "Search the user's Otter.ai meetings and conversations and read their transcripts, to answer what was said or decided. It only reads.",
   "can": [

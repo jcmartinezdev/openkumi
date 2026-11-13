@@ -6,10 +6,12 @@ import ProviderMark from '../components/ProviderMark.astro'
 import Shot from '../components/Shot.astro'
 import { DOWNLOAD_URL, GITHUB_URL } from '../lib/site'
 
-// The superpowers that ship with the app, read from the server's own folder of them.
+// The superpowers that ship with the app, read from the server's own folder of them, by name as the app lists them.
 const powers = Object.entries(import.meta.glob<{ name: string; tagline: string }>('../../../server/superpowers/*/superpower.json', { eager: true, import: 'default' }))
 const icons = import.meta.glob<string>('../../../server/superpowers/*/icon.svg', { eager: true, query: '?raw', import: 'default' })
-const superpowers = powers.map(([file, power]) => ({ ...power, icon: icons[file.replace('superpower.json', 'icon.svg')] }))
+const superpowers = powers
+  .map(([file, power]) => ({ ...power, icon: icons[file.replace('superpower.json', 'icon.svg')] }))
+  .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 
 // The first five are the bots in the screenshots, dressed the same.
 const crew: { name: string; role: string; look?: Look; emoji?: string }[] = [
@@ -223,7 +225,7 @@ const faq = [
       <div class="section-head">
         <span class="eyebrow">Superpowers</span>
         <h2>Powers you hand out, one bot at a time</h2>
-        <p>Let a bot work in your mail, calendar, files and tools. Each superpower says exactly what it can do and signs in with an account of the bot’s own. A bot can use what you give it, and never give itself more.</p>
+        <p>Let a bot work in your apps, or give it know-how: the weather, exchange rates, watching a page, marketing. Each superpower says exactly what it can do, and the ones that work in an app sign in with an account of the bot’s own. A bot can use what you give it, and never give itself more.</p>
       </div>
       <ul class="powers">
         {

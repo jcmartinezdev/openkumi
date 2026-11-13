@@ -12,7 +12,7 @@ import { Mascot } from './Mascot'
 import { ago } from './Sidebar'
 import { Field, Page, Pick, Row, Section, Switch, onServer } from './settingsUi'
 import { api, download, openSettings, request, useStore } from './store'
-import { BotSuperpowers } from './Superpowers'
+import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
 
 export type BotTab = 'bot' | 'superpowers' | 'files'
 export const TABS: [BotTab, string][] = [['bot', 'Bot'], ['superpowers', 'Superpowers'], ['files', 'Files']]
@@ -55,7 +55,8 @@ function LookRow({ bot }: { bot: Bot }) {
   )
 }
 
-export function BotPage({ botId, tab, file }: { botId: string; tab: BotTab; file?: string }) {
+/** `file` is the file open in Files; `power`, the superpower whose page is open in Superpowers. */
+export function BotPage({ botId, tab, file, power }: { botId: string; tab: BotTab; file?: string; power?: string }) {
   const bot = useStore((s) => s.bots).find((b) => b.id === botId)
   // The bot can be deleted from here or from another window.
   useEffect(() => {
@@ -74,7 +75,7 @@ export function BotPage({ botId, tab, file }: { botId: string; tab: BotTab; file
         ))}
       </div>
       {tab === 'bot' && <General bot={bot} />}
-      {tab === 'superpowers' && <BotSuperpowers bot={bot} />}
+      {tab === 'superpowers' && (power ? <SuperpowerPage id={power} bot={bot} /> : <SuperpowerCatalog bot={bot} />)}
       {tab === 'files' && <Files key={file} bot={bot} initial={file} />}
     </>
   )

@@ -626,20 +626,46 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Second bot', provider: 'mock' })
     const powersOf = async () => Object.fromEntries((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.map((b) => [b.name, b.superpowers]))
 
-    // The list: every superpower with what it is for, in the sidebar where skills, connections and plugins used to be.
+    // The catalog: every superpower with what it is for, in the sidebar where skills, connections and plugins used to be,
+    // grouped by what it is for (the same one in each group it belongs to), and searched or narrowed to a group.
     await win.evaluate(() => (location.hash = '/settings/superpowers'))
     await win.locator('.power-card').first().waitFor()
-    assert.deepEqual(await win.locator('.power-card h3').allInnerTexts(), ['Atlassian', 'Granola', 'Linear', 'Notion', 'Otter.ai', 'Readwise', 'Todoist', 'Typefully'])
+    const cards = () => win.locator('.power-card h3').allInnerTexts()
+    assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday'])
+    const group = (name) => win.locator('.set-section', { has: win.locator('h2', { hasText: name }) }).locator('.power-card h3').allInnerTexts()
+    assert.deepEqual(await group('Work'), ['Atlassian', 'Competitors', 'Granola', 'Linear', 'Notion', 'Otter.ai'])
+    assert.deepEqual(await group('Travel'), ['Exchange rates', 'Holidays', 'Weather'])
+    assert.equal((await cards()).filter((name) => name === 'Notion').length, 2, 'in Productivity and in Work')
     const nav = await win.locator('.set-nav').innerText()
     assert.match(nav, /Superpowers/)
     assert.doesNotMatch(nav, /Skills|Connections|Plugins/)
+    const search = win.getByRole('textbox', { name: 'Search superpowers' })
+    await search.fill('rain')
+    await until(async () => (await cards()).join() === 'Weather')
+    await search.fill('notion')
+    await until(async () => (await cards()).join() === 'Notion')
+    await search.fill('')
+    await win.locator('.catalog-chips button', { hasText: 'Marketing' }).click()
+    await until(async () => (await win.locator('.set-section h2').allInnerTexts()).join() === 'Marketing')
+    assert.ok((await cards()).includes('SEO & AI search'))
+    await win.locator('.catalog-chips button', { hasText: 'All' }).click()
+    await win.locator('.power-card', { hasText: 'Notion' }).first().waitFor()
 
     // Its own page says what it does and what it gives a bot, and each bot has a button to activate it.
-    await win.locator('.power-card', { hasText: 'Notion' }).click()
+    await win.locator('.power-card', { hasText: 'Notion' }).first().click()
     await win.locator('.power-head h1', { hasText: 'Notion' }).waitFor()
     assert.match(await win.locator('.power-about').innerText(), /Lets a bot work in your Notion workspace/)
     assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['What a bot can do with it', 'Your bots', 'What it gives a bot'])
-    assert.match(await win.locator('.set-section', { hasText: 'What it gives a bot' }).innerText(), /Instructions[\s\S]*Tools from 127\.0\.0\.1/)
+    const gives = win.locator('.set-section', { hasText: 'What it gives a bot' })
+    assert.match(await gives.innerText(), /Skill[\s\S]*1 file[\s\S]*Tools from 127\.0\.0\.1/)
+    // What it teaches a bot can be read here, formatted or as written, and not changed.
+    await gives.getByRole('button', { name: 'Read the files' }).click()
+    assert.deepEqual(await gives.locator('.skill-files .file-row').allInnerTexts(), ['instructions.md'])
+    await gives.locator('.skill-text', { hasText: 'Use the tools whose names start with' }).waitFor()
+    await gives.getByRole('button', { name: 'Source' }).click()
+    assert.match(await gives.locator('.skill-source').innerText(), /^# Notion\n/)
+    assert.equal(await gives.locator('textarea, [contenteditable]').count(), 0)
+    await gives.getByRole('button', { name: 'Hide files' }).click()
     const row = win.locator('.set-row', { hasText: 'Second bot' })
     assert.match(await row.innerText(), /Not active/)
 
@@ -663,26 +689,41 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     await row.locator('p', { hasText: 'Signed in · 1 tool' }).waitFor({ timeout: 30_000 })
     assert.deepEqual(await powersOf(), { Assistant: [], 'Second bot': ['notion'] }, 'only that bot gets it')
 
-    // The bot's own settings have the same buttons. Signing in inside the bot's browser shows that
-    // browser in the popup; the stand-in approves at once.
+    // The bot's own settings have the same catalog, where what it has stands out in its groups. A superpower opened from
+    // there is about that bot alone: its buttons are by the name, and no other bot is asked about.
+    // Signing in inside the bot's browser shows that browser in the popup; the stand-in approves at once.
     const second = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Second bot')
     await win.evaluate((id) => (location.hash = `/settings/bots/${id}/superpowers`), second.id)
     await win.locator('.tabbar a[aria-selected="true"]', { hasText: 'Superpowers' }).waitFor()
     assert.equal(await win.locator('.tabbar a', { hasText: 'Superpowers' }).locator('.count').innerText(), '1')
-    await win.getByRole('button', { name: 'Activate superpower: Linear for Second bot' }).click()
+    const mine = win.locator('.power-card.on')
+    assert.deepEqual(await mine.locator('h3').allInnerTexts(), ['Notion', 'Notion'], 'in each of its groups')
+    await mine.first().locator('.pill', { hasText: 'Active' }).waitFor()
+    assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday'])
+    await win.locator('.power-card', { hasText: 'Linear' }).click()
+    await win.locator('.power-head h1', { hasText: 'Linear' }).waitFor()
+    assert.equal(await win.evaluate(() => location.hash), `#/settings/bots/${second.id}/superpowers/linear`)
+    assert.match(await win.locator('.crumbs').innerText(), /Bots[\s\S]*Second bot[\s\S]*Linear/)
+    assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['What a bot can do with it', 'What it gives a bot'])
+    await win.locator('.power-head .power-standing', { hasText: 'Not active for Second bot' }).waitFor()
+    await win.locator('.power-head').getByRole('button', { name: 'Activate superpower: Linear for Second bot' }).click()
     const again = win.locator('.dialog', { hasText: 'Activate Linear for Second bot' })
     await again.getByRole('button', { name: /Sign in inside Second bot’s browser/ }).click()
     await again.locator('p', { hasText: 'Linear is active for Second bot.' }).waitFor({ timeout: 30_000 })
     await again.getByRole('button', { name: 'Done' }).click()
     assert.deepEqual((await powersOf())['Second bot'], ['linear', 'notion'])
+    await win.locator('.power-head .power-standing', { hasText: 'Signed in' }).waitFor({ timeout: 30_000 })
     // Notion is signed in, so deactivating it asks first (the test answers yes) and forgets the sign-in.
-    await win.getByRole('button', { name: 'Deactivate superpower: Notion for Second bot' }).click()
+    await win.locator('.crumbs a', { hasText: 'Second bot' }).click()
+    await mine.filter({ hasText: 'Linear' }).waitFor()
+    await mine.filter({ hasText: 'Notion' }).first().click()
+    await win.locator('.power-head').getByRole('button', { name: 'Deactivate superpower: Notion for Second bot' }).click()
     await until(async () => (await powersOf())['Second bot'].join() === 'linear')
 
     // The list shows where each one is active.
     await win.evaluate(() => (location.hash = '/settings/superpowers'))
-    await win.locator('.power-card', { hasText: 'Linear' }).locator('.pill', { hasText: 'Active for 1 bot' }).waitFor()
-    await win.locator('.power-card', { hasText: 'Notion' }).locator('.pill').waitFor({ state: 'detached' })
+    await win.locator('.power-card.on', { hasText: 'Linear' }).locator('.pill', { hasText: 'Active for 1 of 2 bots' }).waitFor()
+    await win.locator('.power-card', { hasText: 'Notion' }).locator('.pill').first().waitFor({ state: 'detached' })
 
   } finally {
     await app?.close().catch(() => {})

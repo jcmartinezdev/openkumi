@@ -1,6 +1,6 @@
 {
   "name": "Readwise",
-  "category": "Your apps",
+  "categories": ["Productivity"],
   "tagline": "Search your highlights and Reader library, and save what you read.",
   "summary": "Search and read the user's Readwise highlights and Reader documents, save new documents and highlights, and tag and file them. Highlights are changed or deleted only after the user approves.",
   "can": [

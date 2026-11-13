@@ -33,6 +33,7 @@ const EMPTY: State = {
   providers: [],
   browsers: {},
   superpowers: [],
+  superpowerCategories: [],
   superpowerStatus: {},
   home: '',
   settings: {} as Settings,
@@ -209,7 +210,7 @@ function handle(ev: ServerEvent) {
     case 'principles':
       return set({ principles: ev.principles })
     case 'superpowers':
-      return set({ superpowers: ev.superpowers })
+      return set({ superpowers: ev.superpowers, superpowerCategories: ev.categories })
     case 'superpower.status': {
       const { [ev.id]: _, ...rest } = state.superpowerStatus[ev.botId] ?? {}
       return set({ superpowerStatus: { ...state.superpowerStatus, [ev.botId]: ev.status ? { ...rest, [ev.id]: ev.status } : rest } })

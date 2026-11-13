@@ -1,6 +1,6 @@
 {
   "name": "Notion",
-  "category": "Your apps",
+  "categories": ["Productivity", "Work"],
   "tagline": "Search your workspace, read pages and databases, and write new ones.",
   "summary": "Search, read and write in the user's Notion workspace: pages, databases and their entries. Existing content is rewritten or archived only after the user approves.",
   "can": [
