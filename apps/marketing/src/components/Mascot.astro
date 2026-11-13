@@ -1,8 +1,8 @@
 ---
 // A bot's mascot, drawn from the same parts as in the app (@openkumi/client/mascot).
 import type { Look } from '@openkumi/shared'
-import { mascotSvg } from '@openkumi/client/mascot'
-import { kumiSvg } from '../lib/brand'
+import { drawMascot } from '@openkumi/client/mascot'
+import { drawKumi } from '../lib/brand'
 
 interface Props {
   /** Leave out for OpenKumi's own mascot. */
@@ -10,7 +10,11 @@ interface Props {
   emoji?: string
   /** Unique on the page: the mascot's gradient is named after it. */
   id: string
-  crop?: 'full' | 'head'
+  /**
+   * `fit` is the whole creature in a box around its body and feet, to sit in a line beside words:
+   * centring the box centres the creature, and its ears and hat reach above it.
+   */
+  crop?: 'full' | 'head' | 'fit'
   /** Breathes and blinks, as the large ones do in the app. */
   live?: boolean
   /** Where in its breath it starts, so mascots side by side are not in step. */
@@ -18,8 +22,13 @@ interface Props {
   class?: string
 }
 
+/** The box `fit` shows, in the units the parts are drawn in. */
+const FIT = '21 46 158 160'
+
 const { look, emoji = '🤖', id, crop = 'full', live = false, delay = 0, class: className } = Astro.props
-const svg = look ? mascotSvg(look, emoji, { id, crop }) : kumiSvg(id, crop)
+const drawn = crop === 'fit' ? 'full' : crop
+const { viewBox, body } = look ? drawMascot(look, emoji, { id, crop: drawn }) : drawKumi(id, drawn)
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${crop === 'fit' ? FIT : viewBox}">${body}</svg>`
 ---
 
 <span class:list={['mascot', { live }, className]} style={`--delay: ${-delay}s`} aria-hidden="true" set:html={svg} />

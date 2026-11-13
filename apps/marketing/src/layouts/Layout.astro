@@ -48,7 +48,7 @@ const socialCard = new URL('/social-card.png', Astro.site)
     <header class="top">
       <div class="container bar">
         <a class="brand" href="/" aria-label={`${SITE_NAME} home`}>
-          <Mascot id="logo" crop="head" class="logo" />
+          <Mascot id="logo" crop="fit" class="logo" />
           <span>{SITE_NAME}</span>
         </a>
         <nav aria-label="Main">
@@ -68,7 +68,7 @@ const socialCard = new URL('/social-card.png', Astro.site)
     <footer class="foot">
       <div class="container foot-row">
         <a class="brand" href="/">
-          <Mascot id="logo-foot" crop="head" class="logo" />
+          <Mascot id="logo-foot" crop="fit" class="logo" />
           <span>{SITE_NAME}</span>
         </a>
         <p>Free and open source under the <a href={LICENSE_URL}>MIT License</a>. © 2026 OpenKumi contributors.</p>
