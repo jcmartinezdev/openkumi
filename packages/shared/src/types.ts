@@ -29,7 +29,7 @@ export interface Bot {
   name: string
   emoji: string
   /**
-   * What the bot is for, in a line. The other bots are told it, so they know when to hand it work.
+   * What the bot is for, in a line. The other bots are told it, so they know what to pass on to it.
    * The owner's, like the rules: a bot cannot change how the others see it.
    */
   description: string
