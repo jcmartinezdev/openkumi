@@ -1,9 +1,11 @@
-// The first screen: pairing this phone with the computer that runs the bots. The computer shows
-// its address and a code (and both as a QR code); the code works once and is checked on both sides.
+// Pairing this phone with the computer that runs the bots, the way to start that the welcome offers
+// (or where a pairing link opens). The computer shows its address and a code (and both as a QR
+// code); the code works once and is checked on both sides.
 import { useEffect, useState } from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Device from 'expo-constants'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { ScreenTitle } from '../src/ScreenTitle'
 import { pairWith } from '../src/session'
 import { useTheme } from '../src/theme'
 
@@ -37,6 +39,7 @@ export default function Pair() {
   const input = [styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.card }]
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScreenTitle title="Pair with your computer" />
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <Text style={[styles.lead, { color: theme.muted }]}>
           On the computer that runs your bots, open Settings, then Environments, switch on “Let other computers connect” and choose “Pair a computer”.
