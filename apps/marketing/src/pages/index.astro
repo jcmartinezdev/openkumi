@@ -126,7 +126,7 @@ const faq = [
           {
             crew.slice(0, 4).map((bot, i) => (
               <div class:list={['row', { on: i === 1 }]}>
-                <Mascot id={`side-${i}`} look={bot.look} emoji={bot.emoji} crop="head" class="head" />
+                <Mascot id={`side-${i}`} look={bot.look} emoji={bot.emoji} crop="fit" class="head" />
                 <span>
                   <strong>{bot.name}</strong>
                   <small>{['Booked: Lisbon, 14–18 May', 'Here is the comparison you asked for…', '3 drafts are waiting in Gmail', 'Shopping list is in your Notes'][i]}</small>
@@ -189,7 +189,7 @@ const faq = [
           <p>Each bot keeps its own instructions and a memory folder, and rewrites them as it learns how you want it to work. Every change it makes to itself is recorded and shown to you, and any of them can be undone.</p>
         </div>
         <div class="art diff-art" aria-hidden="true">
-          <div class="diff-head"><Mascot id="diff" look={crew[1].look} emoji={crew[1].emoji} crop="head" class="head" /><span><strong>Researcher</strong> updated <code>AGENTS.md</code></span><button tabindex="-1">Undo</button></div>
+          <div class="diff-head"><Mascot id="diff" look={crew[1].look} emoji={crew[1].emoji} crop="fit" class="head" /><span><strong>Researcher</strong> updated <code>AGENTS.md</code></span><button tabindex="-1">Undo</button></div>
           <pre><span class="ctx">## How to answer</span>
 <span class="add">+ Lead with the recommendation, then the table.</span>
 <span class="add">+ Prices in euros, delivery to Portugal.</span>
@@ -318,7 +318,7 @@ const faq = [
         <div class="mac">
           <span class="label">Mac mini at home</span>
           <div class="heads">
-            {crew.slice(0, 5).map((bot, i) => <Mascot id={`dev-${i}`} look={bot.look} emoji={bot.emoji} crop="head" class="head" />)}
+            {crew.slice(0, 5).map((bot, i) => <Mascot id={`dev-${i}`} look={bot.look} emoji={bot.emoji} crop="fit" class="head" />)}
           </div>
           <span class="status"><span class="live-dot"></span>5 bots running</span>
           <ul class="paired">
@@ -1039,6 +1039,8 @@ const faq = [
   .heads {
     display: flex;
     gap: 6px;
+    /* Room for the ears and hats, which reach above the mascots' boxes. */
+    margin-top: 10px;
   }
   .heads :global(.head) {
     width: 46px;
