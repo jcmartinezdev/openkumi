@@ -1,0 +1,15 @@
+{
+  "name": "Atlassian",
+  "category": "Your apps",
+  "tagline": "Work in Jira and Confluence: find and file issues, read and write pages.",
+  "summary": "Search, read and write in the user's Atlassian Cloud: Jira issues and comments, Confluence pages and spaces. Existing issues and pages are changed only after the user approves.",
+  "can": [
+    "Search and read the Jira issues and Confluence pages your account can see",
+    "Create issues, comments and new pages",
+    "Change an issue's status or fields, or edit an existing page, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.atlassian.com/v2/mcp"
+  },
+  "site": "https://www.atlassian.com/"
+}

@@ -580,11 +580,12 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
 
   // What ships, each with a page of its own saying what it does and what it gives a bot; then the one the tests bring.
   const all = await list()
-  assert.deepEqual(Object.keys(all), ['linear', 'notion', 'field-guide'], 'those that work in an app first')
-  const { linear, notion, 'field-guide': guide } = all
+  const shipped = ['atlassian', 'granola', 'linear', 'notion', 'otter', 'readwise', 'todoist', 'typefully']
+  assert.deepEqual(Object.keys(all), [...shipped, 'field-guide'], 'those that work in an app first')
+  const { notion, 'field-guide': guide } = all
   assert.deepEqual([notion.name, notion.category, notion.instructions, notion.service, notion.site, notion.onFor], ['Notion', 'Your apps', true, 'mcp.notion.com', 'https://www.notion.so/', []])
   assert.deepEqual([guide.instructions, guide.service], [true, null])
-  for (const id of ['linear', 'notion']) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions, id)
+  for (const id of shipped) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions && all[id].signIn, id)
   assert.doesNotMatch(await told(), /# Your superpowers/)
 
   // Switched on for one bot, and no other.

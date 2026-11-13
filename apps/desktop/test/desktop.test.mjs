@@ -629,7 +629,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     // The list: every superpower with what it is for, in the sidebar where skills, connections and plugins used to be.
     await win.evaluate(() => (location.hash = '/settings/superpowers'))
     await win.locator('.power-card').first().waitFor()
-    assert.deepEqual(await win.locator('.power-card h3').allInnerTexts(), ['Linear', 'Notion'])
+    assert.deepEqual(await win.locator('.power-card h3').allInnerTexts(), ['Atlassian', 'Granola', 'Linear', 'Notion', 'Otter.ai', 'Readwise', 'Todoist', 'Typefully'])
     const nav = await win.locator('.set-nav').innerText()
     assert.match(nav, /Superpowers/)
     assert.doesNotMatch(nav, /Skills|Connections|Plugins/)

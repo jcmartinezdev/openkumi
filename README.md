@@ -34,8 +34,8 @@ that stays logged in.
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone.
 - **Superpowers.** What a bot can do beyond chatting and browsing, switched on by you for one bot
-  at a time: working in Notion or Linear. Each
-  has a page that says what it does, and signs in with an account of the bot's own. A bot can use what you give it but cannot
+  at a time: working in Notion, Linear, Jira and Confluence, Todoist, Readwise or Typefully, or
+  reading your meetings in Granola or Otter.ai. Each has a page that says what it does, and signs in with an account of the bot's own. A bot can use what you give it but cannot
   change it or give itself more.
 - **Replies you can look at.** Replies are drawn with code in colour (with a copy button), tables
   that scroll sideways, ```` ```mermaid ```` diagrams and formulas. A bot can also show a page in
@@ -392,7 +392,7 @@ README.md         its page in the app
 instructions.md   how the bot goes about it; the bot reads it when a task calls for it
 ```
 
-A superpower has instructions, a service, or both. Those that ship (Notion and Linear) are both:
+A superpower has instructions, a service, or both. Those that ship (Notion, Linear and the rest) are all both:
 instructions, and the app's own MCP server, which the bot signs in to with an account of its own
 (two bots can use two different accounts). A service can also be a program run on this computer,
 which is how a superpower with code of its own would work.

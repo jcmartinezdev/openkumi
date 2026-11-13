@@ -66,7 +66,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
   { page: 'browser', id: 'browser-panel', title: 'Open the panel when a bot starts browsing' },
   { page: 'browser', id: 'browsers-running', title: 'Browsers running now', also: 'stop' },
-  { page: 'superpowers', id: 'superpowers', title: 'Superpowers', also: 'plugins apps tools notion linear sign in' },
+  { page: 'superpowers', id: 'superpowers', title: 'Superpowers', also: 'plugins apps tools notion linear atlassian jira confluence todoist granola otter readwise typefully sign in' },
   { page: 'environments', id: 'local-environment', title: 'Local environment', also: 'run on this computer server' },
   { page: 'environments', id: 'remote-environments', title: 'Remote environments', also: 'add another computer connect server lan' },
   { page: 'environments', id: 'lan', title: 'Let other computers connect', also: 'lan remote network access sharing' },
