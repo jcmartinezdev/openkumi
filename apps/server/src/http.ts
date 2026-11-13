@@ -9,6 +9,7 @@ import path from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import type { AppState, ClientEvent, ServerEvent } from '@openkumi/shared'
 import * as agent from './agent.ts'
+import { checkWaiting, isPicture, kept, stage, typeOf, unstage } from './attachments.ts'
 import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
 import { type Frame, browserFor, browserStates, isWebPage, letGo, stopBrowser } from './browser.ts'
 import { HOME, HOME_LABEL, LAN, PORT, ROOT, accessToken, botDir, onEvent, readSecrets, serverId, writeSecret } from './config.ts'
@@ -242,8 +243,10 @@ route('GET', '/api/bots/:id/file', ([id], _, { url, res }) => {
   if (!url.searchParams.has('download')) return ws.open(id, filePath(url))
   const { abs } = ws.resolve(id, filePath(url))
   if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) fail(404, 'No such file')
+  // Pictures and PDFs say what they are, so the apps can show them; anything else is only bytes.
+  const type = typeOf(abs)
   res.writeHead(200, {
-    'Content-Type': 'application/octet-stream',
+    'Content-Type': isPicture(type) || type === 'application/pdf' ? type : 'application/octet-stream',
     'Content-Length': fs.statSync(abs).size,
     'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(abs))}`,
     'X-Content-Type-Options': 'nosniff',
@@ -261,17 +264,33 @@ route('DELETE', '/api/bots/:id/file', async ([id], _, { url }) => {
   const removed = ws.remove(needBot(id).id, filePath(url))
   await ws.commit(id, 'you', `Delete ${removed}`)
 })
+// A file from the owner's device, put in files/ under a name of its own.
 route('POST', '/api/bots/:id/upload', async ([id], _, { url, req }) => {
   needBot(id)
   const data = await readBody(req, 100_000_000)
-  return { path: ws.write(id, ws.incoming(id, url.searchParams.get('name') ?? 'upload'), data) }
+  return { path: ws.write(id, ws.incoming(id, url.searchParams.get('name') ?? 'upload', 'files'), data) }
 }, true)
+// A file picked to go with a message. It waits, out of the bot's sight, until the message is sent,
+// and is thrown away if it is taken out of the message first.
+route('POST', '/api/bots/:id/attachments', async ([id], _, { url, req }) => stage(needBot(id).id, url.searchParams.get('name') ?? 'file', await readBody(req, 100_000_000)), true)
+route('DELETE', '/api/bots/:id/attachments/:file', ([id, file]) => unstage(needBot(id).id, file))
 route('GET', '/api/bots/:id/history', ([id]) => ws.history(needBot(id).id))
 route('GET', '/api/bots/:id/history/:change', async ([id, change]) => ({ diff: await ws.diff(needBot(id).id, change) }))
 route('POST', '/api/bots/:id/history/:change/undo', ([id, change]) => ws.undo(needBot(id).id, change))
 
 // ---- a bot's conversation: one that goes on, and the earlier ones that were set aside
-const messageText = (body: Record<string, any>) => (typeof body.text === 'string' && body.text.trim()) || fail(400, 'Message text is required')
+/** What the owner said, and the ids of the files they sent with it, which are waiting to go. Either may be left out, not both. */
+function message(botId: string, body: Record<string, any>) {
+  const text = typeof body.text === 'string' ? body.text.trim() : ''
+  let files
+  try {
+    files = checkWaiting(botId, body.attachments)
+  } catch (e: any) {
+    fail(400, e.message)
+  }
+  if (!text && !files.length) fail(400, 'Message text is required')
+  return { text, files }
+}
 // What the bot itself refuses (it is still working, the conversation is archived) is for the owner to put right.
 const unless = <T>(act: () => T): T => {
   try {
@@ -281,9 +300,9 @@ const unless = <T>(act: () => T): T => {
   }
 }
 route('POST', '/api/bots/:id/messages', ([id], body) => {
-  const text = messageText(body)
-  const thread = agent.conversation(needBot(id).id)
-  agent.postMessage(thread.id, text, 'user')
+  const { text, files } = message(needBot(id).id, body)
+  const thread = agent.conversation(id)
+  agent.postMessage(thread.id, text, 'user', files)
   return db.getThread(thread.id)
 })
 route('POST', '/api/bots/:id/fresh', ([id]) => unless(() => agent.startFresh(needBot(id).id)))
@@ -312,9 +331,23 @@ route('GET', '/api/threads/:id', ([id]) => ({
   partial: agent.partialOf(id),
 }))
 route('POST', '/api/threads/:id/messages', ([id], body) => {
-  const text = messageText(body)
   const thread = needThread(id)
-  unless(() => agent.postMessage(thread.id, text, 'user'))
+  const { text, files } = message(thread.botId, body)
+  unless(() => agent.postMessage(thread.id, text, 'user', files))
+})
+// A file the owner sent in a thread, as the conversation keeps it.
+route('GET', '/api/threads/:id/attachments/:file', ([id, file], _, { res }) => {
+  const thread = needThread(id)
+  const found = kept(thread.botId, thread.id, file) ?? fail(404, 'No such file')
+  const type = typeOf(found)
+  res.writeHead(200, {
+    'Content-Type': isPicture(type) || type === 'application/pdf' ? type : 'application/octet-stream',
+    'Content-Length': fs.statSync(found).size,
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.basename(found))}`,
+    'X-Content-Type-Options': 'nosniff',
+  })
+  fs.createReadStream(found).pipe(res)
+  return SENT
 })
 route('POST', '/api/threads/:id/stop', ([id]) => agent.stop(needThread(id).id))
 route('DELETE', '/api/threads/:id', ([id]) => {

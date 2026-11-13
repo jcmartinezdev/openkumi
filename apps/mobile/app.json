@@ -26,12 +26,20 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "OpenKumi uses the camera to scan the pairing code shown on your computer.",
+          "cameraPermission": "OpenKumi uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
           "recordAudioAndroid": false
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "OpenKumi lets you choose photos to send to your bots.",
+          "cameraPermission": "OpenKumi uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
+          "microphonePermission": false
+        }
+      ]
     ]
   }
 }

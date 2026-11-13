@@ -1,12 +1,14 @@
 // A bot's conversation (or the thread of one of its subagents): what was said, what the bot did,
 // its reply as it is written, and a place to answer.
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, type NativeScrollEvent, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Item } from '@openkumi/shared'
+import type { Attachment, Item } from '@openkumi/shared'
+import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { describe } from '@openkumi/client/steps'
 import { api, loadThread, mainThread, recentSubagents, useStore } from '@openkumi/client/store'
+import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
 import { BrowserPip } from '../../src/BrowserPip'
@@ -19,7 +21,7 @@ import { Bobbing, BotHead, Mascot } from '../../src/Mascot'
 
 /** What one line of the chat shows. Tool results and the bot's private reasoning are left out on a phone. */
 type Row =
-  | { key: string; kind: 'user' | 'bot' | 'notice'; text: string; error?: boolean }
+  | { key: string; kind: 'user' | 'bot' | 'notice'; text: string; error?: boolean; attachments?: Attachment[]; threadId?: string }
   /** What the bot did between two messages, folded into one line. */
   | { key: string; kind: 'steps'; steps: string[] }
   | { key: string; kind: 'page'; title: string; html: string; height: number }
@@ -38,7 +40,7 @@ function rows(items: Item[]): Row[] {
   for (const item of items) {
     const d = item.data
     const key = String(item.id)
-    if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text } : { key, kind: 'notice', text: `${FROM[d.source]}: ${d.text}` })
+    if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId } : { key, kind: 'notice', text: `${FROM[d.source]}: ${d.text}` })
     // A page stands for the call that showed it; the call is only listed when it failed.
     else if (d.type === 'function_call' && (d.name !== 'show_page' || failed.has(d.call_id))) step(key, describe(d))
     else if (d.type === 'web_search_call') step(key, 'Search the web')
@@ -92,8 +94,26 @@ function useKeyboardUp() {
   return up
 }
 
+/** Shows a text file that was sent, by its name, in the sheet the chat opens files in. */
+const ShowText = createContext<(name: string, text: string) => void>(() => {})
+
+/** What the owner said: the files they sent, then their words. */
+function Said({ row, theme, scale }: { row: Row & { kind: 'user' }; theme: Theme; scale: number }) {
+  const show = useContext(ShowText)
+  return (
+    <View style={styles.said}>
+      {!!row.attachments?.length && <SentFiles threadId={row.threadId!} files={row.attachments} show={show} />}
+      {!!row.text && (
+        <Pressable onLongPress={() => offerCopy(row.text)} style={[styles.user, { backgroundColor: theme.bubble }]}>
+          <Text style={{ color: theme.text, fontSize: 16 * scale, lineHeight: 22 * scale }}>{row.text}</Text>
+        </Pressable>
+      )}
+    </View>
+  )
+}
+
 const Line = memo(function Line({ row, theme, scale }: { row: Row; theme: Theme; scale: number }) {
-  if (row.kind === 'user') return <Pressable onLongPress={() => offerCopy(row.text)} style={[styles.user, { backgroundColor: theme.bubble }]}><Text style={{ color: theme.text, fontSize: 16 * scale, lineHeight: 22 * scale }}>{row.text}</Text></Pressable>
+  if (row.kind === 'user') return <Said row={row as Row & { kind: 'user' }} theme={theme} scale={scale} />
   if (row.kind === 'bot') return <View style={styles.bot}><Markdown text={row.text} /><CopyReply text={row.text} theme={theme} /></View>
   if (row.kind === 'steps') return <Steps steps={row.steps} theme={theme} />
   if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
@@ -149,17 +169,26 @@ export default function Chat() {
       (e) => Alert.alert(path, (e as Error).message),
     )
   }
+  const showText = useMemo(() => (name: string, content: string) => setFile({ path: name, content }), [])
   const fileName = file?.path.split('/').pop() ?? ''
   const parent = thread?.parentId ? threads.find((t) => t.id === thread.parentId) : undefined
 
+  // Files to send with the message, each on its way to the server from when it is picked. Kept per conversation, like on the computer.
+  const files = usePending(id)
+  const uploading = !ready(files)
+  const sendable = files.some((f) => f.staged)
+
   const send = async () => {
     const message = text.trim()
-    if (!message || !bot) return
+    // The files go once they are all on the server; any that failed stay behind in the composer.
+    const going = files.filter((f) => f.staged)
+    if ((!message && !going.length) || uploading || !bot) return
     setError('')
     setSending(true)
     try {
-      await api('POST', forBot ? `/api/bots/${forBot}/messages` : `/api/threads/${thread!.id}/messages`, { text: message })
+      await api('POST', forBot ? `/api/bots/${forBot}/messages` : `/api/threads/${thread!.id}/messages`, { text: message, attachments: going.map((f) => f.staged) })
       setText('')
+      sent(id, going.map((f) => f.id))
       following.current = true
     } catch (e) {
       setError((e as Error).message)
@@ -217,6 +246,7 @@ export default function Chat() {
         <View style={styles.empty}><ActivityIndicator color={theme.muted} /></View>
       ) : (
         <FileLinks.Provider value={openFile}>
+        <ShowText.Provider value={showText}>
         <FlatList
           ref={list}
           data={shown}
@@ -245,6 +275,7 @@ export default function Chat() {
           // The keyboard coming up makes the list shorter; the newest line stays in view.
           onLayout={(e) => ((size.current.frame = e.nativeEvent.layout.height), toEnd())}
         />
+        </ShowText.Provider>
         </FileLinks.Provider>
       )}
       {/* The bot's browser, small, while one of its threads browses. */}
@@ -265,6 +296,7 @@ export default function Chat() {
       {/* A card with the message on top and, under it, what the bot runs on and the send button. Above the keyboard it sits close to it. */}
       <View style={[styles.dock, { paddingBottom: keyboard ? 8 : Math.max(insets.bottom, 10) }]}>
         <View style={[styles.composer, { backgroundColor: theme.raised, borderColor: theme.border }]}>
+          <Tray files={files} remove={(file) => removeFile(id, file)} />
           <TextInput
             accessibilityLabel="Message"
             style={[styles.input, { color: theme.text }]}
@@ -275,14 +307,31 @@ export default function Chat() {
             multiline
           />
           <View style={styles.bar}>
-            {bot && <ModelChip bot={bot} onPress={() => (Keyboard.dismiss(), router.push({ pathname: '/model/[botId]', params: { botId: bot.id } }))} />}
+            {bot && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add photos and files"
+                hitSlop={6}
+                style={({ pressed }) => [styles.attach, { borderColor: theme.border }, pressed && { backgroundColor: theme.bubble }]}
+                onPress={() => chooseFiles(MAX - files.length, (picked) => addFiles(id, bot.id, picked))}
+              >
+                <Glyph name="plus" size={18} color={theme.text} weight={2} />
+              </Pressable>
+            )}
             <View style={{ flex: 1 }} />
+            {bot && <ModelChip bot={bot} onPress={() => (Keyboard.dismiss(), router.push({ pathname: '/model/[botId]', params: { botId: bot.id } }))} />}
             {running ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Stop" style={[styles.send, { backgroundColor: theme.bubble }]} onPress={() => api('POST', `/api/threads/${thread!.id}/stop`).catch((e) => setError(e.message))}>
                 <View style={{ width: 12, height: 12, borderRadius: 2.5, backgroundColor: theme.text }} />
               </Pressable>
             ) : (
-              <Pressable accessibilityRole="button" accessibilityLabel="Send" disabled={sending || !text.trim()} style={[styles.send, { backgroundColor: theme.primary, opacity: sending || !text.trim() ? 0.35 : 1 }]} onPress={send}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={uploading ? 'Send, once the files are added' : 'Send'}
+                disabled={sending || uploading || (!text.trim() && !sendable)}
+                style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || (!text.trim() && !sendable) ? 0.35 : 1 }]}
+                onPress={send}
+              >
                 <Glyph name="up" size={19} color={theme.onPrimary} weight={2.4} />
               </Pressable>
             )}
@@ -295,7 +344,8 @@ export default function Chat() {
 
 const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
-  user: { alignSelf: 'flex-end', maxWidth: '86%', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18, marginVertical: 6 },
+  said: { alignSelf: 'flex-end', alignItems: 'flex-end', maxWidth: '86%', marginVertical: 6, gap: 6 },
+  user: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 18 },
   bot: { marginVertical: 4 },
   copy: { alignSelf: 'flex-start', paddingVertical: 2, marginTop: -4 },
   step: { fontSize: 13.5, paddingVertical: 3 },
@@ -309,4 +359,5 @@ const styles = StyleSheet.create({
   input: { minHeight: 44, maxHeight: 160, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 4, fontSize: 17, lineHeight: 22 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 8, paddingRight: 8, paddingBottom: 8 },
   send: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  attach: { width: 36, height: 36, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, alignItems: 'center', justifyContent: 'center' },
 })

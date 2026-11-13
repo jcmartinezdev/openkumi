@@ -17,12 +17,14 @@ import type { ModelEvent, ModelRequest, Provider } from './types.ts'
  * Scripted offline provider for tests and UI development (enabled with OPENKUMI_MOCK=1).
  * "!tool <name> <json>" calls a tool, "!steps <n>" calls one n times in a row, "!slow" takes a few
  * seconds, "!say <text>" replies with exactly that text, "!system", "!tools" and "!sent" report what
- * the model was sent, anything else is echoed. Asked for a summary, it gives the
- * start of everything the user said in what it was to summarise; asked for a look, always the same one.
+ * the model was sent, "!seen" how many pictures of the conversation it was shown, anything else is
+ * echoed, with the files that came with it and how many of them it was shown. Asked for a summary, it gives the start of everything the user said in what it
+ * was to summarise; asked for a look, always the same one.
  */
 const mock: Provider = {
   id: 'mock',
   info: () => ({ id: 'mock', name: 'Mock (offline testing)', kind: 'apikey', connected: true, detail: 'Scripted replies' }),
+  sees: { pictures: true },
   models: async () => [{ id: 'mock-1', name: 'Mock 1', description: 'Scripted replies.' }],
   async *stream(req: ModelRequest): AsyncGenerator<ModelEvent> {
     const sleep = (ms: number) =>
@@ -45,6 +47,8 @@ const mock: Provider = {
     } else {
       const ask = req.items.findLast((i) => i.type === 'message' && i.role === 'user')
       const text = ask?.type === 'message' ? ask.text : ''
+      const files = ask?.type === 'message' && ask.role === 'user' ? (ask.attachments ?? []) : []
+      const attached = files.length ? ` [${files.map((a) => a.path).join(', ')}; ${req.show?.(files).length ?? 0} shown]` : ''
       const call = text.match(/^!tool ([\w-]+)\s*([\s\S]*)$/)
       if (call) {
         yield { type: 'item', item: { type: 'function_call', name: call[1], arguments: call[2] || '{}', call_id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` } }
@@ -53,6 +57,11 @@ const mock: Provider = {
       // "!system" shows the instructions the model was given; "!tools" the tools it was offered.
       if (text === '!system' || text === '!tools') {
         yield { type: 'item', item: { type: 'message', role: 'assistant', text: text === '!system' ? req.instructions : req.tools.map((t) => t.name).join(' ') } }
+        return
+      }
+      if (text === '!seen') {
+        const seen = req.items.reduce((n, i) => n + (i.type === 'message' && i.role === 'user' && i.attachments ? (req.show?.(i.attachments).length ?? 0) : 0), 0)
+        yield { type: 'item', item: { type: 'message', role: 'assistant', text: `Shown ${seen}` } }
         return
       }
       if (text === '!sent') {
@@ -64,7 +73,7 @@ const mock: Provider = {
       const said = () => text.split('\n').filter((line) => /^(User|Summary): /.test(line)).map((line) => line.replace(/^Summary: /, '').slice(0, 40))
       // Asked to choose a bot's look, it dresses every bot for travel.
       const look = '{"creature":"cat","color":"sky","hat":"cap","extra":"none","clothes":"orange","emoji":"✈️"}'
-      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : req.instructions === CHOOSE_LOOK ? look : text.startsWith('!say ') ? text.slice(5) : `Echo: ${text}`
+      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : req.instructions === CHOOSE_LOOK ? look : text.startsWith('!say ') ? text.slice(5) : `Echo: ${text}${attached}`
     }
     for (const word of reply.split(/(?<=\s)/)) {
       await sleep(5)
@@ -94,7 +103,7 @@ export async function askOnce(provider: Provider, ask: { model: string; instruct
   fs.mkdirSync(cwd, { recursive: true })
   const events = provider.stream
     ? provider.stream({ model, instructions: ask.instructions, items: [{ type: 'message', role: 'user', source: 'user', text: ask.text }], tools: [], effort: '', webSearch: false, sessionId: `ask:${crypto.randomUUID()}`, signal: ask.signal })
-    : provider.turn!({ model, instructions: ask.instructions, input: ask.text, session: null, cwd, toolsUrl: '', effort: '', webSearch: false, signal: ask.signal })
+    : provider.turn!({ model, instructions: ask.instructions, input: ask.text, files: [], session: null, cwd, toolsUrl: '', effort: '', webSearch: false, signal: ask.signal })
   let said = ''
   let streamed = ''
   for await (const ev of events) {

@@ -10,6 +10,7 @@ import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import zlib from 'node:zlib'
 import { after, before, test } from 'node:test'
 import { _electron } from 'playwright-core'
 import { startOAuthServer } from '../../server/test/fixtures/mcp-oauth.mjs'
@@ -436,7 +437,7 @@ test('files go up and come down, and another computer is paired and removed from
 
   // A file is sent up to the bot's folder...
   await win.evaluate((id) => (location.hash = `/settings/bots/${id}/files`), bot.id)
-  await win.locator('input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('kept on the other side') })
+  await win.locator('.files-tab input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('kept on the other side') })
   await win.locator('.file-row', { hasText: 'notes.txt' }).click()
   assert.equal(fs.readFileSync(`${tmp}/local-home/bots/${bot.id}/workspace/files/notes.txt`, 'utf8'), 'kept on the other side')
   // ...and saved back onto this computer. (The test answers the "save as" question by choosing the place beforehand.)
@@ -464,6 +465,75 @@ test('files go up and come down, and another computer is paired and removed from
   await win.waitForSelector('#paired-computers:has-text("No computers are paired")')
   assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/access')).computers.length, 0)
   assert.ok(key)
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('files go with a message: picked or taken out in the composer, pictures made smaller, kept by the conversation and copied to the bot\'s inbox', async () => {
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Looker', provider: 'mock' })
+  const files = `${tmp}/local-home/bots/${bot.id}/workspace/files`
+  /** The names of the files waiting to go with a message, out of the bot's sight. */
+  const waiting = () => {
+    const dir = `${tmp}/local-home/bots/${bot.id}/private/attachments/waiting`
+    return fs.existsSync(dir) ? fs.readdirSync(dir).flatMap((id) => fs.readdirSync(`${dir}/${id}`)).sort() : []
+  }
+  await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
+  await win.locator('.composer textarea').waitFor()
+
+  // A picture larger than models see, and a PDF. The attach button is on the left, the model on the right.
+  const boxes = await Promise.all(['.composer .attach', '.composer .model-picker'].map((s) => win.locator(s).boundingBox()))
+  assert.ok(boxes[0].x < boxes[1].x)
+  const wide = (width, height) => {
+    const chunk = (type, data) => {
+      const body = Buffer.concat([Buffer.from(type), data])
+      const crc = Buffer.alloc(4)
+      crc.writeUInt32BE(zlib.crc32(body))
+      const size = Buffer.alloc(4)
+      size.writeUInt32BE(data.length)
+      return Buffer.concat([size, body, crc])
+    }
+    const head = Buffer.alloc(13)
+    head.writeUInt32BE(width, 0)
+    head.writeUInt32BE(height, 4)
+    head.set([8, 2, 0, 0, 0], 8)
+    const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x55)])
+    return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', head), chunk('IDAT', zlib.deflateSync(Buffer.concat(Array(height).fill(row)))), chunk('IEND', Buffer.alloc(0))])
+  }
+  await win.locator('.composer input[type=file]').setInputFiles([
+    { name: 'wide.png', mimeType: 'image/png', buffer: wide(3000, 1500) },
+    { name: 'doc.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%%EOF\n') },
+    { name: 'not this.txt', mimeType: 'text/plain', buffer: Buffer.from('changed my mind') },
+  ])
+  await win.locator('.tray-item').nth(2).waitFor()
+  await until(async () => !(await win.locator('.tray-wait').count()) && waiting().length === 3, 15_000)
+  // Each goes up as soon as it is picked, and waits where the bot cannot see it; one taken out is thrown away.
+  assert.ok(!fs.existsSync(`${files}/inbox`))
+  await win.locator('.tray-item', { hasText: 'not this.txt' }).hover()
+  await win.getByRole('button', { name: 'Remove not this.txt' }).click()
+  await until(() => waiting().join() === 'doc.pdf,wide.png', 10_000)
+
+  // Sent with words, the bot is shown the picture and told of both.
+  await win.locator('.composer textarea').fill('look')
+  await win.getByRole('button', { name: 'Send' }).click()
+  await win.locator('.msg.assistant', { hasText: 'Echo: look [files/inbox/wide.png, files/inbox/doc.pdf; 1 shown]' }).waitFor()
+  assert.equal(await win.locator('.tray-item').count(), 0)
+  // The bot has its copies in its inbox; the picture went up no larger than models see.
+  assert.deepEqual(fs.readdirSync(`${files}/inbox`).sort(), ['doc.pdf', 'wide.png'])
+  assert.deepEqual([fs.readFileSync(`${files}/inbox/wide.png`).readUInt32BE(16), fs.readFileSync(`${files}/inbox/wide.png`).readUInt32BE(20)], [2048, 1024])
+  // The conversation keeps its own: the bot deleting its copy changes nothing in it.
+  fs.rmSync(`${files}/inbox`, { recursive: true })
+  // In the conversation the picture is shown, and opens full size; the PDF is a card.
+  await win.locator('.said .sent-picture img').waitFor()
+  await win.locator('.said .sent-file', { hasText: 'doc.pdf' }).waitFor()
+  await win.locator('.said .sent-picture').click()
+  await win.locator('.picture-full img').waitFor()
+  await win.keyboard.press('Escape')
+  await win.locator('.picture-full').waitFor({ state: 'detached' })
+  // The tests after this one know only the bots they made.
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${bot.id}`)
 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)

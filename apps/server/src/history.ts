@@ -3,6 +3,7 @@
 // older part is replaced by a summary. The items themselves stay in the database, where the
 // owner can read them and the bot can look them up with search_history.
 import type { Item, ItemData } from '@openkumi/shared'
+import { isPicture, withFiles } from './attachments.ts'
 import * as db from './db.ts'
 import type { Provider } from './providers/types.ts'
 
@@ -57,7 +58,9 @@ export function prepare(all: Item[]): ItemData[] {
 /** What was said earlier in a thread, for an engine that is joining it part-way (or lost its own record of it). */
 export function transcript(all: Item[]): string {
   const { summary, items } = live(all)
-  const turns = items.flatMap(({ data }) => (data.type === 'message' ? [`${data.role === 'user' ? 'User' : 'You'}: ${data.text}`] : []))
+  const turns = items.flatMap(({ data }) =>
+    data.type !== 'message' ? [] : data.role === 'user' ? [`User: ${withFiles(data.text, data.attachments)}`] : [`You: ${data.text}`],
+  )
   if (!turns.length && !summary) return ''
   const said = turns.join('\n\n')
   const cut = said.length > 30_000
@@ -75,6 +78,8 @@ export function tokens(items: ItemData[]): number {
   let chars = 0
   for (const d of items) {
     if (d.type === 'message') chars += d.text.length
+    // A picture a model is shown costs about as much as a page of text; any other file is only named.
+    if (d.type === 'message' && d.role === 'user') for (const a of d.attachments ?? []) chars += isPicture(a.type) ? 6000 : 200
     else if (d.type === 'function_call') chars += d.name.length + d.arguments.length
     else if (d.type === 'function_call_output') chars += d.output.length
     chars += 16
@@ -109,7 +114,8 @@ export const SUMMARISE =
 /** The conversation as plain text for the summary. Tool results are left out: the replies already say what they led to. */
 function digest(items: Item[]): string {
   return items.flatMap(({ data }) => {
-    if (data.type === 'message') return [`${data.role === 'assistant' ? 'Bot' : data.source === 'user' ? 'User' : data.source === 'task' ? 'Scheduled task report' : 'Subagent report'}: ${data.text.slice(0, 6000)}`]
+    if (data.type === 'message' && data.role === 'assistant') return [`Bot: ${data.text.slice(0, 6000)}`]
+    if (data.type === 'message') return [`${data.source === 'user' ? 'User' : data.source === 'task' ? 'Scheduled task report' : 'Subagent report'}: ${withFiles(data.text.slice(0, 6000), data.attachments)}`]
     if (data.type === 'function_call') return [`(the bot used ${data.name} ${data.arguments.slice(0, 160)})`]
     return []
   }).join('\n\n')

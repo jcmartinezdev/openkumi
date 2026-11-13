@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Stands in for the `claude` program in tests: same command line and output format, scripted replies.
 // "!tool <name> <json>" calls a tool at the address it was given, "!system" and "!args" report what
-// it was started with, "!slow" takes a while, anything else is echoed with the turn number. Asked
-// to choose a bot's look, it gives one.
+// it was started with, "!slow" takes a while, anything else is echoed with the turn number and the
+// kinds of the files it was shown. Asked to choose a bot's look, it gives one.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -23,7 +23,7 @@ if (args[0] === 'auth' && args[1] === 'status') {
 }
 
 // Asked about itself instead of being given a message: it says which models it offers, as the real program does.
-if (args.includes('--input-format')) {
+if (args.includes('--input-format') && !args.includes('--system-prompt')) {
   const levels = ['low', 'medium', 'high', 'xhigh', 'max']
   const models = [
     { value: 'default', resolvedModel: 'claude-opus-9', displayName: 'Default (recommended)', description: 'Opus 9 · Best for everyday tasks', supportedEffortLevels: levels },
@@ -36,8 +36,12 @@ if (args.includes('--input-format')) {
   process.exit(0)
 }
 
-let prompt = ''
-for await (const chunk of process.stdin) prompt += chunk
+// The message is one line of stream-json: its text, then any pictures and PDFs.
+let input = ''
+for await (const chunk of process.stdin) input += chunk
+const content = JSON.parse(input).message.content
+const prompt = content[0].text
+const shown = content.slice(1).map((block) => block.source.media_type)
 
 // The turn count lives in a file, like a real session, so a resumed conversation carries on from it.
 const session = flag('--resume') ?? crypto.randomUUID()
@@ -70,7 +74,7 @@ if (call) {
   reply = JSON.stringify({ tools: flag('--tools'), allowed: flag('--allowedTools'), model: flag('--model') ?? null, flags: args.filter((a) => a.startsWith('--')) })
 } else {
   if (prompt.startsWith('!slow')) await new Promise((r) => setTimeout(r, 8000))
-  reply = `Echo (turn ${turn}): ${prompt}`
+  reply = `Echo (turn ${turn}): ${prompt}${shown.length ? ` [shown: ${shown.join(', ')}]` : ''}`
 }
 
 print({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: reply } } })

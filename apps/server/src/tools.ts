@@ -109,7 +109,7 @@ const fileTools: Tool[] = [
     name: 'read_file',
     description:
       'Read a text file from your workspace, or the instructions of one of your superpowers (superpowers/<id>/instructions.md). ' +
-      'Long files come back a window of lines at a time.',
+      'A PDF gives its text, page by page. Long files come back a window of lines at a time.',
     parameters: params(
       {
         path: filePath,

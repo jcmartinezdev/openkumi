@@ -18,7 +18,8 @@
     "./marks": "./src/marks.ts",
     "./tasks": "./src/tasks.ts",
     "./mascot": "./src/mascot.ts",
-    "./browser": "./src/browser.ts"
+    "./browser": "./src/browser.ts",
+    "./attachments": "./src/attachments.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

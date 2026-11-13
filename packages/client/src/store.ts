@@ -504,3 +504,14 @@ export function rootOf(threads: Thread[], thread: Thread): Thread {
 
 /** The environment being shown, for the few places that need its address. */
 export const currentLink = () => link
+
+/**
+ * Where to load something of the environment's from (`path`, such as "/api/threads/…"), with the
+ * key to send, for a view that loads it itself (a picture on the phone). Null while the environment
+ * cannot be reached; the view is drawn again when it can.
+ */
+export function useServerFile(path: string): { uri: string; headers: Record<string, string> } | null {
+  const address = useStore((s) => s.address)
+  if (!address || !link) return null
+  return { uri: address + path, headers: { Authorization: `Bearer ${link.token}` } }
+}

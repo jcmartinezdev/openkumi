@@ -14,7 +14,8 @@ export default function Layout() {
   const appearance = useAppearance()
   const { server, ready } = useSession()
   const router = useRouter()
-  const pairing = useSegments()[0] === 'pair'
+  // The scanner opens over the pairing screen, and is part of it.
+  const pairing = ['pair', 'scan'].includes(useSegments()[0])
 
   useEffect(() => void restore(), [])
   // With no server there is only one thing to do; once paired, the pairing screen is left.
@@ -43,6 +44,8 @@ export default function Layout() {
         <Stack.Screen name="browser/[botId]" options={{ title: 'Browser' }} />
         {/* A sheet over the chat that stops halfway, and goes up the whole way when pulled or scrolled. */}
         <Stack.Screen name="model/[botId]" options={{ presentation: 'formSheet', headerShown: false, sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, contentStyle: { backgroundColor: theme.card } }} />
+        {/* A picture from a conversation, on black, whatever the app's appearance. */}
+        <Stack.Screen name="picture" options={{ presentation: 'fullScreenModal', animation: 'fade', headerShown: false, statusBarStyle: 'light', contentStyle: { backgroundColor: '#000' } }} />
       </Stack>
     </ThemeProvider>
   )

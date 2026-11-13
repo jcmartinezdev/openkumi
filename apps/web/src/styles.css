@@ -403,6 +403,53 @@ details[open] > summary.step-head > .ic:last-child { transform: rotate(90deg); }
 }
 .picker:hover { background-color: var(--hover); color: var(--text); }
 .send { width: 30px; height: 30px; padding: 0; border-radius: 50%; border: none; background: var(--primary); color: var(--on-primary); }
+.composer-bar > button.icon.attach { border-radius: 50%; }
+.composer-bar > button.icon.attach:hover { background: var(--hover); }
+.composer-bar > .model-picker { margin-right: 4px; }
+
+/* Files waiting in the composer to go with the message: pictures as small squares, anything else as a card. */
+.tray { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 10px 0; }
+.tray-item { position: relative; display: flex; align-items: center; gap: 8px; height: 56px; max-width: 220px; padding: 0 12px 0 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--card, var(--raised)); }
+.tray-item.picture { width: 56px; padding: 0; overflow: hidden; }
+.tray-item.picture img { width: 100%; height: 100%; object-fit: cover; }
+.tray-item.bad { border-color: color-mix(in srgb, var(--err) 60%, transparent); }
+.tray-item.bad .tray-meta { color: var(--err); }
+.tray-kind { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: var(--hover); color: var(--muted); }
+.tray-text { min-width: 0; display: grid; gap: 2px; text-align: left; }
+.tray-name { font-size: 12.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-meta { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+.tray-wait { position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit; background: color-mix(in srgb, var(--raised) 55%, transparent); }
+.tray-x {
+  position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; padding: 0; display: grid; place-items: center;
+  border: 1px solid var(--border-strong); border-radius: 50%; background: var(--raised); color: var(--muted); opacity: 0; transition: opacity 0.1s;
+}
+.tray-item:hover .tray-x, .tray-x:focus-visible { opacity: 1; }
+.tray-x:hover:not(:disabled) { background: var(--raised); color: var(--text); }
+.tray-item.picture .tray-x { top: 3px; right: 3px; }
+@media (hover: none) { .tray-x { opacity: 1; } }
+
+/* Files dragged over the conversation: it says where they will go. */
+.drop-hint {
+  grid-row: scroll-start / foot-end; grid-column: scroll-start / scroll-end; z-index: 5; margin: 10px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  border: 2px dashed var(--border-strong); border-radius: 16px; background: color-mix(in srgb, var(--bg) 82%, transparent);
+  font-size: 15px; color: var(--text); animation: fade 0.1s;
+}
+
+/* What the owner sent: their files above what they wrote, on their side of the conversation. */
+.said { align-self: flex-end; max-width: 85%; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.said > .msg.user { max-width: 100%; }
+.sent-files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+/* Pictures side by side at one height, each as wide as it is, up to a point. */
+button.sent-picture { display: block; height: auto; padding: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--hover); cursor: zoom-in; }
+button.sent-picture img { display: block; height: 160px; width: auto; max-width: 280px; object-fit: cover; }
+button.sent-picture:not(:has(img)) { display: grid; place-items: center; width: 160px; height: 162px; }
+button.sent-file, .sent-file { display: flex; align-items: center; gap: 8px; height: 52px; max-width: 260px; padding: 0 14px 0 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--raised); font-weight: 400; }
+button.sent-file:hover { border-color: var(--border-strong); }
+.sent-file.gone { opacity: 0.6; }
+.picture-full { position: relative; flex: 1; min-height: 0; margin: 4px 16px 0; }
+.picture-full img { position: absolute; inset: 0; margin: auto; max-width: 100%; max-height: 100%; border-radius: 6px; }
+.picture-actions { display: flex; justify-content: flex-end; padding: 6px 12px 12px; }
 .send:hover:not(:disabled) { background: var(--primary); opacity: 0.85; }
 .send.stop, .send.stop:hover:not(:disabled) { background: var(--active); color: var(--text); margin-right: 6px; }
 
@@ -917,7 +964,7 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 
 /* ---- the model picker: providers down the side, their models beside them, the reasoning of the bot's model under it */
 :root { --accent: #4c82f7; }
-/* The popup sits above the whole composer, lined up with its left edge. */
+/* The popup sits above the whole composer, lined up with its right edge, where the picker is. */
 .composer { position: relative; }
 .model-picker { display: flex; min-width: 0; max-width: 70%; }
 .model-button { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; height: 30px; padding: 0 9px; border: none; border-radius: 8px; background: none; font-size: 13px; color: var(--muted); }
@@ -928,7 +975,7 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .model-button > svg:last-child { flex: none; transform: rotate(90deg); opacity: 0.7; }
 .provider-icon { flex: none; }
 .model-pop {
-  position: absolute; left: -1px; bottom: calc(100% + 8px); z-index: 20; display: flex; flex-direction: column; width: min(580px, calc(100vw - 32px)); height: min(460px, 66vh);
+  position: absolute; right: -1px; bottom: calc(100% + 8px); z-index: 20; display: flex; flex-direction: column; width: min(580px, calc(100vw - 32px)); height: min(460px, 66vh);
   border: 1px solid var(--border-strong); border-radius: 14px; background: var(--raised); box-shadow: var(--shadow); overflow: hidden; animation: fade 0.1s;
 }
 .model-cols { flex: 1; min-height: 0; display: flex; }

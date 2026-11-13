@@ -21,7 +21,10 @@ if (args[0] === 'models') {
   process.exit(0)
 }
 
-const prompt = fs.readFileSync(flag('--prompt-file'), 'utf8')
+// The prompt file holds content blocks: the text, then any pictures.
+const blocks = JSON.parse(fs.readFileSync(flag('--prompt-file'), 'utf8'))
+const prompt = blocks[0].text
+const shown = blocks.slice(1).map((block) => block.mimeType)
 // The turn count lives in a file, like a real session, so a resumed conversation carries on from it.
 const session = flag('--resume') ?? crypto.randomUUID()
 const file = path.join(os.tmpdir(), `openkumi-fake-grok-${session}.json`)
@@ -45,7 +48,7 @@ if (call) {
 } else if (prompt === '!args') {
   reply = JSON.stringify({ tools: flag('--tools'), mode: flag('--permission-mode'), sandbox: flag('--sandbox'), model: flag('--model') ?? null, cwd: process.cwd(), flags: args.filter((a) => a.startsWith('--')) })
 } else {
-  reply = `Echo (turn ${turn}): ${prompt}`
+  reply = `Echo (turn ${turn}): ${prompt}${shown.length ? ` [shown: ${shown.join(', ')}]` : ''}`
 }
 
 print({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: reply } }, parent_tool_use_id: null })

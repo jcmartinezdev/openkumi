@@ -2,6 +2,7 @@
 // Ollama, LM Studio, vLLM, ...
 import crypto from 'node:crypto'
 import type { ItemData } from '@openkumi/shared'
+import { base64, withFiles } from '../attachments.ts'
 import { readSecrets } from '../config.ts'
 import { type ModelEvent, type ModelRequest, type Provider, errorText, plainModel, sse } from './types.ts'
 
@@ -19,10 +20,19 @@ function authHeaders(c: Config): Record<string, string> {
   return c.apiKey ? { Authorization: `Bearer ${c.apiKey}` } : {}
 }
 
-function toMessages(instructions: string, items: ItemData[]) {
+/** How many of the latest messages with pictures send them along; older ones only name them, so a request stays small. */
+const PICTURED = 4
+
+function toMessages(instructions: string, items: ItemData[], show?: ModelRequest['show']) {
   const messages: any[] = [{ role: 'system', content: instructions }]
+  const pictured = new Set(items.filter((it) => it.type === 'message' && it.role === 'user' && it.attachments?.length).slice(-PICTURED))
   for (const it of items) {
-    if (it.type === 'message') {
+    if (it.type === 'message' && it.role === 'user') {
+      const text = withFiles(it.text, it.attachments)
+      const shown = show && pictured.has(it) ? show(it.attachments!) : []
+      const pictures = shown.map((file) => ({ type: 'image_url', image_url: { url: `data:${file.type};base64,${base64(file)}` } }))
+      messages.push({ role: 'user', content: pictures.length ? [{ type: 'text', text }, ...pictures] : text })
+    } else if (it.type === 'message') {
       messages.push({ role: it.role, content: it.text })
     } else if (it.type === 'function_call') {
       const call = { id: it.call_id, type: 'function', function: { name: it.name, arguments: it.arguments } }
@@ -53,19 +63,29 @@ export async function modelsAt(c: Config, timeoutMs = 4000): Promise<string[] | 
 
 /** One conversation step against a server that speaks the Chat Completions API. */
 export async function* chat(c: Config, req: ModelRequest): AsyncGenerator<ModelEvent> {
-    const res = await fetch(`${c.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { ...authHeaders(c), 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: req.model,
-        messages: toMessages(req.instructions, req.items),
-        tools: req.tools.length ? req.tools.map((t) => ({ type: 'function', function: t })) : undefined,
-        reasoning_effort: req.effort || undefined,
-        stream: true,
-      }),
-      signal: req.signal,
-    })
-    if (!res.ok) throw new Error(`Request failed (${res.status}): ${await errorText(res)}`)
+    const ask = (messages: unknown[]) =>
+      fetch(`${c.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { ...authHeaders(c), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: req.model,
+          messages,
+          tools: req.tools.length ? req.tools.map((t) => ({ type: 'function', function: t })) : undefined,
+          reasoning_effort: req.effort || undefined,
+          stream: true,
+        }),
+        signal: req.signal,
+      })
+    const messages = toMessages(req.instructions, req.items, req.show)
+    let res = await ask(messages)
+    if (!res.ok) {
+      const why = await errorText(res)
+      // Not every model sees pictures. One that says so is asked again, with the pictures only named.
+      const pictured = messages.some((m) => Array.isArray(m.content))
+      if (!pictured || !/image|vision|multi-?modal|modalit/i.test(why)) throw new Error(`Request failed (${res.status}): ${why}`)
+      res = await ask(toMessages(req.instructions, req.items))
+      if (!res.ok) throw new Error(`Request failed (${res.status}): ${await errorText(res)}`)
+    }
 
     let text = ''
     let reasoning = ''
@@ -107,6 +127,7 @@ export async function* chat(c: Config, req: ModelRequest): AsyncGenerator<ModelE
 
 export const openaiCompat: Provider = {
   id: 'openai-compatible',
+  sees: { pictures: true },
 
   info() {
     const c = config()

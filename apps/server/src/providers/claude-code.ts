@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process'
 import os from 'node:os'
 import readline from 'node:readline'
 import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
+import { type Shown, base64 } from '../attachments.ts'
 import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
@@ -125,11 +126,22 @@ async function refresh() {
   info = { ...base, connected: true, detail: [status.email, plan].filter(Boolean).join(' · '), path: program, version }
 }
 
+/** What was said, as the one line of its stream-json input: the text, then the pictures and PDFs that came with it. */
+function message(input: string, files: Shown[]): string {
+  const block = (file: Shown) => {
+    const source = { type: 'base64', media_type: file.type, data: base64(file) }
+    return file.type === 'application/pdf' ? { type: 'document', source } : { type: 'image', source }
+  }
+  return JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: input }, ...files.map(block)] } }) + '\n'
+}
+
 async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   const program = bin()
   if (!program) throw new Error('Claude Code is not installed on this computer.')
   const args = [
     '--print',
+    // The message goes in as JSON, which can carry pictures and PDFs beside the text.
+    '--input-format', 'stream-json',
     '--output-format', 'stream-json',
     '--verbose',
     '--include-partial-messages',
@@ -158,7 +170,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   const emitted = new Set<string>()
   let finished = false
 
-  for await (const line of lines(program, args, { cwd: req.cwd, env, input: req.input, signal: req.signal }, exit)) {
+  for await (const line of lines(program, args, { cwd: req.cwd, env, input: message(req.input, req.files), signal: req.signal }, exit)) {
     let ev: any
     try {
       ev = JSON.parse(line)
@@ -193,6 +205,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
 export const claudeCode: Provider = {
   id: base.id,
   info: () => info,
+  sees: { pictures: true, pdfs: true },
   // Whoever asks while the program is being asked waits for its answer rather than getting the stand-in list.
   models: async () => (await asking, models),
   turn,
