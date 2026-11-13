@@ -212,7 +212,7 @@ class BotBrowser {
     // Work carries on in the newest tab: a sign-in popup, say, until it closes again.
     win.active = tab
     if (targetId) this.targets.set(targetId, tab)
-    // Downloads land in the bot's files/ folder, where its file tools and the Files tab can reach them.
+    // Downloads land in the bot's files/inbox/ folder, where its file tools and the Files tab can reach them.
     page.on('download', (download) => {
       Promise.resolve()
         .then(() => download.saveAs(resolve(this.botId, incoming(this.botId, download.suggestedFilename())).abs))

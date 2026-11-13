@@ -37,6 +37,8 @@ async function refresh() {
 export const localModels: Provider = {
   id: base.id,
   info: () => info,
+  // Many local models do not see pictures; those are asked again without them (see chat()).
+  sees: { pictures: true },
   async models() {
     // Models come and go as they are downloaded, so the list is read again when it is asked for.
     await refresh()

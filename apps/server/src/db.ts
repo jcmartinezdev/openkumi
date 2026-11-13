@@ -1,8 +1,9 @@
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { HistoryMatch, Item, ItemData, ScheduledTask, Thread } from '@openbot/shared'
-import { HOME, emit } from './config.ts'
+import { HOME, emit, privateDir } from './config.ts'
 
 const db = new DatabaseSync(path.join(HOME, 'openbot.db'))
 
@@ -177,6 +178,9 @@ export function deleteBotThreads(botId: string) {
 /** Deletes a thread and every subagent thread beneath it. */
 export function deleteThread(id: string) {
   for (const child of childrenOf(id)) deleteThread(child.id)
+  // The files sent in it go with it (the bot's own copies stay in its files).
+  const botId = getThread(id)?.botId
+  if (botId) fs.rmSync(path.join(privateDir(botId), 'attachments', id), { recursive: true, force: true })
   db.prepare('DELETE FROM items WHERE thread_id = ?').run(id)
   db.prepare('DELETE FROM threads WHERE id = ?').run(id)
   emit({ type: 'thread.delete', id })

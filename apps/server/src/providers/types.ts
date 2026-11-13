@@ -1,4 +1,5 @@
-import type { Effort, ItemData, ModelInfo, ProviderInfo } from '@openbot/shared'
+import type { Attachment, Effort, ItemData, ModelInfo, ProviderInfo } from '@openbot/shared'
+import type { Shown } from '../attachments.ts'
 
 export interface ToolSpec {
   name: string
@@ -16,6 +17,8 @@ export interface ModelRequest {
   webSearch: boolean
   sessionId: string
   signal: AbortSignal
+  /** The files of a message that the model can be shown, read from the bot's workspace. Missing when nothing is to be shown. */
+  show?(attachments: Attachment[]): Shown[]
 }
 
 /**
@@ -29,6 +32,8 @@ export interface TurnRequest {
   instructions: string
   /** What the user (or a subagent's report) said since the engine last ran. */
   input: string
+  /** Files that came with it, for the engine to show its model: only kinds it said it takes (`sees`). */
+  files: Shown[]
   /** The engine's own conversation to continue, or null to start a new one. */
   session: string | null
   /** The bot's workspace, used as the working folder. */
@@ -48,13 +53,20 @@ export type ModelEvent =
   /** Engines only: the id of the engine's conversation, to continue it on the next turn. */
   | { type: 'session'; id: string }
 
+/** What a provider's models can be shown with a message, besides text. Files of other kinds are only named. */
+export interface Sees {
+  pictures?: boolean
+  pdfs?: boolean
+}
+
 /** A provider either answers one model request at a time (`stream`) or runs whole turns itself (`turn`). */
 export interface Provider {
   id: string
   info(): ProviderInfo
-  /** Available model ids, best default first. */
   /** The models it offers, its default first. */
   models(): Promise<ModelInfo[]>
+  /** What it can show its models of the files the user attaches. */
+  sees?: Sees
   stream?(req: ModelRequest): AsyncGenerator<ModelEvent>
   turn?(req: TurnRequest): AsyncGenerator<ModelEvent>
   /** Looks again at whether the provider is usable (for ones that depend on a program being installed). */

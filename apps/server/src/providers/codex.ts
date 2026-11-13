@@ -49,9 +49,19 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     `${req.instructions}\n\n` +
     'Your tools come from Open Bot (the "openbot" tools). For subagents use spawn_subagent and wait_subagents from ' +
     'Open Bot, not any collaboration tool of your own. You cannot run commands or read files except through those tools.'
+  // Pictures that came with the message. Codex takes their paths split at commas, so it is given
+  // copies with plain names, in a folder of their own that goes with the turn. They go before the
+  // other options: --image takes every value up to the next option.
+  const pictures = req.files.length ? fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-codex-')) : null
+  const images = req.files.flatMap((file, n) => {
+    const copy = path.join(pictures!, `${n + 1}${path.extname(file.path).toLowerCase()}`)
+    fs.copyFileSync(file.path, copy)
+    return ['--image', copy]
+  })
   const args = [
     'exec',
     ...(req.session ? ['resume', req.session] : []),
+    ...images,
     '--json',
     '--skip-git-repo-check',
     // Leave out the user's own Codex setup: their MCP servers, plugins and instructions.
@@ -81,26 +91,30 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
 
   const exit: Exit = { code: null, stderr: '' }
   let finished = false
-  for await (const line of lines(program, args, { cwd: req.cwd, env: cleanEnv(), input: req.input, signal: req.signal }, exit)) {
-    let ev: any
-    try {
-      ev = JSON.parse(line)
-    } catch {
-      continue
+  try {
+    for await (const line of lines(program, args, { cwd: req.cwd, env: cleanEnv(), input: req.input, signal: req.signal }, exit)) {
+      let ev: any
+      try {
+        ev = JSON.parse(line)
+      } catch {
+        continue
+      }
+      if (ev.type === 'thread.started' && ev.thread_id) {
+        yield { type: 'session', id: ev.thread_id }
+      } else if (ev.type === 'item.completed') {
+        const item = ev.item ?? {}
+        if (item.type === 'agent_message' && item.text?.trim()) yield { type: 'item', item: { type: 'message', role: 'assistant', text: item.text } }
+        else if (item.type === 'reasoning' && item.text?.trim()) yield { type: 'item', item: { type: 'reasoning', summary: item.text } }
+        else if (item.type === 'web_search') yield { type: 'item', item: { type: 'web_search_call', action: { query: item.query } } }
+        // Calls to Open Bot's own tools are recorded where they are carried out (tool-endpoint.ts).
+      } else if (ev.type === 'turn.completed') {
+        finished = true
+      } else if (ev.type === 'turn.failed' || ev.type === 'error') {
+        throw new Error(String(ev.error?.message ?? ev.message ?? 'Codex reported an error').slice(0, 600))
+      }
     }
-    if (ev.type === 'thread.started' && ev.thread_id) {
-      yield { type: 'session', id: ev.thread_id }
-    } else if (ev.type === 'item.completed') {
-      const item = ev.item ?? {}
-      if (item.type === 'agent_message' && item.text?.trim()) yield { type: 'item', item: { type: 'message', role: 'assistant', text: item.text } }
-      else if (item.type === 'reasoning' && item.text?.trim()) yield { type: 'item', item: { type: 'reasoning', summary: item.text } }
-      else if (item.type === 'web_search') yield { type: 'item', item: { type: 'web_search_call', action: { query: item.query } } }
-      // Calls to Open Bot's own tools are recorded where they are carried out (tool-endpoint.ts).
-    } else if (ev.type === 'turn.completed') {
-      finished = true
-    } else if (ev.type === 'turn.failed' || ev.type === 'error') {
-      throw new Error(String(ev.error?.message ?? ev.message ?? 'Codex reported an error').slice(0, 600))
-    }
+  } finally {
+    if (pictures) fs.rmSync(pictures, { recursive: true, force: true })
   }
   if (req.signal.aborted) return
   if (!finished) throw new Error(`Codex stopped unexpectedly: ${lastError(exit, `exit code ${exit.code}`)}`)
@@ -150,6 +164,8 @@ function listed(): ModelInfo[] {
 export const codex: Provider = {
   id: base.id,
   info: () => info,
+  // It reads pictures only: a PDF is refused as "unsupported image data".
+  sees: { pictures: true },
   // Left to itself, Codex runs the first model of its list: that one leads here, as the default.
   models: async () => {
     const [usual, ...rest] = listed()

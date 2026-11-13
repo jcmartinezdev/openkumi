@@ -1,5 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Bot, Item, ItemData, Thread } from '@openbot/shared'
+import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openbot/client/attachments'
+import { SentFiles, Tray, picked } from './Attachments'
 import { History, day } from './History'
 import { Icon } from './Icon'
 import { CopyButton, FileLinks, Markdown } from './Markdown'
@@ -167,7 +169,7 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
     steps = []
   }
   let marked = false
-  for (const { id, data, createdAt } of items) {
+  for (const { id, threadId, data, createdAt } of items) {
     if (data.type === 'function_call_output' || data.type === 'summary') continue
     // A page stands for the call that showed it; the call is only listed when it failed.
     if (data.type === 'function_call' && data.name === 'show_page' && !outputs.get(data.call_id)?.startsWith('Error:')) continue
@@ -206,7 +208,15 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
       else if (data.source === 'task') blocks.push(<div key={id} data-item={id}><TaskReport text={data.text} /></div>)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
       else if (data.source === 'schedule') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Scheduled task</div>{data.text}</div>)
-      else blocks.push(<div key={id} data-item={id} className="msg user">{data.text}</div>)
+      else if (!data.attachments?.length) blocks.push(<div key={id} data-item={id} className="msg user">{data.text}</div>)
+      else {
+        blocks.push(
+          <div key={id} data-item={id} className="said">
+            <SentFiles threadId={threadId} files={data.attachments} />
+            {data.text && <div className="msg user">{data.text}</div>}
+          </div>,
+        )
+      }
     } else if (data.type === 'notice') {
       blocks.push(<div key={id} className={`notice ${data.level}`}>{data.text}</div>)
     } else if (data.type === 'page') {
@@ -298,6 +308,22 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
   const running = thread?.status === 'running'
   const parent = thread?.parentId ? threads.find((t) => t.id === thread.parentId) : undefined
 
+  // Files to send with the message, each on its way to the server from when it is picked.
+  const files = usePending(draftKey)
+  const attach = (list: Iterable<File>) => {
+    const chosen = [...list]
+    if (!chosen.length) return
+    if (files.length + chosen.length > MAX) setError(`At most ${MAX} files can go with one message.`)
+    addFiles(draftKey, bot.id, picked(chosen))
+    input.current?.focus()
+  }
+  const filePicker = useRef<HTMLInputElement>(null)
+  /** Files are being dragged over the conversation. */
+  const [dropping, setDropping] = useState(false)
+  const canAttach = !archived
+  const uploading = !ready(files)
+  const sendable = files.some((f) => f.staged)
+
   const connected = useStore((s) => s.connected)
   useEffect(() => {
     // Asked again when the connection comes back, in case the chat was opened while it was away.
@@ -346,18 +372,27 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
   }, [draft])
 
+  /** Files of a message that is on its way, so a message sent right after it does not take them again. */
+  const going = useRef(new Set<string>())
   const submit = async (value = draft) => {
     const text = value.trim()
-    if (!text) return
+    // The files go once they are all on the server; any that failed stay behind in the composer.
+    const attached = files.filter((f) => f.staged && !going.current.has(f.id))
+    if ((!text && !attached.length) || uploading) return
+    const ids = attached.map((f) => f.id)
+    ids.forEach((id) => going.current.add(id))
     setDraft('')
     setError('')
     stick.current = true
     try {
       // What is said to the bot goes to its one conversation, which begins with the first message.
-      await api('POST', main ? `/api/bots/${bot.id}/messages` : `/api/threads/${thread.id}/messages`, { text })
+      await api('POST', main ? `/api/bots/${bot.id}/messages` : `/api/threads/${thread.id}/messages`, { text, attachments: attached.map((f) => f.staged) })
+      sent(draftKey, ids)
     } catch (e: any) {
       setError(e.message)
       setDraft(text)
+    } finally {
+      ids.forEach((id) => going.current.delete(id))
     }
   }
 
@@ -388,7 +423,24 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
   }
 
   return (
-    <div className="parts">
+    <div
+      className={`parts ${dropping ? 'dropping' : ''}`}
+      // Files dropped anywhere on the conversation go with the next message.
+      onDragOver={(e) => {
+        if (!canAttach || !e.dataTransfer.types.includes('Files')) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'copy'
+        setDropping(true)
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDropping(false)}
+      onDrop={(e) => {
+        if (!canAttach || !e.dataTransfer.files.length) return
+        e.preventDefault()
+        setDropping(false)
+        attach(e.dataTransfer.files)
+      }}
+    >
+      {dropping && <div className="drop-hint"><Icon name="plus" size={20} /> Drop files to send them to {bot.name}</div>}
       <header>
         <button className="icon menu" aria-label="Menu" onClick={openNav}><Icon name="menu" size={18} /></button>
         {back && (
@@ -474,6 +526,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
             </div>
           ) : (
           <div className="composer">
+            <Tray files={files} remove={(id) => removeFile(draftKey, id)} />
             <textarea
               ref={input}
               value={draft}
@@ -481,6 +534,15 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               placeholder={thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'task' ? 'Message this run' : `Message ${bot.name}`}
               aria-label="Message"
               onChange={(e) => setDraft(e.target.value)}
+              // Files pasted (a screenshot, a picture copied from a page, a file copied in Finder)
+              // are attached. What also comes as both text and markup, as cells copied from a
+              // spreadsheet do with a picture of themselves, is pasted as the text.
+              onPaste={(e) => {
+                const data = e.clipboardData
+                if (!data.files.length || (data.types.includes('text/plain') && data.types.includes('text/html'))) return
+                e.preventDefault()
+                attach(data.files)
+              }}
               onKeyDown={(e) => {
                 // Touch keyboards have no Shift+Enter, so there Enter makes a new line and the button sends.
                 const desktop = matchMedia('(hover: hover) and (pointer: fine)').matches
@@ -493,16 +555,27 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               }}
             />
             <div className="composer-bar">
-              <ModelPicker bot={bot} />
+              <button className="icon attach" title="Attach files" aria-label="Attach files" onClick={() => filePicker.current?.click()}>
+                <Icon name="plus" size={18} />
+              </button>
+              <input ref={filePicker} type="file" multiple hidden onChange={(e) => (attach(e.target.files ?? []), (e.target.value = ''))} />
               <span className="grow" />
+              <ModelPicker bot={bot} />
               {running && (
                 <button className="send stop" title="Stop" aria-label="Stop" onClick={() => api('POST', `/api/threads/${thread.id}/stop`).catch((e) => setError(e.message))}>
                   <Icon name="stop" size={18} />
                 </button>
               )}
-              {(!running || draft.trim()) && (
+              {(!running || draft.trim() || sendable) && (
                 // Not taking focus keeps the phone keyboard up after sending.
-                <button className="send" title="Send" aria-label="Send" disabled={!draft.trim()} onPointerDown={(e) => e.preventDefault()} onClick={() => submit()}>
+                <button
+                  className="send"
+                  title={uploading ? 'Waiting for the files' : 'Send'}
+                  aria-label="Send"
+                  disabled={(!draft.trim() && !sendable) || uploading}
+                  onPointerDown={(e) => e.preventDefault()}
+                  onClick={() => submit()}
+                >
                   <Icon name="up" size={18} />
                 </button>
               )}

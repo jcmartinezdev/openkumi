@@ -3,6 +3,7 @@
 // A bot has one conversation with its owner (see mainThread), which can be started afresh.
 // Runs of scheduled tasks (tasks.ts) are threads beneath the conversation too, and report to it.
 import type { Bot, Item, ItemData, Partial, Thread } from '@openbot/shared'
+import { attach, toShow, withFiles } from './attachments.ts'
 import { getBot, listBots } from './bots.ts'
 import { browserFor, retireWindow } from './browser.ts'
 import { emit, workspaceDir } from './config.ts'
@@ -96,7 +97,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
         ? 'Nobody watches a scheduled run, so if a site needs a login, a CAPTCHA or a two-factor code, say so in your final message. '
         : 'If a site needs a login, a CAPTCHA or a two-factor code, open the page and call browser_ask_user to have the user do that step; it waits until they are done. ') +
       'Read pages with browser_snapshot and act on elements by their [ref] number. Refs change after every snapshot. ' +
-      'Files the browser downloads are saved in your files/ folder.',
+      'Files the browser downloads are saved in your files/inbox/ folder.',
     'For work that splits into independent parts, spawn subagents: they run in parallel in their own threads (and ' +
       'their own browser windows). Give each a self-contained task, because it sees none of this conversation. Either ' +
       'call wait_subagents to block until they finish, or end your turn and you will be woken with each result.',
@@ -136,7 +137,11 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
       `with edit_file. Keep it short and current (it is cut off after ${settings().instructionsLimit} characters): rewrite and remove, do not only append.\n` +
       '- memory/: longer notes, one topic per Markdown file. Only the list below is loaded, so read a note when it is ' +
       'relevant and write one when you learn details worth keeping (people, projects, preferences, how a site works).\n' +
-      '- files/: working files, such as documents you write for the user and downloads.\n' +
+      '- files/: your working files: documents you write for the user, downloads, and files the user sends you. ' +
+      'What arrives (downloads, and the user\'s files) lands in files/inbox/. files/ is yours to keep in order: file ' +
+      'what is worth keeping into folders named for what it is about, give files names that say what they are, and ' +
+      'delete what you no longer need. The conversation keeps its own copy of everything the user sent, so you lose ' +
+      'nothing of theirs by moving or deleting yours.\n' +
       'The user can see every change you make to AGENTS.md and memory/, and undo it.',
   )
   const agents = agentsFile(bot.id)
@@ -192,7 +197,9 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
 export const systemPrompt = (bot: Bot) => instructions(bot, conversation(bot.id), {})
 
 const isUserMessage = (item: Item) => item.data.type === 'message' && item.data.role === 'user'
-const said = (items: Item[]) => items.map((i) => (i.data.type === 'message' ? i.data.text : '')).join('\n\n')
+/** The files the owner sent with a message. */
+const filesOf = (data: ItemData) => (data.type === 'message' && data.role === 'user' ? (data.attachments ?? []) : [])
+const said = (items: Item[]) => items.map((i) => (i.data.type === 'message' ? withFiles(i.data.text, filesOf(i.data)) : '')).join('\n\n')
 
 /** Starts the loop for a thread unless it is already running. */
 export function run(threadId: string) {
@@ -260,6 +267,8 @@ async function loop(threadId: string, state: Run) {
             model,
             instructions: instructions(bot, thread, problems),
             input,
+            // What came with the messages it has not seen yet; earlier files are named in what it is told, and kept in the workspace.
+            files: toShow(bot.id, threadId, fresh.flatMap((i) => filesOf(i.data)), provider.sees),
             session: sessionId,
             cwd: workspaceDir(bot.id),
             toolsUrl: endpoint.url,
@@ -303,6 +312,7 @@ async function loop(threadId: string, state: Run) {
             webSearch: bot.webSearch,
             sessionId: threadId,
             signal,
+            show: (attachments) => toShow(bot.id, threadId, attachments, provider.sees),
           })
           for await (const ev of stream) record(ev)
         } catch (e) {
@@ -364,17 +374,21 @@ function finished(thread: Thread) {
   postMessage(thread.parentId, `<subagent_notification>\n${describeSubagent(thread)}\n</subagent_notification>`, 'subagent')
 }
 
-/** Adds a user-role message to a thread and makes sure the thread runs to answer it. */
-export function postMessage(threadId: string, text: string, source: Extract<ItemData, { role: 'user' }>['source']) {
+/**
+ * Adds a user-role message to a thread and makes sure the thread runs to answer it. `files` are the
+ * ids of files the owner sent with it, waiting to go (see attachments.ts).
+ */
+export function postMessage(threadId: string, text: string, source: Extract<ItemData, { role: 'user' }>['source'], files: string[] = []) {
   const thread = db.getThread(threadId)
   if (!thread) throw new Error('No such thread')
   if (thread.archivedAt) throw new Error('This is an earlier conversation, which can only be read. Continue it to write in it again.')
+  const attachments = files.length ? attach(thread.botId, thread.id, files) : []
   // A conversation is named after what it began with, which is how it is found again once archived.
   if (source === 'user' && thread.kind === 'chat' && thread.title === db.UNTITLED) {
-    const title = text.replace(/\s+/g, ' ').trim()
+    const title = text.replace(/\s+/g, ' ').trim() || attachments.map((a) => a.name).join(', ')
     db.updateThread(threadId, { title: title.length > 60 ? title.slice(0, 57) + '…' : title || db.UNTITLED })
   }
-  db.addItem(threadId, { type: 'message', role: 'user', text, source })
+  db.addItem(threadId, { type: 'message', role: 'user', text, source, ...(attachments.length ? { attachments } : {}) })
   run(threadId)
 }
 

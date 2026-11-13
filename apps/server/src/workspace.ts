@@ -78,7 +78,8 @@ function writable(botId: string, given: unknown): Target {
 }
 
 const isBinary = (buf: Buffer) => buf.subarray(0, 8000).includes(0)
-const size = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
+/** A size for people to read: "820 B", "14.2 KB", "3.1 MB". */
+export const bytes = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
 
 function stat(target: Target): fs.Stats {
   try {
@@ -130,7 +131,7 @@ export function list(botId: string, given: unknown, recursive: boolean): string 
   if (!stat(target).isDirectory()) throw new Error(`${target.rel} is a file, not a folder. Use read_file.`)
   const lines: string[] = []
   for (const entry of walk(target.abs, target.rel, recursive ? 8 : 0, target.only)) {
-    lines.push(entry.dir ? `${entry.path}/` : `${entry.path}  (${size(entry.size)})`)
+    lines.push(entry.dir ? `${entry.path}/` : `${entry.path}  (${bytes(entry.size)})`)
     if (lines.length >= 400) {
       lines.push('… (more entries not shown; list a subfolder)')
       break
@@ -141,21 +142,53 @@ export function list(botId: string, given: unknown, recursive: boolean): string 
   return lines.join('\n') || '(empty)'
 }
 
-/** File contents for the model: text only, a window of lines at a time. */
-export function read(botId: string, given: unknown, offset = 1, limit = 1500): string {
+/** File contents for the model: text only, a window of lines at a time. A PDF gives its text. */
+export async function read(botId: string, given: unknown, offset = 1, limit = 1500): Promise<string> {
   const target = resolve(botId, given)
   const info = stat(target)
   if (info.isDirectory()) throw new Error(`${target.rel || 'That'} is a folder. Use list_files.`)
-  if (info.size > 20_000_000) throw new Error(`${target.rel} is too large to read (${size(info.size)}).`)
-  const buf = fs.readFileSync(target.abs)
-  if (isBinary(buf)) return `(${target.rel} is a binary file, ${size(info.size)}; it cannot be shown as text)`
-  const lines = buf.toString('utf8').split('\n')
+  if (info.size > 20_000_000 && !/\.pdf$/i.test(target.rel)) throw new Error(`${target.rel} is too large to read (${bytes(info.size)}).`)
+  let text: string
+  if (/\.pdf$/i.test(target.rel)) text = await pdfText(target.abs, info)
+  else {
+    const buf = fs.readFileSync(target.abs)
+    if (isBinary(buf)) return `(${target.rel} is a binary file, ${bytes(info.size)}; it cannot be shown as text)`
+    text = buf.toString('utf8')
+  }
+  const lines = text.split('\n')
   const start = Math.max(1, Math.floor(offset) || 1)
   let end = Math.min(lines.length, start - 1 + Math.max(1, Math.floor(limit) || 1500))
-  let text = lines.slice(start - 1, end).join('\n')
-  while (text.length > 36_000 && end > start) text = lines.slice(start - 1, --end).join('\n')
-  if (start === 1 && end === lines.length) return text
-  return `${text}\n\n[lines ${start}-${end} of ${lines.length}${end < lines.length ? `; read more with offset ${end + 1}` : ''}]`
+  let shown = lines.slice(start - 1, end).join('\n')
+  while (shown.length > 36_000 && end > start) shown = lines.slice(start - 1, --end).join('\n')
+  if (start === 1 && end === lines.length) return shown
+  return `${shown}\n\n[lines ${start}-${end} of ${lines.length}${end < lines.length ? `; read more with offset ${end + 1}` : ''}]`
+}
+
+/** The text of the PDFs read lately, so that reading one a window at a time does not take it apart again each time. */
+const pdfs = new Map<string, { stamp: string; text: string }>()
+
+/** A PDF's text, page by page. A scanned PDF has none: its pages are pictures. */
+async function pdfText(abs: string, info: fs.Stats): Promise<string> {
+  const stamp = `${info.size}:${info.mtimeMs}`
+  const kept = pdfs.get(abs)
+  if (kept?.stamp === stamp) return kept.text
+  if (info.size > 100_000_000) throw new Error(`That PDF is too large to read (${bytes(info.size)}).`)
+  // Loaded the first time a PDF is read: it is large, and most turns read none.
+  const { extractText, getDocumentProxy } = await import('unpdf')
+  let pages: string[]
+  try {
+    const doc = await getDocumentProxy(new Uint8Array(fs.readFileSync(abs)))
+    pages = (await extractText(doc, { mergePages: false })).text
+    void doc.loadingTask.destroy()
+  } catch (e: any) {
+    throw new Error(/password/i.test(String(e?.message)) ? 'That PDF is locked with a password.' : `That PDF could not be read: ${String(e?.message ?? e).split('\n')[0]}`)
+  }
+  const text = pages.some((page) => page.trim())
+    ? pages.map((page, i) => `--- Page ${i + 1} of ${pages.length} ---\n${page.trim()}`).join('\n\n')
+    : `(This PDF has ${pages.length} page${pages.length === 1 ? '' : 's'} but no text in it: its pages are probably scanned pictures.)`
+  pdfs.set(abs, { stamp, text })
+  if (pdfs.size > 8) pdfs.delete(pdfs.keys().next().value!)
+  return text
 }
 
 /** File contents for the Files tab. */
@@ -236,15 +269,30 @@ export function move(botId: string, from: unknown, to: unknown): string {
   return `${source.rel} -> ${dest.rel}`
 }
 
-/** A free name in files/ for something arriving from outside (a browser download, an upload). */
-export function incoming(botId: string, name: string): string {
-  const safe = path.basename(name).replace(/[\p{Cc}\p{Cf}\u2028\u2029\\/:*?"<>|]/gu, '_').replace(/^[. ]+/, '') || 'download'
+/** A name a file can be saved under: no folders, no characters that mean something to the system, not hidden. */
+export const safeName = (name: string) =>
+  path.basename(name).replace(/[\p{Cc}\p{Cf}\u2028\u2029\\/:*?"<>|]/gu, '_').replace(/^[. ]+/, '') || 'download'
+
+/**
+ * A free name for something arriving from outside: a browser download, or a file the user sent,
+ * which arrive in files/inbox/ for the bot to file away. What the owner uploads in Files goes in files/.
+ */
+export function incoming(botId: string, name: string, folder = 'files/inbox'): string {
+  const safe = safeName(name)
   const ext = path.extname(safe)
-  const dir = path.join(workspaceDir(botId), 'files')
+  const dir = path.join(workspaceDir(botId), ...folder.split('/'))
   fs.mkdirSync(dir, { recursive: true })
   let candidate = safe
   for (let n = 2; fs.existsSync(path.join(dir, candidate)); n++) candidate = `${safe.slice(0, safe.length - ext.length)} (${n})${ext}`
-  return `files/${candidate}`
+  return `${folder}/${candidate}`
+}
+
+/** Puts a copy of a file from outside the workspace in files/inbox/, and gives where it went. */
+export function copyIn(botId: string, from: string, name: string): string {
+  const rel = incoming(botId, name)
+  fs.copyFileSync(from, resolve(botId, rel).abs)
+  changed(botId)
+  return rel
 }
 
 // ---- what goes into the prompt

@@ -141,6 +141,23 @@ export interface HistoryEntry {
   files: string[]
 }
 
+/**
+ * A file the owner sent with a message: a photo, a PDF, anything. The conversation keeps it, and the
+ * bot gets a copy of its own in files/inbox/, which it may file away, rename or delete. Pictures and
+ * PDFs are also shown to its model with the message, when the model can take them.
+ */
+export interface Attachment {
+  /** The conversation's copy, at /api/threads/<thread>/attachments/<id>. */
+  id: string
+  /** Its name, as it was sent. */
+  name: string
+  /** Where the bot's copy was put ("files/inbox/receipt.jpg"). It may have moved it since. */
+  path: string
+  /** Its media type ("image/jpeg", "application/pdf"); "application/octet-stream" when it is not known. */
+  type: string
+  size: number
+}
+
 export type ThreadStatus = 'idle' | 'running' | 'error'
 
 /**
@@ -174,7 +191,7 @@ export type ItemData =
    * subagent reporting back; a scheduled task handing a run its prompt ('schedule'); or a scheduled
    * run reporting back to the bot's conversation ('task').
    */
-  | { type: 'message'; role: 'user'; text: string; source: 'user' | 'parent' | 'subagent' | 'schedule' | 'task' }
+  | { type: 'message'; role: 'user'; text: string; source: 'user' | 'parent' | 'subagent' | 'schedule' | 'task'; attachments?: Attachment[] }
   | { type: 'message'; role: 'assistant'; text: string }
   | { type: 'reasoning'; summary: string; encrypted?: string | null; model?: string }
   | { type: 'function_call'; name: string; arguments: string; call_id: string }
