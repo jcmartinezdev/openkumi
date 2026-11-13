@@ -1062,28 +1062,20 @@ test('the model picker offers every provider and its models, and picking one mov
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
-test('principles: written once for every bot, each bot’s line set beside them, and all a bot is told read from there', async () => {
+test('master prompt: each bot’s line set from one page, and all a bot is told read there, with nothing to change it', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()
   await showsBot(win, 'Assistant')
-  win.on('dialog', (dialog) => dialog.accept())
   const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
   const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
 
-  // Found from the search, and showing the ones OpenKumi comes with.
+  // Found from the search; the master prompt itself is only there to read.
   await win.evaluate(() => (location.hash = '/settings/general'))
   await win.getByLabel('Search settings').fill('master prompt')
-  await win.locator('.set-results button', { hasText: 'Principles for every bot' }).click()
-  const box = win.getByLabel('Principles for every bot')
-  await box.waitFor()
-  assert.match(await box.inputValue(), /\*\*Work as a team\.\*\*/)
-  await shot('principles')
-
-  // Changed when the box is left; then the owner's own, until the default is put back.
-  await box.fill('Always answer in French.')
-  await box.blur()
-  await win.getByRole('button', { name: 'Restore default' }).waitFor()
-  assert.deepEqual([(await state()).principles.text, fs.readFileSync(`${tmp}/local-home/principles.md`, 'utf8')], ['Always answer in French.', 'Always answer in French.\n'])
+  await win.locator('.set-results button', { hasText: 'What a bot is told' }).click()
+  await win.getByRole('button', { name: 'Show', exact: true }).waitFor()
+  assert.equal(await win.locator('.set-body textarea').count(), 0, 'there is no box to write the master prompt in')
+  await shot('master-prompt')
 
   // What each bot is for, which the others are told.
   const line = win.getByLabel('What Assistant is for')
@@ -1092,18 +1084,13 @@ test('principles: written once for every bot, each bot’s line set beside them,
   await line.blur()
   await until(async () => (await state()).bots[0].description === 'Runs the household.', 10_000)
 
-  // Everything a bot is told, to read while tuning them.
+  // Everything a bot is told, to read.
   await win.getByRole('button', { name: 'Show', exact: true }).click()
   const told = win.locator('.prompt-text')
   await told.waitFor()
-  assert.match(await told.innerText(), /^You are Assistant,[\s\S]*# Principles[\s\S]*Always answer in French\./)
-  await shot('principles-told')
+  assert.match(await told.innerText(), /^You are Assistant,[\s\S]*# Principles[\s\S]*\*\*Work as a team\.\*\*[\s\S]*# Working in OpenKumi/)
+  await shot('master-prompt-told')
   await win.keyboard.press('Escape')
-
-  await win.getByRole('button', { name: 'Restore default' }).click()
-  await win.getByRole('button', { name: 'Restore default' }).waitFor({ state: 'detached' })
-  assert.match(await box.inputValue(), /\*\*Work as a team\.\*\*/)
-  assert.ok(!fs.existsSync(`${tmp}/local-home/principles.md`))
 
   // A bot's own page has its line too.
   await win.evaluate(() => (location.hash = '/settings/bots/assistant'))

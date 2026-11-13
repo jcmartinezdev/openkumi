@@ -45,9 +45,9 @@ that stays logged in.
   that scroll sideways, ```` ```mermaid ```` diagrams and formulas. A bot can also show a page in
   the conversation (a chart, a dashboard, a timeline), drawn in the app's light or dark colours,
   on the computer and on the phone.
-- **Principles every bot follows, and a team that knows itself.** One set of principles, yours to
-  change, is what every bot is told before anything else. Each bot is also told who the other bots
-  are and what each is for, so it hands a task to the one it fits.
+- **One master prompt, and a team that knows itself.** Every bot is told the same master prompt,
+  one file that comes with OpenKumi: the principles it follows and how OpenKumi works. Each bot is
+  also told who the other bots are and what each is for, so it hands a task to the one it fits.
 - **Talk instead of typing.** The microphone in the composer, on the computer and on the phone,
   writes what you say into the message as you say it, where the cursor was. It is written down on
   the device itself, with Apple's speech models (macOS 26 or iOS 26 and later), so no sound leaves
@@ -175,7 +175,7 @@ Everything is set from the Settings page, which saves each change as you make it
 | Providers | Codex and Claude Code (status, program path), other models; switch any of them off |
 | Bots | every bot: what it is for, its rules, model, superpowers and files |
 | Superpowers | what bots can do beyond their own tools: what each does, and which bots have it |
-| Principles | what every bot is told first; what each bot is for; everything a bot is told, to read |
+| Master prompt | what each bot is for; everything a bot is told, to read |
 | Browser | which browser program the bots drive, and which bots have one running |
 | Environments | the local environment (on or off) and remote ones; letting other computers connect to the one being shown, its link and access code |
 | Advanced | limits (steps per turn, subagents), troubleshooting, the data folder |
@@ -271,7 +271,6 @@ screens only read and write these files, so you can also edit them by hand.
 
 ```
 ~/.openkumi/
-  principles.md              yours: what every bot is told first (only once you change the ones OpenKumi comes with)
   bots/<id>/
     bot.md                   yours: name, what it is for, model and the rules the bot must follow
     superpowers.json         yours: the superpowers switched on for this bot
@@ -297,15 +296,15 @@ undo it. (`git --git-dir=…/private/history.git --work-tree=…/workspace log` 
 
 ### What every bot is told
 
-Before each turn a bot is given, in this order:
+Before each turn a bot is given the **master prompt**, one file that comes with OpenKumi
+(`apps/server/master-prompt.md`) and is the same for every bot. Nothing in the app changes it: to
+change what every bot is told, edit that file, which is read again on every step. The server fills
+in what it knows of the bot and the thread, so in this order a bot is told:
 
-1. **Principles**, the same for every bot: how to behave and how to work with the others. OpenKumi
-   comes with a short set (`apps/server/principles.md`); change them under **Settings →
-   Principles**, and they are kept in `~/.openkumi/principles.md` from then on. Restore default
-   deletes that file, so later improvements to the ones OpenKumi comes with reach you again.
+1. **Principles**: how to behave and how to work with the others.
 2. **The other bots**: each one's name, its `bot_id`, the line saying what it is for, the
    superpowers it has, and which is the main assistant. The line is set by you, in the bot's
-   settings or on the Principles page; no bot can change it, its own included, so one bot that has
+   settings or on the Master prompt page; no bot can change it, its own included, so one bot that has
    been talked into something by a web page cannot pass that on to the others through how it is
    described. A new bot's line starts as what its maker gave: the description a bot passes to
    `create_bot`, or else the first sentence of what the bot was made for.
@@ -313,9 +312,9 @@ Before each turn a bot is given, in this order:
    never instructions), then the bot's **rules from you**, which win where they and the principles
    disagree.
 4. Its conversation, scheduled tasks, workspace, its own `AGENTS.md`, the list of its notes, and
-   its superpowers.
+   its superpowers; in a scheduled run or as a subagent, what that means for it.
 
-**Settings → Principles → What a bot is told** shows all of it for any bot.
+**Settings → Master prompt → What a bot is told** shows all of it for any bot.
 
 ### One conversation per bot
 
