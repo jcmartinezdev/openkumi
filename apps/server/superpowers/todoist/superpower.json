@@ -1,6 +1,6 @@
 {
   "name": "Todoist",
-  "category": "Your apps",
+  "categories": ["Productivity", "Everyday"],
   "tagline": "Keep your to-do list: add tasks, plan the day and see what is due.",
   "summary": "Read and manage the user's Todoist: tasks, projects, labels and reminders. Tasks are completed, rescheduled or deleted only when the user asked for it or approves.",
   "can": [

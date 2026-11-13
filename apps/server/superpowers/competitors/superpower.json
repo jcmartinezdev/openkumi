@@ -1,0 +1,11 @@
+{
+  "name": "Competitors",
+  "categories": ["Marketing", "Work"],
+  "tagline": "Dated profiles of your competitors, a comparison, and what changed.",
+  "summary": "Keep a dated profile of each competitor in files/marketing/competitors/ (positioning, pricing, product, what customers say, recent moves, with sources), compare them with the user's product, and report when their pricing or product changes. Public information only.",
+  "can": [
+    "Find your direct and indirect competitors, and profile each one with sources",
+    "Compare them with your product: where you win, where you lose, and the gaps",
+    "Tell you when a competitor changes its pricing or ships something new"
+  ]
+}

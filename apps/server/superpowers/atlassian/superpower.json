@@ -1,6 +1,6 @@
 {
   "name": "Atlassian",
-  "category": "Your apps",
+  "categories": ["Work"],
   "tagline": "Work in Jira and Confluence: find and file issues, read and write pages.",
   "summary": "Search, read and write in the user's Atlassian Cloud: Jira issues and comments, Confluence pages and spaces. Existing issues and pages are changed only after the user approves.",
   "can": [

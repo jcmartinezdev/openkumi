@@ -34,9 +34,13 @@ that stays logged in.
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone.
 - **Superpowers.** What a bot can do beyond chatting and browsing, switched on by you for one bot
-  at a time: working in Notion, Linear, Jira and Confluence, Todoist, Readwise or Typefully, or
-  reading your meetings in Granola or Otter.ai. Each has a page that says what it does, and signs in with an account of the bot's own. A bot can use what you give it but cannot
-  change it or give itself more.
+  at a time: working in Notion, Linear, Jira and Confluence, Todoist, Readwise or Typefully,
+  reading your meetings in Granola or Otter.ai, or know-how such as the weather, exchange rates,
+  public holidays, watching a page, SEO and AI search, social posts, launches, landing pages and
+  competitors. They are grouped by what they are for (Productivity, Work, Creative, Marketing,
+  Travel, Everyday), and each has a page that says what it does and lets you read the files it
+  gives a bot. Those that work in an app sign in with an account of the bot's own. A bot can use
+  what you give it but cannot change it or give itself more.
 - **Replies you can look at.** Replies are drawn with code in colour (with a copy button), tables
   that scroll sideways, ```` ```mermaid ```` diagrams and formulas. A bot can also show a page in
   the conversation (a chart, a dashboard, a timeline), drawn in the app's light or dark colours,
@@ -385,17 +389,24 @@ A superpower is what a bot can do beyond its own tools. Every one ships with Ope
 in `apps/server/superpowers/<id>`:
 
 ```
-superpower.json   name, tagline, category, what a bot can do with it, the line the bot is told,
+superpower.json   name, tagline, categories, what a bot can do with it, the line the bot is told,
                   and its service (an MCP server), when it has one
 icon.svg          its app icon, on a square with only a viewBox (each app rounds the corners)
 README.md         its page in the app
 instructions.md   how the bot goes about it; the bot reads it when a task calls for it
 ```
 
-A superpower has instructions, a service, or both. Those that ship (Notion, Linear and the rest) are all both:
-instructions, and the app's own MCP server, which the bot signs in to with an account of its own
-(two bots can use two different accounts). A service can also be a program run on this computer,
-which is how a superpower with code of its own would work.
+Any other file in the folder is the bot's to read too, and the owner can read every one of them
+(never change them) on the superpower's page. `apps/server/superpowers/categories.json` lists the
+catalog's groups in their order; a superpower names each group it belongs to, so the same one can
+be in several.
+
+A superpower has instructions, a service, or both. The app ones (Notion, Linear and the rest) are
+both: instructions, and the app's own MCP server, which the bot signs in to with an account of its
+own (two bots can use two different accounts). The know-how ones (Weather, SEO & AI search and the
+rest) are instructions only: free services the bot reaches with `web_fetch`, or ways to use its own
+browser, files, pages and scheduled tasks, with nothing to sign in to. A service can also be a
+program run on this computer, which is how a superpower with code of its own would work.
 
 You activate a superpower for one bot at a time, on its page or in the bot's settings; nothing is
 activated for all bots at once. Deactivating one for a bot forgets that bot's sign-in.

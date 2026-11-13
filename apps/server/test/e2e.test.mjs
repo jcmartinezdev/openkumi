@@ -18,7 +18,7 @@ const powers = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-superpowers-'))
 fs.cpSync(path.resolve('superpowers'), powers, { recursive: true })
 function addPower(id, manifest, instructions) {
   fs.mkdirSync(path.join(powers, id))
-  fs.writeFileSync(path.join(powers, id, 'superpower.json'), JSON.stringify({ category: 'Tests', tagline: 'For tests.', summary: `${manifest.name} for tests.`, can: [], ...manifest }))
+  fs.writeFileSync(path.join(powers, id, 'superpower.json'), JSON.stringify({ categories: ['Tests'], tagline: 'For tests.', summary: `${manifest.name} for tests.`, can: [], ...manifest }))
   if (instructions) fs.writeFileSync(path.join(powers, id, 'instructions.md'), instructions)
 }
 const removePower = (id) => fs.rmSync(path.join(powers, id), { recursive: true, force: true })
@@ -611,11 +611,23 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
   // What ships, each with a page of its own saying what it does and what it gives a bot; then the one the tests bring.
   const all = await list()
   const shipped = ['atlassian', 'granola', 'linear', 'notion', 'otter', 'readwise', 'todoist', 'typefully']
-  assert.deepEqual(Object.keys(all), [...shipped, 'field-guide'], 'those that work in an app first')
+  const knowHow = ['competitors', 'exchange-rates', 'holidays', 'landing-pages', 'launch', 'seo', 'social-posts', 'watch-a-page', 'weather']
+  assert.deepEqual(Object.keys(all), [...shipped, ...knowHow, 'field-guide'].sort(), 'by name, apps and know-how together')
+  // Grouped by what they are for, in the catalog's order, the same one in as many groups as fit; the tests' own group comes last.
+  assert.deepEqual((await api('GET', '/api/state')).superpowerCategories, ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday', 'Tests'])
+  assert.deepEqual([all.notion.categories, all.weather.categories, all['field-guide'].categories], [['Productivity', 'Work'], ['Travel', 'Everyday'], ['Tests']])
   const { notion, 'field-guide': guide } = all
-  assert.deepEqual([notion.name, notion.category, notion.instructions, notion.service, notion.site, notion.onFor], ['Notion', 'Your apps', true, 'mcp.notion.com', 'https://www.notion.so/', []])
+  assert.deepEqual([notion.name, notion.instructions, notion.service, notion.site, notion.onFor], ['Notion', true, 'mcp.notion.com', 'https://www.notion.so/', []])
   assert.deepEqual([guide.instructions, guide.service], [true, null])
   for (const id of shipped) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions && all[id].signIn, id)
+  for (const id of knowHow) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions && !all[id].signIn && !all[id].service, id)
+
+  // What one gives a bot to read, its owner can read too: those files and no others, its own page's files left out.
+  assert.deepEqual([guide.files, notion.files], [['instructions.md'], ['instructions.md']])
+  assert.deepEqual(await api('GET', '/api/superpowers/field-guide/file?path=instructions.md'), { path: 'instructions.md', text: '# Field guide\n\nLook at the beak first.\n' })
+  for (const [id, file] of [['notion', 'superpower.json'], ['notion', 'README.md'], ['notion', '../linear/instructions.md'], ['notion', '%2E%2E/linear/instructions.md'], ['nope', 'instructions.md'], ['..', 'notion/instructions.md']]) {
+    await assert.rejects(api('GET', `/api/superpowers/${encodeURIComponent(id)}/file?path=${encodeURIComponent(file)}`), /No such file|Not found/, `${id}/${file}`)
+  }
   assert.doesNotMatch(await told(), /# Your superpowers/)
 
   // Switched on for one bot, and no other.

@@ -1,0 +1,12 @@
+{
+  "name": "Holidays",
+  "categories": ["Everyday", "Travel"],
+  "tagline": "Public holidays and long weekends in about 200 countries, region by region.",
+  "summary": "Public holidays from Nager.Date, with no sign-in: about 200 countries, regional holidays included, any year, and the long weekends a day or two off would make.",
+  "can": [
+    "List the public holidays of a country or region, for any year",
+    "Find the long weekends, and which days off would make one",
+    "Plan trips, meetings and scheduled tasks around holidays here and abroad"
+  ],
+  "site": "https://date.nager.at/"
+}

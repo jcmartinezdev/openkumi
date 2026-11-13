@@ -1,6 +1,6 @@
 {
   "name": "Granola",
-  "category": "Your apps",
+  "categories": ["Work", "Productivity"],
   "tagline": "Ask about your meetings: what was said, decided and promised.",
   "summary": "Search and read the user's Granola meeting notes, and their transcripts on paid Granola plans, to answer what was discussed, decided or promised. It only reads.",
   "can": [

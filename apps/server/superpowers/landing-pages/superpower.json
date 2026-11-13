@@ -1,0 +1,11 @@
+{
+  "name": "Landing pages",
+  "categories": ["Marketing", "Creative"],
+  "tagline": "Reviews a live page for what stops visitors signing up, and rewrites it.",
+  "summary": "Review a live landing, home or pricing page in the browser for what keeps visitors from the one thing it is for, rank the fixes, and rewrite the copy, shown in place as a page. Works from the shared marketing brief in files/marketing/brief.md.",
+  "can": [
+    "Review a live page: the first screen, proof, objections and what gets in the way",
+    "Rank what to fix by how much it should help and how much work it is",
+    "Rewrite the copy and show the new version in place, beside the old"
+  ]
+}

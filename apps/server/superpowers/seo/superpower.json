@@ -1,0 +1,11 @@
+{
+  "name": "SEO & AI search",
+  "categories": ["Marketing"],
+  "tagline": "Gets a site found on Google and quoted in ChatGPT, Claude and Perplexity answers.",
+  "summary": "Audit a site for Google and for AI answer engines (ChatGPT, Claude, Perplexity, Google's AI Overviews): which crawlers may come in, what they see without JavaScript, page basics, structured data and speed, and how answer-ready the content is; then a ranked list of fixes, and pages written to be found. Works from the shared marketing brief in files/marketing/brief.md.",
+  "can": [
+    "Audit a site the way Google and AI crawlers see it, and rank what to fix",
+    "Check which AI crawlers your site lets in, and explain the choice",
+    "Write and rewrite pages, and their structured data, to be found and quoted"
+  ]
+}

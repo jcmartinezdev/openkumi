@@ -1,0 +1,11 @@
+{
+  "name": "Social posts",
+  "categories": ["Marketing", "Creative"],
+  "tagline": "Posts and threads for X, LinkedIn, Bluesky, Threads, Instagram and Mastodon.",
+  "summary": "Write posts and threads for X, LinkedIn, Bluesky, Threads, Instagram and Mastodon within each one's real limits, in the voice from the shared marketing brief (files/marketing/brief.md); turn an article, launch or talk into a set of posts, and keep a calendar. Hands drafts to Typefully when that superpower is active. Never publishes.",
+  "can": [
+    "Write posts and threads that fit each platform's limits and habits",
+    "Turn an article, a launch or a talk into a week of posts",
+    "Keep a calendar of posts, and leave the drafts in Typefully when it is active"
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "name": "Linear",
-  "category": "Your apps",
+  "categories": ["Work"],
   "tagline": "Look up issues and projects, file new ones, and keep them up to date.",
   "summary": "Look up, file and update issues, projects and cycles in the user's Linear workspace. Existing issues are changed only after the user approves.",
   "can": [

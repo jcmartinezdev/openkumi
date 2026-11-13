@@ -4,6 +4,8 @@
 //   icon.svg          its app icon, on a square, with nothing outside a viewBox (the apps round its corners)
 //   README.md         its page in the app
 //   instructions.md   how the bot goes about it, read when a task calls for it
+// Beside them, categories.json lists the groups the catalog shows, in its order. A superpower names
+// the ones it belongs to, as many as fit, so the same one can be found under each.
 // A superpower has instructions, a service the bot signs in to and works in (over MCP, see mcp.ts),
 // or both. Each is switched on for one bot at a time, by the owner; a bot cannot switch one on.
 import fs from 'node:fs'
@@ -25,7 +27,8 @@ export interface Service {
 
 interface Manifest {
   name: string
-  category: string
+  /** The groups it belongs to in the catalog, such as "Productivity" or "Travel". */
+  categories?: string[]
   tagline: string
   /** What the bot is told the superpower is for, in a line. */
   summary: string
@@ -47,6 +50,25 @@ function manifest(id: string): Manifest | null {
   }
 }
 const ids = () => (fs.existsSync(SUPERPOWERS) ? fs.readdirSync(SUPERPOWERS).filter((id) => manifest(id)).sort() : [])
+/** The groups a superpower belongs to; one that names none is under "Other". */
+const groupsOf = (m: Manifest) => {
+  const named = Array.isArray(m.categories) ? m.categories.filter((c) => typeof c === 'string' && c.trim()) : []
+  return named.length ? [...new Set(named)] : ['Other']
+}
+
+/** The groups the catalog shows, in its order: those in categories.json, then any other a superpower names, by name. */
+export function superpowerCategories(): string[] {
+  let listed: string[] = []
+  try {
+    const json = JSON.parse(fs.readFileSync(path.join(SUPERPOWERS, 'categories.json'), 'utf8'))
+    if (Array.isArray(json)) listed = json.filter((c) => typeof c === 'string')
+  } catch {
+    // Without the list, the groups go by name.
+  }
+  const named = new Set(ids().flatMap((id) => groupsOf(manifest(id)!)))
+  return [...listed.filter((c) => named.has(c)), ...[...named].filter((c) => !listed.includes(c)).sort()]
+}
+
 const hasInstructions = (id: string) => fs.existsSync(path.join(SUPERPOWERS, id, 'instructions.md'))
 
 /** A superpower's app icon. Every app draws it at its own size, so its size is given by a viewBox alone. */
@@ -57,6 +79,36 @@ function iconOf(id: string): string {
   } catch {
     return ''
   }
+}
+
+/** The files that make up its page in the app. Everything else in its folder is for the bot to read. */
+const PAGE_FILES = new Set(['superpower.json', 'icon.svg', 'README.md'])
+
+/** What a bot with it can read, by path in its folder, its instructions first. The owner can read them too. */
+function filesOf(id: string): string[] {
+  const found: string[] = []
+  const walk = (rel: string) => {
+    for (const entry of fs.readdirSync(path.join(SUPERPOWERS, id, rel), { withFileTypes: true })) {
+      const at = rel ? `${rel}/${entry.name}` : entry.name
+      if (entry.name.startsWith('.')) continue
+      if (entry.isDirectory()) walk(at)
+      else if (entry.isFile() && !(!rel && PAGE_FILES.has(entry.name))) found.push(at)
+    }
+  }
+  try {
+    walk('')
+  } catch {
+    // A folder that went away has nothing to read.
+  }
+  return found.sort((a, b) => Number(b === 'instructions.md') - Number(a === 'instructions.md') || a.localeCompare(b))
+}
+
+/** One of the files a bot with the superpower reads, for its owner to read on its page. */
+export function superpowerFile(id: string, rel: string): { path: string; text: string } {
+  if (!manifest(id) || !filesOf(id).includes(rel)) throw new Error('No such file')
+  const text = fs.readFileSync(path.join(SUPERPOWERS, id, rel), 'utf8')
+  if (text.includes('\0')) throw new Error('This file cannot be shown here')
+  return { path: rel, text }
 }
 
 export function serviceOf(id: string): Service | null {
@@ -87,9 +139,9 @@ export function enabledSuperpowers(botId: string): string[] {
 const record = (botId: string, list: string[]) => fs.writeFileSync(botFile(botId), JSON.stringify({ on: [...new Set(list)].sort() }, null, 2) + '\n')
 const botsWith = (id: string) => fs.readdirSync(path.join(HOME, 'bots')).filter((botId) => enabledSuperpowers(botId).includes(id))
 
-/** The ones that work in an app come first, then those that are know-how only, each by name. */
+/** Every superpower, by name, those that work in an app among those that are know-how only. */
 export function listSuperpowers(): Superpower[] {
-  const order = (p: Superpower) => `${p.service ? 0 : 1}${p.name.toLowerCase()}`
+  const groups = superpowerCategories()
   return ids().map((id): Superpower => {
     const m = manifest(id)!
     let about = ''
@@ -103,20 +155,21 @@ export function listSuperpowers(): Superpower[] {
       id,
       name: m.name,
       icon: iconOf(id),
-      category: m.category,
+      categories: groupsOf(m).sort((a, b) => groups.indexOf(a) - groups.indexOf(b)),
       tagline: m.tagline,
       about,
       can: m.can,
       instructions: hasInstructions(id),
+      files: filesOf(id),
       signIn: needsSignIn(id),
       service: service ? (service.url ? new URL(service.url).host : 'a program on this computer') : null,
       site: m.site ?? '',
       onFor: botsWith(id),
     }
-  }).sort((a, b) => order(a).localeCompare(order(b)))
+  }).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 }
 
-export const announceSuperpowers = () => emit({ type: 'superpowers', superpowers: listSuperpowers() })
+export const announceSuperpowers = () => emit({ type: 'superpowers', superpowers: listSuperpowers(), categories: superpowerCategories() })
 
 export async function setSuperpower(botId: string, id: string, on: boolean) {
   const m = manifest(id)

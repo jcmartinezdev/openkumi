@@ -76,7 +76,8 @@ export interface Superpower {
   name: string
   /** Its app icon, as SVG markup on a square, or empty when it has none. Each app rounds its corners. */
   icon: string
-  category: string
+  /** The catalog's groups it is in, in the catalog's order. */
+  categories: string[]
   tagline: string
   /** Its own page, in Markdown. */
   about: string
@@ -84,6 +85,8 @@ export interface Superpower {
   can: string[]
   /** It comes with instructions the bot reads when a task calls for them. */
   instructions: boolean
+  /** The files a bot with it can read, by path in its folder, its instructions first. */
+  files: string[]
   /** It works in an app the bot signs in to, and is active only once the bot is signed in. */
   signIn: boolean
   /** Where its tools come from, for display ("mcp.notion.com"), when it brings a service. */
@@ -360,7 +363,7 @@ export type ServerEvent =
   | { type: 'providers'; providers: ProviderInfo[] }
   | { type: 'settings'; settings: Settings }
   | { type: 'principles'; principles: Principles }
-  | { type: 'superpowers'; superpowers: Superpower[] }
+  | { type: 'superpowers'; superpowers: Superpower[]; categories: string[] }
   | { type: 'superpower.status'; botId: string; id: string; status: SuperpowerStatus | null }
   | { type: 'files.changed'; botId: string }
   | { type: 'browser.state'; botId: string; state: BrowserState }
@@ -397,6 +400,8 @@ export interface AppState {
   providers: ProviderInfo[]
   browsers: Record<string, BrowserState>
   superpowers: Superpower[]
+  /** The groups the superpower catalog shows, in its order. */
+  superpowerCategories: string[]
   /** How each bot's superpowers with a service stand, by bot id then superpower id. */
   superpowerStatus: Record<string, Record<string, SuperpowerStatus>>
   /** Where everything is stored, for display (e.g. "~/.openkumi"). */
