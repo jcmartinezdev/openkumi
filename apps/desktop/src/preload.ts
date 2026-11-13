@@ -2,6 +2,7 @@
 // This runs inside the window before its page does, and is the only way from one to the other.
 import { contextBridge, ipcRenderer } from 'electron'
 import type { DesktopBridge, DesktopState } from '@openkumi/shared/desktop'
+import type { DictationEvent } from '@openkumi/shared/dictation'
 
 // Asked for before the page starts, so the first thing it draws is already right. The app only
 // answers its own pages; anything else that ends up in a window gets nothing.
@@ -24,6 +25,9 @@ ipcRenderer.on('desktop:sign-in', (_event, url: string) => {
   else returned = url
 })
 
+const heard = new Set<(event: DictationEvent) => void>()
+ipcRenderer.on('desktop:dictation', (_event, event: DictationEvent) => heard.forEach((listener) => listener(event)))
+
 const bridge: DesktopBridge | null = initial && {
   initial,
   onState(listener) {
@@ -42,6 +46,17 @@ const bridge: DesktopBridge | null = initial && {
   removeAddress: (id, url) => ipcRenderer.invoke('desktop:remove-address', id, url),
   learn: (id, learned) => ipcRenderer.invoke('desktop:learn', id, learned),
   showPage: (html) => ipcRenderer.invoke('desktop:page', html),
+  dictation: {
+    available: () => ipcRenderer.invoke('desktop:can-dictate'),
+    start: (locale) => ipcRenderer.invoke('desktop:dictate', locale),
+    stop: () => ipcRenderer.invoke('desktop:dictate-stop'),
+    cancel: () => ipcRenderer.invoke('desktop:dictate-cancel'),
+    onEvent(listener) {
+      heard.add(listener)
+      return () => void heard.delete(listener)
+    },
+    openMicrophoneSettings: () => ipcRenderer.invoke('desktop:microphone-settings'),
+  },
   onSignIn(listener) {
     returns.add(listener)
     if (returned) {

@@ -48,6 +48,11 @@ that stays logged in.
 - **Principles every bot follows, and a team that knows itself.** One set of principles, yours to
   change, is what every bot is told before anything else. Each bot is also told who the other bots
   are and what each is for, so it hands a task to the one it fits.
+- **Talk instead of typing.** The microphone in the composer, on the computer and on the phone,
+  writes what you say into the message as you say it, where the cursor was. It is written down on
+  the device itself, with Apple's speech models (macOS 26 or iOS 26 and later), so no sound leaves
+  it, and the words go to the bot only when you send them, like anything typed. Esc (or ×) gives
+  up and leaves the message as it was; Enter while it listens sends once the last words are in.
 - **Bots that make bots.** Create bots in the app, or just ask in chat.
 - **A mascot for every bot.** Each bot is a little jelly creature holding a sign with its emoji.
   Choose its creature, colour, hat, extra and clothes, or leave it and the new bot dresses itself
@@ -223,6 +228,7 @@ apps/
       environments.ts  the list of environments and their access codes
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app
+      dictation.ts     runs the Mac's dictation program and passes what it hears to the window
   mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser,
                      settings and scheduled tasks
   marketing/         the website at openkumi.ai (Astro, built to static pages), and the script that
@@ -231,6 +237,8 @@ packages/
   shared/            the types every app agrees on
   client/            what every app needs to talk to a server: the connection, the state
                      kept from it, pairing. Used by the desktop window and the phone app
+  dictation/         dictation on the device (Swift, Apple's speech models): one engine, run by the
+                     desktop app as a small program on a Mac and built into the phone app as an Expo module
 ```
 
 ### One app, several processes and threads
@@ -243,6 +251,7 @@ The app is not a web page in a window. Its work is spread out so that no part ca
 | A process of its own (`OpenKumi Server`) | the server, when the local environment is on. Each bot's Chrome, and each Claude Code or Codex turn, is a further process the server starts |
 | The window | the interface, loaded from the app itself (`openkumi://app/`), talking straight to the environment it shows |
 | A worker thread in the window | the connection to the environment: it reads what arrives, hands changes to the window at most once per frame, and draws the pictures of a bot's browser straight onto the page |
+| A program of its own (`dictation`), while you dictate | listening, and writing down what is said, on the Mac; the app passes its words to the window |
 
 Two things follow for speed. Text that streams in is collected on the worker and applied once per
 frame, and a reply being written is drawn piece by piece, so only its last paragraph is worked out

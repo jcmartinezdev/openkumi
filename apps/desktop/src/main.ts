@@ -9,6 +9,7 @@ import type { DesktopState, Link } from '@openkumi/shared/desktop'
 import os from 'node:os'
 import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresses'
 import { pair, parseAddress } from '@openkumi/client/pair'
+import { canDictate, cancelDictation, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
 import { config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
 import { ASSUME_YES, CATCH_SIGN_INS, HIDDEN, PRELOAD } from './paths.ts'
@@ -202,6 +203,15 @@ answer('desktop:remove', (id) => remove(String(id)))
 answer('desktop:add-address', (id, address) => addAddress(String(id), address))
 answer('desktop:remove-address', (id, url) => removeAddress(String(id), String(url)))
 answer('desktop:learn', (id, learned) => learn(String(id), learned))
+answer('desktop:can-dictate', () => canDictate())
+answer('desktop:dictate-stop', () => stopDictation())
+answer('desktop:dictate-cancel', () => cancelDictation())
+answer('desktop:microphone-settings', () => openMicrophoneSettings())
+// What is said goes back to the window that asked to listen.
+ipcMain.handle('desktop:dictate', (event, locale) => {
+  if (!fromApp(event)) throw new Error('Not allowed.')
+  return startDictation(event.sender, typeof locale === 'string' ? locale : undefined)
+})
 answer('desktop:page', (html) => {
   if (typeof html !== 'string' || html.length > 8_000_000) throw new Error('Not a page.')
   return keepPage(html)

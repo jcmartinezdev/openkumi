@@ -7,12 +7,14 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Attachment, Item } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
+import { useDictation } from '@openkumi/client/dictation'
 import { describe } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
 import { BrowserPip } from '../../src/BrowserPip'
+import { ListeningBar, MicButton, listener, useDictationChecks } from '../../src/Dictation'
 import { ModelChip } from '../../src/ModelChip'
 import { PageSheet, PageView, Sheet } from '../../src/PageView'
 import { useTextScale } from '../../src/prefs'
@@ -185,6 +187,17 @@ export default function Chat() {
   const uploading = !ready(files)
   const sendable = files.some((f) => f.staged)
 
+  // Speaking instead of typing: the words go into the draft as they are heard, where the cursor was.
+  const dictating = useDictation(listener, (draft) => setText(draft))
+  const speaking = dictating.phase !== 'off'
+  const selection = useRef({ start: 0, end: 0 })
+  useDictationChecks(dictating)
+  const startDictating = () => {
+    Keyboard.dismiss()
+    const { start, end } = selection.current
+    dictating.start(text, Math.min(start, text.length), Math.min(end, text.length))
+  }
+
   const send = async () => {
     const message = text.trim()
     // The files go once they are all on the server; any that failed stay behind in the composer.
@@ -310,38 +323,48 @@ export default function Chat() {
             style={[styles.input, { color: theme.text }]}
             value={text}
             onChangeText={setText}
-            placeholder={!connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
+            onSelectionChange={(e) => (selection.current = e.nativeEvent.selection)}
+            // While it listens, the words are the microphone's to write.
+            editable={!speaking}
+            placeholder={speaking ? 'Listening…' : !connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
             placeholderTextColor={theme.faint}
             multiline
           />
           <View style={styles.bar}>
-            {bot && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Add photos and files"
-                hitSlop={6}
-                style={({ pressed }) => [styles.attach, { borderColor: theme.border }, pressed && { backgroundColor: theme.bubble }]}
-                onPress={() => chooseFiles(MAX - files.length, (picked) => addFiles(id, bot.id, picked))}
-              >
-                <Glyph name="plus" size={18} color={theme.text} weight={2} />
-              </Pressable>
-            )}
-            <View style={{ flex: 1 }} />
-            {bot && <ModelChip bot={bot} onPress={() => (Keyboard.dismiss(), router.push({ pathname: '/model/[botId]', params: { botId: bot.id } }))} />}
-            {running ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Stop" style={[styles.send, { backgroundColor: theme.bubble }]} onPress={() => api('POST', `/api/threads/${thread!.id}/stop`).catch((e) => setError(e.message))}>
-                <View style={{ width: 12, height: 12, borderRadius: 2.5, backgroundColor: theme.text }} />
-              </Pressable>
+            {speaking && listener ? (
+              <ListeningBar dictating={dictating} listener={listener} />
             ) : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={!connected ? 'Send, once the connection is back' : uploading ? 'Send, once the files are added' : 'Send'}
-                disabled={sending || uploading || !connected || (!text.trim() && !sendable)}
-                style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || !connected || (!text.trim() && !sendable) ? 0.35 : 1 }]}
-                onPress={send}
-              >
-                <Glyph name="up" size={19} color={theme.onPrimary} weight={2.4} />
-              </Pressable>
+              <>
+                {bot && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Add photos and files"
+                    hitSlop={6}
+                    style={({ pressed }) => [styles.attach, { borderColor: theme.border }, pressed && { backgroundColor: theme.bubble }]}
+                    onPress={() => chooseFiles(MAX - files.length, (picked) => addFiles(id, bot.id, picked))}
+                  >
+                    <Glyph name="plus" size={18} color={theme.text} weight={2} />
+                  </Pressable>
+                )}
+                <View style={{ flex: 1 }} />
+                {bot && <ModelChip bot={bot} onPress={() => (Keyboard.dismiss(), router.push({ pathname: '/model/[botId]', params: { botId: bot.id } }))} />}
+                {bot && listener && <MicButton onPress={startDictating} />}
+                {running ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Stop" style={[styles.send, { backgroundColor: theme.bubble }]} onPress={() => api('POST', `/api/threads/${thread!.id}/stop`).catch((e) => setError(e.message))}>
+                    <View style={{ width: 12, height: 12, borderRadius: 2.5, backgroundColor: theme.text }} />
+                  </Pressable>
+                ) : (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={!connected ? 'Send, once the connection is back' : uploading ? 'Send, once the files are added' : 'Send'}
+                    disabled={sending || uploading || !connected || (!text.trim() && !sendable)}
+                    style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || !connected || (!text.trim() && !sendable) ? 0.35 : 1 }]}
+                    onPress={send}
+                  >
+                    <Glyph name="up" size={19} color={theme.onPrimary} weight={2.4} />
+                  </Pressable>
+                )}
+              </>
             )}
           </View>
         </View>
