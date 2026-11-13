@@ -1,7 +1,9 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Bot, Item, ItemData, Thread } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
+import { useDictation } from '@openkumi/client/dictation'
 import { SentFiles, Tray, picked } from './Attachments'
+import { DictationFailed, Listening, MicButton, useListener } from './Dictation'
 import { History, day } from './History'
 import { Icon } from './Icon'
 import { CopyButton, FileLinks, Markdown } from './Markdown'
@@ -326,6 +328,17 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
   const uploading = !ready(files)
   const sendable = files.some((f) => f.staged)
 
+  // Speaking instead of typing: the words go into the draft as they are heard, where the cursor was.
+  const listener = useListener()
+  const cursor = useRef<number | null>(null)
+  const dictating = useDictation(listener, (text, at) => ((cursor.current = at), setDraft(text)))
+  const speaking = dictating.phase !== 'off'
+  const startDictating = () => {
+    const el = input.current
+    dictating.start(draft, el?.selectionStart ?? draft.length, el?.selectionEnd ?? draft.length)
+    el?.focus()
+  }
+
   const connected = useStore((s) => s.connected)
   useEffect(() => {
     // Shows what is kept of the chat at once, then brings it up to date; again when the connection comes back.
@@ -395,12 +408,16 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
     return () => observer.disconnect()
   }, [])
 
-  // Grow the composer with its content.
+  // Grow the composer with its content. Words that were spoken in leave the cursor after them, in view.
   useLayoutEffect(() => {
     const el = input.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+    if (cursor.current === null) return
+    el.setSelectionRange(cursor.current, cursor.current)
+    if (speaking) el.scrollTop = el.scrollHeight
+    cursor.current = null
   }, [draft])
 
   /** Files of a message that is on its way, so a message sent right after it does not take them again. */
@@ -563,12 +580,15 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
             </div>
           ) : (
           <div className="composer">
+            <DictationFailed dictating={dictating} />
             <Tray files={files} remove={(id) => removeFile(draftKey, id)} />
             <textarea
               ref={input}
               value={draft}
               rows={1}
-              placeholder={!connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'task' ? 'Message this run' : `Message ${bot.name}`}
+              // While it listens, the words are the microphone's to write.
+              readOnly={speaking}
+              placeholder={speaking ? 'Listening…' : !connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'task' ? 'Message this run' : `Message ${bot.name}`}
               aria-label="Message"
               onChange={(e) => setDraft(e.target.value)}
               // Files pasted (a screenshot, a picture copied from a page, a file copied in Finder)
@@ -585,9 +605,14 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
                 const desktop = matchMedia('(hover: hover) and (pointer: fine)').matches
                 // With "Enter sends" off, Enter makes a new line and Cmd or Ctrl with Enter sends.
                 const sends = e.metaKey || e.ctrlKey || (desktop && prefs.enterSends && !e.shiftKey)
-                if (e.key === 'Enter' && sends && !e.nativeEvent.isComposing) {
+                if (speaking && e.key === 'Escape') {
                   e.preventDefault()
-                  submit()
+                  dictating.cancel()
+                } else if (e.key === 'Enter' && sends && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  // While it listens, the last words go in first.
+                  if (speaking) dictating.finish((text) => submit(text))
+                  else submit()
                 }
               }}
             />
@@ -597,7 +622,14 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               </button>
               <input ref={filePicker} type="file" multiple hidden onChange={(e) => (attach(e.target.files ?? []), (e.target.value = ''))} />
               <span className="grow" />
-              <ModelPicker bot={bot} />
+              {speaking && listener ? (
+                <Listening dictating={dictating} listener={listener} />
+              ) : (
+                <>
+                  <ModelPicker bot={bot} />
+                  {listener && <MicButton start={startDictating} />}
+                </>
+              )}
               {running && (
                 <button className="send stop" title="Stop" aria-label="Stop" onClick={() => api('POST', `/api/threads/${thread.id}/stop`).catch((e) => setError(e.message))}>
                   <Icon name="stop" size={18} />
@@ -609,9 +641,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
                   className="send"
                   title={!connected ? 'Offline' : uploading ? 'Waiting for the files' : 'Send'}
                   aria-label="Send"
-                  disabled={(!draft.trim() && !sendable) || uploading || !connected}
+                  disabled={(!draft.trim() && !sendable && !speaking) || uploading || !connected}
                   onPointerDown={(e) => e.preventDefault()}
-                  onClick={() => submit()}
+                  onClick={() => (speaking ? dictating.finish((text) => submit(text)) : submit())}
                 >
                   <Icon name="up" size={18} />
                 </button>

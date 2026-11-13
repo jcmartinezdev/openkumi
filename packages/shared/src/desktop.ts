@@ -1,6 +1,7 @@
 // What the desktop app's window and the app behind it say to each other. The window is the
 // interface (apps/web); the app behind it (apps/desktop) keeps the list of environments, runs the
 // one on this computer, and tells the window which environment to connect to.
+import type { Listener } from './dictation'
 
 /** An OpenKumi server on another computer, reached over the network. */
 export interface RemoteEnvironment {
@@ -97,6 +98,16 @@ export interface DesktopBridge {
    * The address is a site of its own, so the page cannot reach the window.
    */
   showPage(html: string): Promise<string>
+  /**
+   * Dictation on this computer: what is said is written down here, with the Mac's speech models,
+   * and only the words reach the window. Missing from older apps.
+   */
+  dictation?: Listener & {
+    /** Whether this computer can take dictation: a Mac with macOS 26 or later. */
+    available(): Promise<boolean>
+    /** Opens the place in System Settings where the app can be allowed to use the microphone. */
+    openMicrophoneSettings(): Promise<void>
+  }
   /**
    * Called with the address a sign-in in this computer's own browser came back to, for the window
    * to pass on to its environment. One that came before anything listened goes to the first listener.
