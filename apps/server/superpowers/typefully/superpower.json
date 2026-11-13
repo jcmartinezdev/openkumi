@@ -1,0 +1,15 @@
+{
+  "name": "Typefully",
+  "category": "Your apps",
+  "tagline": "Draft posts and threads for X, LinkedIn, Threads, Bluesky and Mastodon.",
+  "summary": "Write, edit and organise drafts in the user's Typefully, for X, LinkedIn, Threads, Bluesky and Mastodon, and see what is queued or published. Nothing is scheduled or published without the user's approval.",
+  "can": [
+    "Write drafts and threads, and edit or tag them",
+    "See your queue, your published posts and your connected accounts",
+    "Schedule or publish a post, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.typefully.com/mcp"
+  },
+  "site": "https://typefully.com/"
+}

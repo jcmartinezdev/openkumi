@@ -1,0 +1,15 @@
+{
+  "name": "Otter.ai",
+  "category": "Your apps",
+  "tagline": "Search your Otter recordings and read what was said.",
+  "summary": "Search the user's Otter.ai meetings and conversations and read their transcripts, to answer what was said or decided. It only reads.",
+  "can": [
+    "Search your meetings and conversations by topic, person or date",
+    "Read a meeting's full transcript",
+    "Only read: it cannot change or delete anything in Otter"
+  ],
+  "mcp": {
+    "url": "https://mcp.otter.ai/mcp"
+  },
+  "site": "https://otter.ai/"
+}

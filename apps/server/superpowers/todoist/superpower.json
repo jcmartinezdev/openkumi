@@ -1,0 +1,15 @@
+{
+  "name": "Todoist",
+  "category": "Your apps",
+  "tagline": "Keep your to-do list: add tasks, plan the day and see what is due.",
+  "summary": "Read and manage the user's Todoist: tasks, projects, labels and reminders. Tasks are completed, rescheduled or deleted only when the user asked for it or approves.",
+  "can": [
+    "Read your tasks, projects and labels, and what is due when",
+    "Add tasks, with due dates, priorities and reminders",
+    "Complete, reschedule or delete a task, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://ai.todoist.net/mcp"
+  },
+  "site": "https://todoist.com/"
+}
