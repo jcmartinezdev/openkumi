@@ -1,10 +1,10 @@
 // A bot's mascot on the phone: the computer's drawing (@openbot/client/mascot), drawn by Skia from
 // its SVG. Skia's SVG draws no emoji, so the emoji on the sign is text laid over it.
 import { type ReactNode, useEffect, useMemo, useRef } from 'react'
-import { Animated, Easing, StyleSheet, Text } from 'react-native'
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native'
 import { Canvas, ImageSVG, Skia } from '@shopify/react-native-skia'
 import type { Bot, Look } from '@openbot/shared'
-import { SIGN, UNDECIDED, VIEWS, mascotSvg } from '@openbot/client/mascot'
+import { HEAD_SIGN, SIGN, UNDECIDED, VIEWS, mascotSvg, signColors } from '@openbot/client/mascot'
 
 interface MascotProps {
   look: Look | undefined
@@ -50,9 +50,30 @@ export function Mascot({ look, emoji, size, crop = 'full', live = false }: Masco
   )
 }
 
-/** A bot's head, where its avatar goes. The row beside it says whose it is. */
-export function BotHead({ bot, size = 32 }: { bot: Pick<Bot, 'look' | 'emoji'> | undefined; size?: number }) {
-  return <Mascot look={bot?.look} emoji={bot?.emoji ?? '🤖'} size={size} crop="head" />
+/**
+ * A bot's head, where its avatar goes, holding up its sign so bots that look alike tell apart. The
+ * row beside it says whose it is. `sign={false}` leaves the sign out where the bot is plain.
+ */
+export function BotHead({ bot, size = 32, sign = true }: { bot: Pick<Bot, 'look' | 'emoji'> | undefined; size?: number; sign?: boolean }) {
+  const emoji = bot?.emoji ?? '🤖'
+  if (!sign) return <Mascot look={bot?.look} emoji={emoji} size={size} crop="head" />
+  const s = HEAD_SIGN
+  const { card, paw, pawEdge } = signColors(bot?.look ?? UNDECIDED)
+  const pawSize = s.paw * size
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={{ width: size, height: size }}>
+      <Mascot look={bot?.look} emoji={emoji} size={size} crop="head" />
+      <View
+        style={[
+          styles.sign,
+          { width: s.width * size, height: s.height * size, right: s.right * size, bottom: s.bottom * size, borderRadius: s.radius * size, backgroundColor: card, transform: [{ rotate: `${s.angle}deg` }] },
+        ]}
+      >
+        <View style={[styles.paw, { width: pawSize, height: pawSize, left: -pawSize / 2, top: (s.height * size - pawSize) / 2, backgroundColor: paw, borderColor: pawEdge }]} />
+        <Text allowFontScaling={false} style={{ fontSize: s.emoji * size }}>{emoji}</Text>
+      </View>
+    </View>
+  )
 }
 
 /** Rocks what it holds from side to side, as a bot's head does while the bot is at work. */
@@ -71,4 +92,7 @@ export function Bobbing({ children }: { children: ReactNode }) {
 
 const styles = StyleSheet.create({
   emoji: { position: 'absolute', textAlign: 'center' },
+  // The edge keeps the sign apart from a pale head or screen.
+  sign: { position: 'absolute', alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(0,0,0,0.22)', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 1, shadowOffset: { width: 0, height: 1 } },
+  paw: { position: 'absolute', borderRadius: 999, borderWidth: StyleSheet.hairlineWidth },
 })

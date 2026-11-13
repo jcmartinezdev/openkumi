@@ -173,7 +173,7 @@ export default function Chat() {
   const tail = (
     <View style={{ paddingBottom: 12 }}>
       {!!partial?.text && <View style={styles.bot}><Markdown text={partial.text} live /></View>}
-      {running && !partial?.text && <View style={styles.working}>{bot ? <Bobbing><BotHead bot={bot} size={24} /></Bobbing> : <ActivityIndicator size="small" color={theme.muted} />}<Text style={{ color: theme.muted, fontSize: 14 }}>Working</Text></View>}
+      {running && !partial?.text && <View style={styles.working}>{bot ? <Bobbing><BotHead bot={bot} size={24} sign={false} /></Bobbing> : <ActivityIndicator size="small" color={theme.muted} />}<Text style={{ color: theme.muted, fontSize: 14 }}>Working</Text></View>}
       {subagents.length > 0 && (
         <View style={styles.chips}>
           {subagents.map((t) => (
