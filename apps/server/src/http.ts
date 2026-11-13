@@ -146,22 +146,30 @@ function count(url: URL, name: string): number | undefined {
   return Number.isSafeInteger(n) && n >= 0 ? n : fail(400, `${name} must be a whole number`)
 }
 
-route('GET', '/api/state', (): AppState => ({
-  bots: listBots(),
-  // Not every thread: the ones the apps list. Any other is fetched when it is opened.
-  threads: db.listedThreads(),
-  tasks: db.listTasks(),
-  providers: providerInfos(),
-  browsers: browserStates(),
-  superpowers: listSuperpowers(),
-  superpowerCategories: superpowerCategories(),
-  superpowerStatus: mcp.superpowerStatuses(),
-  home: HOME_LABEL,
-  settings: settings(),
-  defaults: DEFAULTS,
-  principles: principles(),
-  about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: tasks.TIME_ZONE },
-}))
+route('GET', '/api/state', (_, __, { url }): AppState => {
+  // An app that holds the threads up to a change of this database is sent only what came after it.
+  const since = url.searchParams.get('db') === db.DATABASE_ID ? count(url, 'since') : undefined
+  const changes = since === undefined ? null : db.changesSince(since)
+  return {
+    bots: listBots(),
+    // Not every thread: the ones the apps list. Any other is fetched when it is opened.
+    threads: changes ? changes.threads : db.listedThreads(),
+    ...(changes ? { removed: changes.removed } : {}),
+    database: db.DATABASE_ID,
+    seq: db.latestChange(),
+    tasks: db.listTasks(),
+    providers: providerInfos(),
+    browsers: browserStates(),
+    superpowers: listSuperpowers(),
+    superpowerCategories: superpowerCategories(),
+    superpowerStatus: mcp.superpowerStatuses(),
+    home: HOME_LABEL,
+    settings: settings(),
+    defaults: DEFAULTS,
+    principles: principles(),
+    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: tasks.TIME_ZONE },
+  }
+})
 
 // ---- settings for the whole app
 route('PATCH', '/api/settings', (_, body) => updateSettings(body))
@@ -338,12 +346,13 @@ route('GET', '/api/tasks/:id/runs', ([id], _, { url }) => db.runsOf(id, { before
 
 // ---- threads
 // A thread, and its newest page of items (see db.PAGE); `before` asks for the page before that
-// item instead, and `from` for everything back to that item.
-route('GET', '/api/threads/:id', ([id], _, { url }) => ({
-  thread: needThread(id),
-  ...db.pageOf(id, { before: count(url, 'before'), from: count(url, 'from') }),
-  partial: agent.partialOf(id),
-}))
+// item instead, `from` for everything back to that item, and `after` for what came after it.
+route('GET', '/api/threads/:id', ([id], _, { url }) => {
+  const thread = needThread(id)
+  const after = count(url, 'after')
+  const items = after === undefined ? db.pageOf(id, { before: count(url, 'before'), from: count(url, 'from') }) : db.itemsAfter(id, after)
+  return { thread, ...items, partial: agent.partialOf(id) }
+})
 route('POST', '/api/threads/:id/messages', ([id], body) => {
   const thread = needThread(id)
   const { text, files } = message(thread.botId, body)

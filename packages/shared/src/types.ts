@@ -355,8 +355,9 @@ export interface Partial {
 export type ServerEvent =
   | { type: 'bot.upsert'; bot: Bot }
   | { type: 'bot.delete'; id: string }
-  | { type: 'thread.upsert'; thread: Thread }
-  | { type: 'thread.delete'; id: string }
+  /** `seq`: the number of the change, from one count for every thread (see AppState.seq). */
+  | { type: 'thread.upsert'; thread: Thread; seq: number }
+  | { type: 'thread.delete'; id: string; seq: number }
   | { type: 'task.upsert'; task: ScheduledTask }
   | { type: 'task.delete'; id: string }
   | { type: 'item.add'; item: Item }
@@ -396,7 +397,20 @@ export type ClientEvent =
 
 export interface AppState {
   bots: Bot[]
+  /**
+   * The threads an app keeps a list of: every conversation, and the subagents and runs that are
+   * at work or changed in the last hour. Any other is fetched when it is opened.
+   */
   threads: Thread[]
+  /** The id of the server's database. Change numbers from another database (one started afresh) mean nothing here. */
+  database: string
+  /** The number of the latest change to any thread. Asked for with `?since=` and this database's id, only what changed after it is sent. */
+  seq: number
+  /**
+   * Present in the answer to `?since=`: `threads` then holds only the threads of the list that
+   * changed after that change, and these are the ones removed since.
+   */
+  removed?: string[]
   tasks: ScheduledTask[]
   providers: ProviderInfo[]
   browsers: Record<string, BrowserState>
