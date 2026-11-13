@@ -22,7 +22,6 @@ export default function Settings() {
   const bots = useStore((s) => s.bots)
   const providers = useStore((s) => s.providers)
   const tasks = useStore((s) => s.tasks)
-  const principles = useStore((s) => s.principles)
   const version = useStore((s) => s.about.version)
   const connected = providers.filter((p) => p.connected && p.enabled !== false).length
   const name = server?.name ?? 'the server'
@@ -57,7 +56,6 @@ export default function Settings() {
       {loaded && (
         <Section title={`On ${name}`} inset={ICON_INSET} footer="Kept on the computer that runs your bots, and the same on every device.">
           <Row icon="cpu" label="Providers" value={`${connected} connected`} opens onPress={() => router.push('/settings/providers')} />
-          <Row icon="compass" label="Principles" value={principles?.custom ? 'Your own' : 'Default'} opens onPress={() => router.push('/settings/principles')} />
           <Row icon="sliders" label="New bots" opens onPress={() => router.push('/settings/new-bots')} />
           <Row icon="clock" label="Scheduled tasks" value={tasks.length ? String(tasks.length) : 'None'} opens onPress={() => router.push('/tasks')} />
         </Section>

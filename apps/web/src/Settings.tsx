@@ -8,7 +8,7 @@ import { type Answer, KIND_NAMES, kindOf, ordered } from '@openkumi/client/addre
 import { windowCount } from '@openkumi/client/browser'
 import { pairingLink } from '@openkumi/client/pair'
 import { BotPage, TABS } from './BotPage'
-import { Principles } from './Principles'
+import { MasterPrompt } from './MasterPrompt'
 import { Providers } from './Providers'
 import { desktop, reason, useDesktop } from './desktop'
 import { Icon } from './Icon'
@@ -18,7 +18,7 @@ import { api, closeSettings, openSettings, saveSettings, useStore } from './stor
 import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
 import { BotHead } from './Mascot'
 
-type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'principles' | 'browser' | 'environments' | 'advanced' | 'about'
+type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'prompt' | 'browser' | 'environments' | 'advanced' | 'about'
 type IconName = Parameters<typeof Icon>[0]['name']
 
 const PAGES: Record<PageId, { label: string; icon: IconName }> = {
@@ -28,7 +28,7 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   providers: { label: 'Providers', icon: 'cpu' },
   bots: { label: 'Bots', icon: 'bot' },
   superpowers: { label: 'Superpowers', icon: 'sparkles' },
-  principles: { label: 'Principles', icon: 'compass' },
+  prompt: { label: 'Master prompt', icon: 'compass' },
   browser: { label: 'Browser', icon: 'globe' },
   environments: { label: 'Environments', icon: 'monitor' },
   advanced: { label: 'Advanced', icon: 'wrench' },
@@ -37,7 +37,7 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
 
 const NAV: { heading: string | null; pages: PageId[] }[] = [
   { heading: null, pages: ['general', 'appearance', 'chat'] },
-  { heading: 'Agents', pages: ['providers', 'bots', 'superpowers', 'principles', 'browser'] },
+  { heading: 'Agents', pages: ['providers', 'bots', 'superpowers', 'prompt', 'browser'] },
   { heading: 'Network', pages: ['environments'] },
   { heading: null, pages: ['advanced', 'about'] },
 ]
@@ -60,9 +60,8 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'providers', id: 'provider-claude-code', sub: 'claude-code', title: 'Claude Code', also: 'anthropic claude plan program path sign in' },
   { page: 'providers', id: 'provider-openai-compatible', sub: 'openai-compatible', title: 'Other models', also: 'api key base url ollama openrouter' },
   { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot' },
-  { page: 'principles', id: 'principles', title: 'Principles for every bot', also: 'master prompt system instructions behaviour behavior rules all bots' },
-  { page: 'principles', id: 'team', title: 'What each bot is for', also: 'description team hand over handoff delegate other bots' },
-  { page: 'principles', id: 'told', title: 'What a bot is told', also: 'system prompt instructions preview read' },
+  { page: 'prompt', id: 'team', title: 'What each bot is for', also: 'description team hand over handoff delegate other bots' },
+  { page: 'prompt', id: 'told', title: 'What a bot is told', also: 'master prompt system prompt principles instructions behaviour behavior all bots preview read' },
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
   { page: 'browser', id: 'browser-panel', title: 'Open the panel when a bot starts browsing' },
   { page: 'browser', id: 'browsers-running', title: 'Browsers running now', also: 'stop' },
@@ -225,7 +224,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           {page === 'appearance' && <Appearance />}
           {page === 'chat' && <ChatPage />}
           {page === 'providers' && <Providers selected={path[1]} />}
-          {page === 'principles' && <Principles />}
+          {page === 'prompt' && <MasterPrompt />}
           {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} power={path[2] === 'superpowers' ? path[3] : undefined} /> : <Bots newBot={newBot} />)}
           {page === 'superpowers' && (path[1] ? <SuperpowerPage id={path[1]} /> : <SuperpowerCatalog />)}
           {page === 'browser' && <BrowserPage />}
@@ -337,7 +336,7 @@ function Bots({ newBot }: { newBot: () => void }) {
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
   return (
     <Page>
-      <p className="set-intro">Each bot is a folder with its own instructions, memory, files and browser. Open one to change its rules, model and superpowers. What all of them are told is under <a href="#/settings/principles">Principles</a>.</p>
+      <p className="set-intro">Each bot is a folder with its own instructions, memory, files and browser. Open one to change its rules, model and superpowers. What all of them are told is under <a href="#/settings/prompt">Master prompt</a>.</p>
       <Section title="Bots" action={<button onClick={newBot}><Icon name="plus" size={14} /> New bot</button>}>
         {bots.map((bot: Bot) => (
           <a key={bot.id} className="set-row set-link" id={bot.id === bots[0]?.id ? 'bots' : undefined} href={`#/settings/bots/${encodeURIComponent(bot.id)}`}>

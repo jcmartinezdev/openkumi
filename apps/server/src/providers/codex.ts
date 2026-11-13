@@ -45,10 +45,6 @@ const toml = (value: string) => JSON.stringify(value)
 async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   const program = bin()
   if (!program) throw new Error('Codex is not installed on this computer.')
-  const instructions =
-    `${req.instructions}\n\n` +
-    'Your tools come from OpenKumi (the "openkumi" tools). For subagents use spawn_subagent and wait_subagents from ' +
-    'OpenKumi, not any collaboration tool of your own. You cannot run commands or read files except through those tools.'
   // Pictures that came with the message. Codex takes their paths split at commas, so it is given
   // copies with plain names, in a folder of their own that goes with the turn. They go before the
   // other options: --image takes every value up to the next option.
@@ -69,7 +65,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     ...SWITCHED_OFF.flatMap((feature) => ['--disable', feature]),
     '-c', 'sandbox_mode="read-only"',
     '-c', 'approval_policy="never"',
-    '-c', `developer_instructions=${toml(instructions)}`,
+    '-c', `developer_instructions=${toml(req.instructions)}`,
     // OpenKumi passes the bot's AGENTS.md itself, fresh on every turn.
     '-c', 'project_doc_max_bytes=0',
     // Codex has skills of its own (and finds the user's); the bot's superpowers are the ones in its instructions.

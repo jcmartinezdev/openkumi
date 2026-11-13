@@ -1,38 +1,21 @@
-// Settings › Principles: what every bot is told before anything else, what each bot is for (which
-// the others are told, so they know when to hand it work), and a way to read all a bot is told.
+// Settings › Master prompt: what each bot is for (which the others are told, so they know when to
+// hand it work), and a way to read all a bot is told. The master prompt itself comes with OpenKumi
+// and is the same for every bot: nothing here changes it.
 import { useState } from 'react'
 import type { Bot } from '@openkumi/shared'
-import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { Field, Page, Pick, Row, Section } from './settingsUi'
-import { api, savePrinciples, useStore } from './store'
+import { api, useStore } from './store'
 import { BotHead } from './Mascot'
 
-export function Principles() {
-  const principles = useStore((s) => s.principles)
+export function MasterPrompt() {
   const bots = useStore((s) => s.bots)
-  const [error, setError] = useState('')
-  const save = (text: string | null) => {
-    setError('')
-    savePrinciples(text).catch((e) => setError(e.message))
-  }
-  const restore = () => confirm('Put back the principles OpenKumi comes with? Yours are replaced.') && save(null)
 
   return (
     <Page>
       <p className="set-intro">
-        What every bot is told before anything else: how to behave, and how to work with the other bots. After these, each bot follows its own rules from you and the instructions it writes itself. Bots cannot change them.
+        Every bot is told the same master prompt before each step: how to behave, how to work with the other bots, and how OpenKumi works. It comes with OpenKumi and cannot be changed. Into it go the line below for each bot, each bot’s rules from you, and the instructions it writes itself.
       </p>
-      {error && <div className="notice error">{error}</div>}
-      <Section title="Principles" action={principles?.custom && <button onClick={restore}><Icon name="undo" size={14} /> Restore default</button>}>
-        <Row
-          id="principles"
-          title="For every bot"
-          description={<>Written in Markdown, and saved when you leave the box. Where a bot’s own rules from you say otherwise, its rules win. {principles?.custom ? 'These are your own.' : 'These are the ones OpenKumi comes with.'}</>}
-        >
-          <Field label="Principles for every bot" rows={18} className="set-input set-area" value={principles?.text ?? ''} placeholder="Nothing: bots are told no principles." onCommit={(text) => save(text)} />
-        </Row>
-      </Section>
 
       <Section title="What each bot is for">
         <Row
@@ -52,7 +35,7 @@ export function Principles() {
   )
 }
 
-/** Everything one bot is told before each turn of its conversation, to read while tuning the principles. */
+/** Everything one bot is told before each turn of its conversation, to read. */
 function Told({ bots }: { bots: Bot[] }) {
   const [botId, setBotId] = useState('')
   const [shown, setShown] = useState<{ bot: Bot; text: string } | null>(null)
@@ -73,7 +56,7 @@ function Told({ bots }: { bots: Bot[] }) {
       <Row
         id="told"
         title="Read it all"
-        description="Everything a bot reads before each turn of its conversation: these principles, the other bots, its rules from you, its own instructions and notes, and how OpenKumi works."
+        description="Everything a bot reads before each turn of its conversation: the master prompt, with the other bots, its rules from you, and its own instructions and notes filled in."
         status={error && <span className="err">{error}</span>}
         control={
           <div className="set-link-row">

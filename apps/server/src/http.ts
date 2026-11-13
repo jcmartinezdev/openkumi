@@ -17,7 +17,6 @@ import { beginPairing, computerWith, finishPairing, listComputers, newPairingCod
 import * as mcp from './mcp.ts'
 import * as db from './db.ts'
 import { homeAddresses, nearby, tailscaleAddresses } from './network.ts'
-import { principles, setPrinciples } from './principles.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
 import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower, superpowerCategories, superpowerFile } from './superpowers.ts'
@@ -166,15 +165,12 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     home: HOME_LABEL,
     settings: settings(),
     defaults: DEFAULTS,
-    principles: principles(),
     about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: tasks.TIME_ZONE },
   }
 })
 
 // ---- settings for the whole app
 route('PATCH', '/api/settings', (_, body) => updateSettings(body))
-// What every bot is told first. Null puts back the ones OpenKumi comes with.
-route('PUT', '/api/principles', (_, body) => checked(() => setPrinciples(body.text)))
 // How other computers get in: whether they can reach this one, where, and which ones are paired.
 route('GET', '/api/access', async () => ({ on: lanOn(), port: PORT, addresses: homeAddresses(), tailscale: await tailscaleAddresses(), computers: listComputers() }))
 // Where the other devices can reach this server, for them to keep: the local network first, then

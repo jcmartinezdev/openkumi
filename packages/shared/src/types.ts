@@ -364,7 +364,6 @@ export type ServerEvent =
   | { type: 'stream.delta'; threadId: string; kind: 'text' | 'reasoning'; delta: string }
   | { type: 'providers'; providers: ProviderInfo[] }
   | { type: 'settings'; settings: Settings }
-  | { type: 'principles'; principles: Principles }
   | { type: 'superpowers'; superpowers: Superpower[]; categories: string[] }
   | { type: 'superpower.status'; botId: string; id: string; status: SuperpowerStatus | null }
   | { type: 'files.changed'; botId: string }
@@ -424,18 +423,6 @@ export interface AppState {
   settings: Settings
   /** What every setting is when nothing has been changed, for "reset to default". */
   defaults: Settings
-  principles: Principles
   about: About
 }
 
-/**
- * What every bot is told before anything else: how to behave, and how to work with the other bots.
- * Set by the owner for all bots at once; a bot cannot change them.
- */
-export interface Principles {
-  text: string
-  /** The owner has written their own, instead of the ones OpenKumi comes with. */
-  custom: boolean
-  /** The ones OpenKumi comes with, for "restore default". */
-  default: string
-}
