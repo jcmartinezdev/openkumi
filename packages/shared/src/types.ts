@@ -175,7 +175,8 @@ export type ItemData =
    * run reporting back to the bot's conversation ('task').
    */
   | { type: 'message'; role: 'user'; text: string; source: 'user' | 'parent' | 'subagent' | 'schedule' | 'task'; attachments?: Attachment[] }
-  | { type: 'message'; role: 'assistant'; text: string }
+  /** `stopped`: cut off before it was finished (stopped, failed, or the server shut down); `text` is what had been written. */
+  | { type: 'message'; role: 'assistant'; text: string; stopped?: true }
   | { type: 'reasoning'; summary: string; encrypted?: string | null; model?: string }
   | { type: 'function_call'; name: string; arguments: string; call_id: string }
   | { type: 'function_call_output'; call_id: string; output: string }

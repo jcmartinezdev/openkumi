@@ -15,8 +15,6 @@ export const MIN_INTERVAL = 5
 const GRACE = 10 * 60_000
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-/** How many runs of a task are kept. A task that runs every few minutes would otherwise leave thousands of threads. */
-const KEEP_RUNS = 50
 /** What a run says when it has nothing to pass on; such a run is not reported. */
 const NOTHING = /^nothing to report\.?$/i
 
@@ -176,7 +174,7 @@ function start(task: ScheduledTask, scheduled: boolean): ScheduledTask {
   const thread = db.createThread({ botId: task.botId, parentId: conversation.id, kind: 'task', taskId: task.id, title: task.title })
   const saved = db.saveTask({ ...task, nextRunAt: next, lastRunAt: now, lastStatus: 'running', lastError: null, lastThreadId: thread.id })
   agent.postMessage(thread.id, task.prompt, 'schedule')
-  for (const old of db.runsOf(task.id).slice(KEEP_RUNS)) if (!agent.isRunning(old.id)) db.deleteThread(old.id)
+  // Every run is kept, however many there are; the apps are only ever sent a page of them.
   return saved
 }
 

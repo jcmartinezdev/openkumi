@@ -47,6 +47,8 @@ if (!hasColumn('archived_at')) {
 
 // A run of a scheduled task works in a thread of its own, which knows which task it is for.
 if (!hasColumn('task_id')) db.exec('ALTER TABLE threads ADD COLUMN task_id TEXT')
+// Every run is kept, so a task's are found by an index rather than by reading them all.
+db.exec('CREATE INDEX IF NOT EXISTS threads_task ON threads (task_id, created_at)')
 
 // Nothing survives a restart mid-run, so no thread can still be running.
 db.exec(`UPDATE threads SET status = 'idle' WHERE status = 'running'`)
@@ -95,6 +97,32 @@ export function retireLegacyBots() {
 
 export function listThreads(): Thread[] {
   return db.prepare('SELECT * FROM threads ORDER BY created_at').all().map(toThread)
+}
+
+/** How long a subagent or a scheduled run stays in the apps' list after it last changed. */
+export const RECENT = 60 * 60_000
+
+/**
+ * The threads the apps keep a list of: every conversation (the current ones, and the ones set
+ * aside, which only the owner makes), and the subagents and scheduled runs that are at work or
+ * changed in the last hour, with the threads above them. Everything else stays here until it is
+ * opened: a bot can leave thousands of runs and subagents behind.
+ */
+export function listedThreads(now = Date.now()): Thread[] {
+  const listed = db
+    .prepare(`SELECT * FROM threads WHERE parent_id IS NULL OR status = 'running' OR updated_at > ?`)
+    .all(now - RECENT)
+    .map(toThread)
+  // A recent subagent of an older one is shown beneath it, so the one above comes too.
+  const have = new Set(listed.map((t) => t.id))
+  for (let i = 0; i < listed.length; i++) {
+    const above = listed[i].parentId
+    const parent = above && !have.has(above) ? getThread(above) : undefined
+    if (!parent) continue
+    have.add(parent.id)
+    listed.push(parent)
+  }
+  return listed.sort((a, b) => a.createdAt - b.createdAt)
 }
 
 export function getThread(id: string): Thread | undefined {
@@ -190,6 +218,42 @@ export function deleteThread(id: string) {
 
 export function listItems(threadId: string): Item[] {
   return db.prepare('SELECT * FROM items WHERE thread_id = ? ORDER BY id').all(threadId).map(toItem)
+}
+
+/**
+ * How much of a thread an app is sent at a time. A page ends up a little past `items` or `bytes`,
+ * so that it begins at something said to the bot and no turn is split; a single turn longer than
+ * `most` items or `mostBytes` is cut where it reaches them.
+ */
+export const PAGE = { items: 100, bytes: 1_000_000, most: 400, mostBytes: 4_000_000 }
+
+const ASKED = `json_extract(data, '$.type') = 'message' AND json_extract(data, '$.role') = 'user'`
+
+/**
+ * The newest page of a thread, or with `before` the page that comes before that item. With `from`
+ * the page reaches back to that item at least, however far that is (a message found by searching).
+ * `more` says whether anything older is left.
+ */
+export function pageOf(threadId: string, { before, from }: { before?: number; from?: number } = {}): { items: Item[]; more: boolean } {
+  const next = db.prepare(`SELECT *, length(data) AS size, ${ASKED} AS asked FROM items WHERE thread_id = ? AND id < ? ORDER BY id DESC LIMIT 200`)
+  const rows: any[] = []
+  let bytes = 0
+  let cursor = before ?? Number.MAX_SAFE_INTEGER
+  read: for (;;) {
+    const batch = next.all(threadId, cursor) as any[]
+    for (const row of batch) {
+      rows.push(row)
+      bytes += row.size
+      cursor = row.id
+      if (from !== undefined && row.id > from) continue
+      const full = rows.length >= PAGE.items || bytes >= PAGE.bytes
+      if (full && (row.asked || rows.length >= PAGE.most || bytes >= PAGE.mostBytes)) break read
+    }
+    if (batch.length < 200) break
+  }
+  const oldest = rows.at(-1)?.id
+  const more = oldest !== undefined && !!db.prepare('SELECT 1 FROM items WHERE thread_id = ? AND id < ? LIMIT 1').get(threadId, oldest)
+  return { items: rows.reverse().map(toItem), more }
 }
 
 export function hasItems(threadId: string): boolean {
@@ -301,9 +365,13 @@ export function dueTasks(time: number): ScheduledTask[] {
   return db.prepare('SELECT * FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(time).map(toTask)
 }
 
-/** The runs of a task, newest first. */
-export function runsOf(taskId: string): Thread[] {
-  return db.prepare('SELECT * FROM threads WHERE task_id = ? ORDER BY created_at DESC').all(taskId).map(toThread)
+/** The runs of a task, newest first, `limit` at a time: the ones that started before `before`. `more` says whether older ones are left. */
+export function runsOf(taskId: string, { before, limit = 20 }: { before?: number; limit?: number } = {}): { runs: Thread[]; more: boolean } {
+  const rows = db
+    .prepare('SELECT * FROM threads WHERE task_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?')
+    .all(taskId, before ?? Number.MAX_SAFE_INTEGER, limit + 1)
+    .map(toThread)
+  return { runs: rows.slice(0, limit), more: rows.length > limit }
 }
 
 /** When the next task is due, or null when none is. */

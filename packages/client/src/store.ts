@@ -8,8 +8,10 @@ import { reach } from './addresses'
 import type { Command, Report } from './connection'
 
 export interface State extends AppState {
-  /** Items of threads that have been opened, by thread id. */
+  /** Items of threads that have been opened, by thread id: the newest pages of each, not all of it. */
   items: Record<string, Item[]>
+  /** Whether a thread that has been opened has older items than the ones held, to load with `loadOlder`. */
+  older: Record<string, boolean>
   partial: Record<string, Partial>
   /** Counts changes to each bot's workspace, so views of its files know when to refetch. */
   filesVersion: Record<string, number>
@@ -41,6 +43,7 @@ const EMPTY: State = {
   principles: { text: '', custom: false, default: '' },
   about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '' },
   items: {},
+  older: {},
   partial: {},
   filesVersion: {},
   connected: false,
@@ -168,7 +171,7 @@ function handle(ev: ServerEvent) {
       return set(patch)
     }
     case 'thread.delete':
-      return set({ threads: state.threads.filter((t) => t.id !== ev.id), items: omit(state.items, ev.id) })
+      return set({ threads: state.threads.filter((t) => t.id !== ev.id), items: omit(state.items, ev.id), older: omit(state.older, ev.id) })
     case 'task.upsert':
       return set({ tasks: upsert(state.tasks, ev.task) })
     case 'task.delete':
@@ -406,7 +409,7 @@ async function opened() {
   const events = waiting ?? []
   waiting = null
   batching = true
-  set({ ...snapshot, items: {}, partial: {}, connected: true, loaded: true, failures: 0, refused: false, outdated: false })
+  set({ ...snapshot, items: {}, older: {}, partial: {}, connected: true, loaded: true, failures: 0, refused: false, outdated: false })
   apply(events)
   for (const id of interrupted) loadThread(id).catch(() => {})
   // The server says where else it can be reached; the app keeps that, for when this address stops answering.
@@ -440,7 +443,11 @@ function join(server: string, live: string): string {
   return server + live
 }
 
-export async function loadThread(id: string) {
+/**
+ * Fetches a thread with its newest page of items, and adds the thread to the list if it was not
+ * in it (the list holds only recent subagents and runs). Resolves with the thread.
+ */
+export async function loadThread(id: string): Promise<Thread | undefined> {
   // One request per thread at a time: a second, overlapping one could finish first and then be
   // overwritten by the older response. The request already in flight will deliver the result.
   if (loading.has(id)) return
@@ -448,7 +455,7 @@ export async function loadThread(id: string) {
   const during: Loading = { items: [], text: '', reasoning: '', cutText: false, cutReasoning: false, upserted: false }
   loading.set(id, during)
   try {
-    const res = await api<{ thread: Thread; items: Item[]; partial: Partial }>('GET', `/api/threads/${id}`)
+    const res = await api<{ thread: Thread; items: Item[]; more: boolean; partial: Partial }>('GET', `/api/threads/${id}`)
     // Abandoned by a reconnect or a change of environment: a fresh load has replaced this one.
     if (loading.get(id) !== during) return
     // Items are append-only, so any that arrived meanwhile can simply be added on.
@@ -465,10 +472,38 @@ export async function loadThread(id: string) {
     set({
       threads: upsert(state.threads, thread),
       items: { ...state.items, [id]: [...res.items, ...extra] },
+      older: { ...state.older, [id]: res.more },
       partial: { ...state.partial, [id]: partial },
     })
+    return thread
   } finally {
     if (loading.get(id) === during) loading.delete(id)
+  }
+}
+
+/** Threads whose older items are being fetched: one page at a time each. */
+const fetchingOlder = new Set<string>()
+
+/**
+ * Fetches the page that comes before the oldest item held of an opened thread, or with `to`
+ * everything back to that item (a message found by searching). An answer that arrives after the
+ * thread was loaded afresh (the connection came back meanwhile) is dropped. Resolves with whether
+ * anything was put in front of what was held.
+ */
+export async function loadOlder(id: string, to?: number): Promise<boolean> {
+  const held = state.items[id]
+  if (!held?.length || !state.older[id] || fetchingOlder.has(id)) return false
+  const first = held[0].id
+  const asked = epoch
+  fetchingOlder.add(id)
+  try {
+    const res = await api<{ items: Item[]; more: boolean }>('GET', `/api/threads/${id}?before=${first}${to ? `&from=${to}` : ''}`)
+    if (asked !== epoch || state.items[id]?.[0]?.id !== first) return false
+    const earlier = res.items.filter((i) => i.id < first)
+    set({ items: { ...state.items, [id]: [...earlier, ...state.items[id]] }, older: { ...state.older, [id]: res.more } })
+    return earlier.length > 0
+  } finally {
+    fetchingOlder.delete(id)
   }
 }
 

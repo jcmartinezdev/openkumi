@@ -22,9 +22,13 @@ import { agentsFile, memoryIndex } from './workspace.ts'
 interface Run {
   abort: AbortController
   partial: Partial
+  /** Settles once the loop has ended and saved what it had. */
+  done?: Promise<void>
 }
 
 const running = new Map<string, Run>()
+/** Set while the server shuts down: nothing new starts. */
+let closing = false
 /** Callbacks from wait_subagents calls currently blocked on a thread. */
 const waiters = new Map<string, Set<() => void>>()
 
@@ -203,11 +207,24 @@ const said = (items: Item[]) => items.map((i) => (i.data.type === 'message' ? wi
 
 /** Starts the loop for a thread unless it is already running. */
 export function run(threadId: string) {
-  if (running.has(threadId)) return
+  if (running.has(threadId) || closing) return
   const state: Run = { abort: new AbortController(), partial: { text: '', reasoning: '' } }
   running.set(threadId, state)
   db.updateThread(threadId, { status: 'running' })
-  void loop(threadId, state)
+  state.done = loop(threadId, state)
+}
+
+/**
+ * Stops every thread at work, for the server to shut down, and waits until each has saved what it
+ * had written (but no longer than `waitMs`, in case an engine does not stop when asked).
+ */
+export async function stopAll(waitMs = 5000) {
+  closing = true
+  const runs = [...running.values()]
+  for (const id of running.keys()) stop(id)
+  let timer: NodeJS.Timeout | undefined
+  await Promise.race([Promise.all(runs.map((r) => r.done)), new Promise((resolve) => (timer = setTimeout(resolve, waitMs)))])
+  clearTimeout(timer)
 }
 
 async function loop(threadId: string, state: Run) {
@@ -342,6 +359,9 @@ async function loop(threadId: string, state: Run) {
       if (!arrived) break
     }
   } catch (e: any) {
+    // What had been written of a reply is kept as it stood, for the owner to read and the bot to see.
+    if (state.partial.text.trim()) db.addItem(threadId, { type: 'message', role: 'assistant', text: state.partial.text, stopped: true })
+    state.partial = { text: '', reasoning: '' }
     if (signal.aborted) {
       db.addItem(threadId, { type: 'notice', level: 'info', text: 'Stopped.' })
     } else {
@@ -399,9 +419,15 @@ export function conversation(botId: string): Thread {
   return db.mainThread(botId) ?? db.createThread({ botId })
 }
 
-/** Whether a thread or any subagent beneath it is at work. */
+/**
+ * Whether a thread or any thread beneath it is at work. Found from the threads that are running,
+ * which are few, rather than from every thread beneath it: a conversation keeps all its runs.
+ */
 function busy(thread: Thread): boolean {
-  return isRunning(thread.id) || db.childrenOf(thread.id).some(busy)
+  for (const id of running.keys()) {
+    for (let t = db.getThread(id); t; t = t.parentId ? db.getThread(t.parentId) : undefined) if (t.id === thread.id) return true
+  }
+  return false
 }
 
 /**
@@ -437,8 +463,8 @@ export function resume(thread: Thread): Thread {
 export function stop(threadId: string) {
   for (const child of db.childrenOf(threadId)) {
     // The parent is being stopped too, so there is nobody to report to.
-    db.updateThread(child.id, { reported: true })
-    stop(child.id)
+    if (!child.reported) db.updateThread(child.id, { reported: true })
+    if (busy(child)) stop(child.id)
   }
   running.get(threadId)?.abort.abort(new Error('Stopped'))
 }
@@ -492,7 +518,7 @@ export function outcome(thread: Thread): { status: ReturnType<typeof subagentSta
   let body: string
   if (status === 'running') body = '(still working)'
   else if (status === 'failed') body = `Error: ${notice?.type === 'notice' ? notice.text : 'unknown error'}`
-  else if (answer?.type === 'message') body = answer.text
+  else if (answer?.type === 'message') body = answer.role === 'assistant' && answer.stopped ? `${answer.text}\n(cut off here)` : answer.text
   else body = status === 'stopped' ? '(stopped before producing a result)' : '(finished without a final message)'
   return { status, body }
 }

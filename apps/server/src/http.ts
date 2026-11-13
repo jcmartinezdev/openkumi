@@ -138,9 +138,18 @@ function fail(status: number, message: string): never {
   throw new HttpError(status, message)
 }
 
+/** A whole number given in the address, or undefined when it is not there. */
+function count(url: URL, name: string): number | undefined {
+  const value = url.searchParams.get(name)
+  if (value === null) return undefined
+  const n = Number(value)
+  return Number.isSafeInteger(n) && n >= 0 ? n : fail(400, `${name} must be a whole number`)
+}
+
 route('GET', '/api/state', (): AppState => ({
   bots: listBots(),
-  threads: db.listThreads(),
+  // Not every thread: the ones the apps list. Any other is fetched when it is opened.
+  threads: db.listedThreads(),
   tasks: db.listTasks(),
   providers: providerInfos(),
   browsers: browserStates(),
@@ -323,11 +332,16 @@ route('POST', '/api/tasks', (_, body) => checked(() => tasks.createTask(body, 'u
 route('PATCH', '/api/tasks/:id', ([id], body) => checked(() => tasks.updateTask(needTask(id), body)))
 route('DELETE', '/api/tasks/:id', ([id]) => tasks.deleteTask(needTask(id)))
 route('POST', '/api/tasks/:id/run', ([id]) => unless(() => tasks.runNow(needTask(id))))
+// A task's runs, a page at a time, newest first: `before` is when the oldest one an app has started.
+// The runs of a task that was deleted are still there.
+route('GET', '/api/tasks/:id/runs', ([id], _, { url }) => db.runsOf(id, { before: count(url, 'before') }))
 
 // ---- threads
-route('GET', '/api/threads/:id', ([id]) => ({
+// A thread, and its newest page of items (see db.PAGE); `before` asks for the page before that
+// item instead, and `from` for everything back to that item.
+route('GET', '/api/threads/:id', ([id], _, { url }) => ({
   thread: needThread(id),
-  items: db.listItems(id),
+  ...db.pageOf(id, { before: count(url, 'before'), from: count(url, 'from') }),
   partial: agent.partialOf(id),
 }))
 route('POST', '/api/threads/:id/messages', ([id], body) => {

@@ -1219,6 +1219,59 @@ test('stop cancels a running thread and its subagents', async () => {
   assert.ok(!(await settle(id)).some((d) => d.source === 'subagent'), 'a stopped parent is not woken by its children')
 })
 
+test('a reply stopped part-way is kept as it stood, and the bot sees it next time', async () => {
+  const id = await fresh()
+  await api('POST', `/api/threads/${id}/messages`, { text: '!drip one two three four five six seven eight nine ten' })
+  await until(async () => (await api('GET', `/api/threads/${id}`)).partial.text.includes('two'))
+  await api('POST', `/api/threads/${id}/stop`)
+  const items = await settle(id)
+  const cut = items.at(-2)
+  assert.deepEqual([cut.role, cut.stopped], ['assistant', true])
+  assert.match(cut.text, /^one two/)
+  assert.ok(!cut.text.includes('ten'), 'only what had been written')
+  assert.deepEqual(items.at(-1), { type: 'notice', level: 'info', text: 'Stopped.' })
+  assert.equal((await api('GET', `/api/threads/${id}`)).partial.text, '', 'it is no longer being written')
+  assert.match(lastText(await say(id, '!sent')), /\nassistant: one two/)
+})
+
+test('a long conversation is sent a page at a time, each beginning at something said to the bot', async () => {
+  const id = await fresh()
+  // Two turns of 122 items each, then one of two.
+  for (const turn of [1, 2]) await say(id, '!steps 60', 60_000)
+  await say(id, 'last')
+  const newest = await api('GET', `/api/threads/${id}`)
+  assert.equal(newest.items.length, 124, 'past the page size to the start of the turn, not into the middle of it')
+  assert.deepEqual([newest.items[0].data.text, newest.items.at(-1).data.text, newest.more], ['!steps 60', 'Echo: last', true])
+  const before = await api('GET', `/api/threads/${id}?before=${newest.items[0].id}`)
+  assert.deepEqual([before.items.length, before.items[0].data.text, before.more], [122, '!steps 60', false])
+  assert.equal(before.items.at(-1).id, newest.items[0].id - 1, 'the pages meet')
+  // A message found by searching: everything back to it, in one answer.
+  const back = await api('GET', `/api/threads/${id}?before=${newest.items[0].id}&from=${before.items[5].id}`)
+  assert.equal(back.items.length, 122)
+  assert.equal((await api('GET', `/api/threads/${id}?before=x`).catch((e) => e)).message, `GET /api/threads/${id}?before=x: before must be a whole number`)
+})
+
+test('scheduled tasks: every run is kept, and the apps get them a page at a time', async () => {
+  const id = await fresh()
+  const task = await api('POST', '/api/tasks', { botId: bot.id, title: 'Often', prompt: '!say Nothing to report.', schedule: { type: 'interval', minutes: 60 } })
+  for (let n = 0; n < 52; n++) {
+    await api('POST', `/api/tasks/${task.id}/run`)
+    await until(async () => (await api('GET', '/api/tasks')).find((t) => t.id === task.id).lastStatus !== 'running')
+  }
+  const first = await api('GET', `/api/tasks/${task.id}/runs`)
+  assert.deepEqual([first.runs.length, first.more], [20, true])
+  assert.ok(first.runs.every((r, i) => !i || r.createdAt < first.runs[i - 1].createdAt), 'newest first')
+  let all = first.runs
+  for (let page = first; page.more; ) {
+    page = await api('GET', `/api/tasks/${task.id}/runs?before=${all.at(-1).createdAt}`)
+    all = [...all, ...page.runs]
+  }
+  assert.equal(new Set(all.map((r) => r.id)).size, 52, 'none was deleted')
+  assert.ok(all.every((r) => r.parentId === id && r.kind === 'task'))
+  await api('DELETE', `/api/tasks/${task.id}`)
+  assert.equal((await api('GET', `/api/tasks/${task.id}/runs`)).runs.length, 20, 'the runs of a deleted task are still there')
+})
+
 test('browser: navigate, snapshot refs, type and click', async () => {
   const html = `<title>Form</title><h1>Sign up</h1><input placeholder="Your name" id="n">
     <button onclick="document.title='Hi '+document.getElementById('n').value">Greet</button>`

@@ -73,10 +73,12 @@ const mock: Provider = {
       const said = () => text.split('\n').filter((line) => /^(User|Summary): /.test(line)).map((line) => line.replace(/^Summary: /, '').slice(0, 40))
       // Asked to choose a bot's look, it dresses every bot for travel.
       const look = '{"creature":"cat","color":"sky","hat":"cap","extra":"none","clothes":"orange","emoji":"✈️"}'
-      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : req.instructions === CHOOSE_LOOK ? look : text.startsWith('!say ') ? text.slice(5) : `Echo: ${text}${attached}`
+      reply = req.instructions === SUMMARISE ? `Summary: ${said().join(' / ').slice(0, 400)}` : req.instructions === CHOOSE_LOOK ? look : text.startsWith('!say ') || text.startsWith('!drip ') ? text.slice(text.indexOf(' ') + 1) : `Echo: ${text}${attached}`
     }
+    // "!drip" writes its reply slowly, a word at a time, for a test to stop it part-way.
+    const pause = /^!drip /.test((req.items[asked] as { text?: string } | undefined)?.text ?? '') ? 150 : 5
     for (const word of reply.split(/(?<=\s)/)) {
-      await sleep(5)
+      await sleep(pause)
       yield { type: 'text_delta', delta: word }
     }
     yield { type: 'item', item: { type: 'message', role: 'assistant', text: reply } }
