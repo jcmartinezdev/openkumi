@@ -8,7 +8,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Attachment } from '@openbot/shared'
+import type { Attachment } from '@openkumi/shared'
 import { privateDir } from './config.ts'
 import type { Sees } from './providers/types.ts'
 import { bytes, copyIn, safeName } from './workspace.ts'

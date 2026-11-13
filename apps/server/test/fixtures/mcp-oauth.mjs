@@ -1,12 +1,11 @@
 // A minimal MCP server over HTTP that requires an OAuth sign-in, with its own tiny authorization
 // server, for the tests. The "sign-in page" approves at once and redirects back with a code.
-// With `selfRegistration: false` it is like Google's: an app cannot register itself, the client
-// the owner registered has to prove itself with its secret, and anyone can connect and list the
-// tools, but using one needs an account. `seen.refuse` makes every account stop working.
+// With `openList`, anyone can connect and list the tools, but using one needs an account.
+// `seen.refuse` makes every account stop working.
 import http from 'node:http'
 
-export async function startOAuthServer({ selfRegistration = true } = {}) {
-  const seen = { registered: 0, tokens: 0, authorize: null, client: null, refuse: false }
+export async function startOAuthServer({ openList = false } = {}) {
+  const seen = { registered: 0, tokens: 0, authorize: null, refuse: false }
   /** The codes given out, with the address each was sent back to: a code is exchanged only with that same address. */
   const codes = new Map()
   const server = http.createServer(async (req, res) => {
@@ -31,14 +30,14 @@ export async function startOAuthServer({ selfRegistration = true } = {}) {
         issuer: base,
         authorization_endpoint: `${base}/authorize`,
         token_endpoint: `${base}/token`,
-        ...(selfRegistration && { registration_endpoint: `${base}/register` }),
+        registration_endpoint: `${base}/register`,
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
-        token_endpoint_auth_methods_supported: selfRegistration ? ['none'] : ['client_secret_basic', 'client_secret_post'],
+        token_endpoint_auth_methods_supported: ['none'],
       })
     }
-    if (url.pathname === '/register' && selfRegistration) {
+    if (url.pathname === '/register') {
       seen.registered++
       return json(201, { ...JSON.parse(raw), client_id: `client-${seen.registered}` })
     }
@@ -54,10 +53,6 @@ export async function startOAuthServer({ selfRegistration = true } = {}) {
     }
     if (url.pathname === '/token') {
       const form = new URLSearchParams(raw)
-      const basic = /^Basic (.+)$/.exec(req.headers.authorization ?? '')
-      const [id, secret] = basic ? Buffer.from(basic[1], 'base64').toString().split(':').map(decodeURIComponent) : [form.get('client_id'), form.get('client_secret')]
-      seen.client = { id, secret }
-      if (!selfRegistration && !secret) return json(401, { error: 'invalid_client' })
       if (form.get('grant_type') === 'authorization_code' && (codes.get(form.get('code')) !== form.get('redirect_uri') || !form.get('code_verifier'))) {
         return json(400, { error: 'invalid_grant' })
       }
@@ -69,7 +64,7 @@ export async function startOAuthServer({ selfRegistration = true } = {}) {
       const token = (req.headers.authorization ?? '').replace(/^Bearer /, '')
       const signedIn = /^token-\d+$/.test(token) && !seen.refuse
       const msg = req.method === 'POST' ? JSON.parse(raw) : {}
-      if (!signedIn && (selfRegistration || msg.method === 'tools/call')) {
+      if (!signedIn && (!openList || msg.method === 'tools/call')) {
         return json(401, { error: 'unauthorized' }, { 'WWW-Authenticate': `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"` })
       }
       if (req.method !== 'POST') return json(405, { error: 'method not allowed' })

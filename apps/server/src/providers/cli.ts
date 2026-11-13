@@ -26,7 +26,7 @@ export function findBinary(name: string, override: string, configured = ''): str
 }
 
 /**
- * The environment for a program Open Bot starts. Variables that mark this process as running
+ * The environment for a program OpenKumi starts. Variables that mark this process as running
  * inside another agent session are left out, so the program behaves as if a person had started it.
  */
 export function cleanEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
@@ -85,7 +85,7 @@ export async function* lines(
   try {
     for await (const line of readline.createInterface({ input: proc.stdout })) {
       // Shows everything an engine prints, for working out why a turn went wrong.
-      if (process.env.OPENBOT_DEBUG || settings().debugEngines) console.error(`[${path.basename(bin)}] ${line.slice(0, 1500)}`)
+      if (process.env.OPENKUMI_DEBUG || settings().debugEngines) console.error(`[${path.basename(bin)}] ${line.slice(0, 1500)}`)
       yield line
     }
     exit.code = await ended

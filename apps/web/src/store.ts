@@ -2,10 +2,10 @@
 // are shared with the phone app (packages/client); what is added here is what only a window has:
 // the connection on its own thread, saving files, the canvas for a bot's browser, and the address bar.
 import { useEffect, useState } from 'react'
-import { receive, request, useTransport } from '@openbot/client/store'
+import { receive, request, useTransport } from '@openkumi/client/store'
 import type { WorkerCommand, WorkerReport } from './connection.worker'
 
-export * from '@openbot/client/store'
+export * from '@openkumi/client/store'
 
 // ---- the connection, which lives on its own thread
 

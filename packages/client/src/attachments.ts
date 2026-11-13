@@ -4,7 +4,7 @@
 // looking at a subagent and coming back does not lose them. How a file is read and made smaller is
 // up to each app; this is the part they share.
 import { useSyncExternalStore } from 'react'
-import type { Attachment } from '@openbot/shared'
+import type { Attachment } from '@openkumi/shared'
 import { api, onEnvironmentChange, request } from './store'
 
 /** Pictures are sent no larger than this on their long side: models see no more than that, and a phone's photo is many times it. */

@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Bot, Item, ItemData, Thread } from '@openbot/shared'
-import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openbot/client/attachments'
+import type { Bot, Item, ItemData, Thread } from '@openkumi/shared'
+import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { SentFiles, Tray, picked } from './Attachments'
 import { History, day } from './History'
 import { Icon } from './Icon'
@@ -9,7 +9,7 @@ import { ModelPicker } from './ModelPicker'
 import { PageFrame, PageViewer } from './PageFrame'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
-import { describe, parse, site } from '@openbot/client/steps'
+import { describe, parse, site } from '@openkumi/client/steps'
 import { api, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, openTasks, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
 
@@ -509,7 +509,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
             </div>
           )}
           {partial?.text && <div className="msg assistant"><Markdown text={partial.text} live /></div>}
-          {running && !partial?.text && !partial?.reasoning && <div className="working"><BotHead bot={bot} className="bob" /> Working</div>}
+          {running && !partial?.text && !partial?.reasoning && <div className="working"><BotHead bot={bot} sign={false} className="bob" /> Working</div>}
           {error && <div className="notice error">{error}</div>}
         </div>
         </FileLinks.Provider>

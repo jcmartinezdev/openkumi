@@ -1,0 +1,70 @@
+---
+// A bot's mascot, drawn from the same parts as in the app (@openkumi/client/mascot).
+import type { Look } from '@openkumi/shared'
+import { drawMascot } from '@openkumi/client/mascot'
+import { drawKumi } from '../lib/brand'
+
+interface Props {
+  /** Leave out for OpenKumi's own mascot. */
+  look?: Look
+  emoji?: string
+  /** Unique on the page: the mascot's gradient is named after it. */
+  id: string
+  /**
+   * `fit` is the whole creature in a box around its body and feet, to sit in a line beside words:
+   * centring the box centres the creature, and its ears and hat reach above it.
+   */
+  crop?: 'full' | 'head' | 'fit'
+  /** Breathes and blinks, as the large ones do in the app. */
+  live?: boolean
+  /** Where in its breath it starts, so mascots side by side are not in step. */
+  delay?: number
+  class?: string
+}
+
+/** The box `fit` shows, in the units the parts are drawn in. */
+const FIT = '21 46 158 160'
+
+const { look, emoji = '🤖', id, crop = 'full', live = false, delay = 0, class: className } = Astro.props
+const drawn = crop === 'fit' ? 'full' : crop
+const { viewBox, body } = look ? drawMascot(look, emoji, { id, crop: drawn }) : drawKumi(id, drawn)
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${crop === 'fit' ? FIT : viewBox}">${body}</svg>`
+---
+
+<span class:list={['mascot', { live }, className]} style={`--delay: ${-delay}s`} aria-hidden="true" set:html={svg} />
+
+<style>
+  .mascot {
+    display: inline-block;
+    line-height: 0;
+  }
+  .mascot :global(svg) {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .live :global(.m-body) {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: squish 3.6s ease-in-out infinite var(--delay);
+  }
+  .live :global(.m-eyes) {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: blink 5.2s infinite var(--delay);
+  }
+  @keyframes squish {
+    0%, 100% { transform: scale(1, 1); }
+    50% { transform: scale(1.03, 0.97); }
+  }
+  @keyframes blink {
+    0%, 93%, 100% { transform: scaleY(1); }
+    95.5% { transform: scaleY(0.12); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .live :global(.m-body),
+    .live :global(.m-eyes) {
+      animation: none;
+    }
+  }
+</style>

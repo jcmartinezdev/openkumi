@@ -1,10 +1,10 @@
-// Bots are folders under ~/.openbot/bots. bot.md holds what the owner controls (name, description,
+// Bots are folders under ~/.openkumi/bots. bot.md holds what the owner controls (name, description,
 // model, rules); superpowers.json beside it says what more the bot may do. Nothing here is
 // reachable by the bot's own file tools, which are confined to its workspace.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Bot, Effort, Look } from '@openbot/shared'
+import type { Bot, Effort, Look } from '@openkumi/shared'
 import { HOME, botDir, emit, privateDir, readSecrets, workspaceDir, writeSecret } from './config.ts'
 import { formatFrontMatter, parseFrontMatter } from './frontmatter.ts'
 import { CHOOSE_LOOK, cleanLook, lookFrom, lookQuestion, readChoice, readLook, writeLook } from './look.ts'
@@ -246,7 +246,7 @@ export function deleteBot(id: string) {
 }
 
 /**
- * Open Bot once had its own ChatGPT sign-in. Bots that ran on it now run on Codex, which uses
+ * OpenKumi once had its own ChatGPT sign-in. Bots that ran on it now run on Codex, which uses
  * the same ChatGPT account through OpenAI's own program; the model each bot had chosen is kept.
  */
 export function moveOffChatGPTSignIn() {

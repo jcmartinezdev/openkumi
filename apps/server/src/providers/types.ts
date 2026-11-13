@@ -1,4 +1,4 @@
-import type { Attachment, Effort, ItemData, ModelInfo, ProviderInfo } from '@openbot/shared'
+import type { Attachment, Effort, ItemData, ModelInfo, ProviderInfo } from '@openkumi/shared'
 import type { Shown } from '../attachments.ts'
 
 export interface ToolSpec {
@@ -23,7 +23,7 @@ export interface ModelRequest {
 
 /**
  * One turn for an engine: a program such as Claude Code or Codex that keeps the conversation and
- * runs the model-and-tools loop itself. Open Bot gives it the bot's instructions, what was said
+ * runs the model-and-tools loop itself. OpenKumi gives it the bot's instructions, what was said
  * since it last ran, and an address where it finds the bot's tools.
  */
 export interface TurnRequest {
@@ -38,7 +38,7 @@ export interface TurnRequest {
   session: string | null
   /** The bot's workspace, used as the working folder. */
   cwd: string
-  /** Open Bot's tools for this turn, served as an MCP server at this address. Empty for a turn with no tools. */
+  /** OpenKumi's tools for this turn, served as an MCP server at this address. Empty for a turn with no tools. */
   toolsUrl: string
   effort: Effort
   webSearch: boolean
@@ -111,7 +111,7 @@ export async function errorText(res: Response): Promise<string> {
 }
 
 const LEVELS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
-/** The reasoning levels among these names that Open Bot knows, lightest first. */
+/** The reasoning levels among these names that OpenKumi knows, lightest first. */
 export function efforts(names: unknown[]): NonNullable<ModelInfo['efforts']> {
   return LEVELS.filter((level) => names.includes(level))
 }

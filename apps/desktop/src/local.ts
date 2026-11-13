@@ -1,6 +1,6 @@
-// The local environment: Open Bot's server on this computer, run by the app in a process of its
+// The local environment: OpenKumi's server on this computer, run by the app in a process of its
 // own. The window and the app stay free while bots work, and a server that falls over does not
-// take the app with it. If Open Bot is already running here (started from a terminal, say), the
+// take the app with it. If OpenKumi is already running here (started from a terminal, say), the
 // app joins that one instead of starting a second.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -8,7 +8,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { type UtilityProcess, utilityProcess } from 'electron'
-import type { LocalEnvironment } from '@openbot/shared/desktop'
+import type { LocalEnvironment } from '@openkumi/shared/desktop'
 import { hello } from './environments.ts'
 import { SERVER, USER_DATA } from './paths.ts'
 
@@ -69,7 +69,7 @@ function searchPath() {
  * Takes the server at this port as the local environment. Its access code is in its data folder,
  * which the server names to callers on this computer, and which only this computer's user can read.
  * Whatever answers at the port first has to show that it knows that code, by signing a value made
- * up here: something else that got to the port first and only says it is Open Bot is never sent it.
+ * up here: something else that got to the port first and only says it is OpenKumi is never sent it.
  */
 async function adopt(port: number, turn: number) {
   const challenge = crypto.randomBytes(16).toString('hex')
@@ -80,10 +80,10 @@ async function adopt(port: number, turn: number) {
   } catch {
     // Reported below.
   }
-  if (!token) throw new Error('Open Bot is running on this computer, but its access code could not be read.')
+  if (!token) throw new Error('OpenKumi is running on this computer, but its access code could not be read.')
   const expected = crypto.createHmac('sha256', token).update(challenge).digest()
   const given = Buffer.from(said?.proof ?? '', 'hex')
-  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) throw new Error(`Something on this computer answers at port ${port} as Open Bot, but could not show that it is. It was not given the access code.`)
+  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) throw new Error(`Something on this computer answers at port ${port} as OpenKumi, but could not show that it is. It was not given the access code.`)
   // Turned off, or off and on again, while this was being found out.
   if (turn === turns) set({ state: 'running', error: '', port, token })
 }
@@ -92,13 +92,13 @@ async function start(turn: number) {
   /** False once the local environment has been turned off (or off and on again) since this began. */
   const current = () => turn === turns
   set({ state: 'starting', error: '' })
-  const preferred = Number(process.env.OPENBOT_PORT ?? 4317)
-  // Open Bot may already be running here, started outside the app: then that is the one to use.
+  const preferred = Number(process.env.OPENKUMI_PORT ?? 4317)
+  // OpenKumi may already be running here, started outside the app: then that is the one to use.
   if (await hello(address(preferred), 1500)) {
     try {
       return await adopt(preferred, turn)
     } catch {
-      // Not one this app can use (another user's, or not Open Bot at all): it runs its own beside it.
+      // Not one this app can use (another user's, or not OpenKumi at all): it runs its own beside it.
     }
   }
   const port = (await canListen(preferred)) ? preferred : await anyPort()
@@ -107,10 +107,10 @@ async function start(turn: number) {
   // The log can name folders and addresses, so only the owner may read it.
   const log = fs.createWriteStream(LOG, { mode: 0o600 })
   const child = utilityProcess.fork(SERVER, [], {
-    serviceName: 'Open Bot Server',
+    serviceName: 'OpenKumi Server',
     stdio: ['ignore', 'pipe', 'pipe'],
     // The compiled server is kept between starts, so every start after the first is quicker.
-    env: { ...process.env, PATH: searchPath(), OPENBOT_PORT: String(port), NODE_COMPILE_CACHE: path.join(USER_DATA, 'server-cache') },
+    env: { ...process.env, PATH: searchPath(), OPENKUMI_PORT: String(port), NODE_COMPILE_CACHE: path.join(USER_DATA, 'server-cache') },
   })
   local.child = child
   /** The last things the server printed, for saying why it could not start. */
@@ -128,7 +128,7 @@ async function start(turn: number) {
     local.child = null
     // It was running and stopped by itself. Once is put right quietly; a server that will not stay up is reported.
     if (!wanted || local.state !== 'running') return
-    set({ state: 'failed', error: 'Open Bot on this computer stopped unexpectedly.', port: 0, token: '' })
+    set({ state: 'failed', error: 'OpenKumi on this computer stopped unexpectedly.', port: 0, token: '' })
     if (Date.now() - startedAt > 30_000) void startLocal().catch(() => {})
   })
 
@@ -149,7 +149,7 @@ async function start(turn: number) {
 
 let starting: Promise<void> | null = null
 
-/** Makes sure Open Bot is running on this computer. Throws with the reason when it cannot be started. */
+/** Makes sure OpenKumi is running on this computer. Throws with the reason when it cannot be started. */
 export function startLocal(): Promise<void> {
   wanted = true
   if (local.state === 'running') return Promise.resolve()

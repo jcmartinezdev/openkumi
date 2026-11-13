@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { FileEntry, HistoryEntry } from '@openbot/shared'
+import type { FileEntry, HistoryEntry } from '@openkumi/shared'
 import { emit, privateDir, workspaceDir } from './config.ts'
 import { settings } from './settings.ts'
 import { SUPERPOWERS, enabledSuperpowers, superpowerDir } from './superpowers.ts'
@@ -340,7 +340,7 @@ const GIT_ENV = {
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_TERMINAL_PROMPT: '0',
 }
-const AUTHORS = { bot: 'Bot', you: 'You', system: 'Open Bot' } as const
+const AUTHORS = { bot: 'Bot', you: 'You', system: 'OpenKumi' } as const
 type Author = keyof typeof AUTHORS
 
 const historyDir = (botId: string) => path.join(privateDir(botId), 'history.git')
@@ -352,9 +352,9 @@ function git(botId: string, args: string[], author: Author = 'system'): Promise<
     GIT_DIR: historyDir(botId),
     GIT_WORK_TREE: workspaceDir(botId),
     GIT_AUTHOR_NAME: name,
-    GIT_AUTHOR_EMAIL: 'openbot@localhost',
+    GIT_AUTHOR_EMAIL: 'openkumi@localhost',
     GIT_COMMITTER_NAME: name,
-    GIT_COMMITTER_EMAIL: 'openbot@localhost',
+    GIT_COMMITTER_EMAIL: 'openkumi@localhost',
   }
   // Hooks are switched off so nothing in the repository can make git run a program.
   const safe = ['-c', `core.hooksPath=${os.devNull}`, '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-c', 'core.quotepath=false']

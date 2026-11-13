@@ -1,10 +1,10 @@
 // Engines such as Claude Code and Codex run the model themselves, so they cannot be handed tools as
 // function definitions. Instead, for the length of one turn, the bot's tools are served to the
 // engine as a small MCP server at a one-time address. Every call that comes in is carried out and
-// recorded exactly as a call from Open Bot's own loop would be.
+// recorded exactly as a call from OpenKumi's own loop would be.
 import crypto from 'node:crypto'
 import type http from 'node:http'
-import type { Bot, Thread } from '@openbot/shared'
+import type { Bot, Thread } from '@openkumi/shared'
 import { PORT } from './config.ts'
 import * as db from './db.ts'
 import { type Tool, runTool } from './tools.ts'
@@ -31,7 +31,7 @@ async function answer(turn: Turn, method: string, params: any): Promise<unknown>
       // Agreeing to whatever version the client speaks keeps older and newer programs working.
       protocolVersion: params?.protocolVersion ?? '2025-06-18',
       capabilities: { tools: {} },
-      serverInfo: { name: 'open-bot', version: '0.1.0' },
+      serverInfo: { name: 'openkumi', version: '0.1.0' },
     }
   }
   if (method === 'ping') return {}

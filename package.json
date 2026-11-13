@@ -1,11 +1,11 @@
 {
-  "name": "open-bot",
+  "name": "openkumi",
   "version": "0.1.0",
   "description": "Open-source, local-first AI bots with subagents and a persistent browser per bot.",
   "private": true,
   "type": "module",
   "license": "MIT",
-  "author": "Open Bot contributors",
+  "author": "OpenKumi contributors",
   "engines": {
     "node": ">=22.18"
   },
@@ -14,16 +14,18 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @openbot/desktop",
-    "build": "npm run build -w @openbot/web -w @openbot/desktop",
-    "start": "npm run build && npm run start -w @openbot/desktop",
-    "server": "npm run start -w @openbot/server",
-    "pair": "npm run pair --silent -w @openbot/server",
+    "dev": "npm run dev -w @openkumi/desktop",
+    "build": "npm run build -w @openkumi/web -w @openkumi/desktop",
+    "start": "npm run build && npm run start -w @openkumi/desktop",
+    "server": "npm run start -w @openkumi/server",
+    "pair": "npm run pair --silent -w @openkumi/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test -w @openbot/server && npm run test -w @openbot/desktop",
-    "dist": "npm run build && npm run dist -w @openbot/desktop",
-    "dist:dir": "npm run build && npm run dist -w @openbot/desktop -- --dir",
-    "mobile": "npm run ios -w @openbot/mobile"
+    "test": "npm run test -w @openkumi/server && npm run test -w @openkumi/desktop",
+    "dist": "npm run build && npm run dist -w @openkumi/desktop",
+    "dist:dir": "npm run build && npm run dist -w @openkumi/desktop -- --dir",
+    "mobile": "npm run ios -w @openkumi/mobile",
+    "site": "npm run dev -w @openkumi/marketing",
+    "site:build": "npm run build -w @openkumi/marketing"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

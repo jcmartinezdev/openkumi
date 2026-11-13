@@ -1,16 +1,16 @@
-// Codex as an engine. Open Bot starts the user's own installed `codex` program for each turn; it
+// Codex as an engine. OpenKumi starts the user's own installed `codex` program for each turn; it
 // is signed in with the user's own ChatGPT account, runs the model-and-tools loop itself, and
 // reaches the bot's tools over MCP. Its command and file tools are switched off and its sandbox
-// is read-only, so the bot can do exactly what it could do on Open Bot's own loop.
+// is read-only, so the bot can do exactly what it could do on OpenKumi's own loop.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { ModelInfo, ProviderInfo } from '@openbot/shared'
+import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
-const bin = () => findBinary('codex', 'OPENBOT_CODEX_BIN', settings().codexPath)
+const bin = () => findBinary('codex', 'OPENKUMI_CODEX_BIN', settings().codexPath)
 const base = { id: 'codex', name: 'Codex', kind: 'cli' as const }
 let info: ProviderInfo = { ...base, connected: false, detail: 'Checking…' }
 
@@ -47,12 +47,12 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   if (!program) throw new Error('Codex is not installed on this computer.')
   const instructions =
     `${req.instructions}\n\n` +
-    'Your tools come from Open Bot (the "openbot" tools). For subagents use spawn_subagent and wait_subagents from ' +
-    'Open Bot, not any collaboration tool of your own. You cannot run commands or read files except through those tools.'
+    'Your tools come from OpenKumi (the "openkumi" tools). For subagents use spawn_subagent and wait_subagents from ' +
+    'OpenKumi, not any collaboration tool of your own. You cannot run commands or read files except through those tools.'
   // Pictures that came with the message. Codex takes their paths split at commas, so it is given
   // copies with plain names, in a folder of their own that goes with the turn. They go before the
   // other options: --image takes every value up to the next option.
-  const pictures = req.files.length ? fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-codex-')) : null
+  const pictures = req.files.length ? fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-codex-')) : null
   const images = req.files.flatMap((file, n) => {
     const copy = path.join(pictures!, `${n + 1}${path.extname(file.path).toLowerCase()}`)
     fs.copyFileSync(file.path, copy)
@@ -70,17 +70,17 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     '-c', 'sandbox_mode="read-only"',
     '-c', 'approval_policy="never"',
     '-c', `developer_instructions=${toml(instructions)}`,
-    // Open Bot passes the bot's AGENTS.md itself, fresh on every turn.
+    // OpenKumi passes the bot's AGENTS.md itself, fresh on every turn.
     '-c', 'project_doc_max_bytes=0',
     // Codex has skills of its own (and finds the user's); the bot's superpowers are the ones in its instructions.
     '-c', 'skills.include_instructions=false',
     '-c', 'skills.bundled.enabled=false',
     ...(req.toolsUrl
       ? [
-          '-c', `mcp_servers.openbot.url=${toml(req.toolsUrl)}`,
-          '-c', 'mcp_servers.openbot.tool_timeout_sec=1900',
-          // Nobody is there to approve a tool call, and Open Bot's tools are the ones the owner chose.
-          '-c', 'mcp_servers.openbot.default_tools_approval_mode="approve"',
+          '-c', `mcp_servers.openkumi.url=${toml(req.toolsUrl)}`,
+          '-c', 'mcp_servers.openkumi.tool_timeout_sec=1900',
+          // Nobody is there to approve a tool call, and OpenKumi's tools are the ones the owner chose.
+          '-c', 'mcp_servers.openkumi.default_tools_approval_mode="approve"',
         ]
       : []),
     '-c', `web_search=${toml(req.webSearch ? 'live' : 'disabled')}`,
@@ -106,7 +106,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
         if (item.type === 'agent_message' && item.text?.trim()) yield { type: 'item', item: { type: 'message', role: 'assistant', text: item.text } }
         else if (item.type === 'reasoning' && item.text?.trim()) yield { type: 'item', item: { type: 'reasoning', summary: item.text } }
         else if (item.type === 'web_search') yield { type: 'item', item: { type: 'web_search_call', action: { query: item.query } } }
-        // Calls to Open Bot's own tools are recorded where they are carried out (tool-endpoint.ts).
+        // Calls to OpenKumi's own tools are recorded where they are carried out (tool-endpoint.ts).
       } else if (ev.type === 'turn.completed') {
         finished = true
       } else if (ev.type === 'turn.failed' || ev.type === 'error') {

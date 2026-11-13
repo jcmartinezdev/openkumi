@@ -1,7 +1,7 @@
 // The mark of each thing a bot can run on, as path data on a 24-unit square, for every app to draw
 // its own way (an SVG on the computer, Skia on the phone). The OpenAI, Claude and Ollama marks are
 // from Simple Icons (CC0).
-import type { ProviderInfo } from '@openbot/shared'
+import type { ProviderInfo } from '@openkumi/shared'
 
 /** How a provider's mark is drawn. */
 export interface Mark {

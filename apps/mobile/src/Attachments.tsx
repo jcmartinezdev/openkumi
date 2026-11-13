@@ -1,16 +1,16 @@
 // Files in a conversation on the phone: picking them (a photo, the camera, any file), the ones
 // waiting in the composer, and the ones that went with the owner's messages, as the conversation
 // keeps them whatever the bot did with its own copies. Which files wait, and how they go up, is
-// shared with the computer (@openbot/client/attachments).
+// shared with the computer (@openkumi/client/attachments).
 import { useState } from 'react'
 import { ActionSheetIOS, ActivityIndicator, Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import * as DocumentPicker from 'expo-document-picker'
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator'
 import * as ImagePicker from 'expo-image-picker'
-import type { Attachment } from '@openbot/shared'
-import { type Pending, type Picked, PICTURE_SIDE, isPicture, keptAt, kindOf, sizeOf } from '@openbot/client/attachments'
-import { request, useServerFile } from '@openbot/client/store'
+import type { Attachment } from '@openkumi/shared'
+import { type Pending, type Picked, PICTURE_SIDE, isPicture, keptAt, kindOf, sizeOf } from '@openkumi/client/attachments'
+import { request, useServerFile } from '@openkumi/client/store'
 import { Glyph } from './icons'
 import { useTheme } from './theme'
 
@@ -59,7 +59,7 @@ export function chooseFiles(room: number, add: (picked: Picked[]) => void) {
       } else if (choice === 1) {
         const { granted } = await ImagePicker.requestCameraPermissionsAsync()
         if (!granted) {
-          return Alert.alert('Open Bot cannot use the camera', 'You can let it in the iPhone’s Settings.', [{ text: 'Not now', style: 'cancel' }, { text: 'Settings', onPress: () => void Linking.openSettings() }])
+          return Alert.alert('OpenKumi cannot use the camera', 'You can let it in the iPhone’s Settings.', [{ text: 'Not now', style: 'cancel' }, { text: 'Settings', onPress: () => void Linking.openSettings() }])
         }
         const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
         if (!result.canceled) add(result.assets.map((a) => photo(a.uri)))

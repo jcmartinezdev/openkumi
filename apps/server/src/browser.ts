@@ -6,20 +6,20 @@
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { type BrowserContext, type CDPSession, type Page, type Request, chromium } from 'playwright-core'
-import type { BrowserInput, BrowserState } from '@openbot/shared'
+import type { BrowserInput, BrowserState } from '@openkumi/shared'
 import { PORT, emit, privateDir } from './config.ts'
 import { settings } from './settings.ts'
 import { incoming, resolve } from './workspace.ts'
 
 const VIEWPORT = { width: 1280, height: 800 }
 
-// A bot's browser must not be able to open Open Bot itself: coming from this computer it would be
+// A bot's browser must not be able to open OpenKumi itself: coming from this computer it would be
 // trusted like the owner, and could change the bot's rules and superpowers. These rules
 // make Chrome send any request for this server's address somewhere that refuses it.
 const NO_SELF_ACCESS = `--host-rules=${['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${PORT} 0.0.0.0:1`).join(', ')}`
 
 /**
- * Where a service sends the browser back to after a superpower's sign-in. It is Open Bot's own
+ * Where a service sends the browser back to after a superpower's sign-in. It is OpenKumi's own
  * address, which a bot's browser cannot reach; what matters is the address itself, which carries
  * the result, and which the browser hands over on the way (see signIn).
  */
@@ -29,7 +29,7 @@ const signInThread = (key: string) => `sign-in:${key}`
 
 /** The page a sign-in ends on, in the bot's browser. */
 const ending = (message: string) =>
-  `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Open Bot</title>
+  `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>OpenKumi</title>
 <body style="font:16px system-ui;display:grid;place-items:center;min-height:100vh;margin:0;background:#0c0c0d;color:#ededef"><p style="max-width:420px;padding:24px;text-align:center">${message.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)}</p>`
 
 /** What the bot is told when it tries to act in a window the owner has taken control of. */
@@ -156,7 +156,7 @@ class BotBrowser {
     }
     const profile = path.join(privateDir(this.botId), 'browser-profile')
     // "chromium" means the browser that comes with Playwright, which is started without a channel.
-    const chosen = process.env.OPENBOT_BROWSER_CHANNEL ?? settings().browserChannel
+    const chosen = process.env.OPENKUMI_BROWSER_CHANNEL ?? settings().browserChannel
     const channel = chosen === 'chromium' ? undefined : chosen
     let context: BrowserContext
     try {
@@ -470,7 +470,7 @@ class BotBrowser {
   }
 
   /**
-   * A service sent the browser back to Open Bot. The request itself goes nowhere; only in a
+   * A service sent the browser back to OpenKumi. The request itself goes nowhere; only in a
    * sign-in's own window does its address finish the sign-in, once.
    */
   private async signInReturned(request: Request) {

@@ -45,7 +45,7 @@ const shown = content.slice(1).map((block) => block.source.media_type)
 
 // The turn count lives in a file, like a real session, so a resumed conversation carries on from it.
 const session = flag('--resume') ?? crypto.randomUUID()
-const file = path.join(os.tmpdir(), `openbot-fake-claude-${session}.json`)
+const file = path.join(os.tmpdir(), `openkumi-fake-claude-${session}.json`)
 const turn = (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).turn : 0) + 1
 if (flag('--resume') && turn === 1) {
   print({ type: 'result', subtype: 'error_during_execution', is_error: true, result: `No conversation found with session ID: ${session}` })
@@ -57,7 +57,7 @@ print({ type: 'system', subtype: 'init', session_id: session })
 let reply
 const call = prompt.match(/^!tool (\w+)\s*([\s\S]*)$/)
 if (call) {
-  const url = JSON.parse(flag('--mcp-config')).mcpServers.openbot.url
+  const url = JSON.parse(flag('--mcp-config')).mcpServers.openkumi.url
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

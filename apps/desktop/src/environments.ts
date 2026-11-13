@@ -1,11 +1,11 @@
 // The environments the app knows: where bots run. The local one is run by this app on this
-// computer, when it is turned on. The others are Open Bot on other computers, reached over the
+// computer, when it is turned on. The others are OpenKumi on other computers, reached over the
 // network at one or more addresses. The list is kept in a file of the app's own, with the key each
 // remote one gave this computer when the two were paired.
 import fs from 'node:fs'
 import path from 'node:path'
-import { type SavedAddress, ordered, probe, verdict } from '@openbot/client/addresses'
-import type { EnvironmentReport } from '@openbot/shared/desktop'
+import { type SavedAddress, isServer, ordered, probe, verdict } from '@openkumi/client/addresses'
+import type { EnvironmentReport } from '@openkumi/shared/desktop'
 import { USER_DATA } from './paths.ts'
 
 export interface Environment {
@@ -71,14 +71,14 @@ export function showing(): string | null {
 }
 
 /**
- * What an Open Bot server on this computer says about itself, or null when there is none at the
+ * What an OpenKumi server on this computer says about itself, or null when there is none at the
  * address. With a `challenge`, it answers with that value signed with its access code.
  */
 export async function hello(url: string, timeoutMs = 6000, challenge = ''): Promise<{ app: string; version: string; home?: string; proof?: string } | null> {
   try {
     const res = await fetch(`${url}/api/hello${challenge ? `?challenge=${challenge}` : ''}`, { signal: AbortSignal.timeout(timeoutMs) })
     const said = res.ok ? await res.json() : null
-    return said?.app === 'open-bot' ? said : null
+    return isServer(said) ? said : null
   } catch {
     return null
   }

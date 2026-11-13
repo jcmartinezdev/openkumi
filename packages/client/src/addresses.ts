@@ -3,7 +3,7 @@
 // owner put in front of it. They are tried in that order, and the first that shows it is the server
 // is used. Whatever answers at an address is asked who it is without being sent the key: it has to
 // sign a value made up here with the key's hash, which only that server and this device know (the
-// server's side is in apps/server/src/clients.ts). Something else, or another Open Bot server,
+// server's side is in apps/server/src/clients.ts). Something else, or another OpenKumi server,
 // answering at a saved address is told nothing it could use.
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
@@ -100,7 +100,7 @@ export function useRandom(fn: () => Uint8Array) {
 
 /**
  * What answered at an address: the server (`ok`), the server, no longer letting this device in
- * (`refused`), something else (`other`), an Open Bot too old to show who it is (`outdated`),
+ * (`refused`), something else (`other`), an OpenKumi too old to show who it is (`outdated`),
  * nothing (`unreachable`), or nothing was asked because the key may not go there (`blocked`).
  */
 export type Answer = 'ok' | 'refused' | 'other' | 'outdated' | 'unreachable' | 'blocked'
@@ -110,6 +110,9 @@ export interface Probe {
   /** The id the server there gave, when it was asked. */
   serverId?: string
 }
+
+/** Whether what answered at /api/hello is an OpenKumi server. One from before OpenKumi was renamed calls itself Open Bot. */
+export const isServer = (said: { app?: unknown } | null | undefined) => said?.app === 'openkumi' || said?.app === 'open-bot'
 
 /** How long an address has to answer: a home address answers at once or not at all. */
 const PATIENCE: Record<Kind, number> = { 'this computer': 1500, home: 2500, tailscale: 5000, internet: 6000 }
@@ -126,7 +129,7 @@ export async function probe(url: string, key: string, serverId?: string): Promis
   try {
     const res = await fetch(`${url}/api/hello?challenge=${challenge}&device=${deviceTag(key)}`, { signal: stop.signal })
     const said = await res.json()
-    if (said?.app !== 'open-bot') return { url, answer: 'unreachable' }
+    if (!isServer(said)) return { url, answer: 'unreachable' }
     if (typeof said.id !== 'string' || !said.device) return { url, answer: 'outdated' }
     if (serverId && said.id !== serverId) return { url, answer: 'other', serverId: said.id }
     if (!said.device.known) return { url, answer: 'refused', serverId: said.id }
@@ -171,7 +174,7 @@ export async function checkNew(url: string, key: string, server: { name: string;
   const { answer, serverId } = await probe(url, key, server.serverId)
   const host = new URL(url).host
   if (answer === 'other') throw new Error(`Something else answers at ${host}, not ${server.name}. Its key was not sent there.`)
-  if (answer === 'refused') throw new Error(server.serverId ? `${server.name} answers at ${host}, but no longer lets this device in. Pair them again.` : `The Open Bot at ${host} does not know this device, so it may be a different one. Its key was not sent there.`)
-  if (answer === 'outdated') throw new Error(`The Open Bot at ${host} is older than this app. Update it there, then add the address.`)
+  if (answer === 'refused') throw new Error(server.serverId ? `${server.name} answers at ${host}, but no longer lets this device in. Pair them again.` : `The OpenKumi at ${host} does not know this device, so it may be a different one. Its key was not sent there.`)
+  if (answer === 'outdated') throw new Error(`The OpenKumi at ${host} is older than this app. Update it there, then add the address.`)
   return { checked: answer === 'ok', serverId }
 }

@@ -1,17 +1,17 @@
-// Claude Code as an engine. Open Bot starts the user's own installed `claude` program for each
+// Claude Code as an engine. OpenKumi starts the user's own installed `claude` program for each
 // turn; it is signed in with the user's own account, runs the model-and-tools loop itself, and
 // reaches the bot's tools over MCP. All of its built-in tools are switched off, so the bot can do
-// exactly what it could do on Open Bot's own loop and nothing more.
+// exactly what it could do on OpenKumi's own loop and nothing more.
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import readline from 'node:readline'
-import type { ModelInfo, ProviderInfo } from '@openbot/shared'
+import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { type Shown, base64 } from '../attachments.ts'
 import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
-const bin = () => findBinary('claude', 'OPENBOT_CLAUDE_BIN', settings().claudePath)
+const bin = () => findBinary('claude', 'OPENKUMI_CLAUDE_BIN', settings().claudePath)
 const base = { id: 'claude-code', name: 'Claude Code', kind: 'cli' as const }
 let info: ProviderInfo = { ...base, connected: false, detail: 'Checking…' }
 
@@ -71,7 +71,7 @@ function askModels(program: string): Promise<ModelInfo[] | null> {
   })
 }
 
-/** Turns the program's own list into Open Bot's: one entry per model, the default first, earlier models marked. */
+/** Turns the program's own list into OpenKumi's: one entry per model, the default first, earlier models marked. */
 function named(offered: unknown): ModelInfo[] | null {
   if (!Array.isArray(offered) || !offered.length) return null
   const list = offered as Offered[]
@@ -150,9 +150,9 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     '--system-prompt-snapshot', 'off',
     // No built-in tools: no commands, no files, no fetching. Web search runs on Anthropic's side.
     '--tools', req.webSearch ? 'WebSearch' : '',
-    '--mcp-config', JSON.stringify({ mcpServers: req.toolsUrl ? { openbot: { type: 'http', url: req.toolsUrl } } : {} }),
+    '--mcp-config', JSON.stringify({ mcpServers: req.toolsUrl ? { openkumi: { type: 'http', url: req.toolsUrl } } : {} }),
     '--strict-mcp-config',
-    '--allowedTools', req.webSearch ? 'mcp__openbot,WebSearch' : 'mcp__openbot',
+    '--allowedTools', req.webSearch ? 'mcp__openkumi,WebSearch' : 'mcp__openkumi',
     // Nobody is there to answer a permission prompt; anything not allowed above is refused.
     '--permission-prompts', 'none',
     // Leave out everything from the user's own Claude Code setup: settings, CLAUDE.md, skills, plugins.
@@ -191,7 +191,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
         if (block.type === 'text' && block.text?.trim()) yield { type: 'item', item: { type: 'message', role: 'assistant', text: block.text } }
         else if (block.type === 'thinking' && block.thinking?.trim()) yield { type: 'item', item: { type: 'reasoning', summary: block.thinking } }
         else if (block.type === 'tool_use' && block.name === 'WebSearch') yield { type: 'item', item: { type: 'web_search_call', action: { query: block.input?.query } } }
-        // Calls to Open Bot's own tools are recorded where they are carried out (tool-endpoint.ts).
+        // Calls to OpenKumi's own tools are recorded where they are carried out (tool-endpoint.ts).
       }
     } else if (ev.type === 'result') {
       finished = true

@@ -2,8 +2,8 @@
 // changed afterwards, in its own settings.
 import { Alert } from 'react-native'
 import * as Haptics from 'expo-haptics'
-import type { Settings } from '@openbot/shared'
-import { saveSettings, useStore } from '@openbot/client/store'
+import type { Settings } from '@openkumi/shared'
+import { saveSettings, useStore } from '@openkumi/client/store'
 import { ProviderIcon } from '../../src/icons'
 import { useSession } from '../../src/session'
 import { ICON_INSET, Row, Section, SettingsPage, Slot, SwitchRow } from '../../src/SettingsUi'
@@ -39,7 +39,7 @@ export default function NewBotSettings() {
         ))}
       </Section>
 
-      <Section footer="Show the browser window opens a new bot’s browser on the desktop of the computer running Open Bot, as well as in the app. Some sites only allow signing in that way.">
+      <Section footer="Show the browser window opens a new bot’s browser on the desktop of the computer running OpenKumi, as well as in the app. Some sites only allow signing in that way.">
         <SwitchRow label="Web search" detail="New bots may use the model’s built-in search." value={settings.defaultWebSearch} onChange={(defaultWebSearch) => void save({ defaultWebSearch })} />
         <SwitchRow label="Show the browser window" value={settings.defaultShowBrowser} onChange={(defaultShowBrowser) => void save({ defaultShowBrowser })} />
       </Section>

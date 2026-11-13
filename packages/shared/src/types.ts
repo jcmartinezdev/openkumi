@@ -51,7 +51,7 @@ export interface Bot {
   createdAt: number
 }
 
-/** The parts a bot's mascot is put together from. Every app draws them the same way (@openbot/client/mascot). */
+/** The parts a bot's mascot is put together from. Every app draws them the same way (@openkumi/client/mascot). */
 export type Creature = 'bear' | 'cat' | 'bunny' | 'blob' | 'bug'
 export type BodyColor = 'berry' | 'coral' | 'tangerine' | 'lemon' | 'lime' | 'mint' | 'sky' | 'periwinkle' | 'grape' | 'cocoa' | 'slate' | 'cloud'
 export type Hat = 'none' | 'party' | 'beanie' | 'top' | 'crown' | 'chef' | 'cap' | 'grad' | 'wizard' | 'hardhat' | 'headphones' | 'headband' | 'flower'
@@ -68,7 +68,7 @@ export interface Look {
 
 /**
  * Something a bot can do beyond its own tools, such as working in the user's Notion. Every one ships
- * with Open Bot, and the owner switches it on for one bot at a time. It brings instructions the bot
+ * with OpenKumi, and the owner switches it on for one bot at a time. It brings instructions the bot
  * reads when a task calls for them, a service the bot signs in to and works in, or both.
  */
 export interface Superpower {
@@ -92,26 +92,6 @@ export interface Superpower {
   site: string
   /** Ids of the bots it is switched on for. */
   onFor: string[]
-  /** For a service whose company lets in only apps registered with it (Google), Open Bot's registration there. */
-  registration: Registration | null
-}
-
-/**
- * Open Bot registered with a company that lets in only the apps registered with it, which the owner
- * does once, by hand, for all of that company's superpowers. Until then no bot can sign in to them.
- */
-export interface Registration {
-  id: string
-  /** The company's name ("Google"). */
-  name: string
-  /** The owner has registered Open Bot. */
-  done: boolean
-  /** The client ID the company gave, once registered. It is not a secret; the client secret is never sent. */
-  clientId: string
-  /** A bot can be signed in with the owner's own browser too, not only inside the bot's. */
-  ownBrowser: boolean
-  /** How to register, in Markdown, with this server's own values in it. */
-  guide: string
 }
 
 /** How a bot's connection to a superpower's service stands. */
@@ -214,7 +194,7 @@ export interface Item {
 }
 
 /**
- * When a scheduled task runs. Times of day are in the time zone of the computer running Open Bot.
+ * When a scheduled task runs. Times of day are in the time zone of the computer running OpenKumi.
  * 'daily' runs at `time` ("HH:MM") on the days of the week in `days` (0 is Sunday), every day when it is empty.
  */
 export type Schedule =
@@ -263,7 +243,7 @@ export interface HistoryMatch {
 
 /** Settings for the whole app, stored on the server. Things that belong to one device (theme, text size) are kept in the browser instead. */
 export interface Settings {
-  /** Let other devices on the local network use Open Bot (they need the access code). */
+  /** Let other devices on the local network use OpenKumi (they need the access code). */
   lan: boolean
   /** Which browser program the bots drive. "chromium" is the one that comes with Playwright. */
   browserChannel: 'chrome' | 'msedge' | 'chromium'
@@ -311,7 +291,7 @@ export interface About {
 export interface ProviderInfo {
   id: string
   name: string
-  /** 'cli' is an agent program installed on this computer (Claude Code, Codex) that Open Bot drives. */
+  /** 'cli' is an agent program installed on this computer (Claude Code, Codex) that OpenKumi drives. */
   kind: 'apikey' | 'cli' | 'local'
   connected: boolean
   detail: string
@@ -419,7 +399,7 @@ export interface AppState {
   superpowers: Superpower[]
   /** How each bot's superpowers with a service stand, by bot id then superpower id. */
   superpowerStatus: Record<string, Record<string, SuperpowerStatus>>
-  /** Where everything is stored, for display (e.g. "~/.openbot"). */
+  /** Where everything is stored, for display (e.g. "~/.openkumi"). */
   home: string
   settings: Settings
   /** What every setting is when nothing has been changed, for "reset to default". */
@@ -434,8 +414,8 @@ export interface AppState {
  */
 export interface Principles {
   text: string
-  /** The owner has written their own, instead of the ones Open Bot comes with. */
+  /** The owner has written their own, instead of the ones OpenKumi comes with. */
   custom: boolean
-  /** The ones Open Bot comes with, for "restore default". */
+  /** The ones OpenKumi comes with, for "restore default". */
   default: string
 }

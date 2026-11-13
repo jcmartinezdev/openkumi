@@ -32,11 +32,12 @@ export const PREF_DEFAULTS: Prefs = {
   favoriteModels: [],
 }
 
-const KEY = 'openbot.prefs'
+const KEY = 'openkumi.prefs'
 
 function load(): Prefs {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? '{}')
+    // Kept under Open Bot's name before OpenKumi was renamed.
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? localStorage.getItem('openbot.prefs') ?? '{}')
     // Only known keys of the right type are taken, so an old or damaged entry cannot break the app.
     const known = Object.fromEntries(Object.entries(saved).filter(([k, v]) => k in PREF_DEFAULTS && typeof v === typeof PREF_DEFAULTS[k as keyof Prefs]))
     return { ...PREF_DEFAULTS, ...known }

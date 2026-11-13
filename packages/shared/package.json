@@ -1,7 +1,7 @@
 {
-  "name": "@openbot/shared",
+  "name": "@openkumi/shared",
   "version": "0.1.0",
-  "description": "The types the Open Bot server, interface and desktop app agree on.",
+  "description": "The types the OpenKumi server, interface and desktop app agree on.",
   "private": true,
   "type": "module",
   "license": "MIT",

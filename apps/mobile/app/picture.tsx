@@ -2,8 +2,8 @@
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { keptAt } from '@openbot/client/attachments'
-import { useServerFile } from '@openbot/client/store'
+import { keptAt } from '@openkumi/client/attachments'
+import { useServerFile } from '@openkumi/client/store'
 import { Glyph } from '../src/icons'
 
 export default function Picture() {

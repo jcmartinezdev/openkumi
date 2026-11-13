@@ -1,7 +1,7 @@
 // Models that run on this computer, through Ollama or LM Studio. Nothing leaves the machine and
-// nothing is paid for. Both programs speak the same API as OpenAI, so this is Open Bot's own loop
+// nothing is paid for. Both programs speak the same API as OpenAI, so this is OpenKumi's own loop
 // pointed at them; what it adds is finding them, with no address to type and no key.
-import type { ProviderInfo } from '@openbot/shared'
+import type { ProviderInfo } from '@openkumi/shared'
 import { settings } from '../settings.ts'
 import { type Config, chat, modelsAt } from './openai-compat.ts'
 import { type ModelRequest, type Provider, plainModel } from './types.ts'

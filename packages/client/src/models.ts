@@ -3,7 +3,7 @@
 // pickers open with what is already known and fill in the rest. Shared by the desktop app's model
 // picker and the phone's model sheet, so both offer the same choices by the same rules.
 import { useEffect, useSyncExternalStore } from 'react'
-import type { Bot, Effort, ModelInfo, ProviderInfo } from '@openbot/shared'
+import type { Bot, Effort, ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { api, onEnvironmentChange } from './store'
 
 const known = new Map<string, ModelInfo[]>()

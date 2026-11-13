@@ -2,7 +2,7 @@
 // interface (apps/web); the app behind it (apps/desktop) keeps the list of environments, runs the
 // one on this computer, and tells the window which environment to connect to.
 
-/** An Open Bot server on another computer, reached over the network. */
+/** An OpenKumi server on another computer, reached over the network. */
 export interface RemoteEnvironment {
   id: string
   name: string
@@ -11,13 +11,13 @@ export interface RemoteEnvironment {
   enabled: boolean
 }
 
-/** Open Bot on this computer, run by the app in a process of its own while it is turned on. */
+/** OpenKumi on this computer, run by the app in a process of its own while it is turned on. */
 export interface LocalEnvironment {
   enabled: boolean
   state: 'off' | 'starting' | 'running' | 'failed'
   /** Why it could not start, when it failed. */
   error: string
-  /** False when Open Bot was already running here and the app joined it instead of starting it. */
+  /** False when OpenKumi was already running here and the app joined it instead of starting it. */
   startedHere: boolean
 }
 
@@ -74,11 +74,11 @@ export interface DesktopBridge {
   statuses(): Promise<Record<string, EnvironmentReport>>
   /** Show another environment. */
   open(id: string): Promise<void>
-  /** Turn the local environment on (Open Bot runs on this computer) or off (it does not). */
+  /** Turn the local environment on (OpenKumi runs on this computer) or off (it does not). */
   setLocal(on: boolean): Promise<void>
   /** Start the local environment again after it failed. */
   retry(): Promise<void>
-  /** Pair with Open Bot on another computer, using the code that computer shows, and add it. */
+  /** Pair with OpenKumi on another computer, using the code that computer shows, and add it. */
   add(input: { address: string; code: string; name: string }): Promise<void>
   /** Rename a remote environment, or turn it on or off. */
   update(id: string, patch: { name?: string; enabled?: boolean }): Promise<void>

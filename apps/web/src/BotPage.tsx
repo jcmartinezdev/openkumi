@@ -2,11 +2,11 @@
 // the server: the owner's settings (Bot), what more the bot may do (Superpowers) and what the bot
 // itself keeps (Files).
 import { useEffect, useRef, useState } from 'react'
-import type { Bot, Effort, FileEntry, HistoryEntry, Look } from '@openbot/shared'
+import type { Bot, Effort, FileEntry, HistoryEntry, Look } from '@openkumi/shared'
 import { Icon } from './Icon'
-import { windowCount } from '@openbot/client/browser'
-import { describeLook } from '@openbot/client/mascot'
-import { EFFORT_LABEL, effortsOf, useModels } from '@openbot/client/models'
+import { windowCount } from '@openkumi/client/browser'
+import { describeLook } from '@openkumi/client/mascot'
+import { EFFORT_LABEL, effortsOf, useModels } from '@openkumi/client/models'
 import { type Dress, LookEditor } from './LookEditor'
 import { Mascot } from './Mascot'
 import { ago } from './Sidebar'
@@ -159,7 +159,7 @@ function General({ bot }: { bot: Bot }) {
       <Section title="Browser">
         <Row
           title="Show the browser window"
-          description="Also open this bot’s browser on the desktop of the computer running Open Bot. Some sites only allow sign-in this way. Takes effect the next time its browser starts."
+          description="Also open this bot’s browser on the desktop of the computer running OpenKumi. Some sites only allow sign-in this way. Takes effect the next time its browser starts."
           control={<Switch label="Show the browser window" checked={!bot.headless} onChange={(shown) => save({ headless: !shown })} />}
         />
         <Row
@@ -347,7 +347,7 @@ function Files({ bot, initial }: { bot: Bot; initial?: string }) {
   )
 }
 
-const AUTHOR = { bot: 'Bot', you: 'You', system: 'Open Bot' } as const
+const AUTHOR = { bot: 'Bot', you: 'You', system: 'OpenKumi' } as const
 
 /** A change as git reports it, reduced to file names and added, removed and unchanged lines. */
 function Diff({ text }: { text: string }) {
@@ -407,7 +407,7 @@ function History({ bot, version }: { bot: Bot; version: number }) {
   }
 
   if (!data) return <p className="muted pad">{error || 'Loading…'}</p>
-  if (!data.available) return <p className="muted pad">History needs git, which was not found on this computer. Install git and restart Open Bot to record changes.</p>
+  if (!data.available) return <p className="muted pad">History needs git, which was not found on this computer. Install git and restart OpenKumi to record changes.</p>
   return (
     <div className="history">
       {error && <div className="notice error">{error}</div>}

@@ -12,9 +12,9 @@ import { startOAuthServer } from './fixtures/mcp-oauth.mjs'
 
 const PORT = 4400 + Math.floor(Math.random() * 500)
 const BASE = `http://127.0.0.1:${PORT}`
-const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-test-'))
+const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-test-'))
 /** The superpowers the server offers: the ones that ship, and any the tests add. */
-const powers = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-superpowers-'))
+const powers = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-superpowers-'))
 fs.cpSync(path.resolve('superpowers'), powers, { recursive: true })
 function addPower(id, manifest, instructions) {
   fs.mkdirSync(path.join(powers, id))
@@ -22,14 +22,6 @@ function addPower(id, manifest, instructions) {
   if (instructions) fs.writeFileSync(path.join(powers, id, 'instructions.md'), instructions)
 }
 const removePower = (id) => fs.rmSync(path.join(powers, id), { recursive: true, force: true })
-/** The registrations with companies that do not let apps register themselves: the ones that ship, and any the tests add. */
-const registrations = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-registrations-'))
-fs.cpSync(path.resolve('registrations'), registrations, { recursive: true })
-function addRegistration(id, manifest, guide) {
-  fs.mkdirSync(path.join(registrations, id))
-  fs.writeFileSync(path.join(registrations, id, 'registration.json'), JSON.stringify(manifest))
-  fs.writeFileSync(path.join(registrations, id, 'README.md'), guide)
-}
 // One with nothing to sign in to: instructions only.
 addPower('field-guide', { name: 'Field guide' }, '# Field guide\n\nLook at the beak first.\n')
 let server
@@ -149,17 +141,16 @@ before(async () => {
   server = spawn(process.execPath, ['src/index.ts'], {
     env: {
       ...process.env,
-      OPENBOT_HOME: home,
-      OPENBOT_PORT: String(PORT),
-      OPENBOT_MOCK: '1',
-      OPENBOT_SUPERPOWERS: powers,
-      OPENBOT_REGISTRATIONS: registrations,
+      OPENKUMI_HOME: home,
+      OPENKUMI_PORT: String(PORT),
+      OPENKUMI_MOCK: '1',
+      OPENKUMI_SUPERPOWERS: powers,
       // Scripted stand-ins for the Claude Code and Codex programs.
-      OPENBOT_CLAUDE_BIN: path.resolve('test/fixtures/fake-claude.mjs'),
-      OPENBOT_CODEX_BIN: path.resolve('test/fixtures/fake-codex.mjs'),
-      OPENBOT_GROK_BIN: path.resolve('test/fixtures/fake-grok.mjs'),
+      OPENKUMI_CLAUDE_BIN: path.resolve('test/fixtures/fake-claude.mjs'),
+      OPENKUMI_CODEX_BIN: path.resolve('test/fixtures/fake-codex.mjs'),
+      OPENKUMI_GROK_BIN: path.resolve('test/fixtures/fake-grok.mjs'),
       // And for Tailscale's, which says this computer is on a tailnet.
-      OPENBOT_TAILSCALE_BIN: path.resolve('test/fixtures/fake-tailscale.mjs'),
+      OPENKUMI_TAILSCALE_BIN: path.resolve('test/fixtures/fake-tailscale.mjs'),
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -188,12 +179,12 @@ test('every request needs the access code, also from this computer, and there ar
   assert.equal((await get('/api/state')).status, 401, 'being on this computer is not enough')
   assert.equal((await get('/api/state', { Authorization: 'Bearer wrong' })).status, 401)
   assert.equal((await get(`/api/state?token=${token}`)).status, 401, 'the code is only read from the address for the event stream')
-  assert.equal((await get('/api/state', { Cookie: `openbot_token=${token}` })).status, 401, 'cookies mean nothing')
+  assert.equal((await get('/api/state', { Cookie: `openkumi_token=${token}` })).status, 401, 'cookies mean nothing')
   assert.equal((await get('/api/state', auth())).status, 200)
 
   // Anyone may ask who is here; only the app on this computer is told where the data folder is.
   const hello = await (await get('/api/hello')).json()
-  assert.deepEqual([hello.app, hello.authorized, hello.home], ['open-bot', false, home])
+  assert.deepEqual([hello.app, hello.authorized, hello.home], ['openkumi', false, home])
   // It says which server it is, the same whatever address it is asked at.
   assert.match(hello.id, /^s_[\w-]{12}$/)
   // ...and not a web page whose own name has been pointed at this computer.
@@ -203,9 +194,9 @@ test('every request needs the access code, also from this computer, and there ar
       res.on('data', (d) => (body += d)).on('end', () => resolve(JSON.parse(body)))
     }).on('error', reject),
   )
-  assert.deepEqual([renamed.app, 'home' in renamed], ['open-bot', false])
+  assert.deepEqual([renamed.app, 'home' in renamed], ['openkumi', false])
   assert.equal((await (await get('/api/hello', auth())).json()).authorized, true)
-  // A proxy on this computer (a tunnel, a web server in front of Open Bot) passes on requests from
+  // A proxy on this computer (a tunnel, a web server in front of OpenKumi) passes on requests from
   // elsewhere. Those are not this computer: the access code means nothing there, and the data folder is not named.
   for (const header of ['X-Forwarded-For', 'Forwarded', 'X-Real-IP', 'CF-Connecting-IP']) {
     assert.equal((await get('/api/state', { ...auth(), [header]: '203.0.113.9' })).status, 401, header)
@@ -234,9 +225,9 @@ test('every request needs the access code, also from this computer, and there ar
 
   // Only the desktop app's own pages may read answers; a web page in a browser may not.
   const from = async (origin) => (await get('/api/hello', { Origin: origin })).headers.get('access-control-allow-origin')
-  assert.equal(await from('openbot://app'), 'openbot://app')
+  assert.equal(await from('openkumi://app'), 'openkumi://app')
   assert.equal(await from('https://evil.example'), null)
-  const preflight = await fetch(`${BASE}/api/state`, { method: 'OPTIONS', headers: { Origin: 'openbot://app', 'Access-Control-Request-Headers': 'authorization' } })
+  const preflight = await fetch(`${BASE}/api/state`, { method: 'OPTIONS', headers: { Origin: 'openkumi://app', 'Access-Control-Request-Headers': 'authorization' } })
   assert.equal(preflight.status, 204)
   assert.match(preflight.headers.get('access-control-allow-headers'), /authorization/)
 
@@ -438,7 +429,7 @@ test('a bot is a folder: bot.md holds the owner\'s settings and rules', async ()
   await api('PATCH', `/api/bots/${bot.id}`, { name: 'Tester' })
 })
 
-test('principles: every bot is told them first; the owner changes them, and the ones Open Bot comes with come back', async () => {
+test('principles: every bot is told them first; the owner changes them, and the ones OpenKumi comes with come back', async () => {
   const { principles } = await api('GET', '/api/state')
   assert.equal(principles.custom, false)
   assert.equal(principles.text, principles.default)
@@ -447,7 +438,7 @@ test('principles: every bot is told them first; the owner changes them, and the 
 
   let prompt = await told()
   assert.ok(prompt.includes(`# Principles\n`) && prompt.includes(principles.default))
-  assert.ok(prompt.indexOf('# Principles') < prompt.indexOf('# Working in Open Bot'), 'they come before anything else')
+  assert.ok(prompt.indexOf('# Principles') < prompt.indexOf('# Working in OpenKumi'), 'they come before anything else')
 
   // The owner's own are kept in a file of their own, and told to every bot from the next turn.
   const mine = await api('PUT', '/api/principles', { text: '  Always answer in French.\r\n' })
@@ -463,7 +454,7 @@ test('principles: every bot is told them first; the owner changes them, and the 
   assert.doesNotMatch(await told(), /# Principles/)
 
   await assert.rejects(api('PUT', '/api/principles', { text: 5 }), /must be text/)
-  // Back to the ones Open Bot comes with, which are not written out, so that improvements to them reach everyone.
+  // Back to the ones OpenKumi comes with, which are not written out, so that improvements to them reach everyone.
   assert.equal((await api('PUT', '/api/principles', { text: null })).custom, false)
   assert.ok(!fs.existsSync(file))
   assert.equal((await api('PUT', '/api/principles', { text: principles.default })).custom, false, 'the same text as the default is the default')
@@ -619,19 +610,11 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
 
   // What ships, each with a page of its own saying what it does and what it gives a bot; then the one the tests bring.
   const all = await list()
-  const google = ['gmail', 'google-calendar', 'google-docs', 'google-drive', 'google-sheets', 'google-slides']
-  assert.deepEqual(Object.keys(all), [...google, 'linear', 'notion', 'field-guide'], 'those that work in an app first')
+  assert.deepEqual(Object.keys(all), ['linear', 'notion', 'field-guide'], 'those that work in an app first')
   const { linear, notion, 'field-guide': guide } = all
-  assert.deepEqual([notion.name, notion.category, notion.instructions, notion.service, notion.site, notion.onFor, notion.registration], ['Notion', 'Your apps', true, 'mcp.notion.com', 'https://www.notion.so/', [], null])
+  assert.deepEqual([notion.name, notion.category, notion.instructions, notion.service, notion.site, notion.onFor], ['Notion', 'Your apps', true, 'mcp.notion.com', 'https://www.notion.so/', []])
   assert.deepEqual([guide.instructions, guide.service], [true, null])
-  for (const id of [...google, 'linear', 'notion']) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions, id)
-  // Google's need Open Bot registered with Google first, once for all of them, with a guide that has this server's own address in it.
-  for (const id of google) assert.deepEqual([all[id].category, all[id].signIn, all[id].registration.id, all[id].registration.done], ['Google', true, 'google', false], id)
-  assert.equal(all['google-sheets'].service, 'sheetsmcp.googleapis.com')
-  const steps = all.gmail.registration.guide
-  assert.ok(steps.includes(`\`http://localhost:${PORT}/api/superpowers/callback\``), 'the address to give Google')
-  const services = 'gmail gmailmcp calendar-json calendarmcp docs docsmcp drive drivemcp sheets sheetsmcp slides slidesmcp'.split(' ').map((s) => `${s}.googleapis.com`)
-  assert.ok(steps.includes(`apiid=${services.join(',')})`), 'every Google service the superpowers use is switched on in one go')
+  for (const id of ['linear', 'notion']) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions, id)
   assert.doesNotMatch(await told(), /# Your superpowers/)
 
   // Switched on for one bot, and no other.
@@ -697,7 +680,7 @@ test('superpowers: one with an app is activated by signing the bot in, in the ow
     assert.deepEqual(await powersOf(bot.id), [])
 
     // In the bot's own browser, which the owner uses from any device. The stand-in service approves
-    // at once and sends the browser back to Open Bot with a code, which the browser catches.
+    // at once and sends the browser back to OpenKumi with a code, which the browser catches.
     const { windowId } = await api('POST', `/api/bots/${bot.id}/superpowers/vault/login`, { via: 'bot' })
     const windows = async () => (await api('GET', '/api/state')).browsers[bot.id]?.windows ?? []
     assert.equal((await windows()).find((w) => w.id === windowId)?.threadId, 'sign-in:vault')
@@ -711,19 +694,19 @@ test('superpowers: one with an app is activated by signing the bot in, in the ow
     // browser to the desktop app's address, and the app passes it on.
     const { url } = await api('POST', `/api/bots/${other.id}/superpowers/vault/login`, { via: 'app' })
     const back = (await fetch(url, { redirect: 'manual' })).headers.get('location')
-    assert.ok(back.startsWith('openbot://sign-in/callback?'), back)
+    assert.ok(back.startsWith('openkumi://sign-in/callback?'), back)
     assert.deepEqual(await powersOf(other.id), [], 'not active until the sign-in has come back')
     assert.deepEqual(await api('POST', '/api/superpowers/return', { url: back }), { botId: other.id, id: 'vault' })
     assert.deepEqual(await powersOf(other.id), ['vault'])
     assert.equal(await tool('mcp__vault__whoami', {}, other.id), 'signed in with token-2', 'each bot has an account of its own')
     await assert.rejects(api('POST', '/api/superpowers/return', { url: back }), /expired/, 'a way back is used once')
 
-    // Nothing else finishes a sign-in: not Open Bot's own address over the network or from the
+    // Nothing else finishes a sign-in: not OpenKumi's own address over the network or from the
     // bot's browser, not a way back that was made up, and not some other address.
     const forged = `http://localhost:${PORT}/api/superpowers/callback?code=the-code&state=made-up`
     assert.equal((await fetch(forged)).status, 401)
     assert.match(await tool('browser_navigate', { url: forged }), /^Error:/)
-    await assert.rejects(api('POST', '/api/superpowers/return', { url: 'openbot://sign-in/callback?code=the-code&state=made-up' }), /expired/)
+    await assert.rejects(api('POST', '/api/superpowers/return', { url: 'openkumi://sign-in/callback?code=the-code&state=made-up' }), /expired/)
     await assert.rejects(api('POST', '/api/superpowers/return', { url: 'https://example.com/?code=the-code' }), /not the way back/)
 
     // The account is kept where the bot's own tools cannot reach it.
@@ -752,13 +735,9 @@ test('superpowers: one with an app is activated by signing the bot in, in the ow
   }
 })
 
-test('superpowers: one whose company lets in only registered apps signs in with the owner\'s registration, in the bot\'s browser', async () => {
-  const tundra = await startOAuthServer({ selfRegistration: false })
-  addRegistration('tundra', { name: 'Tundra', clientId: '\\.tundra$', authorize: { access_type: 'offline', prompt: 'consent' } }, 'Add {{redirects}}, then switch on {{apis}}.')
-  addPower('tundra-mail', { name: 'Tundra Mail', mcp: { url: tundra.url, registration: 'tundra', scopes: ['read', 'write'], apis: ['mail.tundra', 'mailmcp.tundra'] } })
-  addPower('tundra-files', { name: 'Tundra Files', mcp: { url: tundra.url, registration: 'tundra', apis: ['files.tundra', 'mail.tundra'] } })
-  const secrets = () => JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8'))
-  const registration = async () => (await api('GET', '/api/superpowers')).find((p) => p.id === 'tundra-mail').registration
+test('superpowers: a sign-in asks only for what the superpower needs, and one that stops working shows when a tool is used', async () => {
+  const tundra = await startOAuthServer({ openList: true })
+  addPower('tundra-mail', { name: 'Tundra Mail', mcp: { url: tundra.url, scopes: ['read', 'write'] } })
   const state = async () => (await api('GET', '/api/state')).superpowerStatus[bot.id]?.['tundra-mail']?.state
   const powersOf = async () => (await api('GET', '/api/state')).bots.find((b) => b.id === bot.id).superpowers
   const signIn = async () => {
@@ -766,38 +745,10 @@ test('superpowers: one whose company lets in only registered apps signs in with 
     await until(async () => (await state()) === 'connected', 20_000)
   }
   try {
-    // Until the owner registers Open Bot there is a guide, with this server's own values in it, and no sign-in.
-    assert.deepEqual(await registration(), {
-      id: 'tundra',
-      name: 'Tundra',
-      done: false,
-      clientId: '',
-      ownBrowser: false,
-      guide: `Add \`http://localhost:${PORT}/api/superpowers/callback\`, then switch on files.tundra,mail.tundra,mailmcp.tundra.`,
-    })
-    await assert.rejects(api('POST', `/api/bots/${bot.id}/superpowers/tundra-mail/login`, { via: 'bot' }), /Open Bot is not registered with Tundra yet/)
-    await assert.rejects(api('PUT', '/api/registrations/tundra', { clientId: 'the-secret', clientSecret: 'one.tundra' }), /does not look like a Tundra client ID/)
-    await assert.rejects(api('PUT', '/api/registrations/tundra', { clientId: 'one.tundra', clientSecret: ' ' }), /Both the client ID and the client secret/)
-    await assert.rejects(api('PUT', '/api/registrations/nowhere', { clientId: 'one.tundra', clientSecret: 'x' }), /No such registration/)
-
-    // Registered once, for all of the company's superpowers. The secret stays on the server.
-    await api('PUT', '/api/registrations/tundra', { clientId: ' one.tundra ', clientSecret: 'first-secret' })
-    assert.deepEqual([(await registration()).done, (await registration()).clientId], [true, 'one.tundra'])
-    assert.deepEqual(secrets().registrations, { tundra: { clientId: 'one.tundra', clientSecret: 'first-secret' } })
-    assert.doesNotMatch(JSON.stringify(await api('GET', '/api/state')), /first-secret/, 'the secret is never sent to the app')
-
-    // Without a page of Open Bot's on the web to come back by, signing in happens in the bot's browser alone,
-    // with the owner's client: nothing registers itself,
-    // only what the superpower needs is asked for, and the company's page is asked for a lasting sign-in.
-    await assert.rejects(api('POST', `/api/bots/${bot.id}/superpowers/tundra-mail/login`, { via: 'app' }), /signs in inside the bot’s browser/)
     await signIn()
     assert.deepEqual(await powersOf(), ['tundra-mail'])
-    assert.equal(tundra.seen.registered, 0)
-    assert.deepEqual(tundra.seen.client, { id: 'one.tundra', secret: 'first-secret' })
-    const asked = tundra.seen.authorize
-    assert.deepEqual([asked.client_id, asked.scope, asked.access_type, asked.prompt], ['one.tundra', 'read write', 'offline', 'consent'])
+    assert.equal(tundra.seen.authorize.scope, 'read write', 'not everything the service offers')
     assert.equal(await tool('mcp__tundra-mail__whoami', {}), 'signed in with token-1')
-    assert.ok(!('client' in JSON.parse(fs.readFileSync(botPath('private', 'superpowers', 'tundra-mail.json'), 'utf8'))), 'the bot keeps no copy of the client')
 
     // The service lists its tools without an account, so a sign-in that stopped working shows when a tool is used.
     tundra.seen.refuse = true
@@ -806,37 +757,25 @@ test('superpowers: one whose company lets in only registered apps signs in with 
     assert.deepEqual(await powersOf(), ['tundra-mail'], 'still active, waiting to be signed in again')
     tundra.seen.refuse = false
     await signIn()
-
-    // A new secret for the same client keeps the sign-in; another client, or none, forgets it.
-    await api('PUT', '/api/registrations/tundra', { clientId: 'one.tundra', clientSecret: 'second-secret' })
-    assert.deepEqual(await powersOf(), ['tundra-mail'])
     assert.match(await tool('mcp__tundra-mail__whoami', {}), /^signed in with token-\d+$/)
-    await api('PUT', '/api/registrations/tundra', { clientId: 'two.tundra', clientSecret: 'third-secret' })
-    assert.deepEqual(await powersOf(), [])
-    assert.ok(!fs.existsSync(botPath('private', 'superpowers', 'tundra-mail.json')))
-    await api('DELETE', '/api/registrations/tundra')
-    assert.equal((await registration()).done, false)
-    assert.equal(secrets().registrations, undefined)
   } finally {
     removePower('tundra-mail')
-    removePower('tundra-files')
-    fs.rmSync(path.join(registrations, 'tundra'), { recursive: true, force: true })
     await tundra.close()
   }
 })
 
-test('a bot cannot reach Open Bot itself or files on the computer through its browser or web_fetch', async () => {
+test('a bot cannot reach OpenKumi itself or files on the computer through its browser or web_fetch', async () => {
   // A bot has no business talking to the server that runs it, with or without the access code.
   const own = `http://localhost:${PORT}/api/state`
   assert.equal((await fetch(own, { headers: auth() })).status, 200, 'the address works for the owner')
-  assert.match(await tool('web_fetch', { url: own }), /^Error: That address is Open Bot itself/)
+  assert.match(await tool('web_fetch', { url: own }), /^Error: That address is OpenKumi itself/)
   for (const host of ['127.0.0.1', '[::1]', '[::ffff:127.0.0.1]', '2130706433', '0.0.0.0', 'app.localhost']) {
-    assert.match(await tool('web_fetch', { url: `http://${host}:${PORT}/api/state` }), /^Error: That address is Open Bot itself/, host)
+    assert.match(await tool('web_fetch', { url: `http://${host}:${PORT}/api/state` }), /^Error: That address is OpenKumi itself/, host)
   }
   const vault = await startOAuthServer()
   try {
     const hop = `${new URL(vault.url).origin}/redirect?to=${encodeURIComponent(own)}`
-    assert.match(await tool('web_fetch', { url: hop }), /^Error: That address is Open Bot itself/, 'not even by way of a redirect')
+    assert.match(await tool('web_fetch', { url: hop }), /^Error: That address is OpenKumi itself/, 'not even by way of a redirect')
   } finally {
     await vault.close()
   }
@@ -899,7 +838,7 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
     // Its own tools for running commands and touching files are switched off, and the user's own setup is left out.
     const started = JSON.parse(await reply('!args'))
     if (engine === 'claude-code') {
-      assert.deepEqual([started.tools, started.allowed, started.model], ['WebSearch', 'mcp__openbot,WebSearch', null])
+      assert.deepEqual([started.tools, started.allowed, started.model], ['WebSearch', 'mcp__openkumi,WebSearch', null])
       for (const flag of ['--restricted', '--strict-mcp-config', '--disable-slash-commands', '--resume']) assert.ok(started.flags.includes(flag), flag)
     } else if (engine === 'grok') {
       assert.deepEqual([started.tools, started.mode, started.sandbox, started.model], ['web_search', 'dontAsk', 'read-only', null])
@@ -931,7 +870,7 @@ test('engines: a thread can move to another engine, and the tool address only wo
   // If the engine has lost its own record (its storage was cleared), the turn starts over from what was said.
   await api('PATCH', `/api/bots/${runner.id}`, { provider: 'claude-code' })
   await say(id, 'one')
-  for (const f of fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('openbot-fake-claude-'))) fs.rmSync(path.join(os.tmpdir(), f))
+  for (const f of fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('openkumi-fake-claude-'))) fs.rmSync(path.join(os.tmpdir(), f))
   assert.match(lastText(await say(id, 'two')), /^Echo \(turn 1\): This conversation was already under way\.[\s\S]*two$/)
 
   // The address an engine uses for the bot's tools is made for one turn and is gone afterwards.

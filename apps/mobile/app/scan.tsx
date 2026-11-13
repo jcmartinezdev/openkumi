@@ -3,7 +3,7 @@ import { useRef } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { useRouter } from 'expo-router'
-import { parsePairingLink } from '@openbot/client/pair'
+import { parsePairingLink } from '@openkumi/client/pair'
 import { useTheme } from '../src/theme'
 
 export default function Scan() {

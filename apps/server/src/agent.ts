@@ -2,7 +2,7 @@
 // coordinates subagents (child threads that run concurrently and report back to their parent).
 // A bot has one conversation with its owner (see mainThread), which can be started afresh.
 // Runs of scheduled tasks (tasks.ts) are threads beneath the conversation too, and report to it.
-import type { Bot, Item, ItemData, Partial, Thread } from '@openbot/shared'
+import type { Bot, Item, ItemData, Partial, Thread } from '@openkumi/shared'
 import { attach, toShow, withFiles } from './attachments.ts'
 import { getBot, listBots } from './bots.ts'
 import { browserFor, retireWindow } from './browser.ts'
@@ -73,7 +73,7 @@ function team(bot: Bot, thread: Thread): string | null {
 /** The system prompt, rebuilt from the bot's folder on every step so its own edits take effect at once. */
 function instructions(bot: Bot, thread: Thread, problems: Record<string, string>): string {
   const parts = [
-    `You are ${bot.name}, an AI bot running locally on the user's own computer inside Open Bot. ` +
+    `You are ${bot.name}, an AI bot running locally on the user's own computer inside OpenKumi. ` +
       `Today is ${new Date().toDateString()}.`,
   ]
   const { text: shared } = principles()
@@ -86,7 +86,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
   const others = team(bot, thread)
   if (others) parts.push(others)
   parts.push(
-    '# Working in Open Bot\n' +
+    '# Working in OpenKumi\n' +
       'Your replies are drawn as GitHub Markdown, with tables, ```mermaid diagrams, and formulas as $…$ or on lines of their own as $$…$$. ' +
       'When figures, a comparison or a structure are clearer as a picture (a chart, a dashboard, a timeline), show one with show_page. ' +
       'A file you save is not shown to the user by itself: when you make a page as a file, also show it with show_page and its path.',

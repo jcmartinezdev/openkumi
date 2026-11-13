@@ -27,7 +27,7 @@ const prompt = blocks[0].text
 const shown = blocks.slice(1).map((block) => block.mimeType)
 // The turn count lives in a file, like a real session, so a resumed conversation carries on from it.
 const session = flag('--resume') ?? crypto.randomUUID()
-const file = path.join(os.tmpdir(), `openbot-fake-grok-${session}.json`)
+const file = path.join(os.tmpdir(), `openkumi-fake-grok-${session}.json`)
 const turn = (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')).turn : 0) + 1
 fs.writeFileSync(file, JSON.stringify({ turn }))
 print({ type: 'system', subtype: 'init', session_id: session })

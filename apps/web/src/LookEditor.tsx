@@ -1,8 +1,8 @@
 // Choosing a bot's look: the emoji on its sign, the creature, its colour and what it wears. Each
 // choice shows as the bot's own head wearing it. Used for a new bot and on a bot's settings page.
 import { type CSSProperties, useState } from 'react'
-import type { Look } from '@openbot/shared'
-import { BODY_COLORS, CLOTHES_COLORS, CREATURES, EXTRAS, HATS, SIGN_EMOJIS, surprise } from '@openbot/client/mascot'
+import type { Look } from '@openkumi/shared'
+import { BODY_COLORS, CLOTHES_COLORS, CREATURES, EXTRAS, HATS, SIGN_EMOJIS, surprise } from '@openkumi/client/mascot'
 import { Icon } from './Icon'
 import { Mascot } from './Mascot'
 

@@ -1,10 +1,10 @@
 // Files in a conversation: the ones waiting in the composer to be sent, the ones that went with the
 // owner's messages (as the conversation keeps them, whatever the bot did with its own copies), and a
 // picture opened to its full size. Which files wait, and how they go up, is shared with the phone
-// (@openbot/client/attachments).
+// (@openkumi/client/attachments).
 import { useEffect, useState } from 'react'
-import type { Attachment } from '@openbot/shared'
-import { type Pending, type Picked, PICTURE_SIDE, isPicture, keptAt, kindOf, onRelease, sizeOf } from '@openbot/client/attachments'
+import type { Attachment } from '@openkumi/shared'
+import { type Pending, type Picked, PICTURE_SIDE, isPicture, keptAt, kindOf, onRelease, sizeOf } from '@openkumi/client/attachments'
 import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { download, onEnvironmentChange, request } from './store'

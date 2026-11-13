@@ -36,7 +36,7 @@ export default function Layout() {
           return { headerStyle: { backgroundColor: background }, headerTintColor: theme.text, headerShadowVisible: false, contentStyle: { backgroundColor: background }, headerBackButtonDisplayMode: 'minimal', statusBarStyle }
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'Open Bot' }} />
+        <Stack.Screen name="index" options={{ title: 'OpenKumi' }} />
         <Stack.Screen name="pair" options={{ title: 'Pair with your computer', headerBackVisible: false }} />
         <Stack.Screen name="scan" options={{ title: 'Scan the code', presentation: 'modal' }} />
         <Stack.Screen name="chat/[id]" options={{ title: '' }} />

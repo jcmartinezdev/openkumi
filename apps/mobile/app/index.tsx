@@ -2,8 +2,8 @@
 // Under them, as at the bottom of the computer's sidebar, the scheduled tasks; Settings is the gear.
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
-import { mainThread, useStore } from '@openbot/client/store'
-import { moment } from '@openbot/client/tasks'
+import { mainThread, useStore } from '@openkumi/client/store'
+import { moment } from '@openkumi/client/tasks'
 import { Glyph } from '../src/icons'
 import { forget, useSession } from '../src/session'
 import { useTheme } from '../src/theme'
@@ -55,7 +55,7 @@ export default function Home() {
     const lead = refused
       ? `${name} no longer lets this phone in. Unpair it, then pair again with a new code.`
       : outdated
-        ? `${name} runs an older Open Bot, which cannot show that it is the computer this phone was paired with, so it is not sent the phone’s key. Update Open Bot there.`
+        ? `${name} runs an older OpenKumi, which cannot show that it is the computer this phone was paired with, so it is not sent the phone’s key. Update OpenKumi there.`
         : failures >= 2
           ? `${name} cannot be reached. Check that this phone is on the same network, or that Tailscale is on, on both. Still trying…`
           : 'Connecting…'

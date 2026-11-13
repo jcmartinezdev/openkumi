@@ -1,21 +1,21 @@
 {
   "expo": {
-    "name": "Open Bot",
-    "slug": "open-bot",
-    "scheme": "openbot",
+    "name": "OpenKumi",
+    "slug": "openkumi",
+    "scheme": "openkumi",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "dev.jcmartinez.openbot",
+      "bundleIdentifier": "ai.openkumi.mobile",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true,
           "NSAllowsLocalNetworking": true
         },
-        "NSLocalNetworkUsageDescription": "Open Bot connects to the computer on your network that runs your bots.",
+        "NSLocalNetworkUsageDescription": "OpenKumi connects to the computer on your network that runs your bots.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "appleTeamId": "48U5Q483NS"
@@ -26,7 +26,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Open Bot uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
+          "cameraPermission": "OpenKumi uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
           "recordAudioAndroid": false
         }
       ],
@@ -35,8 +35,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Open Bot lets you choose photos to send to your bots.",
-          "cameraPermission": "Open Bot uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
+          "photosPermission": "OpenKumi lets you choose photos to send to your bots.",
+          "cameraPermission": "OpenKumi uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
           "microphonePermission": false
         }
       ]

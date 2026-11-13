@@ -5,9 +5,9 @@
 // moves the bot to that provider. A click keeps the picker open, so a model and its reasoning can be
 // picked in one go; Enter and Command (Control elsewhere) with a number pick and close it.
 import { Fragment, useEffect, useRef, useState } from 'react'
-import type { Bot, Effort, ModelInfo } from '@openbot/shared'
+import type { Bot, Effort, ModelInfo } from '@openkumi/shared'
 import { Icon } from './Icon'
-import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, switchTo, useModelLists } from '@openbot/client/models'
+import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, switchTo, useModelLists } from '@openkumi/client/models'
 import { setPrefs, usePrefs } from './prefs'
 import { ProviderIcon } from './ProviderIcon'
 import { api, openSettings, useStore } from './store'

@@ -4,10 +4,10 @@ import { createContext, memo, useContext, useEffect, useMemo, useRef, useState }
 import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, type NativeScrollEvent, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Attachment, Item } from '@openbot/shared'
-import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openbot/client/attachments'
-import { describe } from '@openbot/client/steps'
-import { api, loadThread, mainThread, recentSubagents, useStore } from '@openbot/client/store'
+import type { Attachment, Item } from '@openkumi/shared'
+import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
+import { describe } from '@openkumi/client/steps'
+import { api, loadThread, mainThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
@@ -165,7 +165,7 @@ export default function Chat() {
   const openFile = (path: string) => {
     if (!bot) return
     api<{ content: string; binary: boolean }>('GET', `/api/bots/${bot.id}/file?path=${encodeURIComponent(path)}`).then(
-      (found) => (found.binary ? Alert.alert(path, 'This file can be opened in Open Bot on the computer, under the bot’s files.') : setFile({ path, content: found.content })),
+      (found) => (found.binary ? Alert.alert(path, 'This file can be opened in OpenKumi on the computer, under the bot’s files.') : setFile({ path, content: found.content })),
       (e) => Alert.alert(path, (e as Error).message),
     )
   }
@@ -202,7 +202,7 @@ export default function Chat() {
   const tail = (
     <View style={{ paddingBottom: 12 }}>
       {!!partial?.text && <View style={styles.bot}><Markdown text={partial.text} live /></View>}
-      {running && !partial?.text && <View style={styles.working}>{bot ? <Bobbing><BotHead bot={bot} size={24} /></Bobbing> : <ActivityIndicator size="small" color={theme.muted} />}<Text style={{ color: theme.muted, fontSize: 14 }}>Working</Text></View>}
+      {running && !partial?.text && <View style={styles.working}>{bot ? <Bobbing><BotHead bot={bot} size={24} sign={false} /></Bobbing> : <ActivityIndicator size="small" color={theme.muted} />}<Text style={{ color: theme.muted, fontSize: 14 }}>Working</Text></View>}
       {subagents.length > 0 && (
         <View style={styles.chips}>
           {subagents.map((t) => (

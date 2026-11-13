@@ -1,7 +1,7 @@
 {
-  "name": "@openbot/server",
+  "name": "@openkumi/server",
   "version": "0.1.0",
-  "description": "The Open Bot server: runs the bots, their browsers and their files. It has no interface of its own.",
+  "description": "The OpenKumi server: runs the bots, their browsers and their files. It has no interface of its own.",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -19,7 +19,7 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@openbot/shared": "*",
+    "@openkumi/shared": "*",
     "@types/ws": "^8.5.0"
   }
 }

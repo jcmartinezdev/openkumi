@@ -2,7 +2,7 @@
 // shown, and the one before it let go.
 import { useEffect, useRef, useState } from 'react'
 import { type SkImage, Skia } from '@shopify/react-native-skia'
-import { useStore } from '@openbot/client/store'
+import { useStore } from '@openkumi/client/store'
 import { watch } from './session'
 
 /** The newest picture of a tab, while `on`, and the size of the page in its own units (which taps are sent in). */

@@ -6,10 +6,10 @@ import { useSyncExternalStore } from 'react'
 import { AppState } from 'react-native'
 import * as Crypto from 'expo-crypto'
 import * as SecureStore from 'expo-secure-store'
-import { type SavedAddress, checkNew, ordered, refusal, useRandom, withFound } from '@openbot/client/addresses'
-import { type Picture, createConnection } from '@openbot/client/connection'
-import { pair, parseAddress } from '@openbot/client/pair'
-import { follow, onLearn, receive, recheck, send, useStore, useTransport } from '@openbot/client/store'
+import { type SavedAddress, checkNew, ordered, refusal, useRandom, withFound } from '@openkumi/client/addresses'
+import { type Picture, createConnection } from '@openkumi/client/connection'
+import { pair, parseAddress } from '@openkumi/client/pair'
+import { follow, onLearn, receive, recheck, send, useStore, useTransport } from '@openkumi/client/store'
 
 export interface Server {
   name: string
@@ -25,7 +25,7 @@ useRandom(() => Crypto.getRandomBytes(16))
 /** The server's first address, as the phone shows it when it has no name of its own. */
 export const hostOf = (server: Server) => new URL(ordered(server.addresses)[0]).host
 
-const SAVED = 'openbot.server'
+const SAVED = 'openkumi.server'
 let server: Server | null = null
 /** False until the keychain has been read, so the first screen is not drawn on a guess. */
 let ready = false
@@ -70,8 +70,8 @@ export function useServerStatus(): { text: string; word: string; ok: boolean } {
   const failures = useStore((s) => s.failures)
   const version = useStore((s) => s.about.version)
   if (refused) return { text: 'No longer lets this phone in', word: 'Refused', ok: false }
-  if (outdated) return { text: 'Runs an older Open Bot', word: 'Needs update', ok: false }
-  if (connected) return { text: version ? `Connected · Open Bot ${version}` : 'Connected', word: 'Connected', ok: true }
+  if (outdated) return { text: 'Runs an older OpenKumi', word: 'Needs update', ok: false }
+  if (connected) return { text: version ? `Connected · OpenKumi ${version}` : 'Connected', word: 'Connected', ok: true }
   if (failures >= 2) return { text: 'Cannot be reached. Still trying…', word: 'Unreachable', ok: false }
   const word = loaded ? 'Reconnecting…' : 'Connecting…'
   return { text: word, word, ok: false }

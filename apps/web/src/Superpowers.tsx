@@ -2,11 +2,11 @@
 // what it does and lets the owner activate it for each bot, and the same buttons from the bot's
 // side, in its settings. A superpower is always activated for one bot, never for all of them.
 // Activating one that works in an app means signing the bot in to it, in this computer's browser or
-// in the bot's own. Google's need Open Bot registered with Google first, once, by the owner.
+// in the bot's own.
 import { type ReactNode, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Bot, Registration, Superpower, SuperpowerStatus } from '@openbot/shared'
-import { control, driverOf, signInThread, windowOf } from '@openbot/client/browser'
+import type { Bot, Superpower, SuperpowerStatus } from '@openkumi/shared'
+import { control, driverOf, signInThread, windowOf } from '@openkumi/client/browser'
 import { PageView } from './BrowserPane'
 import { useDesktop } from './desktop'
 import { Markdown } from './Markdown'
@@ -24,8 +24,6 @@ export const Tile = ({ power, size = 'card' }: { power: Superpower; size?: 'row'
 )
 const count = (n: number) => `Active for ${n} ${n === 1 ? 'bot' : 'bots'}`
 const pageOf = (power: Superpower) => `#/settings/superpowers/${encodeURIComponent(power.id)}`
-/** A page is written with lines wrapped for reading as a file; here a paragraph is one flowing piece. */
-const unwrap = (markdown: string) => markdown.replace(/([^\n])\n(?!\n|\s*(?:[-*>#]|\d+\.)\s)/g, '$1 ')
 
 export function SuperpowerList() {
   const powers = useStore((s) => s.superpowers)
@@ -45,14 +43,13 @@ export function SuperpowerList() {
                   <h3>{power.name}</h3>
                   <p>{power.tagline}</p>
                   {power.onFor.length > 0 && <span className="pill good">{count(power.onFor.length)}</span>}
-                  {power.registration && !power.registration.done && <span className="pill">Needs a one-time setup</span>}
                 </div>
               </a>
             ))}
           </div>
         </section>
       ))}
-      {!powers.length && <p className="set-intro">There are no superpowers in this version of Open Bot.</p>}
+      {!powers.length && <p className="set-intro">There are no superpowers in this version of OpenKumi.</p>}
     </Page>
   )
 }
@@ -139,10 +136,7 @@ function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; a
   const [page, setPage] = useState('')
   const status = useStore((s) => s.superpowerStatus[bot.id]?.[power.id])
   const active = useStore((s) => !!s.bots.find((b) => b.id === bot.id)?.superpowers.includes(power.id))
-  const registration = power.registration
-  // A company that admits only registered apps (Google) sends this computer's browser back by way of
-  // Open Bot's page on the web, which this version of Open Bot may not have.
-  const ownBrowser = !!useDesktop().catchesSignIns && (!registration || registration.ownBrowser)
+  const ownBrowser = !!useDesktop().catchesSignIns
   const path = `/api/bots/${bot.id}/superpowers/${power.id}`
   const waiting = step === 'browser' || step === 'bot'
 
@@ -199,18 +193,7 @@ function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; a
               </div>
             </>
           )}
-          {step === 'ask' && registration && !registration.done && (
-            <>
-              <p className="muted">
-                Before a bot can sign in to {power.name}, Open Bot has to be registered with {registration.name}. You do that once, for all the {registration.name} superpowers, and {power.name}’s page shows you how.
-              </p>
-              <div className="actions">
-                <button onClick={cancel}>Cancel</button>
-                <button className="primary" onClick={() => ((location.hash = `${pageOf(power)}`), close())}>Set up {registration.name}</button>
-              </div>
-            </>
-          )}
-          {step === 'ask' && power.signIn && (!registration || registration.done) && (
+          {step === 'ask' && power.signIn && (
             <>
               <p className="muted">
                 {again ? `${bot.name} is not signed in to ${power.name} any more.` : `${bot.name} signs in to ${power.name} with an account of its own. Once it is signed in, ${power.name} is active for ${bot.name}.`}
@@ -227,11 +210,7 @@ function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; a
                   <span>{bot.name}’s own browser, on the computer that runs your bots. Good for using a different account for this bot.</span>
                 </button>
               </div>
-              {registration && !registration.ownBrowser ? (
-                <p className="faint">This version of Open Bot signs bots in to {registration.name} inside their own browser only.</p>
-              ) : (
-                !ownBrowser && <p className="faint">To sign in with your own browser, use the latest Open Bot app installed on this computer.</p>
-              )}
+              {!ownBrowser && <p className="faint">To sign in with your own browser, use the latest OpenKumi app installed on this computer.</p>}
             </>
           )}
           {step === 'browser' && (
@@ -302,8 +281,8 @@ export function SuperpowerPage({ id }: { id: string }) {
       </header>
       {error && <div className="notice error">{error}</div>}
 
-      <section className="power-about"><Markdown text={unwrap(power.about)} /></section>
-      {power.registration && !power.registration.done && <RegistrationSetup registration={power.registration} />}
+      {/* The page is written with lines wrapped for reading as a file; here a paragraph is one flowing piece. */}
+      <section className="power-about"><Markdown text={power.about.replace(/([^\n])\n(?!\n|\s*(?:[-*>#]|\d+\.)\s)/g, '$1 ')} /></section>
 
       <Section title="What a bot can do with it">
         {power.can.map((line) => <Row key={line} title={<><Icon name="check" size={14} />{line}</>} />)}
@@ -324,72 +303,7 @@ export function SuperpowerPage({ id }: { id: string }) {
           />
         )}
       </Section>
-      {power.registration?.done && <RegistrationSetup registration={power.registration} />}
     </Page>
-  )
-}
-
-/**
- * Registering Open Bot with a company that lets in only the apps registered with it (Google). The
- * owner does it once, for all of that company's superpowers, following the guide the server sends,
- * which has the server's own address in it. Once done, it can be changed or taken away.
- */
-function RegistrationSetup({ registration }: { registration: Registration }) {
-  const [changing, setChanging] = useState(false)
-  const [clientId, setClientId] = useState('')
-  const [clientSecret, setClientSecret] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const { name } = registration
-  const send = (method: 'PUT' | 'DELETE', body?: object) => {
-    setError('')
-    setBusy(true)
-    return api(method, `/api/registrations/${registration.id}`, body)
-  }
-  const save = () =>
-    send('PUT', { clientId, clientSecret }).then(
-      () => (setChanging(false), setClientId(''), setClientSecret('')),
-      (e) => setError(e.message),
-    ).finally(() => setBusy(false))
-  const remove = () => {
-    if (!confirm(`Remove Open Bot’s registration with ${name}? Every bot is signed out of the ${name} superpowers, and they are deactivated.`)) return
-    send('DELETE').catch((e) => setError(e.message)).finally(() => setBusy(false))
-  }
-  const plain = { spellCheck: false, autoCapitalize: 'off', autoComplete: 'off', className: 'set-input wide' } as const
-
-  if (registration.done && !changing) {
-    return (
-      <Section title={`Registered with ${name}`}>
-        {error && <div className="notice error">{error}</div>}
-        <Row
-          title={<><Icon name="check" size={14} />Open Bot is registered with {name}</>}
-          description={`Every ${name} superpower signs in with it. Client ID ${registration.clientId}`}
-          control={
-            <>
-              <button onClick={() => setChanging(true)}>Change</button>
-              <button className="ghost" disabled={busy} onClick={remove}>Remove</button>
-            </>
-          }
-        />
-      </Section>
-    )
-  }
-  return (
-    <Section title={registration.done ? `Change the registration with ${name}` : `Set up ${name}, once`}>
-      <div className="registration-guide"><Markdown text={unwrap(registration.guide)} /></div>
-      {error && <div className="notice error">{error}</div>}
-      <Row title="Client ID" control={<input {...plain} aria-label={`${name} client ID`} value={clientId} placeholder="…apps.googleusercontent.com" onChange={(e) => setClientId(e.target.value)} />} />
-      <Row title="Client secret" control={<input {...plain} type="password" aria-label={`${name} client secret`} value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />} />
-      <Row
-        title=""
-        control={
-          <>
-            {registration.done && <button onClick={() => setChanging(false)}>Cancel</button>}
-            <button className="primary" disabled={busy || !clientId.trim() || !clientSecret.trim()} onClick={save}>{busy ? 'Saving…' : 'Save'}</button>
-          </>
-        }
-      />
-    </Section>
   )
 }
 
@@ -413,7 +327,7 @@ export function BotSuperpowers({ bot }: { bot: Bot }) {
             fail={setError}
           />
         ))}
-        {!powers.length && <Row title="There are no superpowers in this version of Open Bot." />}
+        {!powers.length && <Row title="There are no superpowers in this version of OpenKumi." />}
       </Section>
     </Page>
   )

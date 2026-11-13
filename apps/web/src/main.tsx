@@ -8,7 +8,7 @@ import './styles.css'
 const root = document.getElementById('root')!
 if (!inDesktopApp) {
   // The interface is part of the desktop app; a browser has no app behind it to say where the bots run.
-  root.textContent = 'Open Bot is a desktop app. Start it with “npm start”.'
+  root.textContent = 'OpenKumi is a desktop app. Start it with “npm start”.'
 } else {
   const chrome = (state = desktopState()) => {
     document.documentElement.dataset.platform = state.platform

@@ -3,15 +3,35 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { EventEmitter } from 'node:events'
-import type { ServerEvent } from '@openbot/shared'
+import type { ServerEvent } from '@openkumi/shared'
 
-export const HOME = process.env.OPENBOT_HOME ?? path.join(os.homedir(), '.openbot')
-export const PORT = Number(process.env.OPENBOT_PORT ?? 4317)
+/** Where the data was kept while OpenKumi was called Open Bot. */
+const BEFORE = path.join(os.homedir(), '.openbot')
+export const HOME = process.env.OPENKUMI_HOME ?? home()
+export const PORT = Number(process.env.OPENKUMI_PORT ?? 4317)
 export const ROOT = path.resolve(import.meta.dirname, '..')
 /** Started with --lan: serve other devices on the local network whatever the setting says. */
-export const LAN = process.argv.includes('--lan') || process.env.OPENBOT_LAN === '1'
+export const LAN = process.argv.includes('--lan') || process.env.OPENKUMI_LAN === '1'
+
+/** The database, in HOME. */
+export const DATABASE = path.join(HOME, HOME === BEFORE ? 'openbot.db' : 'openkumi.db')
 
 fs.mkdirSync(path.join(HOME, 'bots'), { recursive: true })
+
+/**
+ * OpenKumi was called Open Bot, and kept its data in ~/.openbot. That folder becomes ~/.openkumi
+ * the first time OpenKumi starts, unless a server from before is still using it: then it is used
+ * where it is until a start after that server has stopped.
+ */
+function home() {
+  const home = path.join(os.homedir(), '.openkumi')
+  if (fs.existsSync(home) || !fs.existsSync(BEFORE)) return home
+  // A server has its database open (or was stopped without closing it) while this file is there.
+  if (fs.existsSync(path.join(BEFORE, 'openbot.db-wal'))) return BEFORE
+  fs.renameSync(BEFORE, home)
+  if (fs.existsSync(path.join(home, 'openbot.db'))) fs.renameSync(path.join(home, 'openbot.db'), path.join(home, 'openkumi.db'))
+  return home
+}
 
 // A bot is a folder. Its owner's settings sit at the top; the bot can only reach `workspace`.
 //   bots/<id>/bot.md             name, model and rules

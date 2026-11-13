@@ -1,9 +1,9 @@
 // The desktop app behind this window (see apps/desktop/src/preload.ts). The app keeps the list of
 // environments and runs the one on this computer; this window is told which one to talk to.
 import { useSyncExternalStore } from 'react'
-import type { DesktopBridge, DesktopState } from '@openbot/shared/desktop'
+import type { DesktopBridge, DesktopState } from '@openkumi/shared/desktop'
 
-const bridge = (window as { openbotDesktop?: DesktopBridge }).openbotDesktop
+const bridge = (window as { openkumiDesktop?: DesktopBridge }).openkumiDesktop
 
 /** False when the interface was opened somewhere other than the desktop app, where it cannot work. */
 export const inDesktopApp = !!bridge
