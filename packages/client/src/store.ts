@@ -2,7 +2,7 @@
 // the server's events. Shared by the desktop app's window and the phone app; each brings its own
 // connection (see connection.ts) and hands it over with `useTransport`.
 import { useSyncExternalStore } from 'react'
-import type { AppState, ClientEvent, Item, Partial, Principles, ServerEvent, Settings, Thread } from '@openkumi/shared'
+import type { AppState, ClientEvent, Item, Partial, ServerEvent, Settings, Thread } from '@openkumi/shared'
 import type { Link } from '@openkumi/shared/desktop'
 import { reach } from './addresses'
 import type { Command, Report } from './connection'
@@ -42,7 +42,6 @@ const EMPTY: State = {
   seq: 0,
   settings: {} as Settings,
   defaults: {} as Settings,
-  principles: { text: '', custom: false, default: '' },
   about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '' },
   items: {},
   older: {},
@@ -138,13 +137,6 @@ export async function saveSettings(patch: globalThis.Partial<Settings>) {
   }
 }
 
-/** Changes what every bot is told first; null puts back the ones OpenKumi comes with. */
-export async function savePrinciples(text: string | null) {
-  const asked = epoch
-  const saved = await api<Principles>('PUT', '/api/principles', { text })
-  if (asked === epoch) set({ principles: saved })
-}
-
 const upsert = <T extends { id: string }>(list: T[], value: T) =>
   list.some((x) => x.id === value.id) ? list.map((x) => (x.id === value.id ? value : x)) : [...list, value]
 
@@ -224,8 +216,6 @@ function handle(ev: ServerEvent) {
       return set({ providers: ev.providers })
     case 'settings':
       return set({ settings: ev.settings })
-    case 'principles':
-      return set({ principles: ev.principles })
     case 'superpowers':
       return set({ superpowers: ev.superpowers, superpowerCategories: ev.categories })
     case 'superpower.status': {

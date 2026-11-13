@@ -429,36 +429,19 @@ test('a bot is a folder: bot.md holds the owner\'s settings and rules', async ()
   await api('PATCH', `/api/bots/${bot.id}`, { name: 'Tester' })
 })
 
-test('principles: every bot is told them first; the owner changes them, and the ones OpenKumi comes with come back', async () => {
-  const { principles } = await api('GET', '/api/state')
-  assert.equal(principles.custom, false)
-  assert.equal(principles.text, principles.default)
-  assert.match(principles.text, /\*\*Work as a team\.\*\*/)
-  const file = path.join(home, 'principles.md')
+test('master prompt: every bot is told the one OpenKumi comes with, filled in, and nothing in the app changes it', async () => {
+  const prompt = await told()
+  assert.match(prompt, /^You are Tester, an AI bot running locally on the user's own computer inside OpenKumi\. Today is /)
+  assert.match(prompt, /\n# Principles\nThese hold for every bot here, and you cannot change them\.[\s\S]*\*\*Work as a team\.\*\*/)
+  // In the file's order, with its comment left out and every part filled in.
+  const at = ['# Principles', '# The other bots', '# Working in OpenKumi', '# Your conversation', '# Scheduled tasks', '# Your workspace', '# Your instructions (AGENTS.md)', '# Your notes (memory/)'].map((h) => prompt.indexOf(`\n${h}\n`))
+  assert.ok(at.every((n, i) => n > 0 && (i === 0 || n > at[i - 1])), `in order: ${at}`)
+  assert.ok(!/\{\{|<!--|\n\n\n/.test(prompt), 'no tag, comment or run of empty lines is left')
+  assert.ok(!prompt.includes('# You are running'), 'a conversation is neither a scheduled run nor a subagent')
 
-  let prompt = await told()
-  assert.ok(prompt.includes(`# Principles\n`) && prompt.includes(principles.default))
-  assert.ok(prompt.indexOf('# Principles') < prompt.indexOf('# Working in OpenKumi'), 'they come before anything else')
-
-  // The owner's own are kept in a file of their own, and told to every bot from the next turn.
-  const mine = await api('PUT', '/api/principles', { text: '  Always answer in French.\r\n' })
-  assert.deepEqual([mine.custom, mine.text], [true, 'Always answer in French.'])
-  assert.equal(fs.readFileSync(file, 'utf8'), 'Always answer in French.\n')
-  prompt = await told('!system', 'assistant')
-  assert.ok(prompt.includes('Always answer in French.') && !prompt.includes('Work as a team'))
-
-  // The file is the truth, as bot.md is; with nothing in it, bots are told no principles.
-  fs.writeFileSync(file, 'Edited by hand.')
-  assert.match(await told(), /# Principles\n[\s\S]*Edited by hand\./)
-  await api('PUT', '/api/principles', { text: '' })
-  assert.doesNotMatch(await told(), /# Principles/)
-
-  await assert.rejects(api('PUT', '/api/principles', { text: 5 }), /must be text/)
-  // Back to the ones OpenKumi comes with, which are not written out, so that improvements to them reach everyone.
-  assert.equal((await api('PUT', '/api/principles', { text: null })).custom, false)
-  assert.ok(!fs.existsSync(file))
-  assert.equal((await api('PUT', '/api/principles', { text: principles.default })).custom, false, 'the same text as the default is the default')
-  assert.ok((await told()).includes(principles.default))
+  // It is the same for every bot, and there is nothing to change it with.
+  assert.ok(!('principles' in (await api('GET', '/api/state'))))
+  await assert.rejects(api('PUT', '/api/principles', { text: 'Always answer in French.' }), /Not found/)
 })
 
 test('the other bots: each bot is told who the others are and what each is for, and hands one a task as a subagent', async () => {
@@ -840,7 +823,9 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
     assert.equal(await reply('again'), 'Echo (turn 2): again', engine)
 
     // It gets the bot's own instructions, and reaches the bot's tools; calls are recorded like any other.
-    assert.match(await reply('!system'), /# Your instructions \(AGENTS\.md\)[\s\S]*Likes brevity\./, engine)
+    const system = await reply('!system')
+    assert.match(system, /# Your instructions \(AGENTS\.md\)[\s\S]*Likes brevity\./, engine)
+    assert.equal(system.includes('Your tools come from OpenKumi'), engine === 'codex', `${engine}: only Codex is told not to use tools of its own`)
     const items = await say(id, '!tool write_file {"path":"memory/from-engine.md","content":"hi"}')
     assert.equal(lastText(items), 'Tool result: Saved memory/from-engine.md.', engine)
     const call = items.findLast((d) => d.type === 'function_call')
