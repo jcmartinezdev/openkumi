@@ -13,6 +13,9 @@ import { startOAuthServer } from './fixtures/mcp-oauth.mjs'
 const PORT = 4400 + Math.floor(Math.random() * 500)
 const BASE = `http://127.0.0.1:${PORT}`
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-test-'))
+/** The user's own Codex folder, with servers they set up for themselves, which no bot is to get. */
+const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-codex-home-'))
+fs.writeFileSync(path.join(codexHome, 'config.toml'), 'model = "their-model"\n\n[mcp_servers.calendar]\ncommand = "calendar"\n\n[mcp_servers.calendar.env]\nKEY = "1"\n\n[mcp_servers."my notes"]\nurl = "https://example.com/mcp"\n')
 /** The superpowers the server offers: the ones that ship, and any the tests add. */
 const powers = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-superpowers-'))
 fs.cpSync(path.resolve('superpowers'), powers, { recursive: true })
@@ -155,6 +158,7 @@ before(async () => {
       // Scripted stand-ins for the Claude Code and Codex programs.
       OPENKUMI_CLAUDE_BIN: path.resolve('test/fixtures/fake-claude.mjs'),
       OPENKUMI_CODEX_BIN: path.resolve('test/fixtures/fake-codex.mjs'),
+      CODEX_HOME: codexHome,
       OPENKUMI_GROK_BIN: path.resolve('test/fixtures/fake-grok.mjs'),
       // And for Tailscale's, which says this computer is on a tailnet.
       OPENKUMI_TAILSCALE_BIN: path.resolve('test/fixtures/fake-tailscale.mjs'),
@@ -173,6 +177,7 @@ after(async () => {
   server.kill('SIGTERM')
   await new Promise((r) => server.on('exit', r))
   fs.rmSync(home, { recursive: true, force: true })
+  fs.rmSync(codexHome, { recursive: true, force: true })
   fs.rmSync(powers, { recursive: true, force: true })
 })
 
@@ -1033,9 +1038,56 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
       assert.equal(started.config.sandbox_mode, 'read-only')
       assert.equal(started.config['skills.include_instructions'], false)
       for (const feature of ['shell_tool', 'unified_exec', 'multi_agent', 'plugins']) assert.ok(started.disabled.includes(feature), feature)
-      assert.ok(started.flags.includes('--ignore-user-config'))
+      // It runs as Codex's app server, which reads the user's own setup: the servers they have there are switched off by name.
+      assert.deepEqual([started.opened.sandbox, started.opened.approvalPolicy, started.opened.model], ['read-only', 'never', null])
+      assert.deepEqual([started.config['mcp_servers.calendar.enabled'], started.config['mcp_servers.my notes.enabled'], started.config.notify], [false, false, []])
+      assert.ok(!Object.keys(started.config).some((key) => key.startsWith('mcp_servers.calendar.env')))
     }
   }
+})
+
+test('engines: a message sent now is given to an engine as it works, or cuts its turn short once the step under way is done', async () => {
+  /** Has the bot at work on `first`, with `then` waiting, and has it read `then` now. */
+  const sendNow = async (id, first, then) => {
+    await api('POST', `/api/threads/${id}/messages`, { text: first })
+    await api('POST', `/api/threads/${id}/messages`, { text: then })
+    // The engine's program has to be up and at work on the turn.
+    await new Promise((r) => setTimeout(r, 700))
+    await api('POST', `/api/queue/${(await waitingIn(id))[0].id}/now`)
+    return settle(id, 7000)
+  }
+  const CUT = /^Echo \(turn 2\): \[You were at work on what came before when the user had this put in front of you[^\]]*\]\n\nand this$/
+
+  // Codex takes one more message into a turn that is running: it answers both in the one turn.
+  const steered = await api('POST', '/api/bots', { name: 'Steered', provider: 'codex' })
+  const id = await fresh(steered.id)
+  assert.deepEqual(spoken(await sendNow(id, '!slow first', 'and this')), ['!slow first', 'and this', 'Echo (turn 1): !slow first [told as it worked: and this]'])
+  assert.equal(lastText(await say(id, 'again')), 'Echo (turn 2): again', 'it is not told the message a second time')
+  // When Codex will not take it (it is compacting), its turn is cut short and the message is read next, in the same conversation of its own.
+  const refused = await fresh(steered.id)
+  const cut = spoken(await sendNow(refused, '!busy first', 'and this'))
+  assert.deepEqual(cut.slice(0, 2), ['!busy first', 'and this'])
+  assert.match(cut[2], CUT)
+
+  // Claude Code and Grok cannot be told as they work: their turn is cut short the same way.
+  for (const engine of ['claude-code', 'grok']) {
+    const runner = await api('POST', '/api/bots', { name: `Cut on ${engine}`, provider: engine })
+    const thread = await fresh(runner.id)
+    const said = spoken(await sendNow(thread, '!slow first', 'and this'))
+    assert.deepEqual(said.slice(0, 2), ['!slow first', 'and this'], engine)
+    assert.match(said[2], CUT, engine)
+    assert.equal((await api('GET', `/api/threads/${thread}`)).items.some((i) => i.data.type === 'notice'), false, `${engine}: the bot was not stopped`)
+  }
+
+  // What a tool is doing is not cut off: one that only waits gives way, and the engine gets what it came to.
+  const waiter = await api('POST', '/api/bots', { name: 'Waiter', provider: 'claude-code' })
+  const waiting = await fresh(waiter.id)
+  await say(waiting, '!tool spawn_subagent {"name":"Slow","task":"!slow"}')
+  const items = await sendNow(waiting, '!tool wait_subagents {}', 'now this')
+  assert.match(items.findLast((d) => d.type === 'function_call_output').output, /^Stopped waiting: the user sent a message for you to read now\. The subagents carry on\./)
+  assert.match(lastText(items), /^Echo \(turn \d\): (\[You were at work[^\]]*\]\n\n)?now this$/)
+  await api('POST', `/api/threads/${waiting}/stop`)
+  for (const made of [steered, waiter]) await api('DELETE', `/api/bots/${made.id}`)
 })
 
 test('engines: a thread can move to another engine, and the tool address only works during a turn', async () => {

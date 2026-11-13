@@ -48,6 +48,7 @@ if (call) {
 } else if (prompt === '!args') {
   reply = JSON.stringify({ tools: flag('--tools'), mode: flag('--permission-mode'), sandbox: flag('--sandbox'), model: flag('--model') ?? null, cwd: process.cwd(), flags: args.filter((a) => a.startsWith('--')) })
 } else {
+  if (prompt.startsWith('!slow')) await new Promise((r) => setTimeout(r, 8000))
   reply = `Echo (turn ${turn}): ${prompt}${shown.length ? ` [shown: ${shown.join(', ')}]` : ''}`
 }
 
