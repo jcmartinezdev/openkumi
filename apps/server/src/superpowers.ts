@@ -8,9 +8,8 @@
 // or both. Each is switched on for one bot at a time, by the owner; a bot cannot switch one on.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Registration, Superpower } from '@openkumi/shared'
+import type { Superpower } from '@openkumi/shared'
 import { announce } from './bots.ts'
-import { SIGN_IN_RETURN } from './browser.ts'
 import { HOME, ROOT, botDir, emit, privateDir, readSecrets, writeSecret } from './config.ts'
 import * as mcp from './mcp.ts'
 
@@ -20,8 +19,6 @@ export interface Service {
   url?: string
   command?: string
   args?: string[]
-  /** The registration its sign-in needs, for a company that does not let apps register themselves. */
-  registration?: string
   /** What the bot asks the service for when it signs in. Without them, whatever the service offers. */
   scopes?: string[]
 }
@@ -33,7 +30,7 @@ interface Manifest {
   /** What the bot is told the superpower is for, in a line. */
   summary: string
   can: string[]
-  mcp?: { url: string; registration?: string; scopes?: string[]; apis?: string[] } | { command: string; args?: string[] }
+  mcp?: { url: string; scopes?: string[] } | { command: string; args?: string[] }
   site?: string
 }
 
@@ -65,9 +62,7 @@ function iconOf(id: string): string {
 export function serviceOf(id: string): Service | null {
   const m = manifest(id)
   if (!m?.mcp) return null
-  return 'url' in m.mcp
-    ? { name: m.name, url: m.mcp.url, registration: m.mcp.registration, scopes: m.mcp.scopes }
-    : { name: m.name, command: m.mcp.command, args: m.mcp.args }
+  return 'url' in m.mcp ? { name: m.name, url: m.mcp.url, scopes: m.mcp.scopes } : { name: m.name, command: m.mcp.command, args: m.mcp.args }
 }
 
 /** A superpower that works in an app on the web is active only once the bot is signed in to it. */
@@ -117,7 +112,6 @@ export function listSuperpowers(): Superpower[] {
       service: service ? (service.url ? new URL(service.url).host : 'a program on this computer') : null,
       site: m.site ?? '',
       onFor: botsWith(id),
-      registration: service?.registration ? registrationInfo(service.registration) : null,
     }
   }).sort((a, b) => order(a).localeCompare(order(b)))
 }
@@ -142,112 +136,6 @@ export function signedIn(botId: string, id: string) {
   record(botId, [...now, id])
   announceSuperpowers()
   announce(botId)
-}
-
-// ---- registrations
-
-/**
- * Notion and Linear let OpenKumi register itself as a bot signs in. Google does not, and while its
- * services are in preview it lets the people who use an app register it only for themselves. So the
- * owner registers OpenKumi with it once, following the guide that ships in registrations/<id>, and
- * every superpower that names that registration signs in with what the company gave them.
- */
-interface RegistrationManifest {
-  name: string
-  /** What a client ID of this company's looks like, so a value pasted into the wrong field is caught. */
-  clientId?: string
-  /** What its sign-in page is asked for on top of the usual, such as a sign-in that lasts. */
-  authorize?: Record<string, string>
-}
-
-/** What the owner was given when they registered OpenKumi. */
-interface Client {
-  clientId: string
-  clientSecret: string
-}
-
-export const REGISTRATIONS = process.env.OPENKUMI_REGISTRATIONS ?? path.join(ROOT, 'registrations')
-
-function registrationManifest(id: string): RegistrationManifest | null {
-  if (!ID.test(id)) return null
-  try {
-    return JSON.parse(fs.readFileSync(path.join(REGISTRATIONS, id, 'registration.json'), 'utf8'))
-  } catch {
-    return null
-  }
-}
-
-/** Kept with OpenKumi's own secrets, away from every bot. */
-const clients = (): Record<string, Client> => readSecrets().registrations ?? {}
-
-/** What a superpower's sign-in uses for a registration of the owner's: the client, and what to ask the sign-in page for. */
-export function registeredClient(id: string): (Client & { authorize: Record<string, string> }) | null {
-  const registration = serviceOf(id)?.registration
-  const m = registration ? registrationManifest(registration) : null
-  const client = registration ? clients()[registration] : undefined
-  return m && client ? { ...client, authorize: m.authorize ?? {} } : null
-}
-
-/** The name of the company a superpower's sign-in needs OpenKumi registered with, when it is not registered yet. */
-export function missingRegistration(id: string): string | null {
-  const registration = serviceOf(id)?.registration
-  if (!registration || registeredClient(id)) return null
-  return registrationManifest(registration)?.name ?? registration
-}
-
-/** The superpowers that sign in with a registration. */
-const usersOf = (registration: string) => ids().filter((id) => serviceOf(id)?.registration === registration)
-
-function registrationInfo(id: string): Registration {
-  const m = registrationManifest(id)
-  let guide = ''
-  try {
-    guide = fs.readFileSync(path.join(REGISTRATIONS, id, 'README.md'), 'utf8')
-  } catch {}
-  // Everything the services of its superpowers need switched on, in the company's own names for them.
-  const apis = usersOf(id).flatMap((power) => {
-    const service = manifest(power)?.mcp
-    return service && 'apis' in service ? (service.apis ?? []) : []
-  })
-  // Where the company may send a browser back to: the bot's browser, and the owner's own by way of OpenKumi's page.
-  const returns = [SIGN_IN_RETURN, mcp.RETURN_PAGE].filter(Boolean).map((address) => `\`${address}\``)
-  const redirects = returns.length > 1 ? `${returns.join(' and ')}, each on a line of its own` : returns[0]
-  return {
-    id,
-    name: m?.name ?? id,
-    done: !!clients()[id],
-    clientId: clients()[id]?.clientId ?? '',
-    ownBrowser: !!mcp.RETURN_PAGE,
-    guide: guide.replaceAll('{{redirects}}', redirects).replaceAll('{{apis}}', [...new Set(apis)].join(',')),
-  }
-}
-
-/**
- * The owner registered OpenKumi with a company, or took the registration away (`null`). A sign-in
- * belongs to the client it was made with, so when the client changes, every bot's sign-in with the
- * old one is forgotten and the superpowers that used it are deactivated. A new secret for the same
- * client keeps them.
- */
-export async function register(id: string, client: Client | null) {
-  const m = registrationManifest(id)
-  if (!m) throw new Error('No such registration')
-  if (client) {
-    client = { clientId: String(client.clientId ?? '').trim(), clientSecret: String(client.clientSecret ?? '').trim() }
-    if (!client.clientId || !client.clientSecret) throw new Error('Both the client ID and the client secret are needed.')
-    if (m.clientId && !new RegExp(m.clientId).test(client.clientId)) throw new Error(`That does not look like a ${m.name} client ID. Check that the two values are in the right fields.`)
-  }
-  const all = clients()
-  if (all[id]?.clientId !== client?.clientId) {
-    for (const botId of fs.readdirSync(path.join(HOME, 'bots'))) {
-      const using = enabledSuperpowers(botId).filter((power) => usersOf(id).includes(power))
-      for (const power of using) await setSuperpower(botId, power, false)
-      if (using.length) announce(botId)
-    }
-  }
-  if (client) all[id] = client
-  else delete all[id]
-  writeSecret('registrations', Object.keys(all).length ? all : null)
-  announceSuperpowers()
 }
 
 /** What a bot is told about its superpowers: a line each, with where its instructions are and anything that is wrong. */
@@ -286,9 +174,7 @@ export function moveToSuperpowers() {
     try {
       for (const name of fs.readdirSync(path.join(dir, 'skills'))) had.add(name)
     } catch {}
-    // The Google plugins signed in with a client the owner set up for them, which is gone, so the
-    // Google superpowers start switched off, to be signed in to afresh once OpenKumi is registered.
-    const carried = [...had].filter((id) => manifest(id) && !serviceOf(id)?.registration)
+    const carried = [...had].filter((id) => manifest(id))
     if (carried.length) record(botId, [...enabledSuperpowers(botId), ...carried])
     // The skills folder only ever held links into the catalog, never the bot's own files.
     for (const old of ['skills', 'mcp.json', 'plugins.json']) fs.rmSync(path.join(dir, old), { recursive: true, force: true })
@@ -301,6 +187,7 @@ export function moveToSuperpowers() {
     if (fs.readdirSync(catalog).every((name) => name === '.DS_Store')) fs.rmSync(catalog, { recursive: true, force: true })
   }
   fs.rmSync(path.join(HOME, 'mcp.json'), { force: true })
-  // What the Google plugins were set up with.
+  // What the Google plugins were set up with, and OpenKumi's registration with Google, from while it had Google superpowers.
   if (readSecrets().plugins) writeSecret('plugins', null)
+  if (readSecrets().registrations) writeSecret('registrations', null)
 }

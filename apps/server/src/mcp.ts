@@ -2,17 +2,13 @@
 // connection of its own and, for services that need an account, a sign-in of its own, so two bots
 // can use two different accounts. Signing a bot in to a service is what activates the superpower.
 // It happens in the owner's own browser (the desktop app catches the way back, at APP_RETURN) or
-// in the bot's browser, which works from any device (see browser.ts). A service that does not let
-// OpenKumi register itself (Google's) signs in with the client the owner registered for it. That kind
-// of client comes back only to a web address, so the owner's own browser comes back by way of
-// RETURN_PAGE, which passes it on to the app.
+// in the bot's browser, which works from any device (see browser.ts).
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
   Client,
   InsufficientScopeError,
-  type OAuthClientInformationContext,
   SSEClientTransport,
   StreamableHTTPClientTransport,
   UnauthorizedError,
@@ -27,7 +23,7 @@ import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotoc
 import type { SuperpowerStatus } from '@openkumi/shared'
 import { SIGN_IN_RETURN, browserFor } from './browser.ts'
 import { emit, privateDir, workspaceDir } from './config.ts'
-import { type Service, enabledSuperpowers, missingRegistration, registeredClient, serviceOf, signedIn } from './superpowers.ts'
+import { type Service, enabledSuperpowers, serviceOf, signedIn } from './superpowers.ts'
 import type { Tool } from './tools.ts'
 
 /** The superpowers switched on for a bot that bring a service. */
@@ -46,11 +42,6 @@ function needService(id: string): Service {
  * opens it, and passes it on (apps/desktop/src/main.ts).
  */
 const APP_RETURN = 'openkumi://sign-in/callback'
-/**
- * OpenKumi's public page that sends a browser on to APP_RETURN (apps/sign-in-page), for the companies
- * that send it back only to a web address. Without one, their sign-ins happen in the bot's browser alone.
- */
-export const RETURN_PAGE = process.env.OPENKUMI_RETURN_PAGE ?? ''
 /** Which browser a sign-in happens in: the owner's own ('app'), or the bot's ('bot'). */
 type Via = 'app' | 'bot'
 
@@ -102,11 +93,9 @@ class Credentials implements OAuthClientProvider {
     return !!this.load().tokens
   }
 
-  // The owner's own browser comes back to the app (by way of the page, for a client the owner
-  // registered); the bot's browser catches its address on the way.
+  // The owner's own browser comes back to the app; the bot's browser catches its address on the way.
   get redirectUrl() {
-    if (this.via === 'bot') return SIGN_IN_RETURN
-    return registeredClient(this.id) ? RETURN_PAGE : APP_RETURN
+    return this.via === 'app' ? APP_RETURN : SIGN_IN_RETURN
   }
 
   get clientMetadata() {
@@ -128,14 +117,8 @@ class Credentials implements OAuthClientProvider {
     return state
   }
 
-  // With a client the owner registered there is nothing to register: that client is the one used.
-  clientInformation = (ctx?: OAuthClientInformationContext): StoredOAuthClientInformation | undefined => {
-    const own = registeredClient(this.id)
-    return own ? { client_id: own.clientId, client_secret: own.clientSecret, issuer: ctx?.issuer } : this.load().client
-  }
-  saveClientInformation = (client: StoredOAuthClientInformation) => {
-    if (!registeredClient(this.id)) this.save({ client })
-  }
+  clientInformation = () => this.load().client
+  saveClientInformation = (client: StoredOAuthClientInformation) => this.save({ client })
   tokens = () => this.load().tokens
   saveTokens = (tokens: StoredOAuthTokens) => this.save({ tokens })
   saveCodeVerifier = (verifier: string) => this.save({ verifier })
@@ -149,8 +132,6 @@ class Credentials implements OAuthClientProvider {
   }
 
   redirectToAuthorization(url: URL) {
-    // Whatever else the company's sign-in page has to be asked for, such as a sign-in that lasts.
-    for (const [name, value] of Object.entries(registeredClient(this.id)?.authorize ?? {})) url.searchParams.set(name, value)
     this.authUrl = url
   }
 
@@ -160,15 +141,10 @@ class Credentials implements OAuthClientProvider {
   }
 }
 
-function webService(id: string): Service & { url: string } {
-  const service = needService(id)
-  if (!service.url) throw new Error('That superpower has nothing to sign in to.')
-  return service as Service & { url: string }
-}
-
 /** What a sign-in to a superpower's service is done with: its address, and what the bot asks for there. */
 function signInTo(id: string) {
-  const service = webService(id)
+  const service = needService(id)
+  if (!service.url) throw new Error('That superpower has nothing to sign in to.')
   return { serverUrl: service.url, scope: service.scopes?.join(' ') }
 }
 
@@ -179,14 +155,11 @@ function signInTo(id: string) {
  * account the bot has still works.
  */
 export async function login(botId: string, id: string, headless: boolean, via: Via): Promise<{ url?: string; windowId?: string; done?: true }> {
-  const service = webService(id)
-  const company = missingRegistration(id)
-  if (company) throw new Error(`OpenKumi is not registered with ${company} yet. Register it on ${service.name}’s page, under Superpowers.`)
-  if (via === 'app' && service.registration && !RETURN_PAGE) throw new Error(`${service.name} signs in inside the bot’s browser.`)
+  const signIn = signInTo(id)
   // Activating starts afresh: whatever an earlier attempt left behind is of no use.
   if (!enabledSuperpowers(botId).includes(id)) new Credentials(botId, id).clear()
   const creds = new Credentials(botId, id, via)
-  const result = await auth(creds, signInTo(id))
+  const result = await auth(creds, signIn)
   if (result === 'AUTHORIZED') {
     signedIn(botId, id)
     await reconnect(botId, id)
@@ -283,7 +256,7 @@ async function open(botId: string, id: string): Promise<Live> {
         try {
           return resultText(await current.client.callTool({ name: t.name, arguments: args }, { signal: ctx.signal, timeout: 120_000 }))
         } catch (e) {
-          // Some services (Google's) let a bot connect and list its tools without its account, and
+          // Some services let a bot connect and list its tools without its account, and
           // only ask for the account when a tool is used, so this is where a lapsed sign-in shows.
           if (!(e instanceof UnauthorizedError || e instanceof InsufficientScopeError)) throw e
           await signedOut(botId, id)

@@ -10,17 +10,13 @@ import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { after, before, test } from 'node:test'
-import { _electron, chromium } from 'playwright-core'
+import { _electron } from 'playwright-core'
 import { startOAuthServer } from '../../server/test/fixtures/mcp-oauth.mjs'
 
 const LOCAL_PORT = 4950 + Math.floor(Math.random() * 20)
 const REMOTE_PORT = LOCAL_PORT + 25
 const SERVER = path.resolve(import.meta.dirname, '../../server/src/index.ts')
-/** OpenKumi's page on the web that Google sends a browser back to, and where it would be. */
-const SIGN_IN_PAGE = path.resolve(import.meta.dirname, '../../sign-in-page/index.html')
-const RETURN_PAGE = 'https://pages.example/openkumi/sign-in'
 const packaged = process.env.OPENKUMI_DESKTOP_APP
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-desktop-'))
 // A copy of the superpowers that ship, so a test can point their services somewhere that is not the real one.
@@ -35,7 +31,6 @@ const env = {
   OPENKUMI_PORT: String(LOCAL_PORT),
   OPENKUMI_MOCK: '1',
   OPENKUMI_SUPERPOWERS: `${tmp}/superpowers`,
-  OPENKUMI_RETURN_PAGE: RETURN_PAGE,
   // The app run from the source cannot be what the computer opens sign-ins with; the tests hand it them.
   OPENKUMI_DESKTOP_CATCH_SIGN_INS: '1',
   // Scripted stand-ins for the Claude Code, Codex and Grok programs, so the tests do not depend on what is installed here.
@@ -616,10 +611,8 @@ test('an environment has several addresses: one where something else answers is 
 
 test('superpowers: browse them, open one, activate it for one bot here or in the bot\'s settings, and sign the bot in', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
-  // Notion and Linear are reached at a stand-in that asks for a sign-in the way they do, and approves it
-  // at once; Gmail at one that, like Google, lets in only the client the owner registered.
+  // Notion and Linear are reached at a stand-in that asks for a sign-in the way they do, and approves it at once.
   const service = await startOAuthServer()
-  const google = await startOAuthServer({ selfRegistration: false })
   try {
     const pointAt = (id, url) => {
       const file = `${tmp}/superpowers/${id}/superpower.json`
@@ -627,7 +620,6 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
       fs.writeFileSync(file, JSON.stringify({ ...manifest, mcp: { ...manifest.mcp, url } }))
     }
     for (const id of ['notion', 'linear']) pointAt(id, service.url)
-    pointAt('gmail', google.url)
     const win = await launch()
     await showsBot(win, 'Assistant')
     win.on('dialog', (dialog) => dialog.accept())
@@ -637,7 +629,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     // The list: every superpower with what it is for, in the sidebar where skills, connections and plugins used to be.
     await win.evaluate(() => (location.hash = '/settings/superpowers'))
     await win.locator('.power-card').first().waitFor()
-    assert.deepEqual(await win.locator('.power-card h3').allInnerTexts(), ['Gmail', 'Google Calendar', 'Google Docs', 'Google Drive', 'Google Sheets', 'Google Slides', 'Linear', 'Notion'])
+    assert.deepEqual(await win.locator('.power-card h3').allInnerTexts(), ['Linear', 'Notion'])
     const nav = await win.locator('.set-nav').innerText()
     assert.match(nav, /Superpowers/)
     assert.doesNotMatch(nav, /Skills|Connections|Plugins/)
@@ -692,57 +684,9 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     await win.locator('.power-card', { hasText: 'Linear' }).locator('.pill', { hasText: 'Active for 1 bot' }).waitFor()
     await win.locator('.power-card', { hasText: 'Notion' }).locator('.pill').waitFor({ state: 'detached' })
 
-    // Google's need OpenKumi registered with Google first, once for all of them: the list says so,
-    // activating one leads to the setup on its page, and once it is done bots sign in either way.
-    const gmail = win.locator('.power-card', { hasText: 'Gmail' })
-    await gmail.locator('.pill', { hasText: 'Needs a one-time setup' }).waitFor()
-    await gmail.click()
-    await win.locator('.power-head h1', { hasText: 'Gmail' }).waitFor()
-    const section = (title) => win.locator('.set-section').filter({ has: win.locator('h2', { hasText: new RegExp(`^${title}$`) }) })
-    const setup = section('Set up Google, once')
-    assert.ok((await setup.innerText()).includes(`add http://localhost:${LOCAL_PORT}/api/superpowers/callback and ${RETURN_PAGE}, each on a line of its own`), 'the two addresses to give Google')
-    await win.getByRole('button', { name: 'Activate superpower: Gmail for Second bot' }).click()
-    const first = win.locator('.dialog', { hasText: 'Activate Gmail for Second bot' })
-    await first.getByRole('button', { name: 'Set up Google' }).click()
-    await first.waitFor({ state: 'detached' })
-    await setup.getByLabel('Google client ID').fill('123-abc.apps.googleusercontent.com')
-    await setup.getByLabel('Google client secret').fill('GOCSPX-test')
-    await setup.getByRole('button', { name: 'Save' }).click()
-    const registered = section('Registered with Google')
-    assert.match(await registered.innerText(), /Client ID 123-abc\.apps\.googleusercontent\.com/)
-    await win.getByRole('button', { name: 'Activate superpower: Gmail for Second bot' }).click()
-    const signIn = win.locator('.dialog', { hasText: 'Activate Gmail for Second bot' })
-    await signIn.getByRole('button', { name: /Sign in inside Second bot’s browser/ }).waitFor()
-    // Google sends this computer's browser back to OpenKumi's page on the web, which hands it to the app.
-    await app.evaluate(() => (globalThis.opened = []))
-    await signIn.getByRole('button', { name: /Sign in with your browser/ }).click()
-    await until(() => app.evaluate(() => globalThis.opened.length > 0))
-    const [googlePage] = await app.evaluate(() => globalThis.opened)
-    const toPage = (await fetch(googlePage, { redirect: 'manual' })).headers.get('location')
-    assert.ok(toPage.startsWith(`${RETURN_PAGE}?`), toPage)
-    const browser = await chromium.launch({ channel: 'chrome' })
-    let handed
-    try {
-      const tab = await browser.newPage()
-      await tab.goto(`${pathToFileURL(SIGN_IN_PAGE)}${new URL(toPage).search}`, { waitUntil: 'commit' })
-      handed = await tab.locator('#open[href*="state="]').getAttribute('href')
-    } finally {
-      await browser.close()
-    }
-    assert.ok(handed.startsWith('openkumi://sign-in/callback?code='), handed)
-    await app.evaluate(({ app }, url) => app.emit('open-url', { preventDefault() {} }, url), handed)
-    await signIn.locator('p', { hasText: 'Gmail is active for Second bot.' }).waitFor({ timeout: 30_000 })
-    await signIn.getByRole('button', { name: 'Done' }).click()
-    assert.deepEqual((await powersOf())['Second bot'], ['gmail', 'linear'])
-    assert.deepEqual(google.seen.client, { id: '123-abc.apps.googleusercontent.com', secret: 'GOCSPX-test' })
-    // Taking the registration away signs every bot out of Google's superpowers, which are deactivated.
-    await registered.getByRole('button', { name: 'Remove' }).click()
-    await until(async () => (await powersOf())['Second bot'].join() === 'linear')
-    await setup.waitFor()
   } finally {
     await app?.close().catch(() => {})
     await service.close()
-    await google.close()
   }
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })

@@ -58,8 +58,8 @@ export default function BotSettings() {
       (e) => Alert.alert('Could not start the sign-in', (e as Error).message),
     )
   // On the phone itself: the service's page opens in a sign-in sheet that has the accounts the phone
-  // has in Safari. The service sends the sheet back to the app's own address (Google's by way of Open
-  // Bot's page on the web), the sheet hands that over, and the server finishes the sign-in.
+  // has in Safari. The service sends the sheet back to the app's own address, the sheet hands that
+  // over, and the server finishes the sign-in.
   const signInHere = async (power: Superpower) => {
     const path = `/api/bots/${bot.id}/superpowers/${power.id}/login`
     try {
@@ -79,22 +79,12 @@ export default function BotSettings() {
         { text: 'Activate', onPress: () => void api('PUT', `/api/bots/${bot.id}/superpowers/${power.id}`, { on: true }).catch((e) => Alert.alert('Not activated', (e as Error).message)) },
       ])
     }
-    // Registering OpenKumi with Google means its Cloud console and pasting two values, which is the computer's job.
-    const registration = power.registration
-    if (registration && !registration.done) {
-      return Alert.alert(
-        `Set up ${registration.name} first`,
-        `Before a bot can sign in to ${power.name}, OpenKumi has to be registered with ${registration.name}, once. Do that on your computer: in the OpenKumi app, open Settings, then Superpowers, then ${power.name}.`,
-      )
-    }
-    // A company that admits only registered apps (Google) comes back to the phone by way of OpenKumi's page, which this version may not have.
-    const here = !registration || registration.ownBrowser
     Alert.alert(
       again ? `Sign ${bot.name} in to ${power.name} again?` : `Activate ${power.name}?`,
-      `${bot.name} signs in to ${power.name} with an account of its own${here ? ': on this phone, with the accounts you have in Safari, or inside its own browser, which suits a different account' : ', inside its own browser'}.${again ? '' : ` Once it is signed in, ${power.name} is active.`}`,
+      `${bot.name} signs in to ${power.name} with an account of its own: on this phone, with the accounts you have in Safari, or inside its own browser, which suits a different account.${again ? '' : ` Once it is signed in, ${power.name} is active.`}`,
       [
         { text: 'Cancel', style: 'cancel' },
-        ...(here ? [{ text: 'Sign in on this phone', onPress: () => void signInHere(power) }] : []),
+        { text: 'Sign in on this phone', onPress: () => void signInHere(power) },
         { text: `Sign in inside ${bot.name}’s browser`, onPress: () => void signIn(power) },
       ],
     )

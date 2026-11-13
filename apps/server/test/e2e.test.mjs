@@ -22,14 +22,6 @@ function addPower(id, manifest, instructions) {
   if (instructions) fs.writeFileSync(path.join(powers, id, 'instructions.md'), instructions)
 }
 const removePower = (id) => fs.rmSync(path.join(powers, id), { recursive: true, force: true })
-/** The registrations with companies that do not let apps register themselves: the ones that ship, and any the tests add. */
-const registrations = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-registrations-'))
-fs.cpSync(path.resolve('registrations'), registrations, { recursive: true })
-function addRegistration(id, manifest, guide) {
-  fs.mkdirSync(path.join(registrations, id))
-  fs.writeFileSync(path.join(registrations, id, 'registration.json'), JSON.stringify(manifest))
-  fs.writeFileSync(path.join(registrations, id, 'README.md'), guide)
-}
 // One with nothing to sign in to: instructions only.
 addPower('field-guide', { name: 'Field guide' }, '# Field guide\n\nLook at the beak first.\n')
 let server
@@ -123,7 +115,6 @@ before(async () => {
       OPENKUMI_PORT: String(PORT),
       OPENKUMI_MOCK: '1',
       OPENKUMI_SUPERPOWERS: powers,
-      OPENKUMI_REGISTRATIONS: registrations,
       // Scripted stand-ins for the Claude Code and Codex programs.
       OPENKUMI_CLAUDE_BIN: path.resolve('test/fixtures/fake-claude.mjs'),
       OPENKUMI_CODEX_BIN: path.resolve('test/fixtures/fake-codex.mjs'),
@@ -589,19 +580,11 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
 
   // What ships, each with a page of its own saying what it does and what it gives a bot; then the one the tests bring.
   const all = await list()
-  const google = ['gmail', 'google-calendar', 'google-docs', 'google-drive', 'google-sheets', 'google-slides']
-  assert.deepEqual(Object.keys(all), [...google, 'linear', 'notion', 'field-guide'], 'those that work in an app first')
+  assert.deepEqual(Object.keys(all), ['linear', 'notion', 'field-guide'], 'those that work in an app first')
   const { linear, notion, 'field-guide': guide } = all
-  assert.deepEqual([notion.name, notion.category, notion.instructions, notion.service, notion.site, notion.onFor, notion.registration], ['Notion', 'Your apps', true, 'mcp.notion.com', 'https://www.notion.so/', [], null])
+  assert.deepEqual([notion.name, notion.category, notion.instructions, notion.service, notion.site, notion.onFor], ['Notion', 'Your apps', true, 'mcp.notion.com', 'https://www.notion.so/', []])
   assert.deepEqual([guide.instructions, guide.service], [true, null])
-  for (const id of [...google, 'linear', 'notion']) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions, id)
-  // Google's need OpenKumi registered with Google first, once for all of them, with a guide that has this server's own address in it.
-  for (const id of google) assert.deepEqual([all[id].category, all[id].signIn, all[id].registration.id, all[id].registration.done], ['Google', true, 'google', false], id)
-  assert.equal(all['google-sheets'].service, 'sheetsmcp.googleapis.com')
-  const steps = all.gmail.registration.guide
-  assert.ok(steps.includes(`\`http://localhost:${PORT}/api/superpowers/callback\``), 'the address to give Google')
-  const services = 'gmail gmailmcp calendar-json calendarmcp docs docsmcp drive drivemcp sheets sheetsmcp slides slidesmcp'.split(' ').map((s) => `${s}.googleapis.com`)
-  assert.ok(steps.includes(`apiid=${services.join(',')})`), 'every Google service the superpowers use is switched on in one go')
+  for (const id of ['linear', 'notion']) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions, id)
   assert.doesNotMatch(await told(), /# Your superpowers/)
 
   // Switched on for one bot, and no other.
@@ -722,13 +705,9 @@ test('superpowers: one with an app is activated by signing the bot in, in the ow
   }
 })
 
-test('superpowers: one whose company lets in only registered apps signs in with the owner\'s registration, in the bot\'s browser', async () => {
-  const tundra = await startOAuthServer({ selfRegistration: false })
-  addRegistration('tundra', { name: 'Tundra', clientId: '\\.tundra$', authorize: { access_type: 'offline', prompt: 'consent' } }, 'Add {{redirects}}, then switch on {{apis}}.')
-  addPower('tundra-mail', { name: 'Tundra Mail', mcp: { url: tundra.url, registration: 'tundra', scopes: ['read', 'write'], apis: ['mail.tundra', 'mailmcp.tundra'] } })
-  addPower('tundra-files', { name: 'Tundra Files', mcp: { url: tundra.url, registration: 'tundra', apis: ['files.tundra', 'mail.tundra'] } })
-  const secrets = () => JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8'))
-  const registration = async () => (await api('GET', '/api/superpowers')).find((p) => p.id === 'tundra-mail').registration
+test('superpowers: a sign-in asks only for what the superpower needs, and one that stops working shows when a tool is used', async () => {
+  const tundra = await startOAuthServer({ openList: true })
+  addPower('tundra-mail', { name: 'Tundra Mail', mcp: { url: tundra.url, scopes: ['read', 'write'] } })
   const state = async () => (await api('GET', '/api/state')).superpowerStatus[bot.id]?.['tundra-mail']?.state
   const powersOf = async () => (await api('GET', '/api/state')).bots.find((b) => b.id === bot.id).superpowers
   const signIn = async () => {
@@ -736,38 +715,10 @@ test('superpowers: one whose company lets in only registered apps signs in with 
     await until(async () => (await state()) === 'connected', 20_000)
   }
   try {
-    // Until the owner registers OpenKumi there is a guide, with this server's own values in it, and no sign-in.
-    assert.deepEqual(await registration(), {
-      id: 'tundra',
-      name: 'Tundra',
-      done: false,
-      clientId: '',
-      ownBrowser: false,
-      guide: `Add \`http://localhost:${PORT}/api/superpowers/callback\`, then switch on files.tundra,mail.tundra,mailmcp.tundra.`,
-    })
-    await assert.rejects(api('POST', `/api/bots/${bot.id}/superpowers/tundra-mail/login`, { via: 'bot' }), /OpenKumi is not registered with Tundra yet/)
-    await assert.rejects(api('PUT', '/api/registrations/tundra', { clientId: 'the-secret', clientSecret: 'one.tundra' }), /does not look like a Tundra client ID/)
-    await assert.rejects(api('PUT', '/api/registrations/tundra', { clientId: 'one.tundra', clientSecret: ' ' }), /Both the client ID and the client secret/)
-    await assert.rejects(api('PUT', '/api/registrations/nowhere', { clientId: 'one.tundra', clientSecret: 'x' }), /No such registration/)
-
-    // Registered once, for all of the company's superpowers. The secret stays on the server.
-    await api('PUT', '/api/registrations/tundra', { clientId: ' one.tundra ', clientSecret: 'first-secret' })
-    assert.deepEqual([(await registration()).done, (await registration()).clientId], [true, 'one.tundra'])
-    assert.deepEqual(secrets().registrations, { tundra: { clientId: 'one.tundra', clientSecret: 'first-secret' } })
-    assert.doesNotMatch(JSON.stringify(await api('GET', '/api/state')), /first-secret/, 'the secret is never sent to the app')
-
-    // Without a page of OpenKumi's on the web to come back by, signing in happens in the bot's browser alone,
-    // with the owner's client: nothing registers itself,
-    // only what the superpower needs is asked for, and the company's page is asked for a lasting sign-in.
-    await assert.rejects(api('POST', `/api/bots/${bot.id}/superpowers/tundra-mail/login`, { via: 'app' }), /signs in inside the bot’s browser/)
     await signIn()
     assert.deepEqual(await powersOf(), ['tundra-mail'])
-    assert.equal(tundra.seen.registered, 0)
-    assert.deepEqual(tundra.seen.client, { id: 'one.tundra', secret: 'first-secret' })
-    const asked = tundra.seen.authorize
-    assert.deepEqual([asked.client_id, asked.scope, asked.access_type, asked.prompt], ['one.tundra', 'read write', 'offline', 'consent'])
+    assert.equal(tundra.seen.authorize.scope, 'read write', 'not everything the service offers')
     assert.equal(await tool('mcp__tundra-mail__whoami', {}), 'signed in with token-1')
-    assert.ok(!('client' in JSON.parse(fs.readFileSync(botPath('private', 'superpowers', 'tundra-mail.json'), 'utf8'))), 'the bot keeps no copy of the client')
 
     // The service lists its tools without an account, so a sign-in that stopped working shows when a tool is used.
     tundra.seen.refuse = true
@@ -776,21 +727,9 @@ test('superpowers: one whose company lets in only registered apps signs in with 
     assert.deepEqual(await powersOf(), ['tundra-mail'], 'still active, waiting to be signed in again')
     tundra.seen.refuse = false
     await signIn()
-
-    // A new secret for the same client keeps the sign-in; another client, or none, forgets it.
-    await api('PUT', '/api/registrations/tundra', { clientId: 'one.tundra', clientSecret: 'second-secret' })
-    assert.deepEqual(await powersOf(), ['tundra-mail'])
     assert.match(await tool('mcp__tundra-mail__whoami', {}), /^signed in with token-\d+$/)
-    await api('PUT', '/api/registrations/tundra', { clientId: 'two.tundra', clientSecret: 'third-secret' })
-    assert.deepEqual(await powersOf(), [])
-    assert.ok(!fs.existsSync(botPath('private', 'superpowers', 'tundra-mail.json')))
-    await api('DELETE', '/api/registrations/tundra')
-    assert.equal((await registration()).done, false)
-    assert.equal(secrets().registrations, undefined)
   } finally {
     removePower('tundra-mail')
-    removePower('tundra-files')
-    fs.rmSync(path.join(registrations, 'tundra'), { recursive: true, force: true })
     await tundra.close()
   }
 })
