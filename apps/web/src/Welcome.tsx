@@ -1,7 +1,7 @@
 // The first screen, while the app has no environment at all: a few bots say hello, and under them
 // are the ways to start, running them on this computer or pairing with another one that runs them.
 // The iPhone has the same welcome (apps/mobile/app/welcome.tsx); keep the two alike.
-import { type CSSProperties, type ComponentProps, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { type CSSProperties, type ComponentProps, type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Look } from '@openkumi/shared'
 import { BODY_COLORS, describeLook, surprise } from '@openkumi/client/mascot'
 import { desktop, reason } from './desktop'
@@ -56,7 +56,10 @@ function bounce(t: number) {
   return 7.5625 * (t -= 2.625 / 2.75) * t + 0.984375
 }
 
-/** A hop under way: when it began, the height it began at and goes up to (1 is a whole jump), and how long up and down take. */
+/**
+ * A hop under way: when it began, the height it began at and goes up to (1 is a whole jump), and
+ * how long up and down take.
+ */
 interface Hop {
   at: number
   from: number
@@ -65,30 +68,44 @@ interface Hop {
   down: number
 }
 
+/** Where bounce() first reaches the ground. */
+const CONTACT = 1 / 2.75
 const over = (hop: Hop, now: number) => now >= hop.at + hop.up + hop.down
 function heightOf(hop: Hop, now: number) {
   const t = now - hop.at
   if (t < hop.up) return hop.from + (hop.peak - hop.from) * rise(t / hop.up)
   return t < hop.up + hop.down ? hop.peak * (1 - bounce((t - hop.up) / hop.down)) : 0
 }
+/** How squashed a hop leaves the bot: most as it first touches the ground, and more the higher it came from. */
+function squashOf(hop: Hop, now: number) {
+  const t = (now - hop.at - hop.up) / hop.down
+  return t < 0 ? 0 : Math.max(0, 1 - Math.abs(t - CONTACT) / 0.1) * (0.04 + 0.06 * Math.min(hop.peak, 1))
+}
 /** `a` to `b` as `t` goes from 0 to 1. */
 const towards = (a: number, b: number, t: number) => a + (b - a) * Math.min(Math.max(t, 0), 1)
 
-/** One of the crew: pops up when the screen opens, hops now and then, and when clicked jumps into new clothes. */
+/**
+ * One of the crew: pops up when the screen opens, hops now and then and when the pointer comes over
+ * it, and when clicked jumps into new clothes. Its hops are higher and more often than the iPhone's,
+ * which would hardly show in a window this size.
+ */
 function Hopper({ start, order, still, front = false }: { start: Dress; order: number; still: boolean; front?: boolean }) {
   const [dress, setDress] = useState(start)
   const body = useRef<HTMLSpanElement>(null)
   const shadow = useRef<HTMLSpanElement>(null)
-  // The little hop it does by itself and the jump it makes when clicked, which add up; and the frame drawing them.
-  const hops = useRef<{ idle?: Hop; leap?: Hop; dressed?: boolean; frame?: number }>({})
+  // A little hop and the jump it makes when clicked, which add up; and the frame drawing them.
+  const hops = useRef<{ little?: Hop; leap?: Hop; dressed?: boolean; frame?: number }>({})
 
-  /** Puts the bot at a height: stretched a little while in the air, over a shadow that stays on the ground. */
-  const pose = (height: number) => {
+  /**
+   * Puts the bot at a height: stretched a little while in the air and squashed as it lands, over a
+   * shadow that stays on the ground.
+   */
+  const pose = (height: number, squash: number) => {
     if (!body.current || !shadow.current) return
     const stretch = height < 0.25 ? height / 0.25 : 1 - (height - 0.25) / 0.95
-    const scaleY = height < 0.25 ? towards(1, 1.06, stretch) : towards(1.03, 1.06, stretch)
-    const scaleX = height < 0.25 ? towards(1, 0.95, stretch) : towards(0.97, 0.95, stretch)
-    body.current.style.transform = height ? `translateY(${-height * 0.36 * body.current.offsetWidth}px) scale(${scaleX}, ${scaleY})` : ''
+    const scaleY = (height < 0.25 ? towards(1, 1.06, stretch) : towards(1.03, 1.06, stretch)) - squash
+    const scaleX = (height < 0.25 ? towards(1, 0.95, stretch) : towards(0.97, 0.95, stretch)) + squash
+    body.current.style.transform = height || squash ? `translateY(${-height * 0.36 * body.current.offsetWidth}px) scale(${scaleX}, ${scaleY})` : ''
     // Smaller and fainter the higher the bot goes.
     const ground = towards(1, 0.45, height / 1.2)
     shadow.current.style.transform = height ? `scale(${ground})` : ''
@@ -99,47 +116,55 @@ function Hopper({ start, order, still, front = false }: { start: Dress; order: n
   const draw = () => {
     const now = performance.now()
     const state = hops.current
-    if (state.idle && over(state.idle, now)) state.idle = undefined
+    if (state.little && over(state.little, now)) state.little = undefined
     if (state.leap && over(state.leap, now)) state.leap = undefined
     // The clothes change at the top of the jump.
     if (state.leap && !state.dressed && now >= state.leap.at + state.leap.up) {
       state.dressed = true
       setDress(surprise())
     }
-    pose((state.idle ? heightOf(state.idle, now) : 0) + (state.leap ? heightOf(state.leap, now) : 0))
-    state.frame = state.idle || state.leap ? requestAnimationFrame(draw) : undefined
+    const going = [state.little, state.leap].filter((hop) => !!hop)
+    pose(going.reduce((sum, hop) => sum + heightOf(hop, now), 0), Math.max(0, ...going.map((hop) => squashOf(hop, now))))
+    state.frame = going.length ? requestAnimationFrame(draw) : undefined
   }
 
-  const hop = (kind: 'idle' | 'leap', peak: number, up: number, down: number) => {
+  const hop = (kind: 'little' | 'leap', peak: number, up: number, down: number) => {
     const state = hops.current
     const now = performance.now()
-    // A jump made in the middle of another goes on from where that one has got to.
+    // A hop made in the middle of another goes on from where that one has got to.
     const going = state[kind]
     state[kind] = { at: now, from: going && !over(going, now) ? heightOf(going, now) : 0, peak, up, down }
     if (kind === 'leap') state.dressed = false
     state.frame ??= requestAnimationFrame(draw)
   }
+  const little = (peak: number) => hop('little', peak, 160 + 60 * peak, 400 + 240 * peak)
 
   useEffect(() => {
     if (still) return
-    // Each at its own pace, so they do not hop together.
-    const every = 2400 + order * 1300
+    // Each at its own pace, and now and then higher, so the crew never hops in step.
     let timer = setTimeout(function next() {
-      hop('idle', 0.2, 170, 420)
-      timer = setTimeout(next, every + 590)
-    }, every)
+      little(Math.random() < 0.3 ? 0.7 : 0.4)
+      timer = setTimeout(next, 1400 + Math.random() * 2600)
+    }, 1100 + order * 600 + Math.random() * 1000)
     return () => {
       clearTimeout(timer)
       if (hops.current.frame) cancelAnimationFrame(hops.current.frame)
       hops.current = {}
-      pose(0)
+      pose(0, 0)
     }
   }, [still])
 
   const poke = () => (still ? setDress(surprise()) : hop('leap', 1, 200, 640))
 
   return (
-    <button type="button" className={`hopper ${front ? 'front' : ''}`} style={{ '--order': order } as CSSProperties} aria-label={describeLook(dress.look)} onClick={poke}>
+    <button
+      type="button"
+      className={`hopper ${front ? 'front' : ''}`}
+      style={{ '--order': order } as CSSProperties}
+      aria-label={describeLook(dress.look)}
+      onClick={poke}
+      onPointerEnter={() => !still && !hops.current.leap && little(0.5)}
+    >
       <span className="hopper-in">
         <span className="hopper-body" ref={body}>
           <Mascot look={dress.look} emoji={dress.emoji} live={!still} />
@@ -150,6 +175,45 @@ function Hopper({ start, order, still, front = false }: { start: Dress; order: n
       </span>
     </button>
   )
+}
+
+/** The crew's eyes follow the pointer around the window, and look ahead again when it leaves. */
+function useWatching(crew: RefObject<HTMLDivElement | null>, still: boolean) {
+  useEffect(() => {
+    if (still) return
+    let pointer = { x: 0, y: 0 }
+    let frame = 0
+    const bots = () => [...(crew.current?.querySelectorAll<HTMLElement>('.hopper-body') ?? [])]
+    const look = () => {
+      frame = 0
+      for (const bot of bots()) {
+        const box = bot.getBoundingClientRect()
+        // From between its eyes, halfway down the drawing.
+        const dx = pointer.x - (box.left + box.width / 2)
+        const dy = pointer.y - (box.top + box.height / 2)
+        const far = Math.hypot(dx, dy) || 1
+        // In the drawing's own units: a glance of up to 5 across and 4 up or down.
+        const reach = Math.min(far / 160, 1)
+        bot.style.setProperty('--look', `${((dx / far) * reach * 5).toFixed(2)}px ${((dy / far) * reach * 4).toFixed(2)}px`)
+      }
+    }
+    const move = (e: PointerEvent) => {
+      pointer = { x: e.clientX, y: e.clientY }
+      frame ||= requestAnimationFrame(look)
+    }
+    const away = () => {
+      cancelAnimationFrame(frame)
+      frame = 0
+      bots().forEach((bot) => bot.style.removeProperty('--look'))
+    }
+    addEventListener('pointermove', move)
+    document.documentElement.addEventListener('pointerleave', away)
+    return () => {
+      removeEventListener('pointermove', move)
+      document.documentElement.removeEventListener('pointerleave', away)
+      away()
+    }
+  }, [still])
 }
 
 /** A sparkle that comes and goes. */
@@ -188,6 +252,8 @@ export function Welcome() {
   const still = useStill()
   const [pairing, setPairing] = useState(false)
   const { busy, error, change } = useChange()
+  const crew = useRef<HTMLDivElement>(null)
+  useWatching(crew, still || pairing)
   // Once OpenKumi is turned on here, or another computer is paired, the window moves on by itself.
   if (pairing) return <Pairing back={() => setPairing(false)} />
 
@@ -202,13 +268,14 @@ export function Welcome() {
               <span className="welcome-glow" style={{ left: '36%', top: '55%', width: '84%', '--tint': BODY_COLORS.sky.hex } as CSSProperties} />
               <span className="welcome-glow" style={{ left: '66%', top: '50%', width: '76%', '--tint': BODY_COLORS.berry.hex } as CSSProperties} />
               {SPARKLES.map((sparkle, i) => <Sparkle key={i} {...sparkle} order={i} />)}
-              <div className="welcome-crew">
+              <div className="welcome-crew" ref={crew}>
                 <Hopper start={CREW[0]} order={1} still={still} />
                 <Hopper start={CREW[1]} order={0} still={still} front />
                 <Hopper start={CREW[2]} order={2} still={still} />
               </div>
             </div>
-            <p className="welcome-hint">Click a bot to dress it up</p>
+            {/* Otherwise nothing would say why they stand so still. */}
+            <p className="welcome-hint">{still ? 'This computer is set to reduce motion, so they keep still. Click one for a new outfit.' : 'Click one for a new outfit'}</p>
             <div className="welcome-words">
               <p className="welcome-eyebrow">Welcome to OpenKumi</p>
               <h1>Your own crew<br />of AI bots</h1>

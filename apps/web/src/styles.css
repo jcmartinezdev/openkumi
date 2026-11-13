@@ -242,6 +242,8 @@ button.hopper.front { width: 42%; margin: 0 -6%; z-index: 1; }
 .hopper-body { display: block; transform-origin: 50% 100%; }
 /* The drawing's own shadow would go up with the bot; the one below stays on the ground instead. */
 .hopper-body .mascot > ellipse { display: none; }
+/* Its eyes follow the pointer (Welcome.tsx sets --look in the drawing's units). */
+.hopper-body .m-eyes { translate: var(--look, 0 0); transition: translate 0.25s ease-out; }
 .hopper-ground { display: block; width: 50%; margin-top: -10%; animation: fade 0.4s calc(250ms + var(--order) * 170ms) both; }
 .hopper-shadow { display: block; aspect-ratio: 50 / 7; border-radius: 50%; background: color-mix(in srgb, var(--text) 10%, transparent); }
 @media (prefers-reduced-motion: reduce) { .sparkle, .hopper-in, .hopper-ground { animation: none; } }

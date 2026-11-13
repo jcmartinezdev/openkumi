@@ -177,7 +177,7 @@ export default function Welcome() {
             <Hopper start={CREW[2]} size={back} order={2} still={still} lifted={back * 0.12} />
           </View>
         </View>
-        <Text style={[styles.hint, { color: theme.faint }]}>Tap a bot to dress it up</Text>
+        <Text style={[styles.hint, { color: theme.faint }]}>Tap one for a new outfit</Text>
 
         <View style={styles.words}>
           <Text style={[styles.eyebrow, { color: theme.muted }]}>Welcome to OpenKumi</Text>
