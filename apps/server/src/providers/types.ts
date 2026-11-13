@@ -43,6 +43,16 @@ export interface TurnRequest {
   effort: Effort
   webSearch: boolean
   signal: AbortSignal
+  /** Where the engine says how it can be given one more message as it works. Missing for a turn nobody will add to. */
+  steering?: Steering
+}
+
+/**
+ * A way to hand an engine one more message while its turn is running. An engine that can take one
+ * sets `deliver` for as long as it can; it resolves to false when the engine would not take it.
+ */
+export interface Steering {
+  deliver?: (input: string, files: Shown[]) => Promise<boolean>
 }
 
 export type ModelEvent =

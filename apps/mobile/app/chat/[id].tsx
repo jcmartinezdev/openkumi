@@ -28,7 +28,7 @@ type Row =
   | { key: string; kind: 'page'; title: string; html: string; height: number }
 
 /** Who a message the user did not write is from. */
-const FROM = { parent: 'From the chat above', subagent: 'From a subagent', schedule: 'Scheduled task', task: 'From a scheduled task' }
+const FROM = { parent: 'From the chat above', subagent: 'From a subagent', schedule: 'Scheduled task', task: 'From a scheduled task', bot: 'From another bot' }
 
 function rows(items: Item[]): Row[] {
   const failed = new Set(items.flatMap(({ data: d }) => (d.type === 'function_call_output' && d.output.startsWith('Error:') ? [d.call_id] : [])))
