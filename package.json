@@ -20,7 +20,7 @@
     "server": "npm run start -w @openkumi/server",
     "pair": "npm run pair --silent -w @openkumi/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test -w @openkumi/server && npm run test -w @openkumi/desktop",
+    "test": "npm run test -w @openkumi/server && npm run test -w @openkumi/client && npm run test -w @openkumi/desktop",
     "dist": "npm run build && npm run dist -w @openkumi/desktop",
     "dist:dir": "npm run build && npm run dist -w @openkumi/desktop -- --dir",
     "mobile": "npm run ios -w @openkumi/mobile",

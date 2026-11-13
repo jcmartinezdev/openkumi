@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Attachment, Item } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { describe } from '@openkumi/client/steps'
-import { api, loadOlder, loadThread, mainThread, recentSubagents, useStore } from '@openkumi/client/store'
+import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
@@ -142,9 +142,9 @@ export default function Chat() {
   const keyboard = useKeyboardUp()
 
   useEffect(() => {
-    // Asked again when the connection comes back, in case the chat was opened while it was away.
-    if (thread && !items && connected) loadThread(thread.id).then(() => setError(''), (e) => setError(e.message))
-  }, [thread?.id, items, connected])
+    // Shows what is kept of the chat at once, then brings it up to date; again when the connection comes back.
+    if (thread) openThread(thread.id).then(() => setError(''), (e) => setError(e.message))
+  }, [thread?.id, connected])
   // A subagent or run older than what the list holds is fetched, which puts it in the list.
   useEffect(() => {
     if (!forBot && !thread && connected) loadThread(id).catch((e) => setError(e.message))
@@ -189,7 +189,7 @@ export default function Chat() {
     const message = text.trim()
     // The files go once they are all on the server; any that failed stay behind in the composer.
     const going = files.filter((f) => f.staged)
-    if ((!message && !going.length) || uploading || !bot) return
+    if ((!message && !going.length) || uploading || !bot || !connected) return
     setError('')
     setSending(true)
     try {
@@ -310,7 +310,7 @@ export default function Chat() {
             style={[styles.input, { color: theme.text }]}
             value={text}
             onChangeText={setText}
-            placeholder={thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
+            placeholder={!connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
             placeholderTextColor={theme.faint}
             multiline
           />
@@ -335,9 +335,9 @@ export default function Chat() {
             ) : (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={uploading ? 'Send, once the files are added' : 'Send'}
-                disabled={sending || uploading || (!text.trim() && !sendable)}
-                style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || (!text.trim() && !sendable) ? 0.35 : 1 }]}
+                accessibilityLabel={!connected ? 'Send, once the connection is back' : uploading ? 'Send, once the files are added' : 'Send'}
+                disabled={sending || uploading || !connected || (!text.trim() && !sendable)}
+                style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || !connected || (!text.trim() && !sendable) ? 0.35 : 1 }]}
                 onPress={send}
               >
                 <Glyph name="up" size={19} color={theme.onPrimary} weight={2.4} />

@@ -10,7 +10,7 @@ import { PageFrame, PageViewer } from './PageFrame'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
 import { describe, parse, site } from '@openkumi/client/steps'
-import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, openTasks, recentSubagents, rootOf, useStore } from './store'
+import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, openTasks, openThread, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
 
 type Call = Extract<ItemData, { type: 'function_call' }>
@@ -328,9 +328,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
 
   const connected = useStore((s) => s.connected)
   useEffect(() => {
-    // Asked again when the connection comes back, in case the chat was opened while it was away.
-    if (thread && !items && connected) loadThread(thread.id).then(() => setError(''), (e) => setError(e.message))
-  }, [thread?.id, items, connected])
+    // Shows what is kept of the chat at once, then brings it up to date; again when the connection comes back.
+    if (thread) openThread(thread.id).then(() => setError(''), (e) => setError(e.message))
+  }, [thread?.id, connected])
 
   // On touch devices focusing would pop up the keyboard on every navigation.
   useEffect(() => {
@@ -409,7 +409,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
     const text = value.trim()
     // The files go once they are all on the server; any that failed stay behind in the composer.
     const attached = files.filter((f) => f.staged && !going.current.has(f.id))
-    if ((!text && !attached.length) || uploading) return
+    if ((!text && !attached.length) || uploading || !connected) return
     const ids = attached.map((f) => f.id)
     ids.forEach((id) => going.current.add(id))
     setDraft('')
@@ -568,7 +568,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               ref={input}
               value={draft}
               rows={1}
-              placeholder={thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'task' ? 'Message this run' : `Message ${bot.name}`}
+              placeholder={!connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'task' ? 'Message this run' : `Message ${bot.name}`}
               aria-label="Message"
               onChange={(e) => setDraft(e.target.value)}
               // Files pasted (a screenshot, a picture copied from a page, a file copied in Finder)
@@ -607,9 +607,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
                 // Not taking focus keeps the phone keyboard up after sending.
                 <button
                   className="send"
-                  title={uploading ? 'Waiting for the files' : 'Send'}
+                  title={!connected ? 'Offline' : uploading ? 'Waiting for the files' : 'Send'}
                   aria-label="Send"
-                  disabled={(!draft.trim() && !sendable) || uploading}
+                  disabled={(!draft.trim() && !sendable) || uploading || !connected}
                   onPointerDown={(e) => e.preventDefault()}
                   onClick={() => submit()}
                 >

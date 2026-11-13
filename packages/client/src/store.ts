@@ -199,7 +199,10 @@ function handle(ev: ServerEvent) {
         return
       }
       const list = state.items[threadId]
-      if (!list) return
+      // Not held, or held but not caught up since the connection opened (a copy kept on the
+      // device, or one from before a drop): put after what is held it would leave a gap, and
+      // catching the thread up when it is shown fetches it anyway.
+      if (!list || !current.has(threadId)) return
       if ((list.at(-1)?.id ?? 0) >= ev.item.id) return
       const partial = state.partial[threadId]
       const cleared =
@@ -276,7 +279,9 @@ export function onLearn(fn: typeof learn) {
  * window stays as it is; only what it is connected to changes.
  */
 export function follow(next: Link | null) {
-  if (next && link && next.id === link.id) {
+  // An environment whose server turned out to be another one (the phone paired with another computer) is another environment.
+  const same = next && link && next.id === link.id && (!next.serverId || !link.serverId || next.serverId === link.serverId)
+  if (next && link && same) {
     // The same environment with its addresses brought up to date, or with a new access code: what
     // is on screen stays. An address it no longer has is left; a new code is used from now on.
     const renewed = next.token !== link.token
@@ -293,11 +298,38 @@ export function follow(next: Link | null) {
   clearTimeout(again)
   // Whatever was being fetched belonged to the environment that is being left.
   loading.clear()
+  current.clear()
   leaving.forEach((fn) => fn())
   set(EMPTY)
   link = next
-  if (next) void find()
+  if (next) void begin(next)
   else tell({ type: 'disconnect' })
+}
+
+/**
+ * Where an app keeps its copy of what an environment sent it, to show at once the next time and
+ * while it cannot be reached (see copies.ts). Only environments on other computers have one.
+ */
+export interface Copies {
+  /** The copy of the environment's state, or null when there is none to use. */
+  restore(link: Link): Promise<globalThis.Partial<State> | null>
+  /** The copy of one of its threads, or null. */
+  thread(link: Link, id: string): Promise<{ items: Item[]; older: boolean } | null>
+}
+let copies: Copies | null = null
+export function useCopies(kept: Copies) {
+  copies = kept
+}
+
+/** Shows the copy kept of the environment, if there is one, and then connects to it. */
+async function begin(next: Link) {
+  const asked = epoch
+  if (copies && !next.local) {
+    const copy = await copies.restore(next).catch(() => null)
+    if (asked !== epoch) return
+    if (copy) set({ ...copy, loaded: true })
+  }
+  void find()
 }
 
 // ---- finding the address to connect to
@@ -404,6 +436,7 @@ let waiting: ServerEvent[] | null = null
 async function opened() {
   const mine = ++opens
   waiting = []
+  current.clear()
   // What is held is kept, and only what changed since it is asked for. Without anything held (or
   // from another database), everything comes.
   const since = state.database ? `?since=${state.seq}&db=${encodeURIComponent(state.database)}` : ''
@@ -425,14 +458,12 @@ async function opened() {
   const { removed, ...fresh } = snapshot
   const live = { connected: true, loaded: true, failures: 0, refused: false, outdated: false }
   if (removed) {
-    // Only what changed: laid over the threads held. The chats open in a view catch up on what
-    // was said meanwhile; their fetches start before the events that waited are applied, so that
-    // those are kept for them rather than put after a gap.
+    // Only what changed: laid over the threads held. What is held of each chat stays, and the
+    // chats catch up on what was said meanwhile as views show them (see openThread).
     const gone = new Set(removed)
     const threads = fresh.threads.reduce(upsert, state.threads.filter((t) => !gone.has(t.id)))
     const items = Object.fromEntries(Object.entries(state.items).filter(([id]) => !gone.has(id)))
     set({ ...fresh, threads: trimmed(threads, items), items, partial: {}, ...live })
-    for (const [id, held] of Object.entries(items)) loadThread(id, held.at(-1)?.id ?? 0).catch(() => {})
     apply(events)
     for (const id of interrupted) if (!state.items[id]) loadThread(id).catch(() => {})
   } else {
@@ -457,6 +488,7 @@ export function receive(data: Report) {
   // Closed, or never opened. Before connecting again, the address is asked who it is again.
   opens++
   waiting = null
+  current.clear()
   at = null
   set({ connected: false, address: null, failures: state.connected ? 0 : state.failures + 1 })
   clearTimeout(again)
@@ -508,10 +540,36 @@ export async function loadThread(id: string, after?: number): Promise<Thread | u
       older: fresh ? { ...state.older, [id]: !!res.more } : state.older,
       partial: { ...state.partial, [id]: partial },
     })
+    current.add(id)
     return thread
   } finally {
     if (loading.get(id) === during) loading.delete(id)
   }
+}
+
+/** Threads whose items are up to date: fetched, or caught up, since the connection opened. */
+const current = new Set<string>()
+/** Threads whose kept copy is being read. */
+const reading = new Set<string>()
+
+/**
+ * What a view calls when it shows a thread, and again when the connection comes back: shows the
+ * copy kept on the device if nothing of the thread is held yet, then brings it up to date, with
+ * its newest page or with what came after what is held.
+ */
+export async function openThread(id: string): Promise<void> {
+  const shown = link
+  if (copies && shown && !shown.local && !state.items[id] && !reading.has(id)) {
+    const asked = epoch
+    reading.add(id)
+    const kept = await copies.thread(shown, id).catch(() => null)
+    reading.delete(id)
+    if (asked !== epoch) return
+    if (kept && !state.items[id]) set({ items: { ...state.items, [id]: kept.items }, older: { ...state.older, [id]: kept.older } })
+  }
+  if (!state.connected || current.has(id)) return
+  const held = state.items[id]
+  await loadThread(id, held ? (held.at(-1)?.id ?? 0) : undefined)
 }
 
 /** Threads whose older items are being fetched: one page at a time each. */

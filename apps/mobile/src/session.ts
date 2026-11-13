@@ -8,8 +8,10 @@ import * as Crypto from 'expo-crypto'
 import * as SecureStore from 'expo-secure-store'
 import { type SavedAddress, checkNew, ordered, refusal, useRandom, withFound } from '@openkumi/client/addresses'
 import { type Picture, createConnection } from '@openkumi/client/connection'
+import { forgetCopy, keepCopies, saveCopyNow } from '@openkumi/client/copies'
 import { pair, parseAddress } from '@openkumi/client/pair'
 import { follow, onLearn, receive, recheck, send, useStore, useTransport } from '@openkumi/client/store'
+import { shelf } from './shelf'
 
 export interface Server {
   name: string
@@ -26,6 +28,14 @@ useRandom(() => Crypto.getRandomBytes(16))
 export const hostOf = (server: Server) => new URL(ordered(server.addresses)[0]).host
 
 const SAVED = 'openkumi.server'
+/** What the store calls the paired server; its copy on the phone is kept under this name. */
+const PAIRED = 'paired'
+
+// A copy of what the server sent is kept on the phone, to show at once next time and while the
+// server cannot be reached. It is written when the app goes to the background, which iOS may
+// end it from, rather than within the next few seconds.
+keepCopies(shelf)
+AppState.addEventListener('change', (now) => now === 'background' && void saveCopyNow())
 let server: Server | null = null
 /** False until the keychain has been read, so the first screen is not drawn on a guess. */
 let ready = false
@@ -38,7 +48,7 @@ const set = (next: Server | null) => {
   ready = true
   snapshot = { server, ready }
   // The store shows this server from now on, or nothing.
-  follow(next && { id: 'paired', name: next.name, addresses: ordered(next.addresses), token: next.key, local: false, serverId: next.serverId })
+  follow(next && { id: PAIRED, name: next.name, addresses: ordered(next.addresses), token: next.key, local: false, serverId: next.serverId })
   changed()
 }
 
@@ -130,8 +140,9 @@ export async function pairWith(address: string, code: string, phone: string) {
   const refused = refusal(url)
   if (refused) throw new Error(refused)
   const { key, serverId } = await pair(url, code, phone, () => Crypto.getRandomBytes(16))
-  // Pairing again with the same server keeps its name and the addresses it had.
+  // Pairing again with the same server keeps its name and the addresses it had; another server's copy goes.
   const again = server && serverId && server.serverId === serverId ? server : null
+  if (!again) await forgetCopy(PAIRED)
   await keep({ name: again?.name ?? new URL(url).host, addresses: [...(again?.addresses.filter((a) => a.url !== url) ?? []), { url }], key, serverId })
 }
 
@@ -164,4 +175,5 @@ export async function removeAddress(url: string) {
 export async function forget() {
   await SecureStore.deleteItemAsync(SAVED)
   set(null)
+  await forgetCopy(PAIRED)
 }
