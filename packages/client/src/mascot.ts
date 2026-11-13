@@ -1,7 +1,7 @@
 // A bot's mascot: a jelly creature holding a sign with the bot's emoji, put together from parts.
 // The parts are SVG drawn on a 200-unit square, for every app to show its own way (an <svg> on the
 // computer, Skia on the phone). The server keeps the same part names, in apps/server/src/look.ts.
-import type { BodyColor, ClothesColor, Creature, Extra, Hat, Look } from '@openbot/shared'
+import type { BodyColor, ClothesColor, Creature, Extra, Hat, Look } from '@openkumi/shared'
 
 /** The colours a body can be, as they are named in bot.md and shown in the app. */
 export const BODY_COLORS: Record<BodyColor, { name: string; hex: string }> = {

@@ -15,7 +15,7 @@ export const TEXT_SIZE_LABEL: Record<Prefs['textSize'], string> = { small: 'Smal
 /** How much bigger than usual messages are written at each size. */
 const TEXT_SCALE: Record<Prefs['textSize'], number> = { small: 0.9, default: 1, large: 1.15 }
 
-const SAVED = 'openbot.prefs'
+const SAVED = 'openkumi.prefs'
 let prefs = PREF_DEFAULTS
 const listeners = new Set<() => void>()
 const subscribe = (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn))

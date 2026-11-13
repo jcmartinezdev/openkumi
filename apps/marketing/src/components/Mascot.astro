@@ -1,0 +1,61 @@
+---
+// A bot's mascot, drawn from the same parts as in the app (@openkumi/client/mascot).
+import type { Look } from '@openkumi/shared'
+import { mascotSvg } from '@openkumi/client/mascot'
+import { kumiSvg } from '../lib/brand'
+
+interface Props {
+  /** Leave out for OpenKumi's own mascot. */
+  look?: Look
+  emoji?: string
+  /** Unique on the page: the mascot's gradient is named after it. */
+  id: string
+  crop?: 'full' | 'head'
+  /** Breathes and blinks, as the large ones do in the app. */
+  live?: boolean
+  /** Where in its breath it starts, so mascots side by side are not in step. */
+  delay?: number
+  class?: string
+}
+
+const { look, emoji = '🤖', id, crop = 'full', live = false, delay = 0, class: className } = Astro.props
+const svg = look ? mascotSvg(look, emoji, { id, crop }) : kumiSvg(id, crop)
+---
+
+<span class:list={['mascot', { live }, className]} style={`--delay: ${-delay}s`} aria-hidden="true" set:html={svg} />
+
+<style>
+  .mascot {
+    display: inline-block;
+    line-height: 0;
+  }
+  .mascot :global(svg) {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .live :global(.m-body) {
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    animation: squish 3.6s ease-in-out infinite var(--delay);
+  }
+  .live :global(.m-eyes) {
+    transform-box: fill-box;
+    transform-origin: 50% 50%;
+    animation: blink 5.2s infinite var(--delay);
+  }
+  @keyframes squish {
+    0%, 100% { transform: scale(1, 1); }
+    50% { transform: scale(1.03, 0.97); }
+  }
+  @keyframes blink {
+    0%, 93%, 100% { transform: scaleY(1); }
+    95.5% { transform: scaleY(0.12); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .live :global(.m-body),
+    .live :global(.m-eyes) {
+      animation: none;
+    }
+  }
+</style>

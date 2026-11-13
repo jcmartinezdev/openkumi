@@ -3,9 +3,9 @@
 // from Settings. Each opens to its runs and a form to change it; + makes a new one.
 import { Alert, Switch, Text } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
-import type { ScheduledTask } from '@openbot/shared'
-import { api, useStore } from '@openbot/client/store'
-import { localZone, scheduleLabel, standing, trouble } from '@openbot/client/tasks'
+import type { ScheduledTask } from '@openkumi/shared'
+import { api, useStore } from '@openkumi/client/store'
+import { localZone, scheduleLabel, standing, trouble } from '@openkumi/client/tasks'
 import { useSession } from '../../src/session'
 import { Avatar, Note, Row, Section, SettingsPage } from '../../src/SettingsUi'
 import { useTheme } from '../../src/theme'
@@ -26,7 +26,7 @@ export default function Tasks() {
         <Stack.Toolbar.Button icon="plus" accessibilityLabel="New task" disabled={!bots.length} onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: 'new' } })} />
       </Stack.Toolbar>
 
-      <Section inset={60} footer={zone && zone !== localZone() ? `Times of day are kept in ${zone}, the time zone of the computer running Open Bot.` : undefined}>
+      <Section inset={60} footer={zone && zone !== localZone() ? `Times of day are kept in ${zone}, the time zone of the computer running OpenKumi.` : undefined}>
         {sorted.map((task) => <TaskRow key={task.id} task={task} />)}
         {!sorted.length && <Row label="No scheduled tasks yet" detail="Tap + to make one, or ask a bot, for example “every weekday at 8, send me a short news brief”." />}
       </Section>

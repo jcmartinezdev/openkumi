@@ -1,16 +1,16 @@
-// Grok as an engine. Open Bot starts the user's own installed `grok` program (Grok Build) for each
+// Grok as an engine. OpenKumi starts the user's own installed `grok` program (Grok Build) for each
 // turn; it is signed in with the user's own account, runs the model-and-tools loop itself, and
 // reaches the bot's tools over MCP. Its own tools for commands and files are switched off, so the
-// bot can do exactly what it could do on Open Bot's own loop and nothing more.
+// bot can do exactly what it could do on OpenKumi's own loop and nothing more.
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import type { ModelInfo, ProviderInfo } from '@openbot/shared'
+import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
-const bin = () => findBinary('grok', 'OPENBOT_GROK_BIN', settings().grokPath)
+const bin = () => findBinary('grok', 'OPENKUMI_GROK_BIN', settings().grokPath)
 const base = { id: 'grok', name: 'Grok', kind: 'cli' as const }
 let info: ProviderInfo = { ...base, connected: false, detail: 'Checking…' }
 let models: ModelInfo[] = [{ id: 'default', name: 'Default' }]
@@ -86,7 +86,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   if (!program) throw new Error('Grok is not installed on this computer.')
   const folder = borrowFolder(req.cwd)
   fs.mkdirSync(path.join(folder, '.grok'), { recursive: true })
-  fs.writeFileSync(path.join(folder, '.grok', 'config.toml'), req.toolsUrl ? `[mcp_servers.openbot]\nurl = ${JSON.stringify(req.toolsUrl)}\ntool_timeout_sec = 1900\n` : '', { mode: 0o600 })
+  fs.writeFileSync(path.join(folder, '.grok', 'config.toml'), req.toolsUrl ? `[mcp_servers.openkumi]\nurl = ${JSON.stringify(req.toolsUrl)}\ntool_timeout_sec = 1900\n` : '', { mode: 0o600 })
   // What was said goes in a file of its own: it can be longer than a command line may be.
   const prompt = path.join(folder, 'prompt.txt')
   fs.writeFileSync(prompt, req.input, { mode: 0o600 })
@@ -105,7 +105,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     '--no-plan',
     // Nobody is there to answer a permission prompt: only what is allowed here runs.
     '--permission-mode', 'dontAsk',
-    '--allow', 'MCPTool(openbot__*)',
+    '--allow', 'MCPTool(openkumi__*)',
     // Underneath all that, the program itself may not write outside its own folder.
     '--sandbox', 'read-only',
     '--no-auto-update',
@@ -138,7 +138,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
           if (block.type === 'text' && block.text?.trim()) yield { type: 'item', item: { type: 'message', role: 'assistant', text: block.text } }
           else if (block.type === 'thinking' && block.thinking?.trim()) yield { type: 'item', item: { type: 'reasoning', summary: block.thinking } }
           else if (block.type === 'server_tool_use' && /search/i.test(block.name ?? '')) yield { type: 'item', item: { type: 'web_search_call', action: { query: block.input?.query } } }
-          // Calls to Open Bot's own tools are recorded where they are carried out (tool-endpoint.ts).
+          // Calls to OpenKumi's own tools are recorded where they are carried out (tool-endpoint.ts).
         }
       } else if (ev.type === 'result') {
         finished = true

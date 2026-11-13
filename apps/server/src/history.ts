@@ -2,7 +2,7 @@
 // every time: old tool results are trimmed, and once the whole passes the limit in Settings its
 // older part is replaced by a summary. The items themselves stay in the database, where the
 // owner can read them and the bot can look them up with search_history.
-import type { Item, ItemData } from '@openbot/shared'
+import type { Item, ItemData } from '@openkumi/shared'
 import * as db from './db.ts'
 import type { Provider } from './providers/types.ts'
 

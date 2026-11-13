@@ -2,7 +2,7 @@
 // card, and a card is a list of rows with a name and description on the left and a control on the
 // right. A setting is saved the moment it is changed; there are no Save buttons.
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import type { Settings } from '@openbot/shared'
+import type { Settings } from '@openkumi/shared'
 import { desktopState } from './desktop'
 import { Icon } from './Icon'
 import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'

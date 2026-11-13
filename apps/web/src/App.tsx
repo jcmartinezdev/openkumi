@@ -1,6 +1,6 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { browsingThread, control, windowOf } from '@openbot/client/browser'
+import { browsingThread, control, windowOf } from '@openkumi/client/browser'
 import { BrowserPane, BrowserPip } from './BrowserPane'
 import { Chat } from './Chat'
 import { desktop, useDesktop } from './desktop'
@@ -23,7 +23,7 @@ interface PaneState {
 
 function savedPaneWidth(): number {
   try {
-    return Number(localStorage.getItem('openbot.paneWidth')) || 0
+    return Number(localStorage.getItem('openkumi.paneWidth')) || 0
   } catch {
     return 0
   }
@@ -43,7 +43,7 @@ export function App() {
   const refused = useStore((s) => s.refused)
   const failures = useStore((s) => s.failures)
   const app = useDesktop()
-  // Open Bot on this computer stopped answering, or has a new access code: the app looks again by
+  // OpenKumi on this computer stopped answering, or has a new access code: the app looks again by
   // itself, which starts it if it is gone and reads the code again if it is there.
   const stale = app.current === 'local' && app.local.state === 'running' && (refused || failures >= 2)
   useEffect(() => {

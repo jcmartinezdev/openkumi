@@ -1,7 +1,7 @@
 // Settings › Principles: what every bot is told before anything else, what each bot is for (which
 // the others are told, so they know when to hand it work), and a way to read all a bot is told.
 import { useState } from 'react'
-import type { Bot } from '@openbot/shared'
+import type { Bot } from '@openkumi/shared'
 import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { Field, Page, Pick, Row, Section } from './settingsUi'
@@ -16,7 +16,7 @@ export function Principles() {
     setError('')
     savePrinciples(text).catch((e) => setError(e.message))
   }
-  const restore = () => confirm('Put back the principles Open Bot comes with? Yours are replaced.') && save(null)
+  const restore = () => confirm('Put back the principles OpenKumi comes with? Yours are replaced.') && save(null)
 
   return (
     <Page>
@@ -28,7 +28,7 @@ export function Principles() {
         <Row
           id="principles"
           title="For every bot"
-          description={<>Written in Markdown, and saved when you leave the box. Where a bot’s own rules from you say otherwise, its rules win. {principles?.custom ? 'These are your own.' : 'These are the ones Open Bot comes with.'}</>}
+          description={<>Written in Markdown, and saved when you leave the box. Where a bot’s own rules from you say otherwise, its rules win. {principles?.custom ? 'These are your own.' : 'These are the ones OpenKumi comes with.'}</>}
         >
           <Field label="Principles for every bot" rows={18} className="set-input set-area" value={principles?.text ?? ''} placeholder="Nothing: bots are told no principles." onCommit={(text) => save(text)} />
         </Row>
@@ -73,7 +73,7 @@ function Told({ bots }: { bots: Bot[] }) {
       <Row
         id="told"
         title="Read it all"
-        description="Everything a bot reads before each turn of its conversation: these principles, the other bots, its rules from you, its own instructions and notes, and how Open Bot works."
+        description="Everything a bot reads before each turn of its conversation: these principles, the other bots, its rules from you, its own instructions and notes, and how OpenKumi works."
         status={error && <span className="err">{error}</span>}
         control={
           <div className="set-link-row">

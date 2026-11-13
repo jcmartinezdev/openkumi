@@ -1,7 +1,7 @@
 // The mark of each thing a bot can run on, for the model picker and wherever a provider is named.
-// The marks themselves are shared with the phone app (@openbot/client/marks).
-import type { ProviderInfo } from '@openbot/shared'
-import { markOf } from '@openbot/client/marks'
+// The marks themselves are shared with the phone app (@openkumi/client/marks).
+import type { ProviderInfo } from '@openkumi/shared'
+import { markOf } from '@openkumi/client/marks'
 
 export function ProviderIcon({ provider, size = 16 }: { provider: Pick<ProviderInfo, 'id' | 'detail'>; size?: number }) {
   const mark = markOf(provider)

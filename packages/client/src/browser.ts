@@ -1,7 +1,7 @@
 // What every app needs to show a bot's browser: which window is whose, and who is driving it. Each
 // thread of a bot (its conversation, a subagent, a scheduled run) browses in a window of its own;
 // the owner watches one, and takes control of it to use the page themselves.
-import type { BrowserState, BrowserWindow, Thread } from '@openbot/shared'
+import type { BrowserState, BrowserWindow, Thread } from '@openkumi/shared'
 import { mainThread, send } from './store'
 
 /** This view's own name for itself when it takes control of a window. A new one each time the app starts. */

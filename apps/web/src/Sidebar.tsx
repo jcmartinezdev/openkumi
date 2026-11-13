@@ -1,4 +1,4 @@
-import type { Bot, Thread } from '@openbot/shared'
+import type { Bot, Thread } from '@openkumi/shared'
 import type { Modal } from './App'
 import { Icon } from './Icon'
 import { desktop, useDesktop } from './desktop'
@@ -48,7 +48,7 @@ export function Sidebar({ bot, thread, tasksOpen, openModal, open, close }: Prop
   return (
     <nav className={`sidebar ${open ? 'open' : ''}`}>
       <div className="side-head">
-        <span className="wordmark">Open Bot</span>
+        <span className="wordmark">OpenKumi</span>
         {/* With more than one environment turned on: which one is showing. */}
         {environments.length > 1 && (
           <select className="picker environment" aria-label="Environment" value={app.current ?? ''} onChange={(e) => void desktop.open(e.target.value).catch(() => {})}>

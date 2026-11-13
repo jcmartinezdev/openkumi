@@ -1,14 +1,14 @@
 // The desktop app. Its work is split over separate processes and threads, so that none of it can
 // hold up another part:
 //   - this process: the window, the menu, the list of environments. It does no work of its own.
-//   - the local environment (local.ts): Open Bot's server, in a process of its own.
+//   - the local environment (local.ts): OpenKumi's server, in a process of its own.
 //   - the window (apps/web): the interface, loaded from the app itself, talking straight to the
 //     environment it shows; its connection and the drawing of a bot's browser run on a worker thread.
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, app, dialog, ipcMain, nativeTheme, shell } from 'electron'
-import type { DesktopState, Link } from '@openbot/shared/desktop'
+import type { DesktopState, Link } from '@openkumi/shared/desktop'
 import os from 'node:os'
-import { checkNew, ordered, refusal, withFound } from '@openbot/client/addresses'
-import { pair, parseAddress } from '@openbot/client/pair'
+import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresses'
+import { pair, parseAddress } from '@openkumi/client/pair'
 import { config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
 import { ASSUME_YES, CATCH_SIGN_INS, HIDDEN, PRELOAD } from './paths.ts'
@@ -18,11 +18,11 @@ let win: BrowserWindow | null = null
 
 // ---- sign-ins in this computer's own browser
 // A superpower's sign-in can happen in the browser on this computer, where the person's accounts
-// already are. The service then sends that browser back to an openbot:// address, which the
+// already are. The service then sends that browser back to an openkumi:// address, which the
 // computer opens with this app, and the app hands it to the window to pass on to its environment.
 
 /** The way back from a sign-in (the server's APP_RETURN, apps/server/src/mcp.ts). Nothing else opened with this app is acted on. */
-const SIGN_IN_RETURN = 'openbot://sign-in/callback?'
+const SIGN_IN_RETURN = 'openkumi://sign-in/callback?'
 /** This app is what the computer opens that address with. Only an installed app can be. */
 let catchesSignIns = CATCH_SIGN_INS
 /** A way back that arrived before the window could take it. */
@@ -100,8 +100,8 @@ async function setLocal(on: boolean) {
   }
   if (!config.local.enabled) return
   const detail = local.child
-    ? 'Open Bot on this computer stops, and so do the bots that live here, until you turn it on again. Nothing is deleted.'
-    : 'This app stops using Open Bot on this computer. It was started outside this app, so it keeps running.'
+    ? 'OpenKumi on this computer stops, and so do the bots that live here, until you turn it on again. Nothing is deleted.'
+    : 'This app stops using OpenKumi on this computer. It was started outside this app, so it keeps running.'
   if (!(await confirmed('Turn off the local environment?', detail, 'Turn Off'))) return
   config.local.enabled = false
   changed()
@@ -216,7 +216,7 @@ function createWindow() {
     height: 880,
     minWidth: 400,
     minHeight: 560,
-    title: 'Open Bot',
+    title: 'OpenKumi',
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0c0c0d' : '#ffffff',
     show: false,
     // On a Mac the interface runs to the top of the window, with the window's buttons over it.
@@ -296,7 +296,7 @@ else {
     if (url) signInReturned(url)
   })
   void app.whenReady().then(() => {
-    if (app.isPackaged) catchesSignIns = app.setAsDefaultProtocolClient('openbot')
+    if (app.isPackaged) catchesSignIns = app.setAsDefaultProtocolClient('openkumi')
     const started = process.argv.find((arg) => arg.startsWith(SIGN_IN_RETURN))
     if (started) waitingReturn = started
     // Tests run the app without a window, so it should not sit in the Dock either.

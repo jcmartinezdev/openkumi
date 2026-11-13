@@ -3,8 +3,8 @@
 // off is not offered for bots, on any device.
 import { useEffect, useState } from 'react'
 import { Alert, Text } from 'react-native'
-import type { ProviderInfo } from '@openbot/shared'
-import { api, saveSettings, useStore } from '@openbot/client/store'
+import type { ProviderInfo } from '@openkumi/shared'
+import { api, saveSettings, useStore } from '@openkumi/client/store'
 import { ProviderIcon } from '../../src/icons'
 import { useSession } from '../../src/session'
 import { ICON_INSET, Section, SettingsPage, Slot, SwitchRow } from '../../src/SettingsUi'
@@ -40,7 +40,7 @@ export default function ProviderSettings() {
     <SettingsPage title="Providers" subtitle={server?.name} refresh={{ busy: checking, run: check }}>
       <Section
         inset={ICON_INSET}
-        footer="Switched off, a provider is not offered for bots. Signing in, where a program is and API keys are set in Open Bot on the computer, in Settings › Providers. Pull down to look again."
+        footer="Switched off, a provider is not offered for bots. Signing in, where a program is and API keys are set in OpenKumi on the computer, in Settings › Providers. Pull down to look again."
       >
         {providers.map((p) => (
           <SwitchRow

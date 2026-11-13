@@ -1,0 +1,30 @@
+---
+// The mark of something a bot can run on, as the app draws it (@openkumi/client/marks).
+import { markOf } from '@openkumi/client/marks'
+
+interface Props {
+  id: string
+  detail?: string
+}
+
+const { id, detail = '' } = Astro.props
+const mark = markOf({ id, detail })
+---
+
+<svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+  {
+    mark.stroke ? (
+      <path d={mark.d} fill="none" stroke={mark.color ?? 'currentColor'} stroke-width={mark.stroke} stroke-linecap="round" stroke-linejoin="round" />
+    ) : (
+      <path d={mark.d} fill={mark.color ?? 'currentColor'} />
+    )
+  }
+</svg>
+
+<style>
+  .mark {
+    width: 1.5em;
+    height: 1.5em;
+    flex: none;
+  }
+</style>

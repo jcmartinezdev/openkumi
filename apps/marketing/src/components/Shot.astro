@@ -1,0 +1,71 @@
+---
+// A screenshot of the app, in the visitor's light or dark, inside a window frame. The pictures
+// are in src/assets/screenshots as <name>-light.png and <name>-dark.png; either one is enough.
+import type { ImageMetadata } from 'astro'
+import { getImage } from 'astro:assets'
+
+interface Props {
+  name: string
+  alt: string
+  /** Shown above the fold: loaded at once rather than when scrolled to. */
+  eager?: boolean
+  /** How wide it is drawn, for picking the picture's size. */
+  sizes?: string
+  caption?: string
+  class?: string
+}
+
+const { name, alt, eager = false, sizes = '(max-width: 1200px) 100vw, 1160px', caption, class: className } = Astro.props
+const shots = import.meta.glob<{ default: ImageMetadata }>('../assets/screenshots/*.png', { eager: true })
+const find = (theme: string) => shots[`../assets/screenshots/${name}-${theme}.png`]?.default
+const light = find('light') ?? find('dark')
+const dark = find('dark') ?? find('light')
+const widths = [800, 1400, 2000]
+const make = async (src: ImageMetadata | undefined) =>
+  src && (await Promise.all(widths.filter((w) => w <= src.width).map(async (w) => [await getImage({ src, width: w, format: 'webp', quality: 82 }), w] as const)))
+const [lightSet, darkSet] = await Promise.all([make(light), make(dark)])
+const srcset = (set: NonNullable<typeof lightSet>) => set.map(([img, w]) => `${img.src} ${w}w`).join(', ')
+---
+
+<figure class:list={['shot', className]}>
+  <div class="frame">
+  {
+    light && lightSet && darkSet ? (
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset={srcset(darkSet)} sizes={sizes} type="image/webp" />
+        <source srcset={srcset(lightSet)} sizes={sizes} type="image/webp" />
+        <img src={lightSet.at(-1)![0].src} width={light.width} height={light.height} alt={alt} loading={eager ? 'eager' : 'lazy'} fetchpriority={eager ? 'high' : 'auto'} decoding="async" />
+      </picture>
+    ) : (
+      <div class="missing" role="img" aria-label={alt} />
+    )
+  }
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>
+
+<style>
+  .shot {
+    margin: 0;
+  }
+  .frame {
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--bg-raised);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-lg);
+  }
+  img {
+    width: 100%;
+    height: auto;
+  }
+  figcaption {
+    margin-top: 14px;
+    font-size: 15px;
+    color: var(--muted);
+  }
+  .missing {
+    aspect-ratio: 16 / 10;
+    background: repeating-linear-gradient(-45deg, var(--bg-sunk) 0 12px, var(--bg-raised) 12px 24px);
+  }
+</style>

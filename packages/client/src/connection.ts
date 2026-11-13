@@ -3,7 +3,7 @@
 // the store first makes sure the address is still the environment's server (see store.ts). On the
 // desktop this runs on a worker thread (apps/web/src/connection.worker.ts); on a phone it runs
 // where the app does.
-import type { ClientEvent, ServerEvent } from '@openbot/shared'
+import type { ClientEvent, ServerEvent } from '@openkumi/shared'
 
 export type Command =
   /** Connect to this address, leaving whichever was connected before. */

@@ -45,11 +45,11 @@ test('a device asks who is at an address without sending its key, and only its s
   const heard = []
   /** One port per way of answering: the server, something that only says it is, an old server, and so on. */
   const answer = {
-    server: (q) => ({ app: 'open-bot', id: 's_mine', device: q.get('device') === deviceTag(key) ? { known: true, proof: crypto.createHmac('sha256', hash).update(`server:s_mine:${q.get('challenge')}`).digest('hex') } : { known: false } }),
-    pretender: () => ({ app: 'open-bot', id: 's_mine', device: { known: true, proof: 'ab'.repeat(32) } }),
-    another: () => ({ app: 'open-bot', id: 's_theirs', device: { known: false } }),
-    removed: () => ({ app: 'open-bot', id: 's_mine', device: { known: false } }),
-    older: () => ({ app: 'open-bot', version: '0.0.1', authorized: false }),
+    server: (q) => ({ app: 'openkumi', id: 's_mine', device: q.get('device') === deviceTag(key) ? { known: true, proof: crypto.createHmac('sha256', hash).update(`server:s_mine:${q.get('challenge')}`).digest('hex') } : { known: false } }),
+    pretender: () => ({ app: 'openkumi', id: 's_mine', device: { known: true, proof: 'ab'.repeat(32) } }),
+    another: () => ({ app: 'openkumi', id: 's_theirs', device: { known: false } }),
+    removed: () => ({ app: 'openkumi', id: 's_mine', device: { known: false } }),
+    older: () => ({ app: 'openkumi', version: '0.0.1', authorized: false }),
     stranger: () => ({ hello: 'world' }),
   }
   const servers = {}
@@ -69,7 +69,7 @@ test('a device asks who is at an address without sending its key, and only its s
     assert.equal(await said('server'), 'ok')
     assert.equal((await probe(at('server'), key)).serverId, 's_mine')
     assert.equal(await said('pretender'), 'other', 'says it knows the device, but cannot sign with the key’s hash')
-    assert.equal(await said('another', 's_mine'), 'other', 'another Open Bot server')
+    assert.equal(await said('another', 's_mine'), 'other', 'another OpenKumi server')
     assert.equal(await said('removed', 's_mine'), 'refused')
     assert.equal(await said('older'), 'outdated')
     assert.equal(await said('stranger'), 'unreachable')

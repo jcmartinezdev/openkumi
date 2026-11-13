@@ -2,9 +2,9 @@
 // whether it is signed in, and a switch for offering it to bots at all; the one that is picked
 // opens beside the list with its status, its settings, the models it reports and the bots on it.
 import { useEffect, useState } from 'react'
-import type { ProviderInfo, Settings } from '@openbot/shared'
+import type { ProviderInfo, Settings } from '@openkumi/shared'
 import { Icon } from './Icon'
-import { loadModels, useModelLists } from '@openbot/client/models'
+import { loadModels, useModelLists } from '@openkumi/client/models'
 import { ProviderIcon } from './ProviderIcon'
 import { Field, Row, Switch, useSetting } from './settingsUi'
 import { api, useStore } from './store'
@@ -17,9 +17,9 @@ const ABOUT: Record<string, string> = {
   codex: 'Runs on your ChatGPT plan, through the Codex program installed on this computer. You sign in there, not here.',
   'claude-code': 'Runs on your Claude plan, through the Claude Code program installed on this computer. You sign in there, not here.',
   grok: 'Runs on your Grok plan, through the Grok Build program installed on this computer. You sign in there, not here.',
-  local: 'Models that run on the computer running Open Bot, through Ollama or LM Studio. Nothing is sent anywhere and nothing is paid for. Small models often cannot use tools well, so pick one made for tool use.',
+  local: 'Models that run on the computer running OpenKumi, through Ollama or LM Studio. Nothing is sent anywhere and nothing is paid for. Small models often cannot use tools well, so pick one made for tool use.',
   'openai-compatible': 'Any service that speaks the OpenAI API, such as OpenAI itself or OpenRouter, with a key of your own.',
-  mock: 'Scripted replies, for testing Open Bot without a model.',
+  mock: 'Scripted replies, for testing OpenKumi without a model.',
 }
 
 /** How a provider stands, in a few words: for the list and the top of its page. */
@@ -183,7 +183,7 @@ function Compatible({ provider }: { provider: ProviderInfo }) {
     <div className="prov-block">
       <h4>Connection</h4>
       <Row title="Base URL" description="The address of the API. Clear it to disconnect." control={<Field label="Base URL" value={provider.baseUrl ?? ''} placeholder="https://api.openai.com/v1" onCommit={(baseUrl) => save({ baseUrl })} />} />
-      <Row title="API key" description="Stored on the computer running Open Bot." control={<Field label="API key" type="password" value="" placeholder={provider.connected ? 'Saved' : 'None'} onCommit={(apiKey) => save({ apiKey })} />} />
+      <Row title="API key" description="Stored on the computer running OpenKumi." control={<Field label="API key" type="password" value="" placeholder={provider.connected ? 'Saved' : 'None'} onCommit={(apiKey) => save({ apiKey })} />} />
     </div>
   )
 }

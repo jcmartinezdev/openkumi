@@ -1,7 +1,7 @@
 import type React from 'react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import type { Bot, BrowserInput, BrowserTab, BrowserWindow } from '@openbot/shared'
-import { control, driverOf, hostOf, sessionName } from '@openbot/client/browser'
+import type { Bot, BrowserInput, BrowserTab, BrowserWindow } from '@openkumi/shared'
+import { control, driverOf, hostOf, sessionName } from '@openkumi/client/browser'
 import { Icon } from './Icon'
 import { api, send, useStore, watch } from './store'
 
@@ -312,7 +312,7 @@ export function BrowserPane({ bot, threadId, other, full, setFull, popOut, close
       window.removeEventListener('pointerup', up)
       document.body.classList.remove('resizing')
       try {
-        if (width) localStorage.setItem('openbot.paneWidth', String(width))
+        if (width) localStorage.setItem('openkumi.paneWidth', String(width))
       } catch {
         // Storage can be unavailable (private windows); the width just won't be remembered.
       }

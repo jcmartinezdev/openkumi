@@ -8,6 +8,6 @@ The bot reads the presentations you point it to, and can look at each slide as i
 adds slides freely and asks before it changes or deletes existing ones. To find presentations by
 name, also activate Google Drive for the bot; otherwise give it a link.
 
-Open Bot has to be registered with Google once, for all the Google superpowers; this page walks
+OpenKumi has to be registered with Google once, for all the Google superpowers; this page walks
 you through it. After that, activate it for a bot and sign in to Google in the bot's browser,
 with the account that bot should use.

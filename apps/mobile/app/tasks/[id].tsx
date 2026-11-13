@@ -6,9 +6,9 @@ import { ActionSheetIOS, ActivityIndicator, Alert, Pressable, StyleSheet, Text, 
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import * as Haptics from 'expo-haptics'
-import type { Schedule, ScheduledTask } from '@openbot/shared'
-import { api, useStore } from '@openbot/client/store'
-import { DAY_LETTERS, DAY_NAMES, STATUS_LABEL, WEEK, localZone, madeBy, moment, nextRun, runStatus, runTime, runsOf, trouble } from '@openbot/client/tasks'
+import type { Schedule, ScheduledTask } from '@openkumi/shared'
+import { api, useStore } from '@openkumi/client/store'
+import { DAY_LETTERS, DAY_NAMES, STATUS_LABEL, WEEK, localZone, madeBy, moment, nextRun, runStatus, runTime, runsOf, trouble } from '@openkumi/client/tasks'
 import { Avatar, Field, Note, Row, Section, Segments, SettingsPage, SwitchRow } from '../../src/SettingsUi'
 import { useAppearance, useTheme } from '../../src/theme'
 
@@ -20,7 +20,7 @@ interface Draft {
   kind: Schedule['type']
   /** For "once": when, as a moment in time. */
   at: number
-  /** For "daily": "HH:MM" on the clock of the computer running Open Bot. */
+  /** For "daily": "HH:MM" on the clock of the computer running OpenKumi. */
   time: string
   days: number[]
   /** For "interval": as typed. */
@@ -171,7 +171,7 @@ export default function TaskPage() {
       <Section
         title="When"
         footer={
-          draft.kind === 'daily' ? (otherZone ? `In ${zone}, the time zone of the computer running Open Bot.` : draft.days.length ? undefined : 'Every day. Choose days to run on those only.')
+          draft.kind === 'daily' ? (otherZone ? `In ${zone}, the time zone of the computer running OpenKumi.` : draft.days.length ? undefined : 'Every day. Choose days to run on those only.')
           : draft.kind === 'interval' ? 'Counted from when it is turned on, or from the run before. At most every 5 minutes.'
           : undefined
         }

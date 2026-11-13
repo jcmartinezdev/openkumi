@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Glyph, type GlyphName } from './icons'
 import { ScreenTitle } from './ScreenTitle'
 import { useTheme } from './theme'
-import type { Bot } from '@openbot/shared'
+import type { Bot } from '@openkumi/shared'
 import { BotHead } from './Mascot'
 
 /** A pushed settings page: its title in the bar, and its sections in a scroll view. */

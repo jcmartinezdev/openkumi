@@ -1,7 +1,7 @@
 {
-  "name": "@openbot/web",
+  "name": "@openkumi/web",
   "version": "0.1.0",
-  "description": "The Open Bot interface. It is built into the desktop app; no server serves it.",
+  "description": "The OpenKumi interface. It is built into the desktop app; no server serves it.",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -11,8 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@openbot/client": "*",
-    "@openbot/shared": "*",
+    "@openkumi/client": "*",
+    "@openkumi/shared": "*",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",

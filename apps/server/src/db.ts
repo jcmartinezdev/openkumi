@@ -1,10 +1,9 @@
 import crypto from 'node:crypto'
-import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { HistoryMatch, Item, ItemData, ScheduledTask, Thread } from '@openbot/shared'
-import { HOME, emit } from './config.ts'
+import type { HistoryMatch, Item, ItemData, ScheduledTask, Thread } from '@openkumi/shared'
+import { DATABASE, emit } from './config.ts'
 
-const db = new DatabaseSync(path.join(HOME, 'openbot.db'))
+const db = new DatabaseSync(DATABASE)
 
 db.exec(`
   PRAGMA journal_mode = WAL;

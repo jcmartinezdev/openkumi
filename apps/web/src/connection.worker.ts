@@ -3,7 +3,7 @@
 // arrives, and draws the pictures of a bot's browser straight onto the canvas it was given. The
 // window's own thread only hears about changes it has to show, at most once per frame, so a busy
 // bot or a fast-moving page never makes typing or scrolling stutter.
-import { type Command, type Picture, type Report, createConnection } from '@openbot/client/connection'
+import { type Command, type Picture, type Report, createConnection } from '@openkumi/client/connection'
 
 export type WorkerCommand =
   | Command

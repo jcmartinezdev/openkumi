@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { ProviderInfo } from '@openbot/shared'
+import type { ProviderInfo } from '@openkumi/shared'
 import { HOME, emit } from '../config.ts'
 import { SUMMARISE } from '../history.ts'
 import { CHOOSE_LOOK } from '../look.ts'
@@ -14,7 +14,7 @@ import { openaiCompat } from './openai-compat.ts'
 import type { ModelEvent, ModelRequest, Provider } from './types.ts'
 
 /**
- * Scripted offline provider for tests and UI development (enabled with OPENBOT_MOCK=1).
+ * Scripted offline provider for tests and UI development (enabled with OPENKUMI_MOCK=1).
  * "!tool <name> <json>" calls a tool, "!steps <n>" calls one n times in a row, "!slow" takes a few
  * seconds, "!say <text>" replies with exactly that text, "!system", "!tools" and "!sent" report what
  * the model was sent, anything else is echoed. Asked for a summary, it gives the
@@ -75,7 +75,7 @@ const mock: Provider = {
 }
 
 // The order is the order of preference when a new bot is given "the first one connected".
-const providers: Provider[] = [codex, claudeCode, grok, localModels, openaiCompat, ...(process.env.OPENBOT_MOCK ? [mock] : [])]
+const providers: Provider[] = [codex, claudeCode, grok, localModels, openaiCompat, ...(process.env.OPENKUMI_MOCK ? [mock] : [])]
 
 export function getProvider(id: string): Provider {
   const p = providers.find((p) => p.id === id)

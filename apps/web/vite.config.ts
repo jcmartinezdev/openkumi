@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-const port = Number(process.env.OPENBOT_DEV_PORT ?? 5173)
+const port = Number(process.env.OPENKUMI_DEV_PORT ?? 5173)
 
 // The interface is built into the desktop app, which hands these files to its own window. While
 // developing, the app passes its window's requests on to this server instead, so changes show at once.

@@ -1,10 +1,10 @@
-// A bot's mascot on the phone: the computer's drawing (@openbot/client/mascot), drawn by Skia from
+// A bot's mascot on the phone: the computer's drawing (@openkumi/client/mascot), drawn by Skia from
 // its SVG. Skia's SVG draws no emoji, so the emoji on the sign is text laid over it.
 import { type ReactNode, useEffect, useMemo, useRef } from 'react'
 import { Animated, Easing, StyleSheet, Text } from 'react-native'
 import { Canvas, ImageSVG, Skia } from '@shopify/react-native-skia'
-import type { Bot, Look } from '@openbot/shared'
-import { SIGN, UNDECIDED, VIEWS, mascotSvg } from '@openbot/client/mascot'
+import type { Bot, Look } from '@openkumi/shared'
+import { SIGN, UNDECIDED, VIEWS, mascotSvg } from '@openkumi/client/mascot'
 
 interface MascotProps {
   look: Look | undefined

@@ -1,12 +1,12 @@
 {
-  "name": "@openbot/desktop",
+  "name": "@openkumi/desktop",
   "version": "0.1.0",
-  "description": "The Open Bot desktop app.",
+  "description": "The OpenKumi desktop app.",
   "private": true,
   "type": "module",
   "license": "MIT",
-  "author": "Open Bot contributors",
-  "productName": "Open Bot",
+  "author": "OpenKumi contributors",
+  "productName": "OpenKumi",
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -17,10 +17,10 @@
     "test": "node --test test/"
   },
   "devDependencies": {
-    "@openbot/server": "*",
-    "@openbot/client": "*",
-    "@openbot/shared": "*",
-    "@openbot/web": "*",
+    "@openkumi/server": "*",
+    "@openkumi/client": "*",
+    "@openkumi/shared": "*",
+    "@openkumi/web": "*",
     "electron": "^45.3.0",
     "electron-builder": "^26.18.0",
     "esbuild": "^0.28.0",

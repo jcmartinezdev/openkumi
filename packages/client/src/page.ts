@@ -153,12 +153,12 @@ var root=document.documentElement,last=0;
 function post(m){if(window.ReactNativeWebView)window.ReactNativeWebView.postMessage(JSON.stringify(m));else if(window.parent!==window)window.parent.postMessage(m,"*");}
 function theme(t){if(t==="light"||t==="dark")root.setAttribute("data-theme",t);}
 var m=/[#&]theme=(light|dark)/.exec(location.hash);theme(m?m[1]:${JSON.stringify(initial)});
-window.addEventListener("message",function(e){var d=e.data;if(d&&d.openbot==="theme")theme(d.appearance);});
-function size(){var h=Math.ceil(root.scrollHeight>root.clientHeight?root.scrollHeight:root.getBoundingClientRect().height);if(h!==last){last=h;post({openbot:"size",height:h});}}
+window.addEventListener("message",function(e){var d=e.data;if(d&&d.openkumi==="theme")theme(d.appearance);});
+function size(){var h=Math.ceil(root.scrollHeight>root.clientHeight?root.scrollHeight:root.getBoundingClientRect().height);if(h!==last){last=h;post({openkumi:"size",height:h});}}
 if(window.ResizeObserver)new ResizeObserver(size).observe(root);
 document.addEventListener("DOMContentLoaded",size);window.addEventListener("load",size);
 if(window.ReactNativeWebView)return;
-function open(u){try{u=new URL(u,location.href);}catch(x){return;}if(/^https?:$/.test(u.protocol))post({openbot:"open",url:u.href});}
+function open(u){try{u=new URL(u,location.href);}catch(x){return;}if(/^https?:$/.test(u.protocol))post({openkumi:"open",url:u.href});}
 document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var h=a.getAttribute("href");if(h.charAt(0)==="#")return;e.preventDefault();open(h);},true);
 window.open=function(u){open(String(u));return null;};
 })();`
@@ -169,7 +169,7 @@ export function pageDocument(html: string, appearance: Appearance = 'dark'): str
     '<meta charset="utf-8">' +
     `<meta http-equiv="Content-Security-Policy" content="${PAGE_POLICY}">` +
     (/<meta\s[^>]*name\s*=\s*["']?viewport/i.test(html) ? '' : '<meta name="viewport" content="width=device-width, initial-scale=1">') +
-    `<style id="openbot-base">${BASE}</style>` +
+    `<style id="openkumi-base">${BASE}</style>` +
     `<script>${BOOTSTRAP(appearance)}</script>`
   // Put first in <head> (so before any script or style of the page's own), but after a doctype,
   // which has to stay first or the page is drawn in the old "quirks" way.
@@ -184,7 +184,7 @@ export function pageDocument(html: string, appearance: Appearance = 'dark'): str
 }
 
 /** Tells a page that is already showing to change its colours. */
-export const themeMessage = (appearance: Appearance) => ({ openbot: 'theme', appearance })
+export const themeMessage = (appearance: Appearance) => ({ openkumi: 'theme', appearance })
 
 export type PageMessage = { kind: 'size'; height: number } | { kind: 'open'; url: string }
 
@@ -198,8 +198,8 @@ export function readPageMessage(data: unknown): PageMessage | null {
     }
   }
   if (typeof data !== 'object' || data === null) return null
-  const { openbot, height, url } = data as Record<string, unknown>
-  if (openbot === 'size' && typeof height === 'number' && Number.isFinite(height) && height > 0) return { kind: 'size', height }
-  if (openbot === 'open' && typeof url === 'string' && /^https?:\/\//i.test(url)) return { kind: 'open', url }
+  const { openkumi, height, url } = data as Record<string, unknown>
+  if (openkumi === 'size' && typeof height === 'number' && Number.isFinite(height) && height > 0) return { kind: 'size', height }
+  if (openkumi === 'open' && typeof url === 'string' && /^https?:\/\//i.test(url)) return { kind: 'open', url }
   return null
 }
