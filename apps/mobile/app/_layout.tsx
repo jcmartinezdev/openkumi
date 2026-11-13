@@ -14,7 +14,8 @@ export default function Layout() {
   const appearance = useAppearance()
   const { server, ready } = useSession()
   const router = useRouter()
-  const pairing = useSegments()[0] === 'pair'
+  // The scanner opens over the pairing screen, and is part of it.
+  const pairing = ['pair', 'scan'].includes(useSegments()[0])
 
   useEffect(() => void restore(), [])
   // With no server there is only one thing to do; once paired, the pairing screen is left.
