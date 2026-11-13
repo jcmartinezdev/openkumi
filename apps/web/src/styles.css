@@ -214,6 +214,54 @@ button.pill.link:hover { background: var(--active); }
 .gate-head { display: grid; gap: 6px; padding: 0 16px; }
 .gate-head h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
 .gate-head p { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+
+/* ---- the welcome (Welcome.tsx), while there is no environment at all: the crew, the words, and the ways to start */
+.welcome-scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.welcome-page { min-height: 100%; max-width: 580px; margin: 0 auto; padding: 0 24px 40px; display: flex; flex-direction: column; justify-content: center; gap: 32px; }
+.welcome-hero { display: flex; flex-direction: column; align-items: center; }
+/* The crew stands at the bottom of a stage as wide as the column, up to a point. */
+.welcome-stage { position: relative; width: min(420px, 100%); aspect-ratio: 100 / 63; display: flex; flex-direction: column; justify-content: flex-end; }
+.welcome-glow {
+  position: absolute; aspect-ratio: 1; translate: -50% -50%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--tint) 21%, transparent), transparent);
+}
+.sparkle { position: absolute; translate: -50% -50%; pointer-events: none; animation: twinkle calc(1300ms + var(--order) * 260ms) ease-in-out infinite alternate; }
+.sparkle svg { display: block; width: 100%; height: 100%; }
+.sparkle.dot { border-radius: 50%; background: currentColor; }
+@keyframes twinkle { to { opacity: 0.25; scale: 0.6; } }
+.welcome-crew { position: relative; display: flex; align-items: flex-end; justify-content: center; }
+/* Sizes and margins are shares of the stage's width: the one in front is bigger, and stands a little lower than the two behind. */
+button.hopper {
+  flex: none; width: 32%; height: auto; margin-bottom: 3.84%; padding: 0; border: none; border-radius: 24px;
+  display: flex; flex-direction: column; align-items: center; background: none; transition: none;
+}
+button.hopper:hover:not(:disabled) { background: none; }
+button.hopper.front { width: 42%; margin: 0 -6%; z-index: 1; }
+.hopper-in { display: block; width: 100%; transform-origin: 50% 100%; animation: hopper-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) calc(250ms + var(--order) * 170ms) both; }
+@keyframes hopper-in { from { opacity: 0; transform: translateY(31%) scale(0.3); } }
+.hopper-body { display: block; transform-origin: 50% 100%; }
+/* The drawing's own shadow would go up with the bot; the one below stays on the ground instead. */
+.hopper-body .mascot > ellipse { display: none; }
+.hopper-ground { display: block; width: 50%; margin-top: -10%; animation: fade 0.4s calc(250ms + var(--order) * 170ms) both; }
+.hopper-shadow { display: block; aspect-ratio: 50 / 7; border-radius: 50%; background: color-mix(in srgb, var(--text) 10%, transparent); }
+@media (prefers-reduced-motion: reduce) { .sparkle, .hopper-in, .hopper-ground { animation: none; } }
+.welcome-hint { margin-top: 6px; font-size: 12.5px; color: var(--faint); }
+.welcome-words { display: grid; gap: 8px; margin-top: 24px; text-align: center; }
+.welcome-eyebrow { font-size: 14px; font-weight: 600; color: var(--muted); }
+.welcome-words h1 { font-size: 30px; line-height: 1.2; font-weight: 800; letter-spacing: -0.02em; }
+.welcome-lead { margin-top: 4px; font-size: 15px; line-height: 1.55; color: var(--muted); text-wrap: pretty; }
+.welcome-starts { display: grid; gap: 8px; }
+.welcome-starts h2 { padding: 0 4px; font-size: 12.5px; font-weight: 500; color: var(--muted); }
+button.welcome-start {
+  width: 100%; height: auto; padding: 14px; gap: 14px; justify-content: flex-start; text-align: left; white-space: normal;
+  border-radius: 16px; background: var(--card); color: var(--faint);
+}
+button.welcome-start:hover:not(:disabled) { background: linear-gradient(var(--hover), var(--hover)), var(--card); border-color: var(--border-strong); color: var(--muted); }
+.welcome-start-icon { width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--hover); color: var(--text); }
+.welcome-start strong { display: block; font-size: 15px; font-weight: 600; color: var(--text); }
+.welcome-start strong + span { display: block; font-size: 13px; line-height: 1.45; font-weight: 400; color: var(--muted); }
+.welcome-pairing { animation: rise 0.2s; }
+.welcome-back { align-self: flex-start; margin: -12px 0 -18px 4px; }
 .toast {
   position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 30;
   background: var(--raised); border: 1px solid var(--border-strong); box-shadow: var(--shadow);

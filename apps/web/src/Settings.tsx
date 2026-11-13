@@ -572,7 +572,7 @@ function Addresses({ environment, report, inUse, busy, change }: { environment: 
   )
 }
 
-function AddEnvironment({ add, busy }: { add: (input: { address: string; code: string; name: string }) => void; busy: boolean }) {
+export function AddEnvironment({ add, busy }: { add: (input: { address: string; code: string; name: string }) => void; busy: boolean }) {
   const [address, setAddress] = useState('')
   const [code, setCode] = useState('')
   const [name, setName] = useState('')

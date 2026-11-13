@@ -1,8 +1,9 @@
-// What the window shows while it has no environment to show: the first time the app is opened,
-// while OpenKumi starts on this computer, and when the environment cannot be reached.
+// What the window shows while it has no environment to show: the welcome while there is none at
+// all, then while OpenKumi starts on this computer, and when the environment cannot be reached.
 import { useDesktop } from './desktop'
 import { EnvironmentList } from './Settings'
 import { useStore } from './store'
+import { Welcome } from './Welcome'
 
 export function Gate() {
   const app = useDesktop()
@@ -12,12 +13,14 @@ export function Gate() {
   const connected = useStore((s) => s.connected)
   const { local } = app
   const name = app.current === 'local' ? 'This computer' : (app.environments.find((e) => e.id === app.current)?.name ?? 'The environment')
+  // The first time the app is opened, and again once no environment is left.
+  if (!app.current && !local.enabled && !app.environments.length) return <Welcome />
 
   /** What is going on, and whether there is anything for the person to decide. */
   let lead: string
   let waiting = false
   if (!app.current) {
-    lead = local.enabled || app.environments.length ? 'No environment is turned on. Turn one on, or add one.' : 'Where should your bots run? On this computer, on another one, or both.'
+    lead = 'No environment is turned on. Turn one on, or add one.'
   } else if (app.current === 'local' && local.state !== 'running') {
     // Turned on and not running: it is starting, it failed, or the app is on its way out.
     waiting = local.state !== 'failed'

@@ -107,21 +107,33 @@ test('the local environment can be turned on and off, and remote environments ad
     assert.ok(address, 'this test needs the computer to be on a network')
     const origin = `http://${address}:${REMOTE_PORT}`
 
-    // The first time, nothing is turned on and the app asks where the bots should run.
+    // The first time, nothing is turned on and the app welcomes, with the ways to start.
     let win = await launch()
-    await win.waitForSelector('.gate #local-environment')
+    const start = (title) => win.locator('.welcome-start', { hasText: title })
+    await start('Run them on this computer').waitFor()
     // The window's page is the app's own, not one a server hands out.
     assert.equal(win.url(), 'openkumi://app/')
-    assert.deepEqual(await win.locator('h2').allInnerTexts(), ['This app', 'Environments'])
-    assert.equal(await win.locator('.gate-head p').innerText(), 'Where should your bots run? On this computer, on another one, or both.')
-    assert.match(await win.locator('#local-environment').innerText(), /Turned off\. Bots only run in remote environments\./)
+    assert.deepEqual(await win.locator('.welcome-start strong').allInnerTexts(), ['Run them on this computer', 'Connect to another computer'])
+    // A bot jumps into other clothes when clicked (picked at random, so they may come out the same).
+    const bear = win.locator('.hopper.front')
+    const dressed = await bear.getAttribute('aria-label')
+    for (let tries = 0; (await bear.getAttribute('aria-label')) === dressed; tries++) {
+      assert.ok(tries < 5, 'the bot changes clothes')
+      await bear.click()
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+    // Connecting to another computer opens the pairing form, which goes back to the welcome.
+    await start('Connect to another computer').click()
+    await win.waitForSelector('input[aria-label="Address of the other computer"]')
+    await win.click('.welcome-back')
+    await start('Connect to another computer').waitFor()
     assert.equal(await up(LOCAL_PORT), false, 'with the local environment off, no server runs here')
     assert.ok(!(await processes()).includes('OpenKumi Server'))
     // From here on the window must stay the same page: changing environments does not reload it.
     await win.evaluate(() => (window.sameWindow = true))
 
-    // Turning the local environment on starts the server on this computer, in a process of its own, and shows it.
-    await win.click('#local-environment .switch')
+    // Running the bots here starts the server on this computer, in a process of its own, and shows it.
+    await start('Run them on this computer').click()
     await showsBot(win, 'Assistant')
     assert.equal(await up(LOCAL_PORT), true)
     assert.ok((await processes()).includes('OpenKumi Server'), 'the server is a process of its own inside the app')
@@ -196,14 +208,14 @@ test('the local environment can be turned on and off, and remote environments ad
     await remoteRow(win).locator('button:has-text("Remove")').click()
     await win.waitForSelector('#remote-environments:has-text("No remote environments")')
 
-    // With nothing turned on, the app asks again where the bots should run, and no server runs here.
+    // With no environment left, the app welcomes again, and no server runs here.
     await win.click('#local-environment .switch')
-    await win.waitForSelector('.gate #local-environment')
+    await start('Run them on this computer').waitFor()
     await until(async () => !(await up(LOCAL_PORT)), 15_000)
     assert.equal(await win.evaluate(() => window.sameWindow), true, 'the window was never reloaded along the way')
 
     // Quitting stops the server the app started; the next start brings back what was on.
-    await win.click('#local-environment .switch')
+    await start('Run them on this computer').click()
     await showsBot(win, 'Assistant')
     await app.close()
     await until(async () => !(await up(LOCAL_PORT)), 15_000)

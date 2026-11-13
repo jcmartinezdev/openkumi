@@ -1,6 +1,7 @@
 // The first screen, while this phone is paired with no computer: a few bots say hello, and under
 // them are the ways to start. For now there is one, pairing with the computer the bots run on
-// (pair.tsx); others will join it in the list.
+// (pair.tsx); others will join it in the list. The desktop app has the same welcome
+// (apps/web/src/Welcome.tsx); keep the two alike.
 import { useEffect, useRef, useState } from 'react'
 import { AccessibilityInfo, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
