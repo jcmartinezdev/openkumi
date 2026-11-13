@@ -22,7 +22,7 @@ export default function ServerSettings() {
   const unpair = () =>
     Alert.alert('Unpair this phone?', `The phone forgets ${server.name}. To use it again, pair it again with a new code.`, [
       { text: 'Cancel', style: 'cancel' },
-      // Back to the first screen before the server is forgotten, which then makes way for pairing.
+      // Back to the first screen before the server is forgotten, which then makes way for the welcome.
       { text: 'Unpair', style: 'destructive', onPress: () => (router.dismissAll(), void forget()) },
     ])
 

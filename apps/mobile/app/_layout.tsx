@@ -14,16 +14,18 @@ export default function Layout() {
   const appearance = useAppearance()
   const { server, ready } = useSession()
   const router = useRouter()
-  // The scanner opens over the pairing screen, and is part of it.
-  const pairing = ['pair', 'scan'].includes(useSegments()[0])
+  // Until there is a server the app is its welcome: the first screen, the pairing it leads to, and
+  // the scanner that opens over that.
+  const welcoming = ['welcome', 'pair', 'scan'].includes(useSegments()[0])
 
   useEffect(() => void restore(), [])
-  // With no server there is only one thing to do; once paired, the pairing screen is left.
+  // Once paired the welcome is left, and once unpaired it is back. Either way the app starts over,
+  // with nothing left behind to go back to.
   useEffect(() => {
-    if (!ready) return
-    if (!server && !pairing) router.replace('/pair')
-    else if (server && pairing) router.replace('/')
-  }, [ready, server, pairing])
+    if (!ready || (server ? !welcoming : welcoming)) return
+    if (router.canDismiss()) router.dismissAll()
+    router.replace(server ? '/' : '/welcome')
+  }, [ready, server, welcoming])
 
   return (
     // Navigation draws its bars and their buttons and menus light unless told the app is dark.
@@ -38,7 +40,8 @@ export default function Layout() {
         }}
       >
         <Stack.Screen name="index" options={{ title: 'OpenKumi' }} />
-        <Stack.Screen name="pair" options={{ title: 'Pair with your computer', headerBackVisible: false }} />
+        <Stack.Screen name="welcome" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
+        <Stack.Screen name="pair" />
         <Stack.Screen name="scan" options={{ title: 'Scan the code', presentation: 'modal' }} />
         <Stack.Screen name="chat/[id]" options={{ title: '' }} />
         <Stack.Screen name="browser/[botId]" options={{ title: 'Browser' }} />
