@@ -9,6 +9,7 @@
     "./store": "./src/store.ts",
     "./connection": "./src/connection.ts",
     "./pair": "./src/pair.ts",
+    "./addresses": "./src/addresses.ts",
     "./steps": "./src/steps.ts",
     "./highlight": "./src/highlight.ts",
     "./markdown": "./src/markdown.ts",

@@ -71,7 +71,7 @@ Environments**:
   bots only run in remote environments. If Open Bot is already running on this computer when the
   app starts, the app uses that one and leaves it running.
 - **Environments.** Other computers that run Open Bot, each paired with this one. Each has a
-  switch, and can be renamed or removed.
+  switch, one or more addresses, and can be renamed or removed.
 
 ### Pairing with another computer
 
@@ -90,7 +90,30 @@ only at the computer that runs the bots.
 
 The window shows one environment at a time. With more than one turned on, switch between them
 from the sidebar or the **Environment** menu; the window stays as it is and only what it is
-connected to changes. Reaching another computer works over your local network for now.
+connected to changes.
+
+### Reaching it from anywhere
+
+An environment can have several addresses: its address on your home network, its address on
+[Tailscale](https://tailscale.com), and any you add (the list of addresses beside it, in **Settings →
+Environments**). The app tries them in that order and uses the first that answers, so at home it
+goes straight there and away from home it goes over Tailscale. While connected it looks again every
+minute, and whenever the network changes, and moves back home as soon as home answers.
+
+You only pair once, wherever you are: the server tells the computers and phones paired with it its
+other addresses, and they keep them up to date (a new address on the home network replaces the old
+one). With Tailscale on both, nothing else needs setting up. Addresses you added yourself are only
+changed by you.
+
+A key never goes to an address just because it is saved. Before connecting, the app asks whatever
+answers there who it is, without sending the key: the server has to sign a value the app made up
+with the key's hash, which only that server and that device know. Something else at a saved address
+(another device that got the same home address on another network, or another Open Bot server) is
+told nothing it could use, and an address where something else answers cannot be added. Plain
+`http` is only used on the home network and on Tailscale, which encrypts the connection itself;
+anywhere else an address needs `https`. The server itself only answers this computer, the local
+network and Tailscale, and treats a request a proxy on this computer passes on as coming from
+elsewhere.
 
 A computer can also run the server with no app at all, for other computers to pair with:
 
@@ -115,8 +138,9 @@ and the server lists the phone so you can remove it.
 npm run mobile     # builds it and opens it in the iPhone simulator (needs Xcode and CocoaPods)
 ```
 
-The phone reaches the server over your network, so it works at home, or anywhere with a private
-network such as Tailscale on both. Signing in to providers, registering Open Bot with Google, files
+The phone reaches the server the same way, at each of its addresses in turn: at home over your
+network, and anywhere else over Tailscale, on both. Its Settings list the addresses and which one
+is in use, and one can be added there. Signing in to providers, registering Open Bot with Google, files
 and the Advanced settings are managed in the desktop app.
 
 There is no web version: the server has no pages, and opening its address in a browser shows a

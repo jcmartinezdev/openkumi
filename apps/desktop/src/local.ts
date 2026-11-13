@@ -73,7 +73,7 @@ function searchPath() {
  */
 async function adopt(port: number, turn: number) {
   const challenge = crypto.randomBytes(16).toString('hex')
-  const said = await hello(address(port), '', 3000, challenge)
+  const said = await hello(address(port), 3000, challenge)
   let token = ''
   try {
     if (said?.home) token = JSON.parse(fs.readFileSync(path.join(said.home, 'auth.json'), 'utf8')).accessToken ?? ''
@@ -94,7 +94,7 @@ async function start(turn: number) {
   set({ state: 'starting', error: '' })
   const preferred = Number(process.env.OPENBOT_PORT ?? 4317)
   // Open Bot may already be running here, started outside the app: then that is the one to use.
-  if (await hello(address(preferred), '', 1500)) {
+  if (await hello(address(preferred), 1500)) {
     try {
       return await adopt(preferred, turn)
     } catch {
@@ -171,7 +171,7 @@ export function startLocal(): Promise<void> {
 
 /** Looks again: reads the access code again if the server is still there, and starts it if it is not. */
 export async function retryLocal() {
-  if (local.state === 'running' && (await hello(address(local.port), '', 1500))) return adopt(local.port, turns)
+  if (local.state === 'running' && (await hello(address(local.port), 1500))) return adopt(local.port, turns)
   // One the app had joined is gone. One it started itself reports its own end.
   if (local.state === 'running' && !local.child) local.state = 'off'
   if (local.state === 'running') return

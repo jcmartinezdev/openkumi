@@ -1,15 +1,15 @@
-// The connection to an environment: it keeps the socket open, comes back when it drops, and passes
-// on what arrives in batches, at most one per frame. On the desktop this runs on a worker thread
-// (apps/web/src/connection.worker.ts); on a phone it runs where the app does.
+// The connection to an environment: it holds the socket and passes on what arrives in batches, at
+// most one per frame. When the socket drops it says so and waits to be told where to connect again:
+// the store first makes sure the address is still the environment's server (see store.ts). On the
+// desktop this runs on a worker thread (apps/web/src/connection.worker.ts); on a phone it runs
+// where the app does.
 import type { ClientEvent, ServerEvent } from '@openbot/shared'
 
 export type Command =
   /** Connect to this address, leaving whichever was connected before. */
   | { type: 'connect'; url: string; epoch: number }
-  /** The same environment has a new access code: use this address the next time the connection is made. */
-  | { type: 'retarget'; url: string }
   | { type: 'disconnect' }
-  /** The connection turned out not to be usable: drop it and try again. */
+  /** The connection turned out not to be usable: drop it, which is reported as a close. */
   | { type: 'reconnect' }
   | { type: 'send'; event: ClientEvent }
 
@@ -36,10 +36,8 @@ export function createConnection(report: (message: Report) => void, picture: (pi
 
   let target: { url: string; epoch: number } | null = null
   let socket: WebSocket | null = null
-  let retry: ReturnType<typeof setTimeout> | undefined
 
   function open() {
-    clearTimeout(retry)
     const at = target
     if (!at) return
     const ws = new WebSocket(at.url)
@@ -56,12 +54,10 @@ export function createConnection(report: (message: Report) => void, picture: (pi
       socket = null
       flush()
       report({ type: 'close', epoch: at.epoch })
-      retry = setTimeout(open, 1000)
     }
   }
 
   function hangUp() {
-    clearTimeout(retry)
     const ws = socket
     // Cleared first, so that nothing more from this socket is passed on.
     socket = null
@@ -111,9 +107,6 @@ export function createConnection(report: (message: Report) => void, picture: (pi
         hangUp()
         target = { url: command.url, epoch: command.epoch }
         return open()
-      case 'retarget':
-        if (target) target.url = command.url
-        return
       case 'disconnect':
         target = null
         return hangUp()

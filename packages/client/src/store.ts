@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react'
 import type { AppState, ClientEvent, Item, Partial, Principles, ServerEvent, Settings, Thread } from '@openbot/shared'
 import type { Link } from '@openbot/shared/desktop'
+import { reach } from './addresses'
 import type { Command, Report } from './connection'
 
 export interface State extends AppState {
@@ -18,6 +19,10 @@ export interface State extends AppState {
   failures: number
   /** The environment answered, but did not accept the access code. */
   refused: boolean
+  /** The environment runs an Open Bot too old to show who it is, so it is not sent the key. */
+  outdated: boolean
+  /** The address the connection uses, once one has shown it is the environment's server. */
+  address: string | null
 }
 
 /** What is known before an environment has answered. */
@@ -41,6 +46,8 @@ const EMPTY: State = {
   loaded: false,
   failures: 0,
   refused: false,
+  outdated: false,
+  address: null,
 }
 let state = EMPTY
 const subscribers = new Set<() => void>()
@@ -66,8 +73,10 @@ export function useStore<T>(select: (s: State) => T): T {
 
 // ---- the environment being shown
 
-/** Where requests go: the address and access code of the environment the window shows. */
+/** The environment the window shows: its addresses and access code. */
 let link: Link | null = null
+/** Where requests go: the address that last showed it is the environment's server. Null while there is none. */
+let at: string | null = null
 const leaving = new Set<() => void>()
 /** `fn` is called when the window moves to another environment, to forget what was kept about the one left. */
 export function onEnvironmentChange(fn: () => void) {
@@ -84,10 +93,14 @@ export class ApiError extends Error {
   }
 }
 
-/** A request to the environment, carrying its access code. `body` is sent as it is. */
+/**
+ * A request to the environment, carrying its access code. `body` is sent as it is. Made while no
+ * address has shown it is the server (the connection is being made again), it waits for one.
+ */
 export async function request(method: string, path: string, body?: BodyInit, type?: string): Promise<Response> {
   if (!link) throw new Error('No environment is connected.')
-  const res = await fetch(link.url + path, { method, headers: { Authorization: `Bearer ${link.token}`, ...(type ? { 'Content-Type': type } : {}) }, body })
+  const base = at ?? (await arrival())
+  const res = await fetch(base + path, { method, headers: { Authorization: `Bearer ${link!.token}`, ...(type ? { 'Content-Type': type } : {}) }, body })
   if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error ?? `Request failed (${res.status})`)
   return res
 }
@@ -234,26 +247,137 @@ export function send(event: ClientEvent) {
   tell({ type: 'send', event })
 }
 
+let learn: (id: string, learned: { serverId?: string; addresses?: string[] }) => void = () => {}
+/**
+ * `fn` is told what was learned about the environment being shown: its server's id, once an
+ * address has shown it, and the addresses the server reports. The app keeps them with the environment.
+ */
+export function onLearn(fn: typeof learn) {
+  learn = fn
+}
+
 /**
  * Shows this environment, leaving the one shown before. With null there is nothing to show. The
  * window stays as it is; only what it is connected to changes.
  */
 export function follow(next: Link | null) {
-  if (next?.id === link?.id && next?.url === link?.url && next?.token === link?.token) return
-  const address = next && `${next.url.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(next.token)}`
-  // The same environment with a new access code: what is on screen stays, and the code is used from now on.
-  const sameServer = !!next && next.id === link?.id && next.url === link?.url
-  link = next
-  if (sameServer) return tell({ type: 'retarget', url: address! })
+  if (next && link && next.id === link.id) {
+    // The same environment with its addresses brought up to date, or with a new access code: what
+    // is on screen stays. An address it no longer has is left; a new code is used from now on.
+    const renewed = next.token !== link.token
+    link = { ...next, serverId: next.serverId ?? link.serverId }
+    if (at && !next.addresses.includes(at)) tell({ type: 'reconnect' })
+    else if (renewed && !state.connected) void find()
+    return
+  }
   epoch++
   opens++
   waiting = null
+  at = null
+  arrived(null)
+  clearTimeout(again)
   // Whatever was being fetched belonged to the environment that is being left.
   loading.clear()
   leaving.forEach((fn) => fn())
   set(EMPTY)
-  if (address) tell({ type: 'connect', epoch, url: address })
+  link = next
+  if (next) void find()
   else tell({ type: 'disconnect' })
+}
+
+// ---- finding the address to connect to
+// A remote environment is only sent its key at an address that has just shown it is the
+// environment's server (see addresses.ts). The connection is made there, and again after every
+// drop, each time after asking. On this computer the app has already made sure who it is talking
+// to (apps/desktop/src/local.ts), so the one address is used as it is.
+
+/** Set while the addresses are being asked, so two askings never overlap. */
+let finding = false
+let again: ReturnType<typeof setTimeout> | undefined
+
+function connectTo(url: string) {
+  at = url
+  set({ address: url })
+  tell({ type: 'connect', epoch, url: `${url.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(link!.token)}` })
+  arrived(url)
+}
+
+/** Finds an address where the environment's server answers, and connects there. Tries again until one does. */
+async function find() {
+  clearTimeout(again)
+  if (!link) return
+  // The addresses are being asked already (by `keep`): once that is done, this asks afresh.
+  if (finding) return void (again = setTimeout(find, 1000))
+  if (link.local) return connectTo(link.addresses[0])
+  const asked = epoch
+  finding = true
+  try {
+    const { found, answers } = await reach(link.addresses, link.token, link.serverId)
+    if (asked !== epoch || !link) return
+    if (found) {
+      if (!link.serverId && found.serverId) {
+        link = { ...link, serverId: found.serverId }
+        learn(link.id, { serverId: found.serverId })
+      }
+      return connectTo(found.url)
+    }
+    const refused = answers.some((probe) => probe.answer === 'refused')
+    const outdated = !refused && answers.some((probe) => probe.answer === 'outdated')
+    set({ refused, outdated, failures: state.failures + 1 })
+    again = setTimeout(find, refused || outdated ? 5000 : 2000)
+  } finally {
+    finding = false
+  }
+}
+
+/**
+ * While connected, asks the addresses again: moves to an earlier one that answers (home again,
+ * after Tailscale), or to a later one when the one in use stopped answering, and leaves the one in
+ * use at once if something else answers there now.
+ */
+async function keep() {
+  if (finding || !link || link.local || !at || !state.connected) return
+  const asked = epoch
+  const was = at
+  finding = true
+  try {
+    const { found, answers } = await reach(link.addresses, link.token, link.serverId)
+    if (asked !== epoch || at !== was) return
+    if (found && found.url !== was) return connectTo(found.url)
+    const here = answers.find((probe) => probe.url === was)?.answer
+    if (here === 'other' || here === 'refused') tell({ type: 'reconnect' })
+  } finally {
+    finding = false
+  }
+}
+
+setInterval(() => void keep(), 60_000)
+
+/** Asks again now: the app calls it when the network changes or the app comes back to the front. */
+export function recheck() {
+  if (!link || link.local) return
+  if (state.connected) void keep()
+  else void find()
+}
+
+let arrivals: ((url: string | null) => void)[] = []
+function arrived(url: string | null) {
+  const waiting = arrivals
+  arrivals = []
+  waiting.forEach((fn) => fn(url))
+}
+/** The address requests go to, once there is one. */
+function arrival(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const done = (url: string | null) => {
+      clearTimeout(late)
+      arrivals = arrivals.filter((fn) => fn !== done)
+      if (url) resolve(url)
+      else reject(new Error(`${link?.name ?? 'The environment'} cannot be reached right now.`))
+    }
+    const late = setTimeout(() => done(null), 15_000)
+    arrivals.push(done)
+  })
 }
 
 /** Counts the times the socket opened, so a snapshot fetched for an earlier opening is dropped. */
@@ -281,9 +405,15 @@ async function opened() {
   const events = waiting ?? []
   waiting = null
   batching = true
-  set({ ...snapshot, items: {}, partial: {}, connected: true, loaded: true, failures: 0, refused: false })
+  set({ ...snapshot, items: {}, partial: {}, connected: true, loaded: true, failures: 0, refused: false, outdated: false })
   apply(events)
   for (const id of interrupted) loadThread(id).catch(() => {})
+  // The server says where else it can be reached; the app keeps that, for when this address stops answering.
+  const shown = link
+  if (shown && !shown.local)
+    void api<{ addresses?: string[] }>('GET', '/api/addresses')
+      .then(({ addresses }) => mine === opens && Array.isArray(addresses) && learn(shown.id, { addresses }))
+      .catch(() => {})
 }
 
 /** What the connection reports: it opened, it closed, or events arrived. */
@@ -292,27 +422,13 @@ export function receive(data: Report) {
   if (data.epoch !== epoch) return
   if (data.type === 'open') return void opened()
   if (data.type === 'events') return waiting ? void waiting.push(...data.events) : apply(data.events)
-  // Closed, or never opened. The worker keeps trying.
+  // Closed, or never opened. Before connecting again, the address is asked who it is again.
   opens++
   waiting = null
-  set({ connected: false, failures: state.connected ? 0 : state.failures + 1 })
-  if (state.failures) void diagnose()
-}
-
-/**
- * A socket that will not open does not say why. This asks the environment plainly, to tell one
- * that is not there from one that is there and no longer accepts the access code.
- */
-async function diagnose() {
-  const asked = epoch
-  if (!link) return
-  const stop = new AbortController()
-  const late = setTimeout(() => stop.abort(), 4000)
-  const said = await fetch(`${link.url}/api/hello`, { headers: { Authorization: `Bearer ${link.token}` }, signal: stop.signal })
-    .then((res) => res.json())
-    .catch(() => null)
-  clearTimeout(late)
-  if (asked === epoch && !state.connected) set({ refused: said?.app === 'open-bot' && said.authorized === false })
+  at = null
+  set({ connected: false, address: null, failures: state.connected ? 0 : state.failures + 1 })
+  clearTimeout(again)
+  again = setTimeout(find, 1000)
 }
 
 /** Joins the server's copy of streaming text with what the socket delivered since, without repeating the overlap. */

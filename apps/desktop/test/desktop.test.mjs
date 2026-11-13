@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
+import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -41,6 +42,8 @@ const env = {
   OPENBOT_CLAUDE_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-claude.mjs'),
   OPENBOT_CODEX_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-codex.mjs'),
   OPENBOT_GROK_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-grok.mjs'),
+  // And for Tailscale's, which says the computer is on a tailnet.
+  OPENBOT_TAILSCALE_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-tailscale.mjs'),
 }
 delete env.ELECTRON_RUN_AS_NODE
 delete env.OPENBOT_DEV_URL
@@ -153,14 +156,16 @@ test('the local environment can be turned on and off, and remote environments ad
     await win.fill('input[aria-label="Name"]', 'Other Mac')
     await win.click('button:has-text("Pair and add")')
     await remoteRow(win).waitFor()
-    await remoteRow(win).locator('p:has-text("via LAN · Connected")').waitFor()
+    await remoteRow(win).locator(`p:has-text("Connected · via Home network · ${address}:${REMOTE_PORT}")`).waitFor()
     assert.deepEqual(await menu().then((m) => m.slice(0, 2)), ['*This computer', 'Other Mac'], 'adding an environment does not leave the one that is showing')
 
     // The key this computer was given is kept in a file only the owner can read. It is a key of
     // its own: the other server's access code never left that computer, and the code is used up.
     const saved = JSON.parse(fs.readFileSync(`${tmp}/app/desktop.json`, 'utf8'))
-    assert.deepEqual([saved.local, saved.environments.map((e) => [e.name, e.url, e.enabled])], [{ enabled: true }, [['Other Mac', origin, true]]])
+    assert.deepEqual([saved.local, saved.environments.map((e) => [e.name, e.addresses, e.enabled])], [{ enabled: true }, [['Other Mac', [{ url: origin }], true]]])
     assert.ok(saved.environments[0].token && saved.environments[0].token !== tokenOf('remote-home'))
+    // ...with the other server's own id, to tell it from another one at any of its addresses.
+    assert.match(saved.environments[0].serverId, /^s_/)
     assert.equal(fs.statSync(`${tmp}/app/desktop.json`).mode & 0o777, 0o600)
     // The other computer lists this one by its name.
     assert.equal((await ask(REMOTE_PORT, 'remote-home', 'GET', '/api/access')).computers.length, 1)
@@ -189,7 +194,7 @@ test('the local environment can be turned on and off, and remote environments ad
     await showsBot(win, 'Assistant')
     assert.equal(await win.locator('.sidebar .item', { hasText: 'Far Helper' }).count(), 0)
     await settings(win)
-    await remoteRow(win).locator('p:has-text("via LAN · Turned off")').waitFor()
+    await remoteRow(win).locator('p:has-text("Turned off")').waitFor()
     // Removing an environment forgets it.
     await remoteRow(win).locator('summary').click()
     await remoteRow(win).locator('button:has-text("Remove")').click()
@@ -517,6 +522,94 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
     await win.locator('.gate .set-row', { hasText: 'Far Mac' }).waitFor()
     await app.close()
   } finally {
+    far.kill()
+  }
+})
+
+test('an environment has several addresses: one where something else answers is never sent the key, the next is used, and the app moves back when the first returns', async () => {
+  fs.mkdirSync(`${tmp}/many-home`, { recursive: true })
+  fs.writeFileSync(`${tmp}/many-home/settings.json`, '{"lan": true}')
+  const far = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENBOT_HOME: `${tmp}/many-home`, OPENBOT_PORT: String(REMOTE_PORT), OPENBOT_MOCK: '1', OPENBOT_TAILSCALE_BIN: env.OPENBOT_TAILSCALE_BIN }, stdio: 'ignore' })
+  /** Listens on a port of its own on this computer; `handle` answers what arrives there. */
+  const listen = async (server, port = 0) => (await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve)), `http://127.0.0.1:${server.address().port}`)
+  // What anything that is not the server was sent: none of it may be the key.
+  const heard = []
+  const answering = (says) => http.createServer((req, res) => (heard.push(`${req.url} ${JSON.stringify(req.headers)}`), res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(says))))
+  // A way to the server that can be cut and put back: a relay on a port of its own.
+  const ways = new Set()
+  const relay = () =>
+    net.createServer((socket) => {
+      const onward = net.connect(REMOTE_PORT, '127.0.0.1')
+      ways.add(socket).add(onward)
+      socket.pipe(onward).pipe(socket)
+      socket.on('error', () => onward.destroy())
+      onward.on('error', () => socket.destroy())
+    })
+  const servers = []
+  try {
+    await until(() => up(REMOTE_PORT))
+    await ask(REMOTE_PORT, 'many-home', 'POST', '/api/bots', { name: 'Many Helper', provider: 'mock' })
+    const given = await pairWith(REMOTE_PORT, 'many-home')
+    // Something that says it is that server, and that it knows this computer, but cannot show it.
+    const pretender = answering({ app: 'open-bot', version: '0.1.0', id: given.server, device: { known: true, proof: 'ab'.repeat(32) } })
+    // Another Open Bot server, which has never heard of this computer.
+    const another = answering({ app: 'open-bot', version: '0.1.0', id: 's_another', device: { known: false } })
+    let through = relay()
+    servers.push(pretender, another)
+    const [pretending, elsewhere, relayed] = [await listen(pretender), await listen(another), await listen(through)]
+    const direct = `http://127.0.0.1:${REMOTE_PORT}`
+    fs.writeFileSync(
+      `${tmp}/app/desktop.json`,
+      JSON.stringify({ local: { enabled: false }, environments: [{ id: 'remote-many', name: 'Many Mac', addresses: [{ url: pretending }, { url: relayed }, { url: direct }], token: given.key, enabled: true, serverId: given.server }], current: 'remote-many' }),
+    )
+
+    const win = await launch()
+    await showsBot(win, 'Many Helper')
+    await settings(win)
+    const row = win.locator('.set-row', { has: win.locator('h3:has-text("Many Mac")') })
+    const address = (url) => row.locator('.set-link-row', { has: win.locator(`code:text-is("${url.replace('http://', '')}")`) })
+    await row.locator('button', { hasText: /\d+ addresses/ }).click()
+    // The first address answered, but could not show it was the server: the second one is used.
+    await address(relayed).locator('text=In use').waitFor()
+    await address(pretending).locator('text=Something else answers').waitFor()
+    assert.ok(heard.length > 0 && !heard.some((line) => line.includes(given.key)), 'what answered at the first address was asked who it is, and never given the key')
+
+    // Connected, it learns the server's other addresses, local network and Tailscale, and keeps them.
+    const saved = () => JSON.parse(fs.readFileSync(`${tmp}/app/desktop.json`, 'utf8')).environments[0].addresses
+    await until(() => saved().some((a) => a.url === `http://test-mac.tail0000.ts.net:${REMOTE_PORT}` && a.found))
+    assert.deepEqual(saved().filter((a) => !a.found), [{ url: pretending }, { url: relayed }, { url: direct }], 'the ones put in by hand stay as they were')
+    await address(`http://test-mac.tail0000.ts.net:${REMOTE_PORT}`).locator('text=reported by it').waitFor()
+
+    // The way in use is cut: the app goes on through the next address that shows it is the server.
+    through.close()
+    ways.forEach((socket) => socket.destroy())
+    await address(direct).locator('text=In use').waitFor({ timeout: 20_000 })
+    await showsBot(win, 'Many Helper')
+    // It comes back: on the next look (here, the network coming back), the app moves back to it.
+    through = relay()
+    await listen(through, Number(new URL(relayed).port))
+    await win.evaluate(() => dispatchEvent(new Event('online')))
+    await address(relayed).locator('text=In use').waitFor({ timeout: 20_000 })
+
+    // Adding an address: another server answers there, so it is not added, and is not sent the key.
+    const typed = win.locator('input[aria-label="Another address for Many Mac"]')
+    await typed.fill(elsewhere.replace('http://', ''))
+    await win.click('button:has-text("Add address")')
+    await win.waitForSelector(`.notice.error:has-text("Something else answers at ${elsewhere.replace('http://', '')}, not Many Mac")`)
+    // Where nothing answers yet, it is added, and only ever sent the key once it shows it is the server.
+    await typed.fill('127.0.0.1:1')
+    await win.click('button:has-text("Add address")')
+    await row.locator('text=Added. Nothing answers there right now').waitFor()
+    await address('http://127.0.0.1:1').waitFor()
+    await address('http://127.0.0.1:1').locator('button:has-text("Remove")').click()
+    await address('http://127.0.0.1:1').waitFor({ state: 'detached' })
+    assert.ok(!saved().some((a) => a.url === 'http://127.0.0.1:1'))
+    assert.ok(!heard.some((line) => line.includes(given.key)), 'nothing but the server was ever sent the key')
+    through.close()
+    ways.forEach((socket) => socket.destroy())
+    await app.close()
+  } finally {
+    servers.forEach((server) => server.close())
     far.kill()
   }
 })

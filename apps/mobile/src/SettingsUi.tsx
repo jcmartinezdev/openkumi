@@ -147,7 +147,7 @@ export function Field({ label, value, placeholder, onCommit, onChange, multiline
   required?: boolean
   maxLength?: number
   autoCapitalize?: 'none' | 'sentences' | 'words'
-  keyboardType?: 'default' | 'number-pad'
+  keyboardType?: 'default' | 'number-pad' | 'url'
 }) {
   const theme = useTheme()
   const [typed, setTyped] = useState(value)

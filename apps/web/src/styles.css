@@ -824,6 +824,11 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 
 .pair-code { font-size: 18px; font-weight: 600; letter-spacing: 0.08em; }
 .set-link-row > .faint { width: 58px; flex: none; font-size: 12px; }
+/* An environment's addresses: what network each is on, and what answered there. */
+.set-addresses .set-link-row { min-height: 30px; }
+.set-addresses .set-link-row > .faint:first-child { width: 96px; }
+.set-addresses .set-link-row > .address-state { width: auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-addresses .set-link-row > input { flex: 1; min-width: 0; width: auto; }
 
 /* ---- superpowers */
 .power-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }

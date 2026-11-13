@@ -7,6 +7,7 @@
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, app, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import type { DesktopState, Link } from '@openbot/shared/desktop'
 import os from 'node:os'
+import { checkNew, ordered, refusal, withFound } from '@openbot/client/addresses'
 import { pair, parseAddress } from '@openbot/client/pair'
 import { config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
@@ -42,9 +43,9 @@ function signInReturned(url: string) {
 /** How the window reaches the environment it shows, once there is something to reach. */
 function connection(): Link | null {
   const id = showing()
-  if (id === 'local') return local.state === 'running' ? { id, name: nameOf(id), url: `http://127.0.0.1:${local.port}`, token: local.token, local: true } : null
+  if (id === 'local') return local.state === 'running' ? { id, name: nameOf(id), addresses: [`http://127.0.0.1:${local.port}`], token: local.token, local: true } : null
   const environment = find(id)
-  return environment ? { id: environment.id, name: environment.name, url: environment.url, token: environment.token, local: false } : null
+  return environment ? { id: environment.id, name: environment.name, addresses: ordered(environment.addresses), token: environment.token, local: false, serverId: environment.serverId } : null
 }
 
 function state(): DesktopState {
@@ -53,7 +54,7 @@ function state(): DesktopState {
     platform: process.platform,
     fullScreen: !!win?.isFullScreen(),
     local: { enabled: config.local.enabled, state: config.local.enabled ? local.state : 'off', error: local.error, startedHere: !!local.child },
-    environments: config.environments.map(({ id, name, url, enabled }) => ({ id, name, url, enabled })),
+    environments: config.environments.map(({ id, name, addresses, enabled }) => ({ id, name, addresses, enabled })),
     current: showing(),
     connection: connection(),
     catchesSignIns,
@@ -109,15 +110,58 @@ async function setLocal(on: boolean) {
 
 async function add(input: { address?: unknown; code?: unknown; name?: unknown }) {
   const url = parseAddress(input?.address)
-  const token = await pair(url, input?.code, os.hostname().replace(/\.local$/, ''))
-  const listed = config.environments.find((e) => e.url === url)
+  const refused = refusal(url)
+  if (refused) throw new Error(refused)
+  const { key, serverId } = await pair(url, input?.code, os.hostname().replace(/\.local$/, ''))
+  // Pairing again with a computer that is already listed replaces the key it gave before, and the
+  // address is added to the ones it had. An older server has no id: then it is known by the address.
+  const listed =
+    (serverId && config.environments.find((e) => e.serverId === serverId)) || config.environments.find((e) => !e.serverId && e.addresses.some((a) => a.url === url))
   const name = String(input?.name ?? '').trim().slice(0, 60) || listed?.name || new URL(url).hostname
-  // Pairing again with a computer that is already listed replaces the key it gave before.
   const id = listed?.id ?? `remote-${Date.now().toString(36)}`
-  config.environments = [...config.environments.filter((e) => e.id !== id), { id, name, url, token, enabled: true }]
+  const addresses = listed?.addresses.some((a) => a.url === url) ? listed.addresses : [...(listed?.addresses ?? []), { url }]
+  config.environments = [...config.environments.filter((e) => e.id !== id), { id, name, addresses, token: key, enabled: true, serverId: serverId ?? listed?.serverId }]
   // With nothing else to look at, the new environment is shown at once.
   if (!showing()) config.current = id
   changed()
+}
+
+// ---- an environment's addresses
+// Who gets an environment's key is decided by who shows they are its server, not by an address:
+// one can be added, or taken away, at any time. An address is only kept once whatever answers
+// there has shown it is the environment (or nothing answers yet), and only ever sent the key after.
+
+async function addAddress(id: string, address: unknown) {
+  const environment = find(id)
+  if (!environment) throw new Error('That environment is not here any more.')
+  const url = parseAddress(address)
+  if (environment.addresses.some((a) => a.url === url)) return { checked: true }
+  const { checked, serverId } = await checkNew(url, environment.token, environment)
+  environment.serverId ??= serverId
+  environment.addresses = [...environment.addresses, { url }]
+  changed()
+  return { checked }
+}
+
+function removeAddress(id: string, url: string) {
+  const environment = find(id)
+  if (!environment) return
+  const typed = environment.addresses.find((a) => a.url === url && !a.found)
+  // The server's own come back by themselves while it reports them.
+  if (!typed) throw new Error('That address is one the other computer reports itself, so it stays while it has it.')
+  if (environment.addresses.length === 1) throw new Error('This is its only address. Add another first, or remove the environment.')
+  environment.addresses = environment.addresses.filter((a) => a !== typed)
+  changed()
+}
+
+/** What the window learned about an environment: its server's id, and the addresses the server reports. */
+function learn(id: string, learned: { serverId?: unknown; addresses?: unknown }) {
+  const environment = find(id)
+  if (!environment) return
+  const before = JSON.stringify(environment)
+  if (typeof learned?.serverId === 'string') environment.serverId ??= learned.serverId
+  if (Array.isArray(learned?.addresses)) environment.addresses = withFound(environment.addresses, learned.addresses)
+  if (JSON.stringify(environment) !== before) changed()
 }
 
 function update(id: string, patch: { name?: unknown; enabled?: unknown }) {
@@ -155,6 +199,9 @@ answer('desktop:retry', () => retryLocal())
 answer('desktop:add', (input) => add(input))
 answer('desktop:update', (id, patch) => update(String(id), patch))
 answer('desktop:remove', (id) => remove(String(id)))
+answer('desktop:add-address', (id, address) => addAddress(String(id), address))
+answer('desktop:remove-address', (id, url) => removeAddress(String(id), String(url)))
+answer('desktop:learn', (id, learned) => learn(String(id), learned))
 answer('desktop:page', (html) => {
   if (typeof html !== 'string' || html.length > 8_000_000) throw new Error('Not a page.')
   return keepPage(html)

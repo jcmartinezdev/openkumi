@@ -1,19 +1,26 @@
 // The environments the app knows: where bots run. The local one is run by this app on this
 // computer, when it is turned on. The others are Open Bot on other computers, reached over the
-// network. The list is kept in a file of the app's own, with the key each remote one gave this
-// computer when the two were paired.
+// network at one or more addresses. The list is kept in a file of the app's own, with the key each
+// remote one gave this computer when the two were paired.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { EnvironmentStatus } from '@openbot/shared/desktop'
+import { type SavedAddress, ordered, probe, verdict } from '@openbot/client/addresses'
+import type { EnvironmentReport } from '@openbot/shared/desktop'
 import { USER_DATA } from './paths.ts'
 
 export interface Environment {
   id: string
   name: string
-  url: string
+  /** Where it can be reached: the home network, Tailscale, or an address put in by hand. */
+  addresses: SavedAddress[]
   token: string
   enabled: boolean
+  /** Its server's own id, once known: another server answering at one of the addresses is not it. */
+  serverId?: string
 }
+
+/** An environment as an earlier version kept it, with a single address. */
+const upgraded = ({ url, ...rest }: Environment & { url?: string }): Environment => ({ ...rest, addresses: rest.addresses ?? (url ? [{ url }] : []) })
 
 interface Config {
   local: { enabled: boolean }
@@ -31,11 +38,11 @@ function read(): Config {
       // An earlier version kept one list of "servers", the local one among them.
       return {
         local: { enabled: saved.servers.some((s: { kind: string }) => s.kind === 'local') },
-        environments: saved.servers.filter((s: { kind: string }) => s.kind === 'remote').map(({ id, name, url, token }: Environment) => ({ id, name, url, token, enabled: true })),
+        environments: saved.servers.filter((s: { kind: string }) => s.kind === 'remote').map(({ id, name, url, token }: { id: string; name: string; url: string; token: string }) => ({ id, name, addresses: [{ url }], token, enabled: true })),
         current: saved.current ?? null,
       }
     }
-    if (saved.local && Array.isArray(saved.environments)) return { local: { enabled: !!saved.local.enabled }, environments: saved.environments, current: saved.current ?? null }
+    if (saved.local && Array.isArray(saved.environments)) return { local: { enabled: !!saved.local.enabled }, environments: saved.environments.map(upgraded), current: saved.current ?? null }
   } catch {
     // First run: nothing chosen yet.
   }
@@ -64,12 +71,12 @@ export function showing(): string | null {
 }
 
 /**
- * What an Open Bot server says about itself, or null when there is none at the address. With a
- * `challenge`, a server on this computer answers with that value signed with its access code.
+ * What an Open Bot server on this computer says about itself, or null when there is none at the
+ * address. With a `challenge`, it answers with that value signed with its access code.
  */
-export async function hello(url: string, token = '', timeoutMs = 6000, challenge = ''): Promise<{ app: string; version: string; authorized: boolean; home?: string; proof?: string } | null> {
+export async function hello(url: string, timeoutMs = 6000, challenge = ''): Promise<{ app: string; version: string; home?: string; proof?: string } | null> {
   try {
-    const res = await fetch(`${url}/api/hello${challenge ? `?challenge=${challenge}` : ''}`, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(timeoutMs) })
+    const res = await fetch(`${url}/api/hello${challenge ? `?challenge=${challenge}` : ''}`, { signal: AbortSignal.timeout(timeoutMs) })
     const said = res.ok ? await res.json() : null
     return said?.app === 'open-bot' ? said : null
   } catch {
@@ -77,20 +84,16 @@ export async function hello(url: string, token = '', timeoutMs = 6000, challenge
   }
 }
 
-/** Asks the server whether it is there and accepts the access code. Throws with a reason when not. */
-export async function check({ url, token }: { url: string; token: string }) {
-  const said = await hello(url, token)
-  if (!said) throw new Error(`Could not reach Open Bot at ${url}. Check that the other computer is on, that “Let other computers connect” is switched on in its Settings, under Environments, and that both computers are on the same network.`)
-  if (!said.authorized) throw new Error('That computer no longer accepts this one. Pair them again.')
-}
-
-/** The state of each remote environment right now, in a word. */
-export async function statuses(): Promise<Record<string, EnvironmentStatus>> {
+/**
+ * How each remote environment stands right now, and what each of its addresses said. Every address
+ * is asked who it is, without being sent the key (see packages/client/src/addresses.ts).
+ */
+export async function statuses(): Promise<Record<string, EnvironmentReport>> {
   const found = await Promise.all(
-    config.environments.map(async (environment): Promise<EnvironmentStatus> => {
-      if (!environment.enabled) return 'off'
-      const said = await hello(environment.url, environment.token, 2500)
-      return !said ? 'unreachable' : said.authorized ? 'connected' : 'refused'
+    config.environments.map(async (environment): Promise<EnvironmentReport> => {
+      if (!environment.enabled) return { status: 'off', addresses: {} }
+      const answers = await Promise.all(ordered(environment.addresses).map((url) => probe(url, environment.token, environment.serverId)))
+      return { status: verdict(answers), addresses: Object.fromEntries(answers.map((answer) => [answer.url, answer.answer])) }
     }),
   )
   return Object.fromEntries(config.environments.map((environment, i) => [environment.id, found[i]]))

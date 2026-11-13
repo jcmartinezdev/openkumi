@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { desktop, desktopState, inDesktopApp, onDesktopState } from './desktop'
 import { passSignIn } from './Superpowers'
-import { follow } from './store'
+import { follow, onLearn, recheck } from './store'
 import './styles.css'
 
 const root = document.getElementById('root')!
@@ -16,6 +16,13 @@ if (!inDesktopApp) {
     document.documentElement.toggleAttribute('data-inset', state.platform === 'darwin' && !state.fullScreen)
   }
   chrome()
+  // What the window learns about the environment it shows (its server's id, where else it can be
+  // reached) is kept by the app, with the environment.
+  onLearn((id, learned) => void desktop.learn(id, learned).catch(() => {}))
+  // Coming back to the window, or onto a network, the environment's addresses are asked again:
+  // home may answer again, or the one in use may be gone.
+  addEventListener('online', recheck)
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && recheck())
   follow(desktopState().connection)
   onDesktopState((state) => {
     chrome(state)

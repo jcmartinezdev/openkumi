@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { PairedComputer } from '@openbot/shared'
-import { HOME } from './config.ts'
+import { HOME, serverId } from './config.ts'
 
 interface Stored extends PairedComputer {
   /** A hash of the computer's key. The key itself is only ever held by that computer. */
@@ -42,6 +42,20 @@ export function computerWith(key: string): string | null {
     save()
   }
   return found.id
+}
+
+// ---- showing a paired computer who this is
+// Before a computer sends its key to an address, whatever answers there has to show that it is
+// the server the key came from. The computer names itself by a tag made from the key's hash, and
+// the server signs a value the computer made up with that hash. Only this server and that computer
+// know the hash, so nothing else can sign it, and the tag and the signature give nothing away.
+
+const tagOf = (hash: string) => crypto.createHash('sha256').update(`device:${hash}`).digest('hex')
+
+/** The signature that shows the paired computer with this tag who this is, or null when no paired computer has it. */
+export function proveTo(tag: string, challenge: string, server: string): string | null {
+  const found = clients.find((c) => tagOf(c.hash) === tag)
+  return found ? crypto.createHmac('sha256', found.hash).update(`server:${server}:${challenge}`).digest('hex') : null
 }
 
 export function removeComputer(id: string): boolean {
@@ -81,8 +95,11 @@ export function beginPairing(theirs: string): { nonce: string; proof: string } |
   return { nonce, proof: sign(now.code, 'server', theirs, nonce) }
 }
 
-/** Second step: the other computer's signature. When it is right the code is used up and the computer gets its key. */
-export function finishPairing(theirs: string, ours: string, proof: string, name: string): { key: string; id: string } | null {
+/**
+ * Second step: the other computer's signature. When it is right the code is used up and the
+ * computer gets its key, and this server's id to know it by.
+ */
+export function finishPairing(theirs: string, ours: string, proof: string, name: string): { key: string; id: string; server: string } | null {
   const now = current()
   if (!now) return null
   const expected = Buffer.from(sign(now.code, 'computer', theirs, ours), 'hex')
@@ -97,5 +114,5 @@ export function finishPairing(theirs: string, ours: string, proof: string, name:
   const id = `c_${crypto.randomBytes(6).toString('base64url')}`
   clients.push({ id, name: name.trim().slice(0, 60) || 'A computer', pairedAt: Date.now(), lastSeenAt: Date.now(), hash: hashOf(key) })
   save()
-  return { key, id }
+  return { key, id, server: serverId() }
 }

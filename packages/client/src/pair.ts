@@ -34,10 +34,11 @@ export function parsePairingLink(text: string): { address: string; code: string 
 export const pairingLink = (address: string, code: string) => `openbot://pair?address=${encodeURIComponent(address)}&code=${encodeURIComponent(code)}`
 
 /**
- * Pairs with the server at `url` and returns the key it gives this device. `name` is what the
- * server lists the device as; `random` makes 16 unpredictable bytes (the platform's own way of doing so).
+ * Pairs with the server at `url` and returns the key it gives this device, with the server's own id
+ * (missing from older servers). `name` is what the server lists the device as; `random` makes 16
+ * unpredictable bytes (the platform's own way of doing so).
  */
-export async function pair(url: string, typed: unknown, name: string, random: () => Uint8Array = () => crypto.getRandomValues(new Uint8Array(16))): Promise<string> {
+export async function pair(url: string, typed: unknown, name: string, random: () => Uint8Array = () => crypto.getRandomValues(new Uint8Array(16))): Promise<{ key: string; serverId?: string }> {
   const code = String(typed ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
   if (code.length !== 12) throw new Error('Enter the pairing code shown on the other computer. It looks like ABCD-EFGH-JKMN.')
   const post = async (path: string, body: unknown) => {
@@ -55,5 +56,5 @@ export async function pair(url: string, typed: unknown, name: string, random: ()
   if (!same(String(begun.proof ?? ''), sign(code, 'server', nonce, String(begun.nonce)))) throw new Error('The pairing code is not the one that computer is showing. Check it, or make a new one there.')
   const done = await post('/api/pair/finish', { nonce, serverNonce: begun.nonce, proof: sign(code, 'computer', nonce, String(begun.nonce)), name })
   if (typeof done.key !== 'string' || !done.key) throw new Error('Pairing did not finish. Make a new code on the other computer and try again.')
-  return done.key
+  return { key: done.key, serverId: typeof done.server === 'string' ? done.server : undefined }
 }

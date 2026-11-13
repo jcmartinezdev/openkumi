@@ -8,6 +8,7 @@ export function Gate() {
   const app = useDesktop()
   const failures = useStore((s) => s.failures)
   const refused = useStore((s) => s.refused)
+  const outdated = useStore((s) => s.outdated)
   const connected = useStore((s) => s.connected)
   const { local } = app
   const name = app.current === 'local' ? 'This computer' : (app.environments.find((e) => e.id === app.current)?.name ?? 'The environment')
@@ -24,6 +25,8 @@ export function Gate() {
   } else if (refused && app.current !== 'local') {
     // (On this computer the app reads the new code by itself, so there is nothing to ask for.)
     lead = `${name} no longer lets this computer in. Pair them again: “Add environment” below, with a new code from its Settings.`
+  } else if (outdated && app.current !== 'local') {
+    lead = `${name} runs an older Open Bot, which cannot show that it is the computer this one was paired with, so it is not sent this computer’s key. Update Open Bot there; this connects by itself once it is.`
   } else if (failures >= 2) {
     lead = `${name} cannot be reached. Still trying…`
   } else {

@@ -26,6 +26,7 @@ export default function Home() {
   const loaded = useStore((s) => s.loaded)
   const connected = useStore((s) => s.connected)
   const refused = useStore((s) => s.refused)
+  const outdated = useStore((s) => s.outdated)
   const failures = useStore((s) => s.failures)
   const tasks = useStore((s) => s.tasks)
 
@@ -50,7 +51,14 @@ export default function Home() {
 
   if (!loaded) {
     // Nothing to show yet: the server has not answered, or no longer lets this phone in.
-    const lead = refused ? `${server?.name ?? 'The server'} no longer lets this phone in. Unpair it, then pair again with a new code.` : failures >= 2 ? `${server?.name ?? 'The server'} cannot be reached. Check that this phone is on the same network. Still trying…` : 'Connecting…'
+    const name = server?.name ?? 'The server'
+    const lead = refused
+      ? `${name} no longer lets this phone in. Unpair it, then pair again with a new code.`
+      : outdated
+        ? `${name} runs an older Open Bot, which cannot show that it is the computer this phone was paired with, so it is not sent the phone’s key. Update Open Bot there.`
+        : failures >= 2
+          ? `${name} cannot be reached. Check that this phone is on the same network, or that Tailscale is on, on both. Still trying…`
+          : 'Connecting…'
     return (
       <View style={styles.center}>
         {header}

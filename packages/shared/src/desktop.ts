@@ -6,7 +6,8 @@
 export interface RemoteEnvironment {
   id: string
   name: string
-  url: string
+  /** Where it can be reached. `found` ones were reported by the server; the others were put in by hand. */
+  addresses: { url: string; found?: boolean }[]
   enabled: boolean
 }
 
@@ -25,12 +26,17 @@ export interface Link {
   /** "local", or the id of a remote environment. */
   id: string
   name: string
-  /** The server's address, like http://127.0.0.1:4317. */
-  url: string
+  /**
+   * The server's addresses, like http://192.168.1.20:4317, in the order they are tried. A remote
+   * one is only sent the key once it has shown it is the server (packages/client/src/addresses.ts).
+   */
+  addresses: string[]
   /** The key sent with every request: the server's own access code on this computer, or the key this computer was given when it was paired. */
   token: string
   /** The server is on this computer. */
   local: boolean
+  /** The server's own id, once known: another server answering at one of the addresses is not it. */
+  serverId?: string
 }
 
 export interface DesktopState {
@@ -50,7 +56,13 @@ export interface DesktopState {
   catchesSignIns?: boolean
 }
 
-export type EnvironmentStatus = 'connected' | 'unreachable' | 'refused' | 'off'
+export type EnvironmentStatus = 'connected' | 'unreachable' | 'refused' | 'outdated' | 'off'
+
+/** How a remote environment stands, and what each of its addresses said (see `Answer` in packages/client/src/addresses.ts). */
+export interface EnvironmentReport {
+  status: EnvironmentStatus
+  addresses: Record<string, 'ok' | 'refused' | 'other' | 'outdated' | 'unreachable' | 'blocked'>
+}
 
 /** What the window can ask of the app (see apps/desktop/src/preload.ts). */
 export interface DesktopBridge {
@@ -58,8 +70,8 @@ export interface DesktopBridge {
   initial: DesktopState
   /** Called with the new state whenever it changes. Returns a function that stops the calls. */
   onState(listener: (state: DesktopState) => void): () => void
-  /** Asks each remote environment whether it is there and still accepts this computer. */
-  statuses(): Promise<Record<string, EnvironmentStatus>>
+  /** Asks each remote environment, at each of its addresses, whether it is there and still accepts this computer. */
+  statuses(): Promise<Record<string, EnvironmentReport>>
   /** Show another environment. */
   open(id: string): Promise<void>
   /** Turn the local environment on (Open Bot runs on this computer) or off (it does not). */
@@ -71,6 +83,15 @@ export interface DesktopBridge {
   /** Rename a remote environment, or turn it on or off. */
   update(id: string, patch: { name?: string; enabled?: boolean }): Promise<void>
   remove(id: string): Promise<void>
+  /**
+   * Adds an address to a remote environment, once whatever answers there has shown it is that
+   * environment (or nothing answers yet). `checked` says whether it answered.
+   */
+  addAddress(id: string, address: string): Promise<{ checked: boolean }>
+  /** Forgets an address that was put in by hand. */
+  removeAddress(id: string, url: string): Promise<void>
+  /** Keeps what the window learned about the environment it shows: its server's id and the addresses the server reports. */
+  learn(id: string, learned: { serverId?: string; addresses?: string[] }): Promise<void>
   /**
    * Gives the address of a page to show in a frame (a page a bot showed, wrapped for drawing).
    * The address is a site of its own, so the page cannot reach the window.

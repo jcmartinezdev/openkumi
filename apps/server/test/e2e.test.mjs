@@ -128,6 +128,8 @@ before(async () => {
       OPENBOT_CLAUDE_BIN: path.resolve('test/fixtures/fake-claude.mjs'),
       OPENBOT_CODEX_BIN: path.resolve('test/fixtures/fake-codex.mjs'),
       OPENBOT_GROK_BIN: path.resolve('test/fixtures/fake-grok.mjs'),
+      // And for Tailscale's, which says this computer is on a tailnet.
+      OPENBOT_TAILSCALE_BIN: path.resolve('test/fixtures/fake-tailscale.mjs'),
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -162,6 +164,8 @@ test('every request needs the access code, also from this computer, and there ar
   // Anyone may ask who is here; only the app on this computer is told where the data folder is.
   const hello = await (await get('/api/hello')).json()
   assert.deepEqual([hello.app, hello.authorized, hello.home], ['open-bot', false, home])
+  // It says which server it is, the same whatever address it is asked at.
+  assert.match(hello.id, /^s_[\w-]{12}$/)
   // ...and not a web page whose own name has been pointed at this computer.
   const renamed = await new Promise((resolve, reject) =>
     http.get({ host: '127.0.0.1', port: PORT, path: '/api/hello', headers: { host: `evil.example:${PORT}` } }, (res) => {
@@ -171,6 +175,12 @@ test('every request needs the access code, also from this computer, and there ar
   )
   assert.deepEqual([renamed.app, 'home' in renamed], ['open-bot', false])
   assert.equal((await (await get('/api/hello', auth())).json()).authorized, true)
+  // A proxy on this computer (a tunnel, a web server in front of Open Bot) passes on requests from
+  // elsewhere. Those are not this computer: the access code means nothing there, and the data folder is not named.
+  for (const header of ['X-Forwarded-For', 'Forwarded', 'X-Real-IP', 'CF-Connecting-IP']) {
+    assert.equal((await get('/api/state', { ...auth(), [header]: '203.0.113.9' })).status, 401, header)
+    assert.equal('home' in (await (await get('/api/hello', { [header]: '203.0.113.9' })).json()), false, header)
+  }
 
   // The app on this computer can check it is talking to the server its access code belongs to,
   // before it sends the code: the server signs a value the app chooses with the code.
@@ -1378,6 +1388,30 @@ test('access: another computer is let in by pairing, with a key of its own that 
   const [status, paired] = await post('/api/pair/finish', { nonce, serverNonce: begun.nonce, proof: sign(code, 'computer', nonce, begun.nonce), name: 'Laptop' })
   assert.equal(status, 200)
   assert.equal((await post('/api/pair/begin', { nonce }))[0], 403, 'the code works once')
+  // The computer is told which server this is, to know it by at any address.
+  const { id: server } = await (await fetch(far + '/api/hello')).json()
+  assert.equal(paired.server, server)
+
+  // Before it sends its key to an address, the computer asks who is there, naming itself by a tag
+  // made from the key. Only this server, which keeps the key's hash, can sign the computer's value with it.
+  const hashOf = (key) => crypto.createHash('sha256').update(key).digest('hex')
+  const tagOf = (key) => crypto.createHash('sha256').update(`device:${hashOf(key)}`).digest('hex')
+  const ask = async (key, challenge = crypto.randomBytes(16).toString('hex')) => {
+    const said = await (await fetch(`${far}/api/hello?challenge=${challenge}&device=${tagOf(key)}`)).json()
+    return { said, expected: crypto.createHmac('sha256', hashOf(key)).update(`server:${said.id}:${challenge}`).digest('hex') }
+  }
+  const { said, expected } = await ask(paired.key)
+  assert.deepEqual([said.id, said.device, said.authorized], [server, { known: true, proof: expected }, false], 'the key itself was not sent')
+  assert.deepEqual((await ask('a key nobody was given')).said.device, { known: false })
+  assert.equal('device' in (await (await fetch(`${far}/api/hello?challenge=zz&device=${tagOf(paired.key)}`)).json()), false, 'a challenge has to be a made-up value')
+
+  // Where else it can be reached: the local network, then Tailscale, name first.
+  const reported = (await (await viaNetwork(paired.key, '/api/addresses')).json()).addresses
+  const place = (url) => reported.indexOf(url)
+  assert.ok(place(far) >= 0, 'the address it was reached at')
+  assert.ok(place(far) < place(`http://test-mac.tail0000.ts.net:${PORT}`) && place(`http://test-mac.tail0000.ts.net:${PORT}`) < place(`http://100.101.102.103:${PORT}`), reported.join(' '))
+  assert.equal((await viaNetwork(undefined, '/api/addresses')).status, 401, 'only a paired computer is told')
+  assert.deepEqual((await api('GET', '/api/access')).tailscale.slice(0, 2), ['test-mac.tail0000.ts.net', '100.101.102.103'])
 
   // The paired computer is in with its own key, which is stored here only as a hash.
   assert.equal((await viaNetwork(paired.key)).status, 200)
@@ -1402,9 +1436,12 @@ test('access: another computer is let in by pairing, with a key of its own that 
   assert.equal(await Promise.race([dropped, new Promise((r) => setTimeout(() => r(false), 5000))]), true)
   assert.equal((await viaNetwork(paired.key)).status, 401)
   assert.deepEqual((await api('GET', '/api/access')).computers, [])
+  // ...and it can no longer be shown who this is: it is told the server does not know it.
+  assert.deepEqual((await ask(paired.key)).said.device, { known: false })
 
   await api('PATCH', '/api/settings', { lan: false })
   await until(async () => (await api('GET', '/api/access').catch(() => null))?.on === false)
+  assert.deepEqual((await api('GET', '/api/addresses')).addresses, [], 'with network access off, there is nowhere else to reach it')
   await until(async () => (await viaNetwork(token).then(() => false, () => true)))
   assert.equal((await api('GET', '/api/state')).bots.length > 0, true, 'and this computer is still served')
 })

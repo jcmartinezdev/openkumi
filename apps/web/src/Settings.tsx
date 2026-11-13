@@ -2,8 +2,9 @@
 // right. App-wide settings are kept by the environment; settings marked "this device" stay in the app.
 import { type ReactNode, useEffect, useState } from 'react'
 import type { Bot, PairedComputer, ProviderInfo, Settings } from '@openbot/shared'
-import type { EnvironmentStatus, LocalEnvironment } from '@openbot/shared/desktop'
+import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, RemoteEnvironment } from '@openbot/shared/desktop'
 import qrcode from 'qrcode-generator'
+import { type Answer, KIND_NAMES, kindOf, ordered } from '@openbot/client/addresses'
 import { windowCount } from '@openbot/client/browser'
 import { pairingLink } from '@openbot/client/pair'
 import { BotPage, TABS } from './BotPage'
@@ -390,7 +391,10 @@ function BrowserPage() {
 // ---- Environments: where bots run. The local environment and the remote ones, and how the
 // environment being shown lets the app on other computers in.
 
-const REMOTE_STATUS: Record<EnvironmentStatus, string> = { connected: 'Connected', unreachable: 'Not reachable', refused: 'Access code not accepted', off: 'Turned off' }
+const REMOTE_STATUS: Record<EnvironmentStatus, string> = { connected: 'Connected', unreachable: 'Not reachable', refused: 'No longer lets this computer in', outdated: 'Needs a newer Open Bot', off: 'Turned off' }
+const ANSWERS: Record<Answer, string> = { ok: 'Answers', refused: 'No longer lets this computer in', other: 'Something else answers', outdated: 'Needs a newer Open Bot', unreachable: 'Not reachable from here', blocked: 'Needs https' }
+/** An address as it is shown: without the http:// that most of them start with. */
+const shown = (url: string) => url.replace(/^http:\/\//, '')
 const LOCAL_STATE: Record<LocalEnvironment['state'], string> = {
   off: 'Turned off. Bots only run in remote environments.',
   starting: 'Starting Open Bot on this computer…',
@@ -411,9 +415,12 @@ function Environments() {
 /** The local environment and the remote ones. Part of the settings, and what the window shows while there is nothing to connect to. */
 export function EnvironmentList() {
   const app = useDesktop()
-  const [statuses, setStatuses] = useState<Record<string, EnvironmentStatus>>({})
+  const inUse = useStore((s) => s.address)
+  const [statuses, setStatuses] = useState<Record<string, EnvironmentReport>>({})
   const [adding, setAdding] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
+  /** The environment whose addresses are open below it. */
+  const [opened, setOpened] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   // Whether each remote environment answers: asked when the page opens and when the list changes.
@@ -463,36 +470,93 @@ export function EnvironmentList() {
       <Section title="Environments" action={<button className="ghost" onClick={() => setAdding(!adding)}><Icon name="plus" size={14} /> Add environment</button>}>
         {/* The form stays open when the link was not accepted, so it can be corrected. */}
         {adding && <AddEnvironment add={(input) => change(() => desktop.add(input)).then((added) => added && setAdding(false))} busy={busy} />}
-        {app.environments.map((environment, i) => (
-          <Row
-            key={environment.id}
-            id={i === 0 ? 'remote-environments' : undefined}
-            title={
-              renaming === environment.id ? (
-                <Field label="Name" value={environment.name} onCommit={(name) => change(() => desktop.update(environment.id, { name })).then(() => setRenaming(null))} />
-              ) : (
-                <><Icon name="monitor" size={15} />{environment.name}{showing(environment.id)}</>
-              )
-            }
-            description={<>via LAN · {!environment.enabled ? REMOTE_STATUS.off : statuses[environment.id] ? REMOTE_STATUS[statuses[environment.id]] : 'Checking…'} · <span className="mono">{environment.url}</span></>}
-            control={
-              <>
-                {environment.enabled && app.current !== environment.id && <button onClick={() => change(() => desktop.open(environment.id))}>Open</button>}
-                <Switch label={`Use ${environment.name}`} checked={environment.enabled} disabled={busy} onChange={(enabled) => change(() => desktop.update(environment.id, { enabled }))} />
-                <details className="set-menu">
-                  <summary className="icon" title="More" aria-label={`More for ${environment.name}`}><Icon name="more" /></summary>
-                  <div className="set-menu-items">
-                    <button onClick={(e) => (e.currentTarget.closest('details')!.removeAttribute('open'), setRenaming(environment.id))}>Rename</button>
-                    <button className="danger" onClick={() => change(() => desktop.remove(environment.id))}>Remove</button>
-                  </div>
-                </details>
-              </>
-            }
-          />
-        ))}
+        {app.environments.map((environment, i) => {
+          const report = statuses[environment.id]
+          // The address the window uses, for the one it shows; for the others, the one it would use.
+          const via = app.current === environment.id ? inUse : ordered(environment.addresses).find((url) => report?.addresses[url] === 'ok')
+          const count = environment.addresses.length
+          return (
+            <Row
+              key={environment.id}
+              id={i === 0 ? 'remote-environments' : undefined}
+              title={
+                renaming === environment.id ? (
+                  <Field label="Name" value={environment.name} onCommit={(name) => change(() => desktop.update(environment.id, { name })).then(() => setRenaming(null))} />
+                ) : (
+                  <><Icon name="monitor" size={15} />{environment.name}{showing(environment.id)}</>
+                )
+              }
+              description={
+                <>
+                  {!environment.enabled ? REMOTE_STATUS.off : report ? REMOTE_STATUS[report.status] : 'Checking…'}
+                  {environment.enabled && via && <> · via {KIND_NAMES[kindOf(via)]} · <span className="mono">{shown(via)}</span></>}
+                </>
+              }
+              control={
+                <>
+                  <button className="ghost" aria-expanded={opened === environment.id} onClick={() => setOpened(opened === environment.id ? null : environment.id)}>
+                    {count === 1 ? '1 address' : `${count} addresses`}
+                  </button>
+                  {environment.enabled && app.current !== environment.id && <button onClick={() => change(() => desktop.open(environment.id))}>Open</button>}
+                  <Switch label={`Use ${environment.name}`} checked={environment.enabled} disabled={busy} onChange={(enabled) => change(() => desktop.update(environment.id, { enabled }))} />
+                  <details className="set-menu">
+                    <summary className="icon" title="More" aria-label={`More for ${environment.name}`}><Icon name="more" /></summary>
+                    <div className="set-menu-items">
+                      <button onClick={(e) => (e.currentTarget.closest('details')!.removeAttribute('open'), setRenaming(environment.id))}>Rename</button>
+                      <button className="danger" onClick={() => change(() => desktop.remove(environment.id))}>Remove</button>
+                    </div>
+                  </details>
+                </>
+              }
+            >
+              {opened === environment.id && <Addresses environment={environment} report={report} inUse={via ?? null} busy={busy} change={change} />}
+            </Row>
+          )
+        })}
         {!app.environments.length && !adding && <Row id="remote-environments" title="No remote environments" description="Add one to work with Open Bot running on another computer on your network." />}
       </Section>
     </>
+  )
+}
+
+/**
+ * Where a remote environment can be reached, tried from the top: its home network, then Tailscale,
+ * then any put in by hand. The ones it reports itself are kept up to date by themselves.
+ */
+function Addresses({ environment, report, inUse, busy, change }: { environment: RemoteEnvironment; report?: EnvironmentReport; inUse: string | null; busy: boolean; change: (fn: () => Promise<void>) => Promise<boolean> }) {
+  const [address, setAddress] = useState('')
+  const [note, setNote] = useState('')
+  const add = async () => {
+    setNote('')
+    let checked = true
+    const added = await change(async () => {
+      checked = (await desktop.addAddress(environment.id, address)).checked
+    })
+    if (!added) return
+    setAddress('')
+    if (!checked) setNote(`Added. Nothing answers there right now: it is sent this computer’s key only once it has shown it is ${environment.name}.`)
+  }
+  return (
+    <div className="set-below set-links set-addresses">
+      {ordered(environment.addresses).map((url) => {
+        const found = environment.addresses.find((a) => a.url === url)?.found
+        const answer = report?.addresses[url]
+        return (
+          <div key={url} className="set-link-row">
+            <span className="faint">{KIND_NAMES[kindOf(url)]}</span>
+            <code>{shown(url)}</code>
+            <span className="faint address-state">{[url === inUse ? 'In use' : answer && ANSWERS[answer], found && 'reported by it'].filter(Boolean).join(' · ')}</span>
+            {!found && environment.addresses.length > 1 && <button className="ghost danger" disabled={busy} onClick={() => change(() => desktop.removeAddress(environment.id, url))}>Remove</button>}
+          </div>
+        )
+      })}
+      <div className="set-link-row">
+        <input className="set-input wide" spellCheck={false} autoCapitalize="off" aria-label={`Another address for ${environment.name}`} value={address} placeholder="mac-mini.tail1234.ts.net:4317, or an https address" onChange={(e) => setAddress(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && address.trim() && void add()} />
+        <button disabled={busy || !address.trim()} onClick={() => void add()}>Add address</button>
+      </div>
+      {note && <p className="faint">{note}</p>}
+      <p className="faint">This computer’s key goes to an address only after whatever answers there has shown it is {environment.name}. Plain http works on the home network and over Tailscale; anywhere else the address needs https.</p>
+    </div>
   )
 }
 
@@ -534,7 +598,10 @@ function Qr({ text }: { text: string }) {
 interface AccessInfo {
   on: boolean
   port: number
+  /** On the local network. */
   addresses: string[]
+  /** Its name and address on Tailscale, when it is on it. Missing from older servers. */
+  tailscale?: string[]
   computers: PairedComputer[]
 }
 
@@ -588,7 +655,7 @@ function Sharing() {
         <Row
           id="lan"
           title="Let other computers connect"
-          description="The Open Bot app on other computers on the same network can use this environment once they are paired with it. The connection is not encrypted, so use it only on networks you trust."
+          description="The Open Bot app on your other computers and phone can use this environment once they are paired with it: on the same network, or from anywhere over Tailscale. On the local network the connection is not encrypted, so use it only on networks you trust; Tailscale encrypts it."
           status={about.lanForced ? 'Open Bot was started with --lan, which keeps this on. Start it without that to control it here.' : undefined}
           reset={about.lanForced ? undefined : lan.reset && (() => toggle(false))}
           control={<Switch label="Let other computers connect" checked={on} disabled={about.lanForced} onChange={toggle} />}
@@ -615,14 +682,21 @@ function Sharing() {
                       <CopyButton text={`${ip}:${info.port}`} />
                     </div>
                   ))}
-                  {!info.addresses.length && <p className="faint">This computer is not connected to a network right now.</p>}
+                  {info.tailscale?.map((host) => (
+                    <div key={host} className="set-link-row">
+                      <span className="faint">Tailscale</span>
+                      <code>{host}:{info.port}</code>
+                      <CopyButton text={`${host}:${info.port}`} />
+                    </div>
+                  ))}
+                  {!info.addresses.length && !info.tailscale?.length && <p className="faint">This computer is not connected to a network right now.</p>}
                   {info.addresses[0] && (
                     <div className="pair-qr">
                       <Qr text={pairingLink(`${info.addresses[0]}:${info.port}`, pairing.code)} />
                       <p className="faint">On a phone, open the Open Bot app and choose “Scan the code”. It carries the address and the code, so there is nothing to type.</p>
                     </div>
                   )}
-                  <p className="faint">The code works once, until {new Date(pairing.expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}. This closes by itself when the other computer has used it.</p>
+                  <p className="faint">The code works once, until {new Date(pairing.expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}. This closes by itself when the other computer has used it. Paired once, it learns this computer’s other addresses by itself, so it also finds it over Tailscale.</p>
                 </div>
               )}
             </Row>

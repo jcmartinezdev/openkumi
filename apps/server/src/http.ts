@@ -11,10 +11,11 @@ import type { AppState, ClientEvent, ServerEvent } from '@openbot/shared'
 import * as agent from './agent.ts'
 import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
 import { type Frame, browserFor, browserStates, isWebPage, letGo, stopBrowser } from './browser.ts'
-import { HOME, HOME_LABEL, LAN, PORT, ROOT, accessToken, botDir, onEvent, readSecrets, writeSecret } from './config.ts'
-import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, removeComputer } from './clients.ts'
+import { HOME, HOME_LABEL, LAN, PORT, ROOT, accessToken, botDir, onEvent, readSecrets, serverId, writeSecret } from './config.ts'
+import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, proveTo, removeComputer } from './clients.ts'
 import * as mcp from './mcp.ts'
 import * as db from './db.ts'
+import { homeAddresses, nearby, tailscaleAddresses } from './network.ts'
 import { principles, setPrinciples } from './principles.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
@@ -29,14 +30,15 @@ const SYSTEMS: Record<string, string> = { darwin: 'macOS', win32: 'Windows', lin
 /** Whether other devices on the network are served: the setting, or the --lan flag. */
 const lanOn = () => LAN || settings().lan
 
-/** This computer's addresses on the local network. */
-const addresses = () =>
-  Object.values(os.networkInterfaces())
-    .flat()
-    .filter((i) => i && i.family === 'IPv4' && !i.internal)
-    .map((i) => i!.address)
-
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+/** Headers a proxy adds when it passes on a request from somewhere else. */
+const FORWARDED = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'cf-connecting-ip']
+/**
+ * Whether a request comes from this computer itself. A proxy on this computer (a tunnel, or a web
+ * server put in front of Open Bot) connects from here too, but passes on requests from elsewhere
+ * and says so: those are never taken for this computer.
+ */
+const fromHere = (req: http.IncomingMessage) => LOOPBACK.has(req.socket.remoteAddress ?? '') && !FORWARDED.some((name) => name in req.headers)
 /** The names this computer goes by when it talks to itself. */
 const LOCAL = new Set(['localhost', '127.0.0.1', '[::1]'])
 /** The desktop app's own pages, installed and in development: the only pages that may read answers. */
@@ -60,7 +62,7 @@ function whoIs(req: http.IncomingMessage, url: URL): string | null {
   const header = req.headers.authorization
   const key = header?.startsWith('Bearer ') ? header.slice(7) : url.pathname === '/ws' ? url.searchParams.get('token') : null
   if (!key) return null
-  if (LOOPBACK.has(req.socket.remoteAddress ?? '') && tokenMatches(key)) return 'owner'
+  if (fromHere(req) && tokenMatches(key)) return 'owner'
   return computerWith(key)
 }
 const isAllowed = (req: http.IncomingMessage, url: URL) => whoIs(req, url) !== null
@@ -155,7 +157,12 @@ route('PATCH', '/api/settings', (_, body) => updateSettings(body))
 // What every bot is told first. Null puts back the ones Open Bot comes with.
 route('PUT', '/api/principles', (_, body) => checked(() => setPrinciples(body.text)))
 // How other computers get in: whether they can reach this one, where, and which ones are paired.
-route('GET', '/api/access', () => ({ on: lanOn(), port: PORT, addresses: addresses(), computers: listComputers() }))
+route('GET', '/api/access', async () => ({ on: lanOn(), port: PORT, addresses: homeAddresses(), tailscale: await tailscaleAddresses(), computers: listComputers() }))
+// Where the other devices can reach this server, for them to keep: the local network first, then
+// Tailscale. A device learns these while connected, and tries them in that order from then on.
+route('GET', '/api/addresses', async () => ({
+  addresses: lanOn() ? [...homeAddresses(), ...(await tailscaleAddresses())].map((host) => `http://${host}:${PORT}`) : [],
+}))
 // A code for pairing one more computer. It works once, for a few minutes.
 // Who gets in is decided at this computer, not by a computer that was let in.
 const ownerOnly = ({ req, url }: Call) => whoIs(req, url) === 'owner' || fail(403, 'Computers are paired and removed on the computer running Open Bot.')
@@ -168,7 +175,7 @@ route('DELETE', '/api/computers/:id', ([id], _, call) => {
 })
 // Opens a folder in the file manager of the computer running Open Bot, so only that computer may ask.
 route('POST', '/api/reveal', (_, body, { req }) => {
-  if (!LOOPBACK.has(req.socket.remoteAddress ?? '')) fail(403, 'Folders can only be opened from the computer running Open Bot.')
+  if (!fromHere(req)) fail(403, 'Folders can only be opened from the computer running Open Bot.')
   const dir = body.botId ? botDir(needBot(String(body.botId)).id) : HOME
   const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
   spawn(opener, [dir], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
@@ -378,7 +385,7 @@ function createServer() {
     // and the address itself is the secret: it is made for one turn and stops working after it.
     const tools = url.pathname.match(/^\/mcp\/([\w-]+)$/)
     if (tools) {
-      if (!LOOPBACK.has(req.socket.remoteAddress ?? '')) return void res.writeHead(403).end()
+      if (!fromHere(req)) return void res.writeHead(403).end()
       return handleToolEndpoint(req, res, tools[1])
     }
     if (!url.pathname.startsWith('/api/')) return void res.writeHead(url.pathname === '/' ? 200 : 404, { 'Content-Type': 'text/plain; charset=utf-8' }).end(NOTE)
@@ -389,13 +396,18 @@ function createServer() {
       // The app on this computer reads the access code from the data folder, so it is told where
       // that is. A web page that has had its own name pointed at this computer is not: it would
       // arrive from this computer too, but asking for that other name.
-      const local = LOOPBACK.has(req.socket.remoteAddress ?? '') && LOCAL.has((req.headers.host ?? '').replace(/:\d+$/, ''))
+      const local = fromHere(req) && LOCAL.has((req.headers.host ?? '').replace(/:\d+$/, ''))
       // Before the app sends the code it read there, it wants to know that this really is the
       // server the code belongs to, and not something else that got to the port first. So it sends
       // a value of its own choosing, and gets back that value signed with the code.
       const challenge = url.searchParams.get('challenge')
       const proof = local && challenge ? { proof: crypto.createHmac('sha256', accessToken()).update(challenge).digest('hex') } : {}
-      return void json(200, { app: 'open-bot', version: VERSION, authorized: isAllowed(req, url), ...(local ? { home: HOME } : {}), ...proof })
+      // A paired computer asks the same before it sends its key to an address, naming itself by a
+      // tag instead of the key (see clients.ts).
+      const tag = url.searchParams.get('device')
+      const signed = challenge && tag && /^[0-9a-f]{16,128}$/.test(challenge) && /^[0-9a-f]{64}$/.test(tag) ? proveTo(tag, challenge, serverId()) : undefined
+      const device = signed === undefined ? {} : { device: signed ? { known: true, proof: signed } : { known: false } }
+      return void json(200, { app: 'open-bot', version: VERSION, id: serverId(), authorized: isAllowed(req, url), ...(local ? { home: HOME } : {}), ...proof, ...device })
     }
     try {
       // Pairing: a computer that has no key yet shows that it was given the code (see clients.ts).
@@ -425,6 +437,12 @@ function createServer() {
     } catch (e: any) {
       json(e instanceof HttpError ? e.status : 500, { error: String(e?.message ?? e).split('\n')[0] })
     }
+  })
+  // Only this computer, the local network and Tailscale are served. Over the internet, plain http
+  // would show every device's key to whoever is in between, so such a connection is closed before
+  // anything is read from it.
+  server.on('connection', (socket) => {
+    if (!nearby(socket.remoteAddress ?? '')) socket.destroy()
   })
 
   const wss = new WebSocketServer({ noServer: true })
@@ -529,7 +547,7 @@ export function startServer(): http.Server {
   const describe = () => {
     // Run by the desktop app, what is printed goes into a log file, and the app shows the link itself.
     if (host === '127.0.0.1' || parent) return
-    console.log(`  Other computers on your network can reach it at ${addresses().map((ip) => `http://${ip}:${PORT}`).join(' or ')}`)
+    console.log(`  Other computers on your network can reach it at ${homeAddresses().map((ip) => `http://${ip}:${PORT}`).join(' or ')}`)
     console.log('  To let one in, run "npm run pair" here and enter the code it prints in the app there.\n')
   }
   server.on('error', (e: NodeJS.ErrnoException) => {

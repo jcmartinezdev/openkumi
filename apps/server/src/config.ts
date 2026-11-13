@@ -62,6 +62,17 @@ export function accessToken(): string {
   return readSecrets().accessToken ?? resetAccessToken()
 }
 
+let id: string | undefined
+/**
+ * This server's own id, the same across restarts and whatever address it is reached at, so a
+ * device paired with it can tell it from another server answering at one of its addresses.
+ */
+export function serverId(): string {
+  id ??= readSecrets().serverId
+  if (!id) writeSecret('serverId', (id = `s_${crypto.randomBytes(9).toString('base64url')}`))
+  return id
+}
+
 /** Replaces the secret, which signs out every device that was using the old one. */
 export function resetAccessToken(): string {
   const token = crypto.randomBytes(18).toString('base64url')

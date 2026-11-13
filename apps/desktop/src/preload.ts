@@ -38,6 +38,9 @@ const bridge: DesktopBridge | null = initial && {
   add: (input) => ipcRenderer.invoke('desktop:add', input),
   update: (id, patch) => ipcRenderer.invoke('desktop:update', id, patch),
   remove: (id) => ipcRenderer.invoke('desktop:remove', id),
+  addAddress: (id, address) => ipcRenderer.invoke('desktop:add-address', id, address),
+  removeAddress: (id, url) => ipcRenderer.invoke('desktop:remove-address', id, url),
+  learn: (id, learned) => ipcRenderer.invoke('desktop:learn', id, learned),
   showPage: (html) => ipcRenderer.invoke('desktop:page', html),
   onSignIn(listener) {
     returns.add(listener)
