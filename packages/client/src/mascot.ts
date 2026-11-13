@@ -203,6 +203,19 @@ const EXTRA: Record<Extra, (a: string) => string> = {
 
 /** Where the emoji goes, for an app that draws it itself (Skia's SVG has no emoji): its centre and size, and the sign's tilt. */
 export const SIGN = { x: 100, y: 166, size: 30, angle: -5 }
+/** The card the emoji is on. */
+const CARD = '#fffaf1'
+/**
+ * The sign as a head holds it up at its corner, so bots that look alike tell apart in lists. The app
+ * draws it over the head: a card with the emoji and one paw on its left edge. Each length is a share
+ * of the head's width, and `right` and `bottom` reach past the head's box.
+ */
+export const HEAD_SIGN = { width: 0.68, height: 0.54, right: -0.15, bottom: -0.1, radius: 0.15, emoji: 0.37, paw: 0.21, angle: -6 }
+/** The colours of a sign and of the paw holding it, for a body of the look's colour. */
+export function signColors(look: Look): { card: string; paw: string; pawEdge: string } {
+  const c = BODY_COLORS[look.color]?.hex ?? BODY_COLORS.cloud.hex
+  return { card: CARD, paw: mix(c, WHITE, 0.12), pawEdge: mix(c, BLACK, 0.2) }
+}
 /** The square each crop shows: the whole creature, or its head for small places. */
 export const VIEWS = { full: { x: 0, y: -12, width: 200, height: 224 }, head: { x: 24, y: -4, width: 152, height: 152 } }
 
@@ -225,6 +238,7 @@ export function drawMascot(look: Look, emoji: string, { crop = 'full', id = 'mas
   const ears = (EAR[look.creature] ?? EAR.blob)(c, a)
   const hat = (HAT[look.hat] ?? HAT.none)(a)
   const extra = (EXTRA[look.extra] ?? EXTRA.none)(a)
+  const sign = signColors(look)
   const body =
     `<defs><radialGradient id="${id}" cx="0.38" cy="0.3" r="0.85"><stop offset="0" stop-color="${mix(c, WHITE, 0.45)}"/><stop offset="0.55" stop-color="${c}"/><stop offset="1" stop-color="${mix(c, BLACK, 0.22)}"/></radialGradient></defs>` +
     (crop === 'full' ? '<ellipse cx="100" cy="206" rx="56" ry="6" fill="#000000" opacity="0.16"/>' : '') +
@@ -240,9 +254,9 @@ export function drawMascot(look: Look, emoji: string, { crop = 'full', id = 'mas
     extra +
     `<g transform="rotate(${SIGN.angle} ${SIGN.x} ${SIGN.y})">` +
     `<rect x="64" y="143" width="72" height="50" rx="12" fill="#000000" opacity="0.12"/>` +
-    `<rect x="64" y="140" width="72" height="50" rx="12" fill="#fffaf1" stroke="#000000" stroke-opacity="0.12" stroke-width="1.5"/>` +
+    `<rect x="64" y="140" width="72" height="50" rx="12" fill="${sign.card}" stroke="#000000" stroke-opacity="0.12" stroke-width="1.5"/>` +
     (bare ? '' : `<text x="${SIGN.x}" y="${SIGN.y}" font-size="${SIGN.size}" text-anchor="middle" dominant-baseline="central" font-family="'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif">${escape(emoji)}</text>`) +
-    [64, 136].map((x) => `<circle cx="${x}" cy="166" r="11" fill="${mix(c, WHITE, 0.12)}" stroke="${mix(c, BLACK, 0.2)}" stroke-width="1.2"/><circle cx="${x - 3}" cy="162" r="3" fill="#ffffff" opacity="0.5"/>`).join('') +
+    [64, 136].map((x) => `<circle cx="${x}" cy="166" r="11" fill="${sign.paw}" stroke="${sign.pawEdge}" stroke-width="1.2"/><circle cx="${x - 3}" cy="162" r="3" fill="#ffffff" opacity="0.5"/>`).join('') +
     `</g>${hat}</g>`
   return { viewBox: `${view.x} ${view.y} ${view.width} ${view.height}`, body }
 }

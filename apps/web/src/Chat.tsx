@@ -457,7 +457,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
             </div>
           )}
           {partial?.text && <div className="msg assistant"><Markdown text={partial.text} live /></div>}
-          {running && !partial?.text && !partial?.reasoning && <div className="working"><BotHead bot={bot} className="bob" /> Working</div>}
+          {running && !partial?.text && !partial?.reasoning && <div className="working"><BotHead bot={bot} sign={false} className="bob" /> Working</div>}
           {error && <div className="notice error">{error}</div>}
         </div>
         </FileLinks.Provider>
