@@ -1,7 +1,7 @@
 // Drives the real desktop app (Electron), with its window kept off the screen. Everything the app
 // touches is temporary: its own data, and the data of the servers it runs or talks to.
-//   OPENBOT_DESKTOP_APP   the program inside a packaged app, to test that instead of the source
-//   OPENBOT_TEST_SHOW=1   show the window while the tests run
+//   OPENKUMI_DESKTOP_APP   the program inside a packaged app, to test that instead of the source
+//   OPENKUMI_TEST_SHOW=1   show the window while the tests run
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -18,35 +18,35 @@ import { startOAuthServer } from '../../server/test/fixtures/mcp-oauth.mjs'
 const LOCAL_PORT = 4950 + Math.floor(Math.random() * 20)
 const REMOTE_PORT = LOCAL_PORT + 25
 const SERVER = path.resolve(import.meta.dirname, '../../server/src/index.ts')
-/** Open Bot's page on the web that Google sends a browser back to, and where it would be. */
+/** OpenKumi's page on the web that Google sends a browser back to, and where it would be. */
 const SIGN_IN_PAGE = path.resolve(import.meta.dirname, '../../sign-in-page/index.html')
-const RETURN_PAGE = 'https://pages.example/open-bot/sign-in'
-const packaged = process.env.OPENBOT_DESKTOP_APP
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-desktop-'))
+const RETURN_PAGE = 'https://pages.example/openkumi/sign-in'
+const packaged = process.env.OPENKUMI_DESKTOP_APP
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-desktop-'))
 // A copy of the superpowers that ship, so a test can point their services somewhere that is not the real one.
 fs.cpSync(path.resolve(import.meta.dirname, '../../server/superpowers'), `${tmp}/superpowers`, { recursive: true })
-// OPENBOT_DESKTOP_YES answers the app's own confirmation dialogs, which a test cannot click.
+// OPENKUMI_DESKTOP_YES answers the app's own confirmation dialogs, which a test cannot click.
 const env = {
   ...process.env,
-  OPENBOT_DESKTOP_DATA: `${tmp}/app`,
-  OPENBOT_DESKTOP_YES: '1',
-  OPENBOT_DESKTOP_HIDDEN: process.env.OPENBOT_TEST_SHOW ? '' : '1',
-  OPENBOT_HOME: `${tmp}/local-home`,
-  OPENBOT_PORT: String(LOCAL_PORT),
-  OPENBOT_MOCK: '1',
-  OPENBOT_SUPERPOWERS: `${tmp}/superpowers`,
-  OPENBOT_RETURN_PAGE: RETURN_PAGE,
+  OPENKUMI_DESKTOP_DATA: `${tmp}/app`,
+  OPENKUMI_DESKTOP_YES: '1',
+  OPENKUMI_DESKTOP_HIDDEN: process.env.OPENKUMI_TEST_SHOW ? '' : '1',
+  OPENKUMI_HOME: `${tmp}/local-home`,
+  OPENKUMI_PORT: String(LOCAL_PORT),
+  OPENKUMI_MOCK: '1',
+  OPENKUMI_SUPERPOWERS: `${tmp}/superpowers`,
+  OPENKUMI_RETURN_PAGE: RETURN_PAGE,
   // The app run from the source cannot be what the computer opens sign-ins with; the tests hand it them.
-  OPENBOT_DESKTOP_CATCH_SIGN_INS: '1',
+  OPENKUMI_DESKTOP_CATCH_SIGN_INS: '1',
   // Scripted stand-ins for the Claude Code, Codex and Grok programs, so the tests do not depend on what is installed here.
-  OPENBOT_CLAUDE_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-claude.mjs'),
-  OPENBOT_CODEX_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-codex.mjs'),
-  OPENBOT_GROK_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-grok.mjs'),
+  OPENKUMI_CLAUDE_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-claude.mjs'),
+  OPENKUMI_CODEX_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-codex.mjs'),
+  OPENKUMI_GROK_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-grok.mjs'),
   // And for Tailscale's, which says the computer is on a tailnet.
-  OPENBOT_TAILSCALE_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-tailscale.mjs'),
+  OPENKUMI_TAILSCALE_BIN: path.resolve(import.meta.dirname, '../../server/test/fixtures/fake-tailscale.mjs'),
 }
 delete env.ELECTRON_RUN_AS_NODE
-delete env.OPENBOT_DEV_URL
+delete env.OPENKUMI_DEV_URL
 
 const up = (port) => fetch(`http://127.0.0.1:${port}/api/hello`).then((r) => r.ok, () => false)
 const tokenOf = (home) => JSON.parse(fs.readFileSync(`${tmp}/${home}/auth.json`, 'utf8')).accessToken
@@ -100,7 +100,7 @@ test('the local environment can be turned on and off, and remote environments ad
   // "Another computer": a second server with its own data, reached by this machine's network address.
   fs.mkdirSync(`${tmp}/remote-home`, { recursive: true })
   fs.writeFileSync(`${tmp}/remote-home/settings.json`, '{"lan": true}')
-  const remote = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENBOT_HOME: `${tmp}/remote-home`, OPENBOT_PORT: String(REMOTE_PORT), OPENBOT_MOCK: '1' }, stdio: 'ignore' })
+  const remote = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENKUMI_HOME: `${tmp}/remote-home`, OPENKUMI_PORT: String(REMOTE_PORT), OPENKUMI_MOCK: '1' }, stdio: 'ignore' })
   const remoteRow = (win) => win.locator('.set-row', { has: win.locator('h3:has-text("Other Mac")') })
 
   try {
@@ -115,12 +115,12 @@ test('the local environment can be turned on and off, and remote environments ad
     let win = await launch()
     await win.waitForSelector('.gate #local-environment')
     // The window's page is the app's own, not one a server hands out.
-    assert.equal(win.url(), 'openbot://app/')
+    assert.equal(win.url(), 'openkumi://app/')
     assert.deepEqual(await win.locator('h2').allInnerTexts(), ['This app', 'Environments'])
     assert.equal(await win.locator('.gate-head p').innerText(), 'Where should your bots run? On this computer, on another one, or both.')
     assert.match(await win.locator('#local-environment').innerText(), /Turned off\. Bots only run in remote environments\./)
     assert.equal(await up(LOCAL_PORT), false, 'with the local environment off, no server runs here')
-    assert.ok(!(await processes()).includes('Open Bot Server'))
+    assert.ok(!(await processes()).includes('OpenKumi Server'))
     // From here on the window must stay the same page: changing environments does not reload it.
     await win.evaluate(() => (window.sameWindow = true))
 
@@ -128,7 +128,7 @@ test('the local environment can be turned on and off, and remote environments ad
     await win.click('#local-environment .switch')
     await showsBot(win, 'Assistant')
     assert.equal(await up(LOCAL_PORT), true)
-    assert.ok((await processes()).includes('Open Bot Server'), 'the server is a process of its own inside the app')
+    assert.ok((await processes()).includes('OpenKumi Server'), 'the server is a process of its own inside the app')
     // The server has no pages; the interface is the app's.
     assert.match(await (await fetch(`http://127.0.0.1:${LOCAL_PORT}/`)).text(), /no page of its own/)
     // The connection to the environment is on a worker thread, not the window's own.
@@ -144,7 +144,7 @@ test('the local environment can be turned on and off, and remote environments ad
 
     // Settings > Environments: pair with a remote one. A wrong code is explained; the right one is accepted.
     await settings(win)
-    assert.match(await win.locator('#local-environment').innerText(), /Local environment\s*Showing now\s*Open Bot runs on this computer\./)
+    assert.match(await win.locator('#local-environment').innerText(), /Local environment\s*Showing now\s*OpenKumi runs on this computer\./)
     await win.click('.set-section-head button:has-text("Add environment")')
     const { code } = await ask(REMOTE_PORT, 'remote-home', 'POST', '/api/pairing')
     await win.fill('input[aria-label="Address of the other computer"]', `${address}:${REMOTE_PORT}`)
@@ -182,7 +182,7 @@ test('the local environment can be turned on and off, and remote environments ad
     await win.click('#local-environment .switch')
     await until(async () => !(await up(LOCAL_PORT)), 15_000)
     await win.waitForSelector('#local-environment:has-text("Turned off. Bots only run in remote environments.")')
-    assert.ok(!(await processes()).includes('Open Bot Server'))
+    assert.ok(!(await processes()).includes('OpenKumi Server'))
     // ...and turning it on again starts it, without leaving the environment that is showing.
     await win.click('#local-environment .switch')
     await until(() => up(LOCAL_PORT))
@@ -223,7 +223,7 @@ test('the local environment can be turned on and off, and remote environments ad
       await until(() => up(LOCAL_PORT))
       win = await launch()
       await showsBot(win, 'Assistant')
-      assert.ok(!(await processes()).includes('Open Bot Server'), 'the app does not start a second one')
+      assert.ok(!(await processes()).includes('OpenKumi Server'), 'the app does not start a second one')
       await settings(win)
       assert.match(await win.locator('#local-environment').innerText(), /started outside this app/)
       await app.close()
@@ -405,7 +405,7 @@ test('replies are drawn with code in colour, diagrams, formulas and tables, and 
   await send(`!tool show_page ${JSON.stringify({ title: 'Sales', html, height: 100 })}`)
   const frame = win.locator('.page iframe')
   await frame.waitFor({ timeout: 30_000 })
-  assert.match(await frame.getAttribute('src'), /^openbot:\/\/page\/[0-9a-f]{32}#theme=(light|dark)$/)
+  assert.match(await frame.getAttribute('src'), /^openkumi:\/\/page\/[0-9a-f]{32}#theme=(light|dark)$/)
   const inside = win.frameLocator('.page iframe')
   assert.match(await inside.locator('#c').innerText(), /^#(3987e5|2a78d6)$/)
   await until(async () => (await win.locator('.page-frame').evaluate((el) => el.offsetHeight)) > 200, 10_000)
@@ -417,13 +417,13 @@ test('replies are drawn with code in colour, diagrams, formulas and tables, and 
   await until(async () => (await app.evaluate(() => globalThis.opened)).includes('https://example.com/more'), 5000)
 
   // It is a site of its own: it cannot reach the app, what the app is given, or the network.
-  const page = win.frames().find((f) => f.url().startsWith('openbot://page/'))
+  const page = win.frames().find((f) => f.url().startsWith('openkumi://page/'))
   assert.equal(await page.evaluate(() => { try { return String(!!parent.document) } catch { return 'blocked' } }), 'blocked')
-  assert.equal(await page.evaluate(() => typeof window.openbotDesktop), 'undefined')
+  assert.equal(await page.evaluate(() => typeof window.openkumiDesktop), 'undefined')
   await until(async () => (await page.title()) === 'refused', 5000)
   // Nor can it open anything without a click in it, or go to another site in its frame.
   await win.locator('.composer textarea').focus()
-  await page.evaluate(() => setTimeout(() => parent.postMessage({ openbot: 'open', url: 'https://example.com/unasked' }, '*'), 50))
+  await page.evaluate(() => setTimeout(() => parent.postMessage({ openkumi: 'open', url: 'https://example.com/unasked' }, '*'), 50))
   await page.evaluate(() => void (location.href = 'https://example.com/elsewhere'))
   await new Promise((resolve) => setTimeout(resolve, 1500))
   assert.deepEqual(await app.evaluate(() => globalThis.opened), ['https://example.com/more'])
@@ -478,18 +478,18 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
   const configure = (config) => fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify(config))
   const localOnly = { local: { enabled: true }, environments: [], current: 'local' }
 
-  // Something else has the usual port and says it is Open Bot. It cannot show that it knows the
+  // Something else has the usual port and says it is OpenKumi. It cannot show that it knows the
   // access code, so the app does not send it the code, and runs its own server beside it.
   const heard = []
   const impostor = http.createServer((req, res) => {
     heard.push(`${req.url} ${req.headers.authorization ?? ''}`)
-    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ app: 'open-bot', version: '0', authorized: true, home: `${tmp}/local-home`, proof: 'ff' }))
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ app: 'openkumi', version: '0', authorized: true, home: `${tmp}/local-home`, proof: 'ff' }))
   })
   await new Promise((resolve) => impostor.listen(LOCAL_PORT, '127.0.0.1', resolve))
   configure(localOnly)
   let win = await launch()
   await showsBot(win, 'Assistant')
-  assert.ok((await processes()).includes('Open Bot Server'))
+  assert.ok((await processes()).includes('OpenKumi Server'))
   assert.ok(heard.length > 0 && !heard.some((line) => line.includes(tokenOf('local-home'))), 'the impostor was asked who it is, and never given the access code')
   await app.close()
   await new Promise((resolve) => impostor.close(resolve))
@@ -499,9 +499,9 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
   await until(() => up(LOCAL_PORT))
   win = await launch()
   await showsBot(win, 'Assistant')
-  assert.ok(!(await processes()).includes('Open Bot Server'))
+  assert.ok(!(await processes()).includes('OpenKumi Server'))
   joined.kill()
-  await until(async () => (await processes()).includes('Open Bot Server'), 30_000)
+  await until(async () => (await processes()).includes('OpenKumi Server'), 30_000)
   await showsBot(win, 'Assistant')
   await win.locator('.toast').waitFor({ state: 'detached', timeout: 15_000 })
   await app.close()
@@ -509,7 +509,7 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
 
   // Another computer stops letting this one in: the window says so, instead of trying for ever.
   fs.mkdirSync(`${tmp}/far-home`, { recursive: true })
-  const far = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENBOT_HOME: `${tmp}/far-home`, OPENBOT_PORT: String(REMOTE_PORT), OPENBOT_MOCK: '1' }, stdio: 'ignore' })
+  const far = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENKUMI_HOME: `${tmp}/far-home`, OPENKUMI_PORT: String(REMOTE_PORT), OPENKUMI_MOCK: '1' }, stdio: 'ignore' })
   try {
     await until(() => up(REMOTE_PORT))
     const given = await pairWith(REMOTE_PORT, 'far-home')
@@ -529,7 +529,7 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
 test('an environment has several addresses: one where something else answers is never sent the key, the next is used, and the app moves back when the first returns', async () => {
   fs.mkdirSync(`${tmp}/many-home`, { recursive: true })
   fs.writeFileSync(`${tmp}/many-home/settings.json`, '{"lan": true}')
-  const far = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENBOT_HOME: `${tmp}/many-home`, OPENBOT_PORT: String(REMOTE_PORT), OPENBOT_MOCK: '1', OPENBOT_TAILSCALE_BIN: env.OPENBOT_TAILSCALE_BIN }, stdio: 'ignore' })
+  const far = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENKUMI_HOME: `${tmp}/many-home`, OPENKUMI_PORT: String(REMOTE_PORT), OPENKUMI_MOCK: '1', OPENKUMI_TAILSCALE_BIN: env.OPENKUMI_TAILSCALE_BIN }, stdio: 'ignore' })
   /** Listens on a port of its own on this computer; `handle` answers what arrives there. */
   const listen = async (server, port = 0) => (await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve)), `http://127.0.0.1:${server.address().port}`)
   // What anything that is not the server was sent: none of it may be the key.
@@ -551,9 +551,9 @@ test('an environment has several addresses: one where something else answers is 
     await ask(REMOTE_PORT, 'many-home', 'POST', '/api/bots', { name: 'Many Helper', provider: 'mock' })
     const given = await pairWith(REMOTE_PORT, 'many-home')
     // Something that says it is that server, and that it knows this computer, but cannot show it.
-    const pretender = answering({ app: 'open-bot', version: '0.1.0', id: given.server, device: { known: true, proof: 'ab'.repeat(32) } })
-    // Another Open Bot server, which has never heard of this computer.
-    const another = answering({ app: 'open-bot', version: '0.1.0', id: 's_another', device: { known: false } })
+    const pretender = answering({ app: 'openkumi', version: '0.1.0', id: given.server, device: { known: true, proof: 'ab'.repeat(32) } })
+    // Another OpenKumi server, which has never heard of this computer.
+    const another = answering({ app: 'openkumi', version: '0.1.0', id: 's_another', device: { known: false } })
     let through = relay()
     servers.push(pretender, another)
     const [pretending, elsewhere, relayed] = [await listen(pretender), await listen(another), await listen(through)]
@@ -692,7 +692,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     await win.locator('.power-card', { hasText: 'Linear' }).locator('.pill', { hasText: 'Active for 1 bot' }).waitFor()
     await win.locator('.power-card', { hasText: 'Notion' }).locator('.pill').waitFor({ state: 'detached' })
 
-    // Google's need Open Bot registered with Google first, once for all of them: the list says so,
+    // Google's need OpenKumi registered with Google first, once for all of them: the list says so,
     // activating one leads to the setup on its page, and once it is done bots sign in either way.
     const gmail = win.locator('.power-card', { hasText: 'Gmail' })
     await gmail.locator('.pill', { hasText: 'Needs a one-time setup' }).waitFor()
@@ -713,7 +713,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     await win.getByRole('button', { name: 'Activate superpower: Gmail for Second bot' }).click()
     const signIn = win.locator('.dialog', { hasText: 'Activate Gmail for Second bot' })
     await signIn.getByRole('button', { name: /Sign in inside Second bot’s browser/ }).waitFor()
-    // Google sends this computer's browser back to Open Bot's page on the web, which hands it to the app.
+    // Google sends this computer's browser back to OpenKumi's page on the web, which hands it to the app.
     await app.evaluate(() => (globalThis.opened = []))
     await signIn.getByRole('button', { name: /Sign in with your browser/ }).click()
     await until(() => app.evaluate(() => globalThis.opened.length > 0))
@@ -729,7 +729,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     } finally {
       await browser.close()
     }
-    assert.ok(handed.startsWith('openbot://sign-in/callback?code='), handed)
+    assert.ok(handed.startsWith('openkumi://sign-in/callback?code='), handed)
     await app.evaluate(({ app }, url) => app.emit('open-url', { preventDefault() {} }, url), handed)
     await signIn.locator('p', { hasText: 'Gmail is active for Second bot.' }).waitFor({ timeout: 30_000 })
     await signIn.getByRole('button', { name: 'Done' }).click()
@@ -822,7 +822,7 @@ test('scheduled tasks: made on their page, run, and each run opened from beneath
   win.on('dialog', (dialog) => dialog.accept())
   const helper = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Helper', provider: 'mock' })
   const here = () => win.evaluate(() => location.hash)
-  const shot = (name) => process.env.OPENBOT_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENBOT_TEST_SHOTS, `${name}.png`) })
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
 
   // They have a place of their own in the sidebar, which says who may do what.
   await win.locator('.sidebar .tasks-link').click()
@@ -1000,10 +1000,10 @@ test('principles: written once for every bot, each bot’s line set beside them,
   const win = await launch()
   await showsBot(win, 'Assistant')
   win.on('dialog', (dialog) => dialog.accept())
-  const shot = (name) => process.env.OPENBOT_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENBOT_TEST_SHOTS, `${name}.png`) })
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
   const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
 
-  // Found from the search, and showing the ones Open Bot comes with.
+  // Found from the search, and showing the ones OpenKumi comes with.
   await win.evaluate(() => (location.hash = '/settings/general'))
   await win.getByLabel('Search settings').fill('master prompt')
   await win.locator('.set-results button', { hasText: 'Principles for every bot' }).click()

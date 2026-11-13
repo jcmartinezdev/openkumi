@@ -10,9 +10,10 @@ import { test } from 'node:test'
 
 const PORT = 4900 + Math.floor(Math.random() * 90)
 
-async function withServer(home, fn) {
+/** Runs the server on the data in `home`, or with `env` saying where that is some other way. */
+async function withServer(home, fn, env = { OPENKUMI_HOME: home }) {
   const server = spawn(process.execPath, ['src/index.ts'], {
-    env: { ...process.env, OPENBOT_HOME: home, OPENBOT_PORT: String(PORT), OPENBOT_MOCK: '1' },
+    env: { ...process.env, OPENKUMI_PORT: String(PORT), OPENKUMI_MOCK: '1', ...env },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   await new Promise((resolve, reject) => {
@@ -29,9 +30,9 @@ async function withServer(home, fn) {
 }
 
 test('bots stored in the database become folders, keeping their id, logins and chats', async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-migrate-'))
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-migrate-'))
   try {
-    const db = new DatabaseSync(path.join(home, 'openbot.db'))
+    const db = new DatabaseSync(path.join(home, 'openkumi.db'))
     db.exec(`
       CREATE TABLE bots (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, instructions TEXT NOT NULL,
@@ -61,7 +62,7 @@ test('bots stored in the database become folders, keeping their id, logins and c
       // The second start must find nothing left to do.
       const state = await withServer(home, (get) => get('/api/state'))
       assert.equal(state.bots.length, 2, `start ${run}: no default bot is added beside the imported ones`)
-      // A bot that ran on Open Bot's own ChatGPT sign-in, which no longer exists, runs on Codex and keeps its model.
+      // A bot that ran on OpenKumi's own ChatGPT sign-in, which no longer exists, runs on Codex and keeps its model.
       assert.deepEqual([state.bots[1].id, state.bots[1].provider, state.bots[1].model], ['b_Old-2', 'codex', 'gpt-5.5'])
       assert.ok(!state.providers.some((p) => p.id === 'chatgpt'))
       assert.deepEqual([state.settings.defaultProvider, state.settings.disabledProviders], ['', ['mock']])
@@ -84,7 +85,7 @@ test('bots stored in the database become folders, keeping their id, logins and c
 
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')), { accessToken: 'keep-me' }, 'the old sign-in is forgotten, the access code is not')
 
-    const after = new DatabaseSync(path.join(home, 'openbot.db'))
+    const after = new DatabaseSync(path.join(home, 'openkumi.db'))
     const tables = after.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all().map((r) => r.name)
     assert.ok(tables.includes('bots_imported') && !tables.includes('bots'), 'the old rows are kept aside, not deleted')
     after.close()
@@ -94,9 +95,9 @@ test('bots stored in the database become folders, keeping their id, logins and c
 })
 
 test('a bot that had several chats keeps the one used last as its conversation, and the others as earlier ones', async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-migrate-'))
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-migrate-'))
   try {
-    const db = new DatabaseSync(path.join(home, 'openbot.db'))
+    const db = new DatabaseSync(path.join(home, 'openkumi.db'))
     db.exec(`
       CREATE TABLE bots (
         id TEXT PRIMARY KEY, name TEXT NOT NULL, emoji TEXT NOT NULL, instructions TEXT NOT NULL,
@@ -139,7 +140,7 @@ test('a bot that had several chats keeps the one used last as its conversation, 
 })
 
 test('skills, connections and plugins become superpowers: what a bot had that is now one stays on, except Google\'s, and the rest goes', async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-migrate-'))
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-migrate-'))
   try {
     const bot = (id, settings) => {
       const dir = path.join(home, 'bots', id)
@@ -148,7 +149,7 @@ test('skills, connections and plugins become superpowers: what a bot had that is
       for (const [file, value] of Object.entries(settings)) fs.writeFileSync(path.join(dir, file), JSON.stringify(value))
       return dir
     }
-    // The catalog of skills Open Bot used to keep, with copies of its own and one the owner added.
+    // The catalog of skills OpenKumi used to keep, with copies of its own and one the owner added.
     for (const name of ['deep-research', 'linear', 'gmail', 'mine']) {
       fs.mkdirSync(path.join(home, 'skills', name), { recursive: true })
       fs.writeFileSync(path.join(home, 'skills', name, 'SKILL.md'), `---\nname: ${name}\n---\n`)
@@ -173,5 +174,41 @@ test('skills, connections and plugins become superpowers: what a bot had that is
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')), { accessToken: 'keep-me' })
   } finally {
     fs.rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi, once no server has it open', async () => {
+  // A home folder of its own, so the server looks for ~/.openbot and ~/.openkumi in it.
+  const user = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-renamed-'))
+  const before = path.join(user, '.openbot')
+  const after = path.join(user, '.openkumi')
+  const { OPENKUMI_HOME, ...rest } = process.env
+  const env = { ...rest, HOME: user }
+  try {
+    fs.mkdirSync(before)
+    fs.writeFileSync(path.join(before, 'auth.json'), JSON.stringify({ accessToken: 'keep-me' }))
+    const db = new DatabaseSync(path.join(before, 'openbot.db'))
+    db.exec(`
+      PRAGMA journal_mode = WAL;
+      CREATE TABLE threads (
+        id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, parent_id TEXT, title TEXT NOT NULL, kind TEXT NOT NULL,
+        status TEXT NOT NULL, model TEXT, reported INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      INSERT INTO threads VALUES ('t_kept', 'b_1', NULL, 'From before', 'chat', 'idle', NULL, 0, 1700000000001, 1700000000002);
+    `)
+    const threads = async (get) => (await get('/api/state')).threads.map((t) => t.id)
+
+    // An Open Bot server still has the database open: the folder stays where it is, and is used there.
+    await withServer(before, async (get) => assert.ok((await threads(get)).includes('t_kept')), env)
+    assert.ok(!fs.existsSync(after), 'not moved while in use')
+
+    db.close()
+    await withServer(after, async (get) => assert.ok((await threads(get)).includes('t_kept')), env)
+    assert.ok(!fs.existsSync(before), 'moved')
+    assert.ok(fs.existsSync(path.join(after, 'openkumi.db')) && !fs.existsSync(path.join(after, 'openbot.db')), 'the database is renamed with it')
+    assert.equal(JSON.parse(fs.readFileSync(path.join(after, 'auth.json'), 'utf8')).accessToken, 'keep-me', 'paired devices keep working')
+  } finally {
+    fs.rmSync(user, { recursive: true, force: true })
   }
 })

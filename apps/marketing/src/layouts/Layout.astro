@@ -1,0 +1,193 @@
+---
+import '@fontsource-variable/inter'
+import '@fontsource-variable/bricolage-grotesque'
+import '../styles/global.css'
+import Mascot from '../components/Mascot.astro'
+import { DESCRIPTION, GITHUB_URL, LICENSE_URL, NAV, SITE_NAME, TAGLINE } from '../lib/site'
+
+interface Props {
+  title?: string
+  description?: string
+  noindex?: boolean
+}
+
+const { title = `${SITE_NAME}: ${TAGLINE}`, description = DESCRIPTION, noindex = false } = Astro.props
+const canonical = new URL(Astro.url.pathname, Astro.site)
+const socialCard = new URL('/social-card.png', Astro.site)
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="64x64" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#faf8f4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f0f12" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={socialCard} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="OpenKumi's mascot, a blue jelly bear in headphones, beside the words: Your own crew of AI bots." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialCard} />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="top">
+      <div class="container bar">
+        <a class="brand" href="/" aria-label={`${SITE_NAME} home`}>
+          <Mascot id="logo" crop="head" class="logo" />
+          <span>{SITE_NAME}</span>
+        </a>
+        <nav aria-label="Main">
+          {NAV.map((item) => <a href={item.href}>{item.label}</a>)}
+        </nav>
+        <a class="github" href={GITHUB_URL} aria-label="OpenKumi on GitHub">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2 0 1.9 1.2 1.9 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6 0-3.2 0 0 1-.3 3.4 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8 0 3.2.9.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.1.7.8.6A12 12 0 0 0 12 .3"></path></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </header>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="foot">
+      <div class="container foot-row">
+        <a class="brand" href="/">
+          <Mascot id="logo-foot" crop="head" class="logo" />
+          <span>{SITE_NAME}</span>
+        </a>
+        <p>Free and open source under the <a href={LICENSE_URL}>MIT License</a>. © 2026 OpenKumi contributors.</p>
+        <nav aria-label="Footer">
+          <a href={GITHUB_URL}>GitHub</a>
+          <a href="/#faq">FAQ</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  .skip {
+    position: absolute;
+    left: 16px;
+    top: -60px;
+    z-index: 100;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: var(--button);
+    color: var(--button-text);
+  }
+  .skip:focus {
+    top: 12px;
+  }
+  .top {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--bg) 82%, transparent);
+    backdrop-filter: saturate(1.6) blur(14px);
+    -webkit-backdrop-filter: saturate(1.6) blur(14px);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  }
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    height: 64px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font: 700 20px/1 var(--display);
+    letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  .brand :global(.logo) {
+    width: 34px;
+  }
+  nav {
+    display: flex;
+    gap: 28px;
+  }
+  .bar nav {
+    margin-right: auto;
+  }
+  nav a {
+    color: var(--muted);
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  nav a:hover {
+    color: var(--text);
+  }
+  .github {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .github svg {
+    width: 17px;
+    height: 17px;
+  }
+  .github:hover {
+    border-color: var(--faint);
+  }
+  @media (max-width: 760px) {
+    .bar nav {
+      display: none;
+    }
+    .bar {
+      justify-content: space-between;
+    }
+  }
+  .foot {
+    border-top: 1px solid var(--border);
+    padding: 40px 0 48px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .foot-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px 32px;
+  }
+  .foot .brand {
+    color: var(--text);
+    font-size: 17px;
+  }
+  .foot .brand :global(.logo) {
+    width: 28px;
+  }
+  .foot p {
+    flex: 1;
+    min-width: 260px;
+  }
+  .foot p a {
+    color: var(--text);
+  }
+</style>

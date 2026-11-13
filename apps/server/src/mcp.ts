@@ -3,7 +3,7 @@
 // can use two different accounts. Signing a bot in to a service is what activates the superpower.
 // It happens in the owner's own browser (the desktop app catches the way back, at APP_RETURN) or
 // in the bot's browser, which works from any device (see browser.ts). A service that does not let
-// Open Bot register itself (Google's) signs in with the client the owner registered for it. That kind
+// OpenKumi register itself (Google's) signs in with the client the owner registered for it. That kind
 // of client comes back only to a web address, so the owner's own browser comes back by way of
 // RETURN_PAGE, which passes it on to the app.
 import crypto from 'node:crypto'
@@ -24,7 +24,7 @@ import {
   type StoredOAuthTokens,
 } from '@modelcontextprotocol/client'
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/client/stdio'
-import type { SuperpowerStatus } from '@openbot/shared'
+import type { SuperpowerStatus } from '@openkumi/shared'
 import { SIGN_IN_RETURN, browserFor } from './browser.ts'
 import { emit, privateDir, workspaceDir } from './config.ts'
 import { type Service, enabledSuperpowers, missingRegistration, registeredClient, serviceOf, signedIn } from './superpowers.ts'
@@ -42,15 +42,15 @@ function needService(id: string): Service {
 // ---- sign-in
 
 /**
- * Where a service sends the owner's own browser back to. The Open Bot app on that computer is what
+ * Where a service sends the owner's own browser back to. The OpenKumi app on that computer is what
  * opens it, and passes it on (apps/desktop/src/main.ts).
  */
-const APP_RETURN = 'openbot://sign-in/callback'
+const APP_RETURN = 'openkumi://sign-in/callback'
 /**
- * Open Bot's public page that sends a browser on to APP_RETURN (apps/sign-in-page), for the companies
+ * OpenKumi's public page that sends a browser on to APP_RETURN (apps/sign-in-page), for the companies
  * that send it back only to a web address. Without one, their sign-ins happen in the bot's browser alone.
  */
-export const RETURN_PAGE = process.env.OPENBOT_RETURN_PAGE ?? ''
+export const RETURN_PAGE = process.env.OPENKUMI_RETURN_PAGE ?? ''
 /** Which browser a sign-in happens in: the owner's own ('app'), or the bot's ('bot'). */
 type Via = 'app' | 'bot'
 
@@ -111,7 +111,7 @@ class Credentials implements OAuthClientProvider {
 
   get clientMetadata() {
     return {
-      client_name: 'Open Bot',
+      client_name: 'OpenKumi',
       // Both, so a bot can be signed in either way with the one registration.
       redirect_uris: [SIGN_IN_RETURN, APP_RETURN],
       grant_types: ['authorization_code', 'refresh_token'],
@@ -181,7 +181,7 @@ function signInTo(id: string) {
 export async function login(botId: string, id: string, headless: boolean, via: Via): Promise<{ url?: string; windowId?: string; done?: true }> {
   const service = webService(id)
   const company = missingRegistration(id)
-  if (company) throw new Error(`Open Bot is not registered with ${company} yet. Register it on ${service.name}’s page, under Superpowers.`)
+  if (company) throw new Error(`OpenKumi is not registered with ${company} yet. Register it on ${service.name}’s page, under Superpowers.`)
   if (via === 'app' && service.registration && !RETURN_PAGE) throw new Error(`${service.name} signs in inside the bot’s browser.`)
   // Activating starts afresh: whatever an earlier attempt left behind is of no use.
   if (!enabledSuperpowers(botId).includes(id)) new Credentials(botId, id).clear()
@@ -298,7 +298,7 @@ async function open(botId: string, id: string): Promise<Live> {
 
   const make = () =>
     new Client(
-      { name: 'open-bot', version: '0.1.0' },
+      { name: 'openkumi', version: '0.1.0' },
       {
         listChanged: {
           tools: {

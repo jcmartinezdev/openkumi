@@ -2,7 +2,7 @@
 // A bot has one conversation; when its owner starts fresh, the one so far is set aside and listed
 // here, where it can be read, searched, continued or deleted.
 import { useEffect, useRef, useState } from 'react'
-import type { Bot, HistoryMatch, Thread } from '@openbot/shared'
+import type { Bot, HistoryMatch, Thread } from '@openkumi/shared'
 import { Icon } from './Icon'
 import { usePrefs } from './prefs'
 import { api, navigate, useStore } from './store'

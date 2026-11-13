@@ -25,7 +25,7 @@ for (const bot of listBots()) {
   // A bot folder made by hand may have nothing but bot.md in it.
   if (!fs.existsSync(path.join(workspaceDir(bot.id), 'AGENTS.md'))) await scaffold(bot.id, bot.name)
   // Edits made while the server was not running are the owner's.
-  else await commit(bot.id, 'you', 'Changes made outside Open Bot')
+  else await commit(bot.id, 'you', 'Changes made outside OpenKumi')
 }
 
 if (!listBots().length) {

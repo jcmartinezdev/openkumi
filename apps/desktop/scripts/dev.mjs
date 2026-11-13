@@ -6,13 +6,13 @@ import path from 'node:path'
 import electron from 'electron'
 
 const here = path.resolve(import.meta.dirname, '..')
-const port = Number(process.env.OPENBOT_DEV_PORT ?? 5173)
+const port = Number(process.env.OPENKUMI_DEV_PORT ?? 5173)
 const url = `http://127.0.0.1:${port}`
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 await import('./build.mjs')
 
-const vite = spawn(npm, ['run', 'dev', '-w', '@openbot/web'], { cwd: path.join(here, '..', '..'), stdio: 'inherit', env: { ...process.env, OPENBOT_DEV_PORT: String(port) } })
+const vite = spawn(npm, ['run', 'dev', '-w', '@openkumi/web'], { cwd: path.join(here, '..', '..'), stdio: 'inherit', env: { ...process.env, OPENKUMI_DEV_PORT: String(port) } })
 const stop = () => vite.kill('SIGTERM')
 process.on('SIGINT', stop)
 process.on('SIGTERM', stop)
@@ -27,7 +27,7 @@ for (let waited = 0; ; waited += 150) {
   await new Promise((r) => setTimeout(r, 150))
 }
 
-const app = spawn(electron, ['.'], { cwd: here, stdio: 'inherit', env: { ...process.env, OPENBOT_DEV_URL: url } })
+const app = spawn(electron, ['.'], { cwd: here, stdio: 'inherit', env: { ...process.env, OPENKUMI_DEV_URL: url } })
 app.on('exit', (code) => {
   stop()
   process.exit(code ?? 0)

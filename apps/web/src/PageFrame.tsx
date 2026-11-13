@@ -2,7 +2,7 @@
 // its own (see apps/desktop/src/protocol.ts), so its scripts cannot reach the app; all it can do is
 // say how tall it is and which link was clicked. It takes the app's colours, and follows them.
 import { useEffect, useRef, useState } from 'react'
-import { PAGE_MAX_HEIGHT, pageDocument, pageHeight, readPageMessage, themeMessage } from '@openbot/client/page'
+import { PAGE_MAX_HEIGHT, pageDocument, pageHeight, readPageMessage, themeMessage } from '@openkumi/client/page'
 import { desktop } from './desktop'
 import { Icon } from './Icon'
 import { Dialog } from './Modals'

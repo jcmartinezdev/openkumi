@@ -1,7 +1,7 @@
 // Any server that speaks the OpenAI Chat Completions API: api.openai.com with a key, OpenRouter,
 // Ollama, LM Studio, vLLM, ...
 import crypto from 'node:crypto'
-import type { ItemData } from '@openbot/shared'
+import type { ItemData } from '@openkumi/shared'
 import { readSecrets } from '../config.ts'
 import { type ModelEvent, type ModelRequest, type Provider, errorText, plainModel, sse } from './types.ts'
 

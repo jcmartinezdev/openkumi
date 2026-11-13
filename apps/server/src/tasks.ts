@@ -4,7 +4,7 @@
 // make them with their tools, within the rules at the end of this file: a bot schedules only for
 // itself and changes or deletes only what it made, except the main assistant (the first bot), which
 // may do all of that for every bot.
-import type { Bot, Schedule, ScheduledTask, Thread } from '@openbot/shared'
+import type { Bot, Schedule, ScheduledTask, Thread } from '@openkumi/shared'
 import * as agent from './agent.ts'
 import { getBot, listBots } from './bots.ts'
 import * as db from './db.ts'
@@ -216,7 +216,7 @@ function tick() {
   plan()
 }
 
-/** Starts the schedule. Runs that fell due while Open Bot was not running are dealt with at once. */
+/** Starts the schedule. Runs that fell due while OpenKumi was not running are dealt with at once. */
 export function startScheduler() {
   tick()
 }

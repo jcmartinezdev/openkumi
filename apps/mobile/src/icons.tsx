@@ -1,11 +1,11 @@
 // Icons drawn with Skia from path data on a 24-unit square: the providers' marks (shared with the
-// computer, @openbot/client/marks) and the few line icons the phone needs, drawn as the computer's are.
+// computer, @openkumi/client/marks) and the few line icons the phone needs, drawn as the computer's are.
 // Superpowers bring app icons of their own, as SVG, which Skia draws as they are.
 import { useMemo } from 'react'
 import { Text, View } from 'react-native'
 import { Canvas, Group, ImageSVG, Path, Skia } from '@shopify/react-native-skia'
-import type { ProviderInfo, Superpower } from '@openbot/shared'
-import { markOf } from '@openbot/client/marks'
+import type { ProviderInfo, Superpower } from '@openkumi/shared'
+import { markOf } from '@openkumi/client/marks'
 import { useTheme } from './theme'
 
 // Circles are written as two arcs, which is all a path can say.

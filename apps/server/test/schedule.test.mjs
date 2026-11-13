@@ -1,4 +1,4 @@
-// Scheduled tasks across time: runs that fell due while Open Bot was not running, and times of day
+// Scheduled tasks across time: runs that fell due while OpenKumi was not running, and times of day
 // across a change of the clocks. Each test has a data folder of its own.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -15,12 +15,12 @@ async function withServer(home, fn) {
   const server = spawn(process.execPath, ['src/index.ts'], {
     env: {
       ...process.env,
-      OPENBOT_HOME: home,
-      OPENBOT_PORT: String(PORT),
-      OPENBOT_MOCK: '1',
-      OPENBOT_CLAUDE_BIN: fixture('fake-claude.mjs'),
-      OPENBOT_CODEX_BIN: fixture('fake-codex.mjs'),
-      OPENBOT_GROK_BIN: fixture('fake-grok.mjs'),
+      OPENKUMI_HOME: home,
+      OPENKUMI_PORT: String(PORT),
+      OPENKUMI_MOCK: '1',
+      OPENKUMI_CLAUDE_BIN: fixture('fake-claude.mjs'),
+      OPENKUMI_CODEX_BIN: fixture('fake-codex.mjs'),
+      OPENKUMI_GROK_BIN: fixture('fake-grok.mjs'),
     },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
@@ -49,8 +49,8 @@ async function until(check, timeoutMs = 15_000) {
   }
 }
 
-test('runs that fell due while Open Bot was off: a time of day long past is missed, the others run late, and a run cut off is stopped', async () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-schedule-'))
+test('runs that fell due while OpenKumi was off: a time of day long past is missed, the others run late, and a run cut off is stopped', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-schedule-'))
   try {
     const botId = await withServer(home, async (api) => {
       const [main] = (await api('GET', '/api/state')).bots
@@ -60,7 +60,7 @@ test('runs that fell due while Open Bot was off: a time of day long past is miss
 
     // Written while the server is not running, as if the computer had been asleep.
     const now = Date.now()
-    const db = new DatabaseSync(path.join(home, 'openbot.db'))
+    const db = new DatabaseSync(path.join(home, 'openkumi.db'))
     const add = (id, schedule, nextRunAt, lastStatus = null) =>
       db.prepare(
         `INSERT INTO tasks (id, bot_id, title, prompt, schedule, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, created_at, updated_at)
@@ -99,7 +99,7 @@ test('runs that fell due while Open Bot was off: a time of day long past is miss
 })
 
 test('a time of day stays that time across a change of the clocks', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openbot-schedule-'))
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-schedule-'))
   try {
     const script = `
       const { nextRun } = await import('./src/tasks.ts')
@@ -112,7 +112,7 @@ test('a time of day stays that time across a change of the clocks', () => {
       ]))
       process.exit(0)
     `
-    const out = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, TZ: 'Europe/Berlin', OPENBOT_HOME: home }, encoding: 'utf8' })
+    const out = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, TZ: 'Europe/Berlin', OPENKUMI_HOME: home }, encoding: 'utf8' })
     assert.equal(out.status, 0, out.stderr)
     // Summer time ends on 25 October 2026 and begins on 29 March 2026 in Berlin.
     assert.deepEqual(JSON.parse(out.stdout), ['25 8 0', '26 8 0', '29 8 0'])

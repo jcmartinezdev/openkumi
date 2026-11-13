@@ -2,8 +2,8 @@
 // it, and a page to make or change one. Each run is a thread beneath the bot's conversation and
 // opens like any other. Unlike the settings, a task is a form: it is saved when it is whole.
 import { useState } from 'react'
-import type { Bot, Schedule, ScheduledTask, Thread } from '@openbot/shared'
-import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, madeBy, nextRun, runStatus, runTime, runsOf, scheduleLabel, standing, trouble } from '@openbot/client/tasks'
+import type { Bot, Schedule, ScheduledTask, Thread } from '@openkumi/shared'
+import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, madeBy, nextRun, runStatus, runTime, runsOf, scheduleLabel, standing, trouble } from '@openkumi/client/tasks'
 import { Icon } from './Icon'
 import { Page, Pick, Row, Section, Switch } from './settingsUi'
 import { api, openTasks, useStore } from './store'
@@ -42,7 +42,7 @@ function TaskList() {
         what came of it. Bots schedule tasks too, only for themselves, and change only the ones they made
         {main && <>. {main.emoji} {main.name}, your first bot, is the main assistant: it can schedule, change and delete tasks for every bot</>}.
       </p>
-      {zone && zone !== localZone() && <p className="set-intro">Times of day are kept in {zone}, the time zone of the computer running Open Bot.</p>}
+      {zone && zone !== localZone() && <p className="set-intro">Times of day are kept in {zone}, the time zone of the computer running OpenKumi.</p>}
       <section className="set-section">
         <div className="set-section-head"><h2>Tasks</h2></div>
         {sorted.map((task) => <TaskCard key={task.id} task={task} />)}
@@ -239,7 +239,7 @@ function Editor({ task }: { task?: ScheduledTask }) {
           <>
             <Row
               title="Time"
-              description={zone && zone !== localZone() ? `In ${zone}, the time zone of the computer running Open Bot.` : undefined}
+              description={zone && zone !== localZone() ? `In ${zone}, the time zone of the computer running OpenKumi.` : undefined}
               control={<input type="time" className="set-input time" aria-label="Time" value={draft.time} onChange={(e) => change({ time: e.target.value })} />}
             />
             <Row

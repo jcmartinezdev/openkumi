@@ -2,11 +2,11 @@
 // what it does and lets the owner activate it for each bot, and the same buttons from the bot's
 // side, in its settings. A superpower is always activated for one bot, never for all of them.
 // Activating one that works in an app means signing the bot in to it, in this computer's browser or
-// in the bot's own. Google's need Open Bot registered with Google first, once, by the owner.
+// in the bot's own. Google's need OpenKumi registered with Google first, once, by the owner.
 import { type ReactNode, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Bot, Registration, Superpower, SuperpowerStatus } from '@openbot/shared'
-import { control, driverOf, signInThread, windowOf } from '@openbot/client/browser'
+import type { Bot, Registration, Superpower, SuperpowerStatus } from '@openkumi/shared'
+import { control, driverOf, signInThread, windowOf } from '@openkumi/client/browser'
 import { PageView } from './BrowserPane'
 import { useDesktop } from './desktop'
 import { Markdown } from './Markdown'
@@ -52,7 +52,7 @@ export function SuperpowerList() {
           </div>
         </section>
       ))}
-      {!powers.length && <p className="set-intro">There are no superpowers in this version of Open Bot.</p>}
+      {!powers.length && <p className="set-intro">There are no superpowers in this version of OpenKumi.</p>}
     </Page>
   )
 }
@@ -141,7 +141,7 @@ function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; a
   const active = useStore((s) => !!s.bots.find((b) => b.id === bot.id)?.superpowers.includes(power.id))
   const registration = power.registration
   // A company that admits only registered apps (Google) sends this computer's browser back by way of
-  // Open Bot's page on the web, which this version of Open Bot may not have.
+  // OpenKumi's page on the web, which this version of OpenKumi may not have.
   const ownBrowser = !!useDesktop().catchesSignIns && (!registration || registration.ownBrowser)
   const path = `/api/bots/${bot.id}/superpowers/${power.id}`
   const waiting = step === 'browser' || step === 'bot'
@@ -202,7 +202,7 @@ function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; a
           {step === 'ask' && registration && !registration.done && (
             <>
               <p className="muted">
-                Before a bot can sign in to {power.name}, Open Bot has to be registered with {registration.name}. You do that once, for all the {registration.name} superpowers, and {power.name}’s page shows you how.
+                Before a bot can sign in to {power.name}, OpenKumi has to be registered with {registration.name}. You do that once, for all the {registration.name} superpowers, and {power.name}’s page shows you how.
               </p>
               <div className="actions">
                 <button onClick={cancel}>Cancel</button>
@@ -228,9 +228,9 @@ function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; a
                 </button>
               </div>
               {registration && !registration.ownBrowser ? (
-                <p className="faint">This version of Open Bot signs bots in to {registration.name} inside their own browser only.</p>
+                <p className="faint">This version of OpenKumi signs bots in to {registration.name} inside their own browser only.</p>
               ) : (
-                !ownBrowser && <p className="faint">To sign in with your own browser, use the latest Open Bot app installed on this computer.</p>
+                !ownBrowser && <p className="faint">To sign in with your own browser, use the latest OpenKumi app installed on this computer.</p>
               )}
             </>
           )}
@@ -330,7 +330,7 @@ export function SuperpowerPage({ id }: { id: string }) {
 }
 
 /**
- * Registering Open Bot with a company that lets in only the apps registered with it (Google). The
+ * Registering OpenKumi with a company that lets in only the apps registered with it (Google). The
  * owner does it once, for all of that company's superpowers, following the guide the server sends,
  * which has the server's own address in it. Once done, it can be changed or taken away.
  */
@@ -352,7 +352,7 @@ function RegistrationSetup({ registration }: { registration: Registration }) {
       (e) => setError(e.message),
     ).finally(() => setBusy(false))
   const remove = () => {
-    if (!confirm(`Remove Open Bot’s registration with ${name}? Every bot is signed out of the ${name} superpowers, and they are deactivated.`)) return
+    if (!confirm(`Remove OpenKumi’s registration with ${name}? Every bot is signed out of the ${name} superpowers, and they are deactivated.`)) return
     send('DELETE').catch((e) => setError(e.message)).finally(() => setBusy(false))
   }
   const plain = { spellCheck: false, autoCapitalize: 'off', autoComplete: 'off', className: 'set-input wide' } as const
@@ -362,7 +362,7 @@ function RegistrationSetup({ registration }: { registration: Registration }) {
       <Section title={`Registered with ${name}`}>
         {error && <div className="notice error">{error}</div>}
         <Row
-          title={<><Icon name="check" size={14} />Open Bot is registered with {name}</>}
+          title={<><Icon name="check" size={14} />OpenKumi is registered with {name}</>}
           description={`Every ${name} superpower signs in with it. Client ID ${registration.clientId}`}
           control={
             <>
@@ -413,7 +413,7 @@ export function BotSuperpowers({ bot }: { bot: Bot }) {
             fail={setError}
           />
         ))}
-        {!powers.length && <Row title="There are no superpowers in this version of Open Bot." />}
+        {!powers.length && <Row title="There are no superpowers in this version of OpenKumi." />}
       </Section>
     </Page>
   )

@@ -2,8 +2,8 @@
 // the server's events. Shared by the desktop app's window and the phone app; each brings its own
 // connection (see connection.ts) and hands it over with `useTransport`.
 import { useSyncExternalStore } from 'react'
-import type { AppState, ClientEvent, Item, Partial, Principles, ServerEvent, Settings, Thread } from '@openbot/shared'
-import type { Link } from '@openbot/shared/desktop'
+import type { AppState, ClientEvent, Item, Partial, Principles, ServerEvent, Settings, Thread } from '@openkumi/shared'
+import type { Link } from '@openkumi/shared/desktop'
 import { reach } from './addresses'
 import type { Command, Report } from './connection'
 
@@ -19,7 +19,7 @@ export interface State extends AppState {
   failures: number
   /** The environment answered, but did not accept the access code. */
   refused: boolean
-  /** The environment runs an Open Bot too old to show who it is, so it is not sent the key. */
+  /** The environment runs an OpenKumi too old to show who it is, so it is not sent the key. */
   outdated: boolean
   /** The address the connection uses, once one has shown it is the environment's server. */
   address: string | null
@@ -125,7 +125,7 @@ export async function saveSettings(patch: globalThis.Partial<Settings>) {
   }
 }
 
-/** Changes what every bot is told first; null puts back the ones Open Bot comes with. */
+/** Changes what every bot is told first; null puts back the ones OpenKumi comes with. */
 export async function savePrinciples(text: string | null) {
   const asked = epoch
   const saved = await api<Principles>('PUT', '/api/principles', { text })

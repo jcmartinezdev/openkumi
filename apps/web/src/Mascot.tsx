@@ -1,8 +1,8 @@
-// A bot's mascot, drawn from its look (@openbot/client/mascot). Whole, it stands in the empty
+// A bot's mascot, drawn from its look (@openkumi/client/mascot). Whole, it stands in the empty
 // conversation and on the bot's page; its head, holding up the sign, stands for the bot in lists.
 import { type CSSProperties, useId, useMemo } from 'react'
-import type { Bot, Look } from '@openbot/shared'
-import { HEAD_SIGN, UNDECIDED, drawMascot, signColors } from '@openbot/client/mascot'
+import type { Bot, Look } from '@openkumi/shared'
+import { HEAD_SIGN, UNDECIDED, drawMascot, signColors } from '@openkumi/client/mascot'
 
 interface MascotProps {
   look: Look

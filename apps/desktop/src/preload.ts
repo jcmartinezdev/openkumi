@@ -1,7 +1,7 @@
 // What the window may ask of the app behind it (the contract is in packages/shared/src/desktop.ts).
 // This runs inside the window before its page does, and is the only way from one to the other.
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DesktopBridge, DesktopState } from '@openbot/shared/desktop'
+import type { DesktopBridge, DesktopState } from '@openkumi/shared/desktop'
 
 // Asked for before the page starts, so the first thing it draws is already right. The app only
 // answers its own pages; anything else that ends up in a window gets nothing.
@@ -53,4 +53,4 @@ const bridge: DesktopBridge | null = initial && {
   },
 }
 
-if (bridge) contextBridge.exposeInMainWorld('openbotDesktop', bridge)
+if (bridge) contextBridge.exposeInMainWorld('openkumiDesktop', bridge)

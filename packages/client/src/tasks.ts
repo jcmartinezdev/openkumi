@@ -1,5 +1,5 @@
 // Scheduled tasks in words, the same in every app: when one runs, and how its runs went.
-import type { Schedule, ScheduledTask, Thread } from '@openbot/shared'
+import type { Schedule, ScheduledTask, Thread } from '@openkumi/shared'
 
 export const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -26,7 +26,7 @@ export function moment(time: number, now = Date.now()): string {
 
 /**
  * When a task runs, e.g. "Weekdays at 08:00". A time of day is kept in the time zone of the
- * computer running Open Bot; `zone` names it when it is not this device's.
+ * computer running OpenKumi; `zone` names it when it is not this device's.
  */
 export function scheduleLabel(s: Schedule, zone?: string): string {
   if (s.type === 'once') return `Once, ${moment(s.at)}`

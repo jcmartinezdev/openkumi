@@ -7,7 +7,7 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
-import type { AppState, ClientEvent, ServerEvent } from '@openbot/shared'
+import type { AppState, ClientEvent, ServerEvent } from '@openkumi/shared'
 import * as agent from './agent.ts'
 import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
 import { type Frame, browserFor, browserStates, isWebPage, letGo, stopBrowser } from './browser.ts'
@@ -35,14 +35,14 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 const FORWARDED = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'cf-connecting-ip']
 /**
  * Whether a request comes from this computer itself. A proxy on this computer (a tunnel, or a web
- * server put in front of Open Bot) connects from here too, but passes on requests from elsewhere
+ * server put in front of OpenKumi) connects from here too, but passes on requests from elsewhere
  * and says so: those are never taken for this computer.
  */
 const fromHere = (req: http.IncomingMessage) => LOOPBACK.has(req.socket.remoteAddress ?? '') && !FORWARDED.some((name) => name in req.headers)
 /** The names this computer goes by when it talks to itself. */
 const LOCAL = new Set(['localhost', '127.0.0.1', '[::1]'])
 /** The desktop app's own pages, installed and in development: the only pages that may read answers. */
-const APP_ORIGINS = new Set(['openbot://app', 'openbot-dev://app'])
+const APP_ORIGINS = new Set(['openkumi://app', 'openkumi-dev://app'])
 
 function tokenMatches(given: string | undefined): boolean {
   const token = Buffer.from(accessToken())
@@ -154,7 +154,7 @@ route('GET', '/api/state', (): AppState => ({
 
 // ---- settings for the whole app
 route('PATCH', '/api/settings', (_, body) => updateSettings(body))
-// What every bot is told first. Null puts back the ones Open Bot comes with.
+// What every bot is told first. Null puts back the ones OpenKumi comes with.
 route('PUT', '/api/principles', (_, body) => checked(() => setPrinciples(body.text)))
 // How other computers get in: whether they can reach this one, where, and which ones are paired.
 route('GET', '/api/access', async () => ({ on: lanOn(), port: PORT, addresses: homeAddresses(), tailscale: await tailscaleAddresses(), computers: listComputers() }))
@@ -165,7 +165,7 @@ route('GET', '/api/addresses', async () => ({
 }))
 // A code for pairing one more computer. It works once, for a few minutes.
 // Who gets in is decided at this computer, not by a computer that was let in.
-const ownerOnly = ({ req, url }: Call) => whoIs(req, url) === 'owner' || fail(403, 'Computers are paired and removed on the computer running Open Bot.')
+const ownerOnly = ({ req, url }: Call) => whoIs(req, url) === 'owner' || fail(403, 'Computers are paired and removed on the computer running OpenKumi.')
 route('POST', '/api/pairing', (_, __, call) => (ownerOnly(call), newPairingCode()))
 // Taking a computer's key away also ends whatever it has open.
 route('DELETE', '/api/computers/:id', ([id], _, call) => {
@@ -173,9 +173,9 @@ route('DELETE', '/api/computers/:id', ([id], _, call) => {
   if (!removeComputer(id)) fail(404, 'No such computer')
   hangUp(id)
 })
-// Opens a folder in the file manager of the computer running Open Bot, so only that computer may ask.
+// Opens a folder in the file manager of the computer running OpenKumi, so only that computer may ask.
 route('POST', '/api/reveal', (_, body, { req }) => {
-  if (!fromHere(req)) fail(403, 'Folders can only be opened from the computer running Open Bot.')
+  if (!fromHere(req)) fail(403, 'Folders can only be opened from the computer running OpenKumi.')
   const dir = body.botId ? botDir(needBot(String(body.botId)).id) : HOME
   const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
   spawn(opener, [dir], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref()
@@ -224,7 +224,7 @@ route('POST', '/api/bots/:id/superpowers/:power/login', ([id, power], body) => {
 })
 route('DELETE', '/api/bots/:id/superpowers/:power/login', ([id, power]) => mcp.cancelLogin(needBot(id).id, power))
 route('POST', '/api/superpowers/return', (_, body) => mcp.finishAppSignIn(String(body.url ?? '')).catch((e) => fail(400, e.message)))
-// Open Bot registered by the owner with a company that does not let apps register themselves (Google).
+// OpenKumi registered by the owner with a company that does not let apps register themselves (Google).
 route('PUT', '/api/registrations/:id', ([id], body) =>
   register(id, { clientId: body.clientId, clientSecret: body.clientSecret }).then(listSuperpowers, (e) => fail(400, e.message)),
 )
@@ -369,9 +369,9 @@ route('POST', '/api/bots/:id/browser/:action', async ([id, action], body) => {
 let hangUp = (_who: string) => {}
 
 /** What someone sees who opens the server's address in a browser. */
-const NOTE = `This is an Open Bot server. It has no page of its own.
+const NOTE = `This is an OpenKumi server. It has no page of its own.
 
-To use it, open the Open Bot desktop app, go to Settings > Environments,
+To use it, open the OpenKumi desktop app, go to Settings > Environments,
 choose "Add environment" and paste the link you were given.
 `
 
@@ -390,7 +390,7 @@ function createServer() {
     }
     if (!url.pathname.startsWith('/api/')) return void res.writeHead(url.pathname === '/' ? 200 : 404, { 'Content-Type': 'text/plain; charset=utf-8' }).end(NOTE)
     const json = (status: number, body: unknown) => res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(body))
-    // Who is here: lets the desktop app tell an Open Bot server from anything else at an address,
+    // Who is here: lets the desktop app tell an OpenKumi server from anything else at an address,
     // and whether the access code it holds is still the right one.
     if (url.pathname === '/api/hello') {
       // The app on this computer reads the access code from the data folder, so it is told where
@@ -407,7 +407,7 @@ function createServer() {
       const tag = url.searchParams.get('device')
       const signed = challenge && tag && /^[0-9a-f]{16,128}$/.test(challenge) && /^[0-9a-f]{64}$/.test(tag) ? proveTo(tag, challenge, serverId()) : undefined
       const device = signed === undefined ? {} : { device: signed ? { known: true, proof: signed } : { known: false } }
-      return void json(200, { app: 'open-bot', version: VERSION, id: serverId(), authorized: isAllowed(req, url), ...(local ? { home: HOME } : {}), ...proof, ...device })
+      return void json(200, { app: 'openkumi', version: VERSION, id: serverId(), authorized: isAllowed(req, url), ...(local ? { home: HOME } : {}), ...proof, ...device })
     }
     try {
       // Pairing: a computer that has no key yet shows that it was given the code (see clients.ts).
@@ -551,14 +551,14 @@ export function startServer(): http.Server {
     console.log('  To let one in, run "npm run pair" here and enter the code it prints in the app there.\n')
   }
   server.on('error', (e: NodeJS.ErrnoException) => {
-    console.error(e.code === 'EADDRINUSE' ? `Port ${PORT} is already in use. Set OPENBOT_PORT to use another.` : e)
+    console.error(e.code === 'EADDRINUSE' ? `Port ${PORT} is already in use. Set OPENKUMI_PORT to use another.` : e)
     process.exit(1)
   })
   server.listen(PORT, host, () => {
     // Made now rather than at the first request, so the app on this computer can read it.
     accessToken()
-    console.log(`\n  The Open Bot server is running at http://127.0.0.1:${PORT}`)
-    console.log('  It has no page of its own: open the Open Bot desktop app to use it.\n')
+    console.log(`\n  The OpenKumi server is running at http://127.0.0.1:${PORT}`)
+    console.log('  It has no page of its own: open the OpenKumi desktop app to use it.\n')
     describe()
     parent?.postMessage({ type: 'ready', port: PORT })
     process.send?.({ type: 'ready', port: PORT })

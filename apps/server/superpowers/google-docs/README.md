@@ -8,6 +8,6 @@ The bot reads and adds to the documents you point it to. It asks before it rewri
 anything already there. To find documents by name, also activate Google Drive for the bot;
 otherwise give it a link.
 
-Open Bot has to be registered with Google once, for all the Google superpowers; this page walks
+OpenKumi has to be registered with Google once, for all the Google superpowers; this page walks
 you through it. After that, activate it for a bot and sign in to Google in the bot's browser,
 with the account that bot should use.

@@ -4,9 +4,9 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { ActionSheetIOS, ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, type NativeScrollEvent, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Item } from '@openbot/shared'
-import { describe } from '@openbot/client/steps'
-import { api, loadThread, mainThread, recentSubagents, useStore } from '@openbot/client/store'
+import type { Item } from '@openkumi/shared'
+import { describe } from '@openkumi/client/steps'
+import { api, loadThread, mainThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
 import { BrowserPip } from '../../src/BrowserPip'
@@ -145,7 +145,7 @@ export default function Chat() {
   const openFile = (path: string) => {
     if (!bot) return
     api<{ content: string; binary: boolean }>('GET', `/api/bots/${bot.id}/file?path=${encodeURIComponent(path)}`).then(
-      (found) => (found.binary ? Alert.alert(path, 'This file can be opened in Open Bot on the computer, under the bot’s files.') : setFile({ path, content: found.content })),
+      (found) => (found.binary ? Alert.alert(path, 'This file can be opened in OpenKumi on the computer, under the bot’s files.') : setFile({ path, content: found.content })),
       (e) => Alert.alert(path, (e as Error).message),
     )
   }

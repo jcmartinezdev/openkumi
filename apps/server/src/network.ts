@@ -42,7 +42,7 @@ export const homeAddresses = () =>
 // once Tailscale is on. Without the program, the address is still found among the network's.
 
 /** Where the program usually is: the Mac app's own copy, or one on the PATH. A test names its own. */
-const PROGRAMS = process.env.OPENBOT_TAILSCALE_BIN ? [process.env.OPENBOT_TAILSCALE_BIN] : ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale']
+const PROGRAMS = process.env.OPENKUMI_TAILSCALE_BIN ? [process.env.OPENKUMI_TAILSCALE_BIN] : ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale']
 const PATH = [process.env.PATH ?? '', '/opt/homebrew/bin', '/usr/local/bin'].join(path.delimiter)
 
 function status(program: string): Promise<any> {

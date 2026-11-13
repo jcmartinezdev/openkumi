@@ -1,9 +1,9 @@
 // In the composer: what the bot runs on now, and how hard it is set to think when that was chosen.
 // Tapping it opens the model sheet (app/model/[botId].tsx).
 import { Pressable, StyleSheet, Text } from 'react-native'
-import type { Bot } from '@openbot/shared'
-import { EFFORT_LABEL, useModels } from '@openbot/client/models'
-import { useStore } from '@openbot/client/store'
+import type { Bot } from '@openkumi/shared'
+import { EFFORT_LABEL, useModels } from '@openkumi/client/models'
+import { useStore } from '@openkumi/client/store'
 import { Glyph, ProviderIcon } from './icons'
 import { useTheme } from './theme'
 

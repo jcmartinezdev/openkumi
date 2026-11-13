@@ -1,18 +1,18 @@
-// The window's pages come from the app itself, under an address of its own (openbot://app/), not
+// The window's pages come from the app itself, under an address of its own (openkumi://app/), not
 // from any server. Installed, they are the built interface's files; while developing, each request
 // is passed on to the Vite server so that changes show at once.
 //
 // Pages that bots show in a conversation (show_page) are handed out under another address of
-// their own (openbot://page/), so that they are a different site from the app: their scripts run,
+// their own (openkumi://page/), so that they are a different site from the app: their scripts run,
 // but they cannot reach the app, its access codes or anything else in the window.
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { net, protocol } from 'electron'
-import { PAGE_POLICY } from '@openbot/client/page'
+import { PAGE_POLICY } from '@openkumi/client/page'
 import { DEV_URL, WEB } from './paths.ts'
 
-const SCHEME = DEV_URL ? 'openbot-dev' : 'openbot'
+const SCHEME = DEV_URL ? 'openkumi-dev' : 'openkumi'
 /** The only origin the app's pages have. The server lets pages from here, and no others, read its answers. */
 export const APP_ORIGIN = `${SCHEME}://app`
 export const APP_URL = `${APP_ORIGIN}/`

@@ -1,5 +1,5 @@
 // Function tools the model can call. Each returns a string that goes back to the model.
-import type { Bot, ItemData, Thread } from '@openbot/shared'
+import type { Bot, ItemData, Thread } from '@openkumi/shared'
 import * as agent from './agent.ts'
 import { createBot, listBots } from './bots.ts'
 import { browserFor, byRef, isWebPage, snapshot } from './browser.ts'
@@ -47,7 +47,7 @@ async function page(ctx: ToolContext, { leaving = false, reading = false } = {})
 /** How long browser_ask_user waits for the owner: less than the half hour Claude Code, Codex and Grok wait for a tool. */
 const ASK_TIMEOUT = 25 * 60_000
 
-/** Open Bot's own address. Requests from this computer are trusted like the owner, so a bot must never make one. */
+/** OpenKumi's own address. Requests from this computer are trusted like the owner, so a bot must never make one. */
 function isOwnServer(url: URL) {
   const host = url.hostname.replace(/\.$/, '').toLowerCase()
   // Every way of writing "this computer", including IPv6 forms of 127.0.0.1.
@@ -67,7 +67,7 @@ const botSummary = (b: Bot) => ({
 const botTools: Tool[] = [
   {
     name: 'list_bots',
-    description: 'List every bot that exists in this Open Bot installation, including yourself.',
+    description: 'List every bot that exists in this OpenKumi installation, including yourself.',
     parameters: params({}),
     run: (_, ctx) => JSON.stringify(listBots().map((b) => ({ ...botSummary(b), you: b.id === ctx.bot.id })), null, 1),
   },
@@ -574,13 +574,13 @@ const webTools: Tool[] = [
     parameters: params({ url: str('Absolute http(s) URL') }, ['url']),
     run: async (a, ctx) => {
       const signal = AbortSignal.any([ctx.signal, AbortSignal.timeout(30_000)])
-      const headers = { 'User-Agent': 'Mozilla/5.0 (compatible; OpenBot/0.1)', Accept: 'text/html,application/json,text/plain,*/*' }
-      // Redirects are followed by hand so that none of them can lead to Open Bot's own address.
+      const headers = { 'User-Agent': 'Mozilla/5.0 (compatible; OpenKumi/0.1)', Accept: 'text/html,application/json,text/plain,*/*' }
+      // Redirects are followed by hand so that none of them can lead to OpenKumi's own address.
       let url = new URL(String(a.url))
       let res: Response
       for (let hops = 0; ; hops++) {
         if (!/^https?:$/.test(url.protocol)) throw new Error('Only http and https addresses can be fetched.')
-        if (isOwnServer(url)) throw new Error('That address is Open Bot itself, which is not available to you.')
+        if (isOwnServer(url)) throw new Error('That address is OpenKumi itself, which is not available to you.')
         res = await fetch(url, { signal, headers, redirect: 'manual' })
         const next = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null
         if (!next) break

@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react'
 import * as SecureStore from 'expo-secure-store'
 
-const SAVED = 'openbot.favoriteModels'
+const SAVED = 'openkumi.favoriteModels'
 let favorites: string[] = []
 const listeners = new Set<() => void>()
 const subscribe = (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn))

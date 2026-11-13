@@ -9,6 +9,6 @@ Gmail until you send it yourself. It asks before it labels, archives, trashes or
 as spam. As it works with you it notes how you write and who your regular contacts are, so its
 drafts get closer to yours over time.
 
-Open Bot has to be registered with Google once, for all the Google superpowers; this page walks
+OpenKumi has to be registered with Google once, for all the Google superpowers; this page walks
 you through it. After that, activate it for a bot and sign in to Google in the bot's browser,
 with the account that bot should use.

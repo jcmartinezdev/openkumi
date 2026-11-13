@@ -1,8 +1,8 @@
-// App-wide settings, kept in ~/.openbot/settings.json and changed from the Settings page.
+// App-wide settings, kept in ~/.openkumi/settings.json and changed from the Settings page.
 // Only values that differ from the defaults are written, so the file stays small and hand-editable.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Settings } from '@openbot/shared'
+import type { Settings } from '@openkumi/shared'
 import { HOME, emit } from './config.ts'
 
 export const DEFAULTS: Settings = {

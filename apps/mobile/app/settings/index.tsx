@@ -3,8 +3,8 @@
 // kept on it; the rest is kept on the server and is the same on every device, as on the computer.
 import { StyleSheet, View } from 'react-native'
 import { useRouter } from 'expo-router'
-import type { Bot } from '@openbot/shared'
-import { useStore } from '@openbot/client/store'
+import type { Bot } from '@openkumi/shared'
+import { useStore } from '@openkumi/client/store'
 import { Glyph } from '../../src/icons'
 import { useBotModel } from '../../src/ModelChip'
 import { THEME_LABEL, usePrefs } from '../../src/prefs'
@@ -64,7 +64,7 @@ export default function Settings() {
       )}
 
       <Section inset={ICON_INSET}>
-        <Row icon="info" label="About" value={version ? `Open Bot ${version}` : undefined} opens onPress={() => router.push('/settings/about')} />
+        <Row icon="info" label="About" value={version ? `OpenKumi ${version}` : undefined} opens onPress={() => router.push('/settings/about')} />
       </Section>
     </SettingsPage>
   )

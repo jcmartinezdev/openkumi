@@ -1,9 +1,9 @@
 <!doctype html>
 <!--
-  Open Bot's way back from a sign-in, for companies that send a browser back only to a web address
-  (Google). All it does is hand what the sign-in came back with to the Open Bot app, at
-  openbot://sign-in/callback, on a computer or a phone. It keeps nothing, loads nothing and sends
-  nothing anywhere else, and the code it hands over is of no use without what the Open Bot server
+  OpenKumi's way back from a sign-in, for companies that send a browser back only to a web address
+  (Google). All it does is hand what the sign-in came back with to the OpenKumi app, at
+  openkumi://sign-in/callback, on a computer or a phone. It keeps nothing, loads nothing and sends
+  nothing anywhere else, and the code it hands over is of no use without what the OpenKumi server
   kept for that sign-in.
 
   Host it as it is, at any https address, and put that address in RETURN_PAGE
@@ -16,7 +16,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'">
 <meta name="robots" content="noindex">
-<title>Back to Open Bot</title>
+<title>Back to OpenKumi</title>
 <style>
   :root { color-scheme: light dark; --text: #1d1d1f; --muted: #6e6e73; --bg: #f5f5f7; --card: #fff; --border: #e3e3e8; --button: #1d1d1f; --button-text: #fff; }
   @media (prefers-color-scheme: dark) {
@@ -33,25 +33,25 @@
 </head>
 <body>
 <main>
-  <h1 id="title">Back to Open Bot</h1>
-  <p id="note">Open Bot is finishing the sign-in. You can close this tab once it says it is done.</p>
-  <a id="open" href="openbot://sign-in/callback">Open Open Bot</a>
+  <h1 id="title">Back to OpenKumi</h1>
+  <p id="note">OpenKumi is finishing the sign-in. You can close this tab once it says it is done.</p>
+  <a id="open" href="openkumi://sign-in/callback">Open OpenKumi</a>
 </main>
 <script>
   const came = new URLSearchParams(location.search)
   // Only what a sign-in comes back with, so nothing else can be handed to the app this way.
   const back = new URLSearchParams()
   for (const name of ['code', 'state', 'iss', 'scope', 'error', 'error_description']) if (came.has(name)) back.set(name, came.get(name))
-  const target = `openbot://sign-in/callback?${back}`
+  const target = `openkumi://sign-in/callback?${back}`
   document.getElementById('open').href = target
   // The code is not left in the address bar or the browser's history.
   history.replaceState(null, '', location.pathname)
   if (!came.has('state')) {
     document.getElementById('title').textContent = 'Nothing to do here'
-    document.getElementById('note').textContent = 'This page finishes signing in to Open Bot. Start a sign-in from the app.'
+    document.getElementById('note').textContent = 'This page finishes signing in to OpenKumi. Start a sign-in from the app.'
     document.getElementById('open').hidden = true
   } else {
-    if (came.has('error')) document.getElementById('note').textContent = 'The sign-in was not completed. Open Bot shows what went wrong.'
+    if (came.has('error')) document.getElementById('note').textContent = 'The sign-in was not completed. OpenKumi shows what went wrong.'
     location.replace(target)
   }
 </script>

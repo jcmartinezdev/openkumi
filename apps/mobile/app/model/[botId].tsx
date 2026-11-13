@@ -8,9 +8,9 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, type LayoutChangeEvent, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
-import type { Bot, Effort, ModelInfo } from '@openbot/shared'
-import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, switchTo, useModelLists } from '@openbot/client/models'
-import { api, useStore } from '@openbot/client/store'
+import type { Bot, Effort, ModelInfo } from '@openkumi/shared'
+import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, switchTo, useModelLists } from '@openkumi/client/models'
+import { api, useStore } from '@openkumi/client/store'
 import { toggleFavorite, useFavorites } from '../../src/favorites'
 import { Glyph, ProviderIcon } from '../../src/icons'
 import { type Theme, useTheme } from '../../src/theme'
@@ -135,7 +135,7 @@ export default function ModelSheet() {
               : !provider?.connected ? (
                 <>
                   <Text style={[styles.emptyText, { color: theme.text }]}>{provider ? (provider.hint ?? `${provider.name} is not connected.`) : 'There is nothing to run bots on yet.'}</Text>
-                  <Text style={[styles.emptyText, { color: theme.faint }]}>Connect it in Open Bot on your computer, in Settings › Providers.</Text>
+                  <Text style={[styles.emptyText, { color: theme.faint }]}>Connect it in OpenKumi on your computer, in Settings › Providers.</Text>
                 </>
               )
               : lists.has(tab) ? <Text style={[styles.emptyText, { color: theme.muted }]}>This provider lists no models.</Text>

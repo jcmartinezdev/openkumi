@@ -1,5 +1,5 @@
 // Superpowers: what a bot can do beyond its own tools, such as working in the user's Notion or
-// researching a question properly. Every one ships with Open Bot, as a folder in superpowers/<id>:
+// researching a question properly. Every one ships with OpenKumi, as a folder in superpowers/<id>:
 //   superpower.json   its name, what it is for and what a bot can do with it, and its service
 //   icon.svg          its app icon, on a square, with nothing outside a viewBox (the apps round its corners)
 //   README.md         its page in the app
@@ -8,7 +8,7 @@
 // or both. Each is switched on for one bot at a time, by the owner; a bot cannot switch one on.
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Registration, Superpower } from '@openbot/shared'
+import type { Registration, Superpower } from '@openkumi/shared'
 import { announce } from './bots.ts'
 import { SIGN_IN_RETURN } from './browser.ts'
 import { HOME, ROOT, botDir, emit, privateDir, readSecrets, writeSecret } from './config.ts'
@@ -37,8 +37,8 @@ interface Manifest {
   site?: string
 }
 
-/** The superpowers that ship with Open Bot. Tests bring a set of their own. */
-export const SUPERPOWERS = process.env.OPENBOT_SUPERPOWERS ?? path.join(ROOT, 'superpowers')
+/** The superpowers that ship with OpenKumi. Tests bring a set of their own. */
+export const SUPERPOWERS = process.env.OPENKUMI_SUPERPOWERS ?? path.join(ROOT, 'superpowers')
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/
 
 function manifest(id: string): Manifest | null {
@@ -80,7 +80,7 @@ export const superpowerDir = (id: string) => path.join(SUPERPOWERS, id)
 
 const botFile = (botId: string) => path.join(botDir(botId), 'superpowers.json')
 
-/** The superpowers switched on for a bot that Open Bot still has. */
+/** The superpowers switched on for a bot that OpenKumi still has. */
 export function enabledSuperpowers(botId: string): string[] {
   try {
     const list = JSON.parse(fs.readFileSync(botFile(botId), 'utf8')).on
@@ -147,9 +147,9 @@ export function signedIn(botId: string, id: string) {
 // ---- registrations
 
 /**
- * Notion and Linear let Open Bot register itself as a bot signs in. Google does not, and while its
+ * Notion and Linear let OpenKumi register itself as a bot signs in. Google does not, and while its
  * services are in preview it lets the people who use an app register it only for themselves. So the
- * owner registers Open Bot with it once, following the guide that ships in registrations/<id>, and
+ * owner registers OpenKumi with it once, following the guide that ships in registrations/<id>, and
  * every superpower that names that registration signs in with what the company gave them.
  */
 interface RegistrationManifest {
@@ -160,13 +160,13 @@ interface RegistrationManifest {
   authorize?: Record<string, string>
 }
 
-/** What the owner was given when they registered Open Bot. */
+/** What the owner was given when they registered OpenKumi. */
 interface Client {
   clientId: string
   clientSecret: string
 }
 
-export const REGISTRATIONS = process.env.OPENBOT_REGISTRATIONS ?? path.join(ROOT, 'registrations')
+export const REGISTRATIONS = process.env.OPENKUMI_REGISTRATIONS ?? path.join(ROOT, 'registrations')
 
 function registrationManifest(id: string): RegistrationManifest | null {
   if (!ID.test(id)) return null
@@ -177,7 +177,7 @@ function registrationManifest(id: string): RegistrationManifest | null {
   }
 }
 
-/** Kept with Open Bot's own secrets, away from every bot. */
+/** Kept with OpenKumi's own secrets, away from every bot. */
 const clients = (): Record<string, Client> => readSecrets().registrations ?? {}
 
 /** What a superpower's sign-in uses for a registration of the owner's: the client, and what to ask the sign-in page for. */
@@ -188,7 +188,7 @@ export function registeredClient(id: string): (Client & { authorize: Record<stri
   return m && client ? { ...client, authorize: m.authorize ?? {} } : null
 }
 
-/** The name of the company a superpower's sign-in needs Open Bot registered with, when it is not registered yet. */
+/** The name of the company a superpower's sign-in needs OpenKumi registered with, when it is not registered yet. */
 export function missingRegistration(id: string): string | null {
   const registration = serviceOf(id)?.registration
   if (!registration || registeredClient(id)) return null
@@ -209,7 +209,7 @@ function registrationInfo(id: string): Registration {
     const service = manifest(power)?.mcp
     return service && 'apis' in service ? (service.apis ?? []) : []
   })
-  // Where the company may send a browser back to: the bot's browser, and the owner's own by way of Open Bot's page.
+  // Where the company may send a browser back to: the bot's browser, and the owner's own by way of OpenKumi's page.
   const returns = [SIGN_IN_RETURN, mcp.RETURN_PAGE].filter(Boolean).map((address) => `\`${address}\``)
   const redirects = returns.length > 1 ? `${returns.join(' and ')}, each on a line of its own` : returns[0]
   return {
@@ -223,7 +223,7 @@ function registrationInfo(id: string): Registration {
 }
 
 /**
- * The owner registered Open Bot with a company, or took the registration away (`null`). A sign-in
+ * The owner registered OpenKumi with a company, or took the registration away (`null`). A sign-in
  * belongs to the client it was made with, so when the client changes, every bot's sign-in with the
  * old one is forgotten and the superpowers that used it are deactivated. A new secret for the same
  * client keeps them.
@@ -268,7 +268,7 @@ export const superpowerNames = (botId: string) => enabledSuperpowers(botId).map(
 
 /**
  * A bot used to have skills, connections and plugins, each switched on in a place of its own, and
- * Open Bot kept a copy of every skill in ~/.openbot/skills. Whatever a bot had that is now a
+ * OpenKumi kept a copy of every skill in ~/.openkumi/skills. Whatever a bot had that is now a
  * superpower stays switched on; the rest goes, along with the sign-ins, which were for addresses
  * that are no longer used.
  */
@@ -287,7 +287,7 @@ export function moveToSuperpowers() {
       for (const name of fs.readdirSync(path.join(dir, 'skills'))) had.add(name)
     } catch {}
     // The Google plugins signed in with a client the owner set up for them, which is gone, so the
-    // Google superpowers start switched off, to be signed in to afresh once Open Bot is registered.
+    // Google superpowers start switched off, to be signed in to afresh once OpenKumi is registered.
     const carried = [...had].filter((id) => manifest(id) && !serviceOf(id)?.registration)
     if (carried.length) record(botId, [...enabledSuperpowers(botId), ...carried])
     // The skills folder only ever held links into the catalog, never the bot's own files.
@@ -296,7 +296,7 @@ export function moveToSuperpowers() {
   }
   const catalog = path.join(HOME, 'skills')
   if (fs.existsSync(catalog)) {
-    // Copies of the skills that came with Open Bot go. A skill the owner put there is theirs, so it is left where it is.
+    // Copies of the skills that came with OpenKumi go. A skill the owner put there is theirs, so it is left where it is.
     for (const name of fs.readdirSync(catalog)) if (fs.existsSync(path.join(catalog, name, '.bundled'))) fs.rmSync(path.join(catalog, name), { recursive: true, force: true })
     if (fs.readdirSync(catalog).every((name) => name === '.DS_Store')) fs.rmSync(catalog, { recursive: true, force: true })
   }

@@ -1,12 +1,12 @@
 // The settings: a full-window view with its sections down the left and one page of settings on the
 // right. App-wide settings are kept by the environment; settings marked "this device" stay in the app.
 import { type ReactNode, useEffect, useState } from 'react'
-import type { Bot, PairedComputer, ProviderInfo, Settings } from '@openbot/shared'
-import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, RemoteEnvironment } from '@openbot/shared/desktop'
+import type { Bot, PairedComputer, ProviderInfo, Settings } from '@openkumi/shared'
+import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, RemoteEnvironment } from '@openkumi/shared/desktop'
 import qrcode from 'qrcode-generator'
-import { type Answer, KIND_NAMES, kindOf, ordered } from '@openbot/client/addresses'
-import { windowCount } from '@openbot/client/browser'
-import { pairingLink } from '@openbot/client/pair'
+import { type Answer, KIND_NAMES, kindOf, ordered } from '@openkumi/client/addresses'
+import { windowCount } from '@openkumi/client/browser'
+import { pairingLink } from '@openkumi/client/pair'
 import { BotPage, TABS } from './BotPage'
 import { Principles } from './Principles'
 import { Providers } from './Providers'
@@ -362,7 +362,7 @@ function BrowserPage() {
           title="Program"
           description="Which browser the bots use. Every bot keeps its own profile and logins. Takes effect the next time a bot’s browser starts."
           reset={program.reset}
-          control={<Pick label="Browser program" value={program.value} options={[['chrome', 'Google Chrome'], ['msedge', 'Microsoft Edge'], ['chromium', 'Chromium (comes with Open Bot)']]} onChange={program.set} />}
+          control={<Pick label="Browser program" value={program.value} options={[['chrome', 'Google Chrome'], ['msedge', 'Microsoft Edge'], ['chromium', 'Chromium (comes with OpenKumi)']]} onChange={program.set} />}
         />
         <Row
           id="browser-panel"
@@ -391,15 +391,15 @@ function BrowserPage() {
 // ---- Environments: where bots run. The local environment and the remote ones, and how the
 // environment being shown lets the app on other computers in.
 
-const REMOTE_STATUS: Record<EnvironmentStatus, string> = { connected: 'Connected', unreachable: 'Not reachable', refused: 'No longer lets this computer in', outdated: 'Needs a newer Open Bot', off: 'Turned off' }
-const ANSWERS: Record<Answer, string> = { ok: 'Answers', refused: 'No longer lets this computer in', other: 'Something else answers', outdated: 'Needs a newer Open Bot', unreachable: 'Not reachable from here', blocked: 'Needs https' }
+const REMOTE_STATUS: Record<EnvironmentStatus, string> = { connected: 'Connected', unreachable: 'Not reachable', refused: 'No longer lets this computer in', outdated: 'Needs a newer OpenKumi', off: 'Turned off' }
+const ANSWERS: Record<Answer, string> = { ok: 'Answers', refused: 'No longer lets this computer in', other: 'Something else answers', outdated: 'Needs a newer OpenKumi', unreachable: 'Not reachable from here', blocked: 'Needs https' }
 /** An address as it is shown: without the http:// that most of them start with. */
 const shown = (url: string) => url.replace(/^http:\/\//, '')
 const LOCAL_STATE: Record<LocalEnvironment['state'], string> = {
   off: 'Turned off. Bots only run in remote environments.',
-  starting: 'Starting Open Bot on this computer…',
-  running: 'Open Bot runs on this computer.',
-  failed: 'Open Bot could not start on this computer.',
+  starting: 'Starting OpenKumi on this computer…',
+  running: 'OpenKumi runs on this computer.',
+  failed: 'OpenKumi could not start on this computer.',
 }
 
 function Environments() {
@@ -513,7 +513,7 @@ export function EnvironmentList() {
             </Row>
           )
         })}
-        {!app.environments.length && !adding && <Row id="remote-environments" title="No remote environments" description="Add one to work with Open Bot running on another computer on your network." />}
+        {!app.environments.length && !adding && <Row id="remote-environments" title="No remote environments" description="Add one to work with OpenKumi running on another computer on your network." />}
       </Section>
     </>
   )
@@ -655,8 +655,8 @@ function Sharing() {
         <Row
           id="lan"
           title="Let other computers connect"
-          description="The Open Bot app on your other computers and phone can use this environment once they are paired with it: on the same network, or from anywhere over Tailscale. On the local network the connection is not encrypted, so use it only on networks you trust; Tailscale encrypts it."
-          status={about.lanForced ? 'Open Bot was started with --lan, which keeps this on. Start it without that to control it here.' : undefined}
+          description="The OpenKumi app on your other computers and phone can use this environment once they are paired with it: on the same network, or from anywhere over Tailscale. On the local network the connection is not encrypted, so use it only on networks you trust; Tailscale encrypts it."
+          status={about.lanForced ? 'OpenKumi was started with --lan, which keeps this on. Start it without that to control it here.' : undefined}
           reset={about.lanForced ? undefined : lan.reset && (() => toggle(false))}
           control={<Switch label="Let other computers connect" checked={on} disabled={about.lanForced} onChange={toggle} />}
         />
@@ -665,7 +665,7 @@ function Sharing() {
             <Row
               id="pair"
               title="Pair a computer"
-              description={local ? 'Makes a code that lets one computer or phone in. In the Open Bot app on a computer, choose Settings, Environments, “Add environment”, and enter this computer’s address and the code. On a phone, scan the picture.' : 'Computers are paired, and removed, in the app on the computer that runs this environment.'}
+              description={local ? 'Makes a code that lets one computer or phone in. In the OpenKumi app on a computer, choose Settings, Environments, “Add environment”, and enter this computer’s address and the code. On a phone, scan the picture.' : 'Computers are paired, and removed, in the app on the computer that runs this environment.'}
               control={local && <button onClick={() => run(async () => setPairing(await api('POST', '/api/pairing')))}>{pairing ? 'New code' : 'Pair a computer'}</button>}
             >
               {pairing && (
@@ -693,7 +693,7 @@ function Sharing() {
                   {info.addresses[0] && (
                     <div className="pair-qr">
                       <Qr text={pairingLink(`${info.addresses[0]}:${info.port}`, pairing.code)} />
-                      <p className="faint">On a phone, open the Open Bot app and choose “Scan the code”. It carries the address and the code, so there is nothing to type.</p>
+                      <p className="faint">On a phone, open the OpenKumi app and choose “Scan the code”. It carries the address and the code, so there is nothing to type.</p>
                     </div>
                   )}
                   <p className="faint">The code works once, until {new Date(pairing.expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}. This closes by itself when the other computer has used it. Paired once, it learns this computer’s other addresses by itself, so it also finds it over Tailscale.</p>
@@ -767,7 +767,7 @@ function Advanced() {
         <Row
           id="debug-engines"
           title="Log what the engines print"
-          description="Write everything those programs print to the output of the Open Bot server, to work out why a turn went wrong."
+          description="Write everything those programs print to the output of the OpenKumi server, to work out why a turn went wrong."
           reset={debug.reset}
           control={<Switch label="Log what the engines print" checked={debug.value} onChange={debug.set} />}
         />
@@ -776,7 +776,7 @@ function Advanced() {
         <Row
           id="data-folder"
           title="Data folder"
-          description={<>Everything Open Bot keeps is in <code>{home}</code>: bots, conversations and these settings.</>}
+          description={<>Everything OpenKumi keeps is in <code>{home}</code>: bots, conversations and these settings.</>}
           control={onServer() && <button onClick={() => api('POST', '/api/reveal', {}).catch((e) => alert(e.message))}><Icon name="folder" size={14} /> Open folder</button>}
         />
         <Row id="delete-chats" title="Delete all conversations" description="Removes what was said with every bot, the earlier conversations included. Bots, their files and their memory are kept." control={<button className="danger" disabled={!chats} onClick={deleteChats}>Delete all conversations</button>} />
@@ -793,10 +793,10 @@ function AboutPage() {
   const fact = (title: string, value: ReactNode, id?: string) => <Row id={id} title={title} control={<span className="set-fact">{value}</span>} />
   return (
     <Page>
-      <Section title="Open Bot">
+      <Section title="OpenKumi">
         {fact('Version', about.version, 'version')}
         {fact('Runs with', `Node.js ${about.node.replace(/^v/, '')} on ${about.platform}`)}
-        {fact('Port', <>{about.port} <span className="faint">(set with OPENBOT_PORT when starting Open Bot)</span></>)}
+        {fact('Port', <>{about.port} <span className="faint">(set with OPENKUMI_PORT when starting OpenKumi)</span></>)}
         {fact('Data folder', <code>{home}</code>)}
         {fact('License', 'MIT')}
       </Section>

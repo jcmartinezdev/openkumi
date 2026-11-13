@@ -1,7 +1,7 @@
 {
-  "name": "@openbot/client",
+  "name": "@openkumi/client",
   "version": "0.1.0",
-  "description": "What every Open Bot app needs to talk to a server: the connection, the state kept from it, and pairing.",
+  "description": "What every OpenKumi app needs to talk to a server: the connection, the state kept from it, and pairing.",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -31,7 +31,7 @@
     "react": ">=19"
   },
   "devDependencies": {
-    "@openbot/shared": "*",
+    "@openkumi/shared": "*",
     "@types/react": "^19.0.0"
   }
 }

@@ -4,7 +4,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { PairedComputer } from '@openbot/shared'
+import type { PairedComputer } from '@openkumi/shared'
 import { HOME, serverId } from './config.ts'
 
 interface Stored extends PairedComputer {

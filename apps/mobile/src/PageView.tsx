@@ -1,11 +1,11 @@
 // A page a bot showed (show_page), and diagrams and formulas, drawn in a web view of their own.
 // The view is fitted to the page, which tells it how tall it is; tapped links open in Safari. The
-// page cannot reach the app: all it can do is say how tall it is (see @openbot/client/page).
+// page cannot reach the app: all it can do is say how tall it is (see @openkumi/client/page).
 import { type ReactNode, useMemo, useState } from 'react'
 import { Linking, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
 import { WebView, type WebViewMessageEvent } from 'react-native-webview'
 import type { ShouldStartLoadRequest } from 'react-native-webview/lib/WebViewTypes'
-import { PAGE_MAX_HEIGHT, pageDocument, pageHeight, readPageMessage } from '@openbot/client/page'
+import { PAGE_MAX_HEIGHT, pageDocument, pageHeight, readPageMessage } from '@openkumi/client/page'
 import { useAppearance, useTheme } from './theme'
 
 /** The page is the only thing a view shows. A link that was tapped opens in Safari; a page cannot go anywhere by itself. */

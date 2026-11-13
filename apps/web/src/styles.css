@@ -323,7 +323,7 @@ a.row { text-decoration: none; }
 .md img { max-width: 100%; border-radius: 8px; }
 
 /* Code: its language and a button to copy it above it. The colours are CODE_COLORS in
-   @openbot/client/highlight, which the phone uses too; light-dark() follows the app's theme. */
+   @openkumi/client/highlight, which the phone uses too; light-dark() follows the app's theme. */
 .code-block { margin: 0 0 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--side); overflow: hidden; }
 .md > .code-block:last-child { margin-bottom: 0; }
 .code-head { display: flex; align-items: center; gap: 2px; height: 32px; padding: 0 4px 0 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--faint); }
@@ -859,7 +859,7 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .power-head .faint { font-size: 12px; }
 .power-head .faint a { color: inherit; }
 .power-about { padding: 0 16px; font-size: 14px; line-height: 1.6; }
-/* How to register Open Bot with a company such as Google, at the top of the card its fields are in. */
+/* How to register OpenKumi with a company such as Google, at the top of the card its fields are in. */
 .registration-guide { padding: 14px 16px 10px; font-size: 13.5px; line-height: 1.6; }
 .registration-guide ol { padding-left: 22px; }
 .registration-guide li + li { margin-top: 6px; }

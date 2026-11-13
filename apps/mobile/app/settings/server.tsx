@@ -4,8 +4,8 @@
 import { useState } from 'react'
 import { Alert } from 'react-native'
 import { useRouter } from 'expo-router'
-import { KIND_NAMES, kindOf, ordered } from '@openbot/client/addresses'
-import { useStore } from '@openbot/client/store'
+import { KIND_NAMES, kindOf, ordered } from '@openkumi/client/addresses'
+import { useStore } from '@openkumi/client/store'
 import { addAddress, forget, hostOf, removeAddress, rename, useServerStatus, useSession } from '../../src/session'
 import { Field, Row, Section, SettingsPage } from '../../src/SettingsUi'
 
@@ -51,7 +51,7 @@ export default function ServerSettings() {
       <Section title="Connection">
         <Row label="Status" value={status.word} />
         {!!inUse && <Row label="Through" value={KIND_NAMES[kindOf(inUse)]} />}
-        {!!about.version && <Row label="Open Bot" value={about.version} />}
+        {!!about.version && <Row label="OpenKumi" value={about.version} />}
         {!!about.timeZone && <Row label="Time zone" value={about.timeZone} />}
       </Section>
 

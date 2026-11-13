@@ -1,8 +1,8 @@
 // What a bot's mascot looks like. It is a line of words in bot.md, such as "look: cat sky cap
-// orange", checked against the parts every app knows how to draw (@openbot/client/mascot). No word
+// orange", checked against the parts every app knows how to draw (@openkumi/client/mascot). No word
 // belongs to two kinds of part, so the order does not matter and "none" is simply left out.
 import crypto from 'node:crypto'
-import type { BodyColor, ClothesColor, Creature, Extra, Hat, Look } from '@openbot/shared'
+import type { BodyColor, ClothesColor, Creature, Extra, Hat, Look } from '@openkumi/shared'
 
 // Records rather than lists, so that a part added to the types and not here is an error.
 const CREATURES: Record<Creature, string> = {
