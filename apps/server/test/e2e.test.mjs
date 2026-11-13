@@ -77,6 +77,36 @@ async function toolIn(threadId, name, args, timeoutMs) {
   return items.findLast((d) => d.type === 'function_call_output').output
 }
 
+/** Sends a file up to wait for a message, as the apps do when the owner picks one to send. */
+async function pick(botId, name, bytes) {
+  const res = await fetch(`${BASE}/api/bots/${botId}/attachments?name=${encodeURIComponent(name)}`, { method: 'POST', body: bytes, headers: auth() })
+  return res.json()
+}
+
+/** A picture one pixel in size. */
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64')
+/** A PDF of one page that says `text`. */
+function pdf(text) {
+  const stream = `BT /F1 24 Tf 72 700 Td (${text}) Tj ET`
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ]
+  let out = '%PDF-1.4\n'
+  const offsets = objects.map((object, i) => {
+    const at = out.length
+    out += `${i + 1} 0 obj\n${object}\nendobj\n`
+    return at
+  })
+  const xref = out.length
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  return Buffer.from(out, 'latin1')
+}
+
 /** A connection to the server's event stream, as an app's view has. */
 async function openSocket() {
   const socket = new WebSocket(`ws://127.0.0.1:${PORT}/ws?token=${token}`)
@@ -855,9 +885,79 @@ test('engines: a thread can move to another engine, and the tool address only wo
   assert.deepEqual((await settle(id, 5000)).at(-1), { type: 'notice', level: 'info', text: 'Stopped.' })
 })
 
+test('attachments: the conversation keeps what was sent, the bot gets its copy in its inbox, and each model is shown the pictures and PDFs it takes', async () => {
+  const PDF = pdf('The secret word is PELICAN')
+  const kept = (threadId) => botPath('private', 'attachments', threadId)
+  const picture = await pick(bot.id, 'pixel.png', PNG)
+  const document = await pick(bot.id, 'secret.pdf', PDF)
+  assert.deepEqual([picture.name, picture.type, picture.size, document.type], ['pixel.png', 'image/png', PNG.length, 'application/pdf'])
+  // Until the message goes, a picked file is out of the bot's sight; one taken out again is thrown away.
+  const dropped = await pick(bot.id, 'not this.txt', Buffer.from('no'))
+  assert.ok(!fs.existsSync(botPath('workspace', 'files', 'inbox', 'pixel.png')))
+  await api('DELETE', `/api/bots/${bot.id}/attachments/${dropped.id}`)
+  assert.ok(!fs.existsSync(botPath('private', 'attachments', 'waiting', dropped.id)))
+
+  // Sent: the message names the files, the bot's copies are in its inbox, and the model is shown the ones it takes (the scripted one, pictures).
+  const id = await fresh()
+  await api('POST', `/api/threads/${id}/messages`, { text: 'what is this?', attachments: [picture.id, document.id] })
+  const items = await settle(id)
+  assert.deepEqual(items.find((d) => d.type === 'message' && d.role === 'user').attachments, [
+    { ...picture, path: 'files/inbox/pixel.png' },
+    { ...document, path: 'files/inbox/secret.pdf' },
+  ])
+  assert.equal(lastText(items), 'Echo: what is this? [files/inbox/pixel.png, files/inbox/secret.pdf; 1 shown]')
+  assert.deepEqual(fs.readFileSync(botPath('workspace', 'files', 'inbox', 'pixel.png')), PNG)
+  // A file goes with one message only.
+  await assert.rejects(api('POST', `/api/threads/${id}/messages`, { text: 'again', attachments: [picture.id] }), /no longer waiting/)
+
+  // The bot files its copy away, or deletes it: the conversation still has the picture, and still shows it to the model.
+  assert.equal(await toolIn(id, 'move_file', { from: 'files/inbox/pixel.png', to: 'files/tests/pixel.png' }), 'Moved files/inbox/pixel.png -> files/tests/pixel.png.')
+  fs.rmSync(botPath('workspace', 'files', 'tests'), { recursive: true })
+  const res = await fetch(`${BASE}/api/threads/${id}/attachments/${picture.id}`, { headers: auth() })
+  assert.deepEqual([res.headers.get('content-type'), Buffer.from(await res.arrayBuffer())], ['image/png', PNG])
+  assert.equal(lastText(await say(id, '!seen')), 'Shown 1')
+  assert.equal((await fetch(`${BASE}/api/threads/${id}/attachments/${'x'.repeat(16)}`, { headers: auth() })).status, 404)
+
+  // Files alone are a message too, and a conversation that begins with them is named after them.
+  const alone = await pick(bot.id, 'secret.pdf', PDF)
+  await fresh()
+  const begun = await api('POST', `/api/bots/${bot.id}/messages`, { attachments: [alone.id] })
+  assert.equal(begun.title, 'secret.pdf')
+  await settle(begun.id)
+  assert.ok(fs.existsSync(botPath('workspace', 'files', 'inbox', 'secret (2).pdf')), 'a copy never replaces a file of the bot\'s')
+  // Something has to be said or sent, and only files that are waiting can be.
+  await assert.rejects(api('POST', `/api/threads/${id}/messages`, { text: ' ', attachments: [] }), /Message text is required/)
+  for (const given of ['../bot.md', 'files/inbox/secret.pdf', 'x'.repeat(16)]) await assert.rejects(api('POST', `/api/threads/${id}/messages`, { text: 'hi', attachments: [given] }), /no longer waiting/, given)
+
+  // The bot reads a PDF's text, page by page.
+  assert.equal(await tool('read_file', { path: 'files/inbox/secret.pdf' }), '--- Page 1 of 1 ---\nThe secret word is PELICAN')
+  // A conversation that is deleted takes what was sent in it along; the bot keeps its copies.
+  assert.ok(fs.existsSync(kept(begun.id)))
+  await api('DELETE', `/api/threads/${begun.id}`)
+  assert.ok(!fs.existsSync(kept(begun.id)) && fs.existsSync(botPath('workspace', 'files', 'inbox', 'secret (2).pdf')))
+
+  // Each engine is shown what it takes: Claude Code pictures and PDFs, Codex and Grok pictures. All are told what came, and where their copy is.
+  for (const [engine, shown] of [['claude-code', 'image/png, image/png, application/pdf'], ['codex', 'image/png, image/png'], ['grok', 'image/png, image/png']]) {
+    const runner = await api('POST', '/api/bots', { name: `Sees on ${engine}`, provider: engine })
+    // Codex would take a comma for the end of a picture's path.
+    const files = [await pick(runner.id, 'dot.png', PNG), await pick(runner.id, 'a,b.png', PNG), await pick(runner.id, 'secret.pdf', PDF)]
+    const thread = await fresh(runner.id)
+    await api('POST', `/api/threads/${thread}/messages`, { text: 'look', attachments: files.map((f) => f.id) })
+    assert.equal(
+      lastText(await settle(thread)),
+      'Echo (turn 1): look\n\n[The user attached 3 files. Your copies: files/inbox/dot.png (picture, 70 B), files/inbox/a,b.png (picture, 70 B), ' +
+        `files/inbox/secret.pdf (PDF, ${PDF.length} B). read_file gives the text of a PDF or a text file.] [shown: ${shown}]`,
+      engine,
+    )
+    // What the engine was shown once, it keeps: the next turn brings no files again.
+    assert.equal(lastText(await say(thread, 'and?')), 'Echo (turn 2): and?', engine)
+  }
+})
+
 test('local models: a model server on this computer is found and runs a bot, with tools', async () => {
   // Stands in for Ollama or LM Studio: the same API, with one scripted model.
   const asked = []
+  let blind = false
   const fake = http.createServer(async (req, res) => {
     if (req.url === '/v1/models') return void res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ data: [{ id: 'tiny-local' }] }))
     let body = ''
@@ -870,6 +970,13 @@ test('local models: a model server on this computer is found and runs a bot, wit
     }
     asked.push(request)
     const last = request.messages.at(-1)
+    // Sent pictures, it says what it saw; while it is a model that sees none, it refuses them, as such models do.
+    if (Array.isArray(last.content)) {
+      if (blind) return void res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: 'This model does not support image input.' } }))
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' })
+      const saw = last.content.filter((part) => part.type === 'image_url').map((part) => part.image_url.url.slice(0, 22))
+      return void res.end(`data: ${JSON.stringify({ choices: [{ delta: { content: `Local saw: ${saw.join(', ')}` } }] })}\n\ndata: [DONE]\n\n`)
+    }
     // Like a model with a small window, it refuses a conversation that is too long for it.
     const length = request.messages.slice(1).reduce((sum, m) => sum + (m.content?.length ?? 0), 0)
     if (length > 6000) return void res.writeHead(400, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: { message: "This model's maximum context length is 1500 tokens." } }))
@@ -909,6 +1016,14 @@ test('local models: a model server on this computer is found and runs a bot, wit
     assert.equal(fs.readFileSync(path.join(home, 'bots', runner.id, 'workspace', 'memory', 'local.md'), 'utf8'), 'kept here')
     assert.deepEqual([asked[0].model, asked[0].messages[0].role, asked[0].tools.some((t) => t.function.name === 'write_file')], ['tiny-local', 'system', true])
     assert.equal(asked.every((request) => !request.headers), true)
+
+    // A picture goes with its message; a model that does not see pictures is asked again with them only named.
+    await api('POST', `/api/threads/${id}/messages`, { text: 'see?', attachments: [(await pick(runner.id, 'dot.png', PNG)).id] })
+    assert.equal(lastText(await settle(id)), 'Local saw: data:image/png;base64,')
+    blind = true
+    await api('POST', `/api/threads/${id}/messages`, { text: 'and now?', attachments: [(await pick(runner.id, 'dot.png', PNG)).id] })
+    assert.match(lastText(await settle(id)), /^Local echo: and now\?\n\n\[The user attached a file\. Your copy: files\/inbox\/dot \(2\)\.png \(picture, 70 B\)/)
+    blind = false
 
     // When the model refuses the conversation for its length, the older part is summarised and it is asked again.
     const long = await fresh(runner.id)

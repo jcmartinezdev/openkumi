@@ -33,6 +33,9 @@ args.forEach((a, i) => {
 
 let prompt = ''
 for await (const chunk of process.stdin) prompt += chunk
+// Pictures come as paths, which the real program splits at commas.
+const TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }
+const shown = args.flatMap((a, i) => (args[i - 1] === '--image' ? a.split(',') : [])).map((file) => (fs.existsSync(file) ? TYPES[path.extname(file)] : 'missing'))
 
 const session = args[1] === 'resume' ? args[2] : crypto.randomUUID()
 const file = path.join(os.tmpdir(), `openkumi-fake-codex-${session}.json`)
@@ -55,7 +58,7 @@ if (call) {
 } else if (prompt === '!args') {
   reply = JSON.stringify({ config: { ...config, developer_instructions: undefined, 'mcp_servers.openkumi.url': undefined }, disabled: args.filter((_, i) => args[i - 1] === '--disable'), flags: args.filter((a) => a.startsWith('--')) })
 } else {
-  reply = `Echo (turn ${turn}): ${prompt}`
+  reply = `Echo (turn ${turn}): ${prompt}${shown.length ? ` [shown: ${shown.join(', ')}]` : ''}`
 }
 print({ type: 'item.completed', item: { id: 'item_0', type: 'agent_message', text: reply } })
 print({ type: 'turn.completed', usage: {} })

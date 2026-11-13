@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
+import { base64 } from '../attachments.ts'
 import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
@@ -87,9 +88,12 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   const folder = borrowFolder(req.cwd)
   fs.mkdirSync(path.join(folder, '.grok'), { recursive: true })
   fs.writeFileSync(path.join(folder, '.grok', 'config.toml'), req.toolsUrl ? `[mcp_servers.openkumi]\nurl = ${JSON.stringify(req.toolsUrl)}\ntool_timeout_sec = 1900\n` : '', { mode: 0o600 })
-  // What was said goes in a file of its own: it can be longer than a command line may be.
-  const prompt = path.join(folder, 'prompt.txt')
-  fs.writeFileSync(prompt, req.input, { mode: 0o600 })
+  // What was said goes in a file of its own: it can be longer than a command line may be. It is
+  // written as content blocks (Agent Client Protocol's), which can carry pictures beside the text,
+  // and which Grok reads as such; a message that merely looked like them would be misread otherwise.
+  const prompt = path.join(folder, 'prompt.json')
+  const blocks = [{ type: 'text', text: req.input }, ...req.files.map((file) => ({ type: 'image', data: base64(file), mimeType: file.type }))]
+  fs.writeFileSync(prompt, JSON.stringify(blocks), { mode: 0o600 })
   const args = [
     '--prompt-file', prompt,
     '--verbatim',
@@ -158,6 +162,8 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
 export const grok: Provider = {
   id: base.id,
   info: () => info,
+  // It does not read PDFs given to it: it goes looking for a tool to open them with.
+  sees: { pictures: true },
   models: async () => models,
   turn,
   refresh,
