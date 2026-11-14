@@ -4,7 +4,7 @@ Lets a bot work with your Jotform forms, through Jotform's own service. Ask it t
 - "Build a sign-up form for the workshop: name, email, dietary needs."
 - "How many registrations came in for Saturday, and who's bringing a guest?"
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and approve it on Jotform's
+Activating it signs the bot in: you approve it on Jotform's
 own page. It works on every Jotform plan, including the free one, and does not count against your
 form or submission limits.
 

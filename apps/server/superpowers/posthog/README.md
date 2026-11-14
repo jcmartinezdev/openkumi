@@ -5,7 +5,7 @@ like:
 - "Which errors started after Tuesday's release?"
 - "Is the new-onboarding flag on for everyone yet?"
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and choose where your
+Activating it signs the bot in: you choose where your
 project is hosted, US Cloud or EU Cloud, on PostHog's own page: your PostHog address starts with
 `us.` or `eu.`. It works on every PostHog plan, and what the bot runs counts toward your usage as
 usual.

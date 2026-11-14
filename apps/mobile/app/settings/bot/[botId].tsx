@@ -12,7 +12,8 @@ import { inShort, summarize } from '@openkumi/client/workspace'
 import { ProviderIcon, SuperpowerIcon } from '../../../src/icons'
 import { useBotModel } from '../../../src/ModelChip'
 import { Field, ICON_INSET, Row, Section, SettingsPage, Slot, SwitchRow } from '../../../src/SettingsUi'
-import { standing, usePowers } from '../../../src/superpowers'
+import { check, standingOf, useStatuses } from '../../../src/superpowers'
+import { StandingLine } from '../../../src/PowerUi'
 import { useTheme } from '../../../src/theme'
 import { describeLook } from '@openkumi/client/mascot'
 import { Mascot } from '../../../src/Mascot'
@@ -26,13 +27,13 @@ export default function BotSettings() {
   const browser = useStore((s) => s.browsers[botId])
   const powers = useStore((s) => s.superpowers)
   const zone = useStore((s) => s.about.timeZone)
-  const { statuses, manage } = usePowers(stored)
+  const statuses = useStatuses(botId)
   const { entries } = useFiles(botId)
   const allAutomations = useStore((s) => s.automations)
   /** What was just changed, shown at once instead of when the server has said so. */
   const [changed, setChanged] = useState<Partial<Bot> | null>(null)
   // Nothing connects until it is needed, so how the bot's services stand is asked for here.
-  useEffect(() => void api('POST', `/api/bots/${botId}/superpowers/check`).catch(() => {}), [botId])
+  useEffect(() => void check(botId).catch(() => {}), [botId])
   useEffect(() => setChanged(null), [stored])
 
   // Gone, because it was deleted here or elsewhere.
@@ -90,21 +91,17 @@ export default function BotSettings() {
         inset={ICON_INSET}
         footer="What the bot can do beyond its own tools. Only you can activate one; the bot cannot. Each bot signs in to an app in its own browser, so each can use a different account."
       >
-        {powers.filter((power) => bot.superpowers.includes(power.id)).map((power) => {
-          const status = statuses?.[power.id]
-          const trouble = status?.state === 'needs-login' || status?.state === 'error'
-          return (
-            <Row
-              key={power.id}
-              leading={<Slot><SuperpowerIcon power={power} /></Slot>}
-              label={power.name}
-              detail={<Text style={{ color: trouble ? theme.err : theme.faint, fontSize: 13.5, lineHeight: 18 }} numberOfLines={2}>{standing(power, status) || 'Active'}</Text>}
-              accessibilityHint={`Sign in again, or deactivate ${power.name}`}
-              onPress={() => manage(bot, power)}
-            />
-          )
-        })}
-        <Row icon="plus" label="Add a superpower" tone="action" opens onPress={() => router.push({ pathname: '/superpowers/[botId]', params: { botId: bot.id } })} />
+        {powers.filter((power) => bot.superpowers.includes(power.id)).map((power) => (
+          <Row
+            key={power.id}
+            leading={<Slot><SuperpowerIcon power={power} /></Slot>}
+            label={power.name}
+            detail={<StandingLine standing={standingOf(bot.id, power, statuses?.[power.id])} />}
+            opens
+            onPress={() => router.push({ pathname: '/superpowers/[botId]/[id]', params: { botId: bot.id, id: power.id } })}
+          />
+        ))}
+        <Row icon="compass" label="Browse superpowers" tone="action" opens onPress={() => router.push({ pathname: '/superpowers/[botId]', params: { botId: bot.id } })} />
       </Section>
 
       <Section title="Automations" inset={ICON_INSET}>

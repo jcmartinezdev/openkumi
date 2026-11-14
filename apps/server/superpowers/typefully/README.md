@@ -5,7 +5,7 @@ like:
 - "What's scheduled for this week?"
 - "Draft three takes on today's launch, in my usual tone."
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and approve it on
+Activating it signs the bot in: you approve it on
 Typefully's own page. The bot posts through the accounts you connected in Typefully.
 
 The bot writes drafts and leaves them for you. It asks before it schedules or publishes

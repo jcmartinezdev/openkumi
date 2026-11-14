@@ -5,7 +5,7 @@ like:
 - "Save this recipe as a note in Cooking."
 - "What did I write about the Lisbon trip last spring?"
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and approve it on
+Activating it signs the bot in: you approve it on
 Evernote's own page. It needs a paid Evernote plan: on a free account Evernote turns the sign-in
 down. Evernote's service is in beta, so what it offers may change.
 

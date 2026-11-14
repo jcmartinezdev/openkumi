@@ -4,7 +4,7 @@ Lets a bot work in your Notion workspace, through Notion's own service. Ask it t
 - "Add this to the reading list database, tagged 'to read'."
 - "Turn this conversation into a page under Projects."
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and choose on Notion's
+Activating it signs the bot in: you choose on Notion's
 own page which workspace and which pages this bot may see. The bot only ever reaches what you
 picked there, and you can change that in Notion at any time.
 

@@ -10,6 +10,7 @@ import { createPortal } from 'react-dom'
 import type { Bot, Superpower, SuperpowerStatus } from '@openkumi/shared'
 import { control, driverOf, signInThread, windowOf } from '@openkumi/client/browser'
 import { hookAddress, hookStanding } from '@openkumi/client/webhooks'
+import { matches, searchWords, unwrap } from '@openkumi/client/superpowers'
 import { PageView } from './BrowserPane'
 import { useDesktop } from './desktop'
 import { Markdown } from './Markdown'
@@ -31,30 +32,6 @@ const count = (n: number, of: number) => (of > 1 ? `Active for ${n} of ${of} bot
 const pageOf = (power: Superpower, bot?: Bot) =>
   bot ? `#/settings/bots/${encodeURIComponent(bot.id)}/superpowers/${encodeURIComponent(power.id)}` : `#/settings/superpowers/${encodeURIComponent(power.id)}`
 
-/** Whether every word looked for is somewhere in what the superpower says about itself. */
-function matches(power: Superpower, words: string[]): boolean {
-  const text = [power.name, power.tagline, ...power.categories, ...power.can].join(' ').toLowerCase()
-  return words.every((word) => text.includes(word))
-}
-
-/**
- * A superpower's files are written with their lines wrapped for reading as text; shown formatted,
- * each paragraph and list item is one flowing piece. Code, tables and headings stay as they are.
- */
-function unwrap(text: string): string {
-  const out: string[] = []
-  let code = false
-  for (const line of text.split('\n')) {
-    const fence = /^\s*(```|~~~)/.test(line)
-    const prev = out.at(-1) ?? ''
-    const joins = !code && !fence && line.trim() && prev.trim() && !/^\s*(```|~~~|#|\|)/.test(prev) && !/^\s*([-*+>#|]|\d+\.\s)/.test(line)
-    if (joins) out[out.length - 1] = `${prev} ${line.trim()}`
-    else out.push(line)
-    if (fence) code = !code
-  }
-  return out.join('\n')
-}
-
 /** What the catalog showed last, so coming back to it from a superpower's page finds it as it was. */
 const lastLook = { query: '', category: '' }
 
@@ -75,7 +52,7 @@ export function SuperpowerCatalog({ bot }: { bot?: Bot }) {
 
   const categories = listed.length ? listed : [...new Set(powers.flatMap((p) => p.categories))]
   const shown = category && categories.includes(category) ? category : ''
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const words = searchWords(query)
   const found = powers.filter((p) => (!shown || p.categories.includes(shown)) && matches(p, words))
   const groups: [title: string, powers: Superpower[]][] = words.length
     ? [[`${found.length} found`, found]]

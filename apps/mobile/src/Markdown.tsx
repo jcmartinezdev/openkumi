@@ -208,10 +208,11 @@ export const Markdown = memo(function Markdown({ text, live = false }: { text: s
   const style = useMemo(() => look(theme, scale), [theme, scale])
   const drawn = useMemo(() => rules(theme, appearance, live, scale), [theme, appearance, live, scale])
   const openFile = useContext(FileLinks)
-  // A link to one of the bot's files opens it here; any other link opens in Safari.
+  // A link to one of the bot's files opens it here; any other link opens in Safari. A link to a
+  // file where there are no files to open (a superpower's own) has nowhere to go, and stays text.
   const press = (url: string) => {
     const path = openFile ? workspaceLink(url) : null
-    if (!path) return true
+    if (!path) return /^[a-z][a-z0-9+.-]*:/i.test(url)
     openFile!(path)
     return false
   }

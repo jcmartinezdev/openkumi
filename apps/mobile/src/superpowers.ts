@@ -1,79 +1,139 @@
 // Giving a bot a superpower from the phone and taking it away again. One that works in an app is
 // active once the bot has signed in to it: on the phone itself, with the accounts Safari has, or
-// inside the bot's own browser, which suits a different account.
-import { ActionSheetIOS, Alert } from 'react-native'
-import { useRouter } from 'expo-router'
+// inside the bot's own browser, which suits a different account. What is under way, and what went
+// wrong, is kept here rather than in a screen, so the superpower's page shows it whichever screen
+// started it (the sign-in sheet closes before the sign-in is done).
+import { useSyncExternalStore } from 'react'
+import { Alert } from 'react-native'
+import type { useRouter } from 'expo-router'
+import * as Haptics from 'expo-haptics'
 import * as WebBrowser from 'expo-web-browser'
 import type { Bot, Superpower, SuperpowerStatus } from '@openkumi/shared'
 import { signInThread } from '@openkumi/client/browser'
+import { type Standing, shortStanding } from '@openkumi/client/superpowers'
 import { api, useStore } from '@openkumi/client/store'
 
-export function usePowers(bot: Bot | undefined) {
-  const router = useRouter()
-  const statuses = useStore((s) => (bot ? s.superpowerStatus[bot.id] : undefined))
-
-  const deactivate = (bot: Bot, power: Superpower) => {
-    const turn = () => api('PUT', `/api/bots/${bot.id}/superpowers/${power.id}`, { on: false }).catch((e) => Alert.alert('Not saved', (e as Error).message))
-    if (!statuses?.[power.id]?.signedIn) return void turn()
-    Alert.alert(`Deactivate ${power.name}?`, `${bot.name}’s sign-in to ${power.name} is forgotten.`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Deactivate', style: 'destructive', onPress: () => void turn() },
-    ])
-  }
-  // In the bot's own browser, on the browser screen, with the phone in control.
-  const signIn = (bot: Bot, power: Superpower) =>
-    api<{ windowId?: string }>('POST', `/api/bots/${bot.id}/superpowers/${power.id}/login`, { via: 'bot' }).then(
-      ({ windowId }) => windowId && router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: signInThread(power.id), take: '1' } }),
-      (e) => Alert.alert('Could not start the sign-in', (e as Error).message),
-    )
-  // On the phone itself: the service's page opens in a sign-in sheet that has the accounts the phone
-  // has in Safari. The service sends the sheet back to the app's own address, the sheet hands that
-  // over, and the server finishes the sign-in.
-  const signInHere = async (bot: Bot, power: Superpower) => {
-    const path = `/api/bots/${bot.id}/superpowers/${power.id}/login`
-    try {
-      const { url } = await api<{ url?: string }>('POST', path, { via: 'app' })
-      if (!url) return
-      const result = await WebBrowser.openAuthSessionAsync(url, 'openkumi://sign-in/callback')
-      if (result.type !== 'success') return void api('DELETE', path).catch(() => {})
-      await api('POST', '/api/superpowers/return', { url: result.url })
-    } catch (e) {
-      Alert.alert('Not signed in', (e as Error).message)
-    }
-  }
-  const activate = (bot: Bot, power: Superpower, again = false) => {
-    if (!power.signIn) {
-      return Alert.alert(`Activate ${power.name}?`, `${bot.name} can use ${power.name} as soon as it is active. There is nothing to sign in to.`, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Activate', onPress: () => void api('PUT', `/api/bots/${bot.id}/superpowers/${power.id}`, { on: true }).catch((e) => Alert.alert('Not activated', (e as Error).message)) },
-      ])
-    }
-    Alert.alert(
-      again ? `Sign ${bot.name} in to ${power.name} again?` : `Activate ${power.name}?`,
-      `${bot.name} signs in to ${power.name} with an account of its own: on this phone, with the accounts you have in Safari, or inside its own browser, which suits a different account.${again ? '' : ` Once it is signed in, ${power.name} is active.`}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign in on this phone', onPress: () => void signInHere(bot, power) },
-        { text: `Sign in inside ${bot.name}’s browser`, onPress: () => void signIn(bot, power) },
-      ],
-    )
-  }
-  /** What can be done with one the bot has: sign in again, where it signs in, and deactivate it. */
-  const manage = (bot: Bot, power: Superpower) => {
-    const options = [...(power.signIn ? ['Sign in again'] : []), 'Deactivate', 'Cancel']
-    ActionSheetIOS.showActionSheetWithOptions(
-      { title: power.name, message: standing(power, statuses?.[power.id]) || power.tagline, options, destructiveButtonIndex: options.length - 2, cancelButtonIndex: options.length - 1 },
-      (i) => (options[i] === 'Sign in again' ? activate(bot, power, true) : options[i] === 'Deactivate' ? deactivate(bot, power) : undefined),
-    )
-  }
-  return { statuses, activate, manage }
+/** What is being done with one superpower for one bot, and what went wrong with the last try. */
+export interface Attempt {
+  busy?: 'activating' | 'deactivating' | 'signing-in'
+  error?: string
 }
 
-/** How a superpower with a service stands for a bot that has it, when that is worth saying instead of what it is for. */
-export function standing(power: Superpower, status: SuperpowerStatus | undefined): string {
-  if (!power.service || !status) return ''
-  if (status.state === 'connected') return `${status.signedIn ? 'Signed in' : 'Connected'} · ${status.tools} ${status.tools === 1 ? 'tool' : 'tools'}`
-  if (status.state === 'needs-login') return 'Not signed in any more'
-  if (status.state === 'error') return status.error ?? 'Not working.'
-  return ''
+const key = (botId: string, powerId: string) => `${botId}/${powerId}`
+let attempts: Record<string, Attempt> = {}
+const listeners = new Set<() => void>()
+function setAttempt(botId: string, powerId: string, attempt: Attempt) {
+  attempts = { ...attempts, [key(botId, powerId)]: attempt }
+  for (const heard of listeners) heard()
+}
+const subscribe = (heard: () => void) => (listeners.add(heard), () => void listeners.delete(heard))
+
+export function useAttempt(botId: string, powerId: string): Attempt {
+  return useSyncExternalStore(subscribe, () => attempts[key(botId, powerId)] ?? NONE)
+}
+const NONE: Attempt = {}
+
+/** Said so a person can act on it: a phone that cannot reach the computer says so, not "fetch failed". */
+export function plainly(e: unknown): string {
+  const message = (e as Error)?.message ?? String(e)
+  return /fetch failed|network request failed|failed to fetch|load failed/i.test(message) ? 'can’t reach the computer running OpenKumi' : message
+}
+
+/** What failed, then why, as one or two sentences whether the reason is a phrase or a sentence of its own. */
+export function failed(what: string, e: unknown): string {
+  const why = plainly(e).trim()
+  return /[.!?]$/.test(why) ? `${what}. ${why[0].toUpperCase()}${why.slice(1)}` : `${what}: ${why}.`
+}
+
+// ---- how one a bot has stands, in a list
+
+/** The last settled word for each superpower of each bot, so a reconnect does not flash "Connecting…". */
+const settled = new Map<string, Standing>()
+
+/**
+ * How one a bot has stands, for the catalog and the bot's settings alike. While it reconnects, the
+ * last settled word stands (kept while the app runs); only one never settled says "Connecting…".
+ */
+export function standingOf(botId: string, power: Superpower, status: SuperpowerStatus | undefined): Standing {
+  const now = shortStanding(power, status)
+  if (now.settled) settled.set(key(botId, power.id), now)
+  return now.settled ? now : (settled.get(key(botId, power.id)) ?? now)
+}
+
+/** How the bot's superpowers stand. Nothing connects until it is needed, so a screen that shows this asks for it as it opens. */
+export function useStatuses(botId: string): Record<string, SuperpowerStatus> | undefined {
+  return useStore((s) => s.superpowerStatus[botId])
+}
+export const check = (botId: string) => api('POST', `/api/bots/${botId}/superpowers/check`)
+
+// ---- activating
+
+/** Activating one there is nothing to sign in to: at once, from its page. */
+export async function activate(bot: Bot, power: Superpower) {
+  setAttempt(bot.id, power.id, { busy: 'activating' })
+  try {
+    await api('PUT', `/api/bots/${bot.id}/superpowers/${power.id}`, { on: true })
+    setAttempt(bot.id, power.id, {})
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+  } catch (e) {
+    setAttempt(bot.id, power.id, { error: failed('Couldn’t activate', e) })
+  }
+}
+
+/**
+ * Starts signing a bot in, from the sheet that asked where. What starts, or fails to, is the
+ * sheet's to show; once it has started the sheet closes (`close`) and the rest happens over the
+ * superpower's page: the phone's own sign-in sheet, or the bot's browser in control. A sign-in that
+ * comes back failed says why on the page.
+ */
+export async function signIn(bot: Bot, power: Superpower, via: 'app' | 'bot', router: ReturnType<typeof useRouter>, close: () => void) {
+  const path = `/api/bots/${bot.id}/superpowers/${power.id}/login`
+  const started = await api<{ url?: string; windowId?: string; done?: true }>('POST', path, { via })
+  setAttempt(bot.id, power.id, {})
+  close()
+  if (started.windowId) return router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: signInThread(power.id), take: '1' } })
+  if (!started.url) return
+  const url = started.url
+  // The phone shows its sign-in sheet once the choice has gone, not over it.
+  await new Promise((done) => setTimeout(done, 450))
+  setAttempt(bot.id, power.id, { busy: 'signing-in' })
+  try {
+    const result = await WebBrowser.openAuthSessionAsync(url, 'openkumi://sign-in/callback')
+    if (result.type !== 'success') {
+      setAttempt(bot.id, power.id, {})
+      return void api('DELETE', path).catch(() => {})
+    }
+    await api('POST', '/api/superpowers/return', { url: result.url })
+    setAttempt(bot.id, power.id, {})
+  } catch (e) {
+    setAttempt(bot.id, power.id, { error: failed('Sign-in didn’t finish', e) })
+  }
+}
+
+// ---- deactivating
+
+/**
+ * Deactivating, always asked first, saying what is lost: a sign-in, and a webhook with the
+ * automations it starts. Until the computer answers the page shows what it last said.
+ */
+export function deactivate(bot: Bot, power: Superpower, status: SuperpowerStatus | undefined, hooked: boolean) {
+  const lost = [
+    ...(status?.signedIn ? [`${bot.name}’s sign-in to ${power.name} is forgotten.`] : []),
+    ...(hooked ? ['Its webhook is removed, and the automations it starts are paused.'] : []),
+  ]
+  Alert.alert(`Deactivate ${power.name}?`, lost.length ? lost.join(' ') : `${bot.name} stops using it.`, [
+    { text: 'Cancel', style: 'cancel' },
+    {
+      text: 'Deactivate',
+      style: 'destructive',
+      onPress: () => {
+        setAttempt(bot.id, power.id, { busy: 'deactivating' })
+        settled.delete(key(bot.id, power.id))
+        api('PUT', `/api/bots/${bot.id}/superpowers/${power.id}`, { on: false }).then(
+          () => setAttempt(bot.id, power.id, {}),
+          (e) => setAttempt(bot.id, power.id, { error: `${failed('Couldn’t deactivate', e)} As far as this phone knows, ${power.name} is still on.` }),
+        )
+      },
+    },
+  ])
 }
