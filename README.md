@@ -397,7 +397,8 @@ either one opens the other end.
 
 ### Automations
 
-An automation gives a bot a prompt without you asking: at set times, or when something changes.
+An automation gives a bot a prompt without you asking: at set times, when something changes, or
+when one of its apps calls.
 **Automations**, at the bottom of the sidebar, lists every one with its latest runs beneath it, and
 is where you make, change, pause, run and delete them. Bots make them too, with their tools.
 
@@ -431,9 +432,38 @@ What starts one:
   assigned to me"): it knows its tools and what they give back. The form makes watches on web
   pages; **Look now**, on a watch's page, looks at once.
 
+- **An app's call (a webhook).** An app the bot is signed in to calls OpenKumi the moment
+  something happens there, and the automation starts at once instead of at a watch's next look.
+  Linear can; a superpower says so, and how, in its `superpower.json` under `hooks`.
+  - **A door of its own.** Calls come from the internet, which the server otherwise refuses. They
+    are taken on a port of their own (the server's port plus one, 4318 unless `OPENKUMI_HOOKS_PORT`
+    says otherwise), which is open on this computer only and takes `POST /hooks/…` and nothing
+    else. You point a tunnel at it (`tailscale funnel 4318`, or one of your own) and give OpenKumi
+    the address the tunnel has, on the app's page under **Superpowers**: it suggests this
+    computer's Tailscale name, and you can enter any https address.
+  - **Set up once for each bot**, on the same page: OpenKumi gives the webhook an address nobody
+    can guess, you enter it in the app by the steps shown (in Linear only a workspace admin can),
+    and give OpenKumi the secret the app signs its calls with. The secret stays on the server.
+  - **A call is taken only when the app signed it** with that secret; any other gets the answer an
+    address nobody set up gets. The same call is taken once.
+  - **A run is told what happened by id alone**: the kind of event, the ids and numbers in it, and
+    for a change the names of the fields that changed. Nothing anyone wrote in the app is passed
+    on (no titles, no comments), so the bot reads the item itself with its own sign-in, as it
+    would anything else there.
+  - Calls that come within five minutes of a run wait and are answered together in the next one,
+    up to 50 at a time. While an automation is paused its calls are kept, and it is given them
+    when it is turned on again.
+  - The computer has to be awake to be called. Linear tries again after a minute, an hour and six
+    hours, then gives up and may switch its webhook off; a watch is the safer choice for what
+    must not be missed.
+
+  In the form, **Starts** offers "When Linear calls" for a bot whose webhook is set up, with what
+  to run on. A bot makes one with `create_automation` and `hook`; it cannot set a webhook up.
+  Removing a webhook, or deactivating the superpower, pauses the automations that started on it.
+
 Each run is a thread of its own beneath the bot's conversation, like a subagent's. It sees nothing
-of the conversation, so an automation's prompt has to stand on its own; a run a watch started is
-also told what changed, set apart as information that is not an instruction. When it is done, what
+of the conversation, so an automation's prompt has to stand on its own; a run a watch or a call
+started is also told what changed or happened, set apart as information that is not an instruction. When it is done, what
 it came to arrives in the conversation and the bot tells you about it there; a run that ends with
 exactly "Nothing to report." is not passed on, for automations that only matter when something
 happened. A run opens like any conversation, from beneath its automation, from under the bot in

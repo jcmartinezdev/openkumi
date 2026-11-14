@@ -1,7 +1,7 @@
 // One automation: how it stands and its runs (each opens like a conversation), then a form to
 // change it, saved with the button in the bar. "new" makes one, for `botId` when given. Unlike the
-// settings, an automation is saved when it is whole, as on the computer. One that watches something
-// shows what it watches, which is set up on the computer or by a bot and kept as it is here.
+// settings, an automation is saved when it is whole, as on the computer. One that watches something,
+// or starts when an app calls, shows that; it is set up on the computer or by a bot and kept as it is here.
 import { useState } from 'react'
 import { ActionSheetIOS, ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
@@ -18,7 +18,7 @@ interface Draft {
   title: string
   prompt: string
   enabled: boolean
-  /** How it goes by the clock, or 'watch' for one that runs when something changes. */
+  /** How it goes by the clock, or 'watch' for one that does not: it runs when something changes, or when an app calls. */
   kind: Schedule['type'] | 'watch'
   /** For "once": when, as a moment in time. */
   at: number
@@ -41,7 +41,7 @@ function draftOf(automation: Automation | undefined, botId: string): Draft {
     title: automation?.title ?? '',
     prompt: automation?.prompt ?? '',
     enabled: automation?.enabled ?? true,
-    kind: trigger?.kind === 'watch' ? 'watch' : (s?.type ?? 'daily'),
+    kind: trigger && trigger.kind !== 'time' ? 'watch' : (s?.type ?? 'daily'),
     at: s?.type === 'once' ? s.at : nextHour.getTime(),
     time: s?.type === 'daily' ? s.time : '08:00',
     days: s?.type === 'daily' ? s.days : [],
@@ -95,6 +95,10 @@ export default function AutomationPage() {
   const { runs, more, showOlder, error: runsError } = useRuns(automation?.id)
   const running = automation?.lastStatus === 'running'
   const watch = automation?.trigger.kind === 'watch' ? automation.trigger.watch : undefined
+  const hook = automation?.trigger.kind === 'hook' ? automation.trigger.hook : undefined
+  /** What the app calls about, by name, for the ones this automation runs on. */
+  const caller = useStore((s) => s.superpowers.find((p) => p.id === hook?.power))
+  const called = caller?.hooks?.events ?? []
   const otherZone = !!zone && zone !== localZone()
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -177,7 +181,8 @@ export default function AutomationPage() {
       <Section
         title="When"
         footer={
-          draft.kind === 'watch' ? `Looked at by OpenKumi itself, which starts a run only when it changed. What it watches is changed on the computer, or by asking ${bot?.name ?? 'the bot'}.`
+          hook ? `A run is told what happened by id alone, and reads the rest in ${hook.app} itself. What it runs on is changed on the computer, or by asking ${bot?.name ?? 'the bot'}.`
+          : draft.kind === 'watch' ? `Looked at by OpenKumi itself, which starts a run only when it changed. What it watches is changed on the computer, or by asking ${bot?.name ?? 'the bot'}.`
           : draft.kind === 'daily' ? (otherZone ? `In ${zone}, the time zone of the computer running OpenKumi.` : draft.days.length ? undefined : 'Every day. Choose days to run on those only.')
           : draft.kind === 'interval' ? 'Counted from when it is turned on, or from the run before. At most every 5 minutes.'
           : undefined
@@ -188,6 +193,7 @@ export default function AutomationPage() {
             <Segments label="Runs" value={draft.kind} options={KINDS} onChange={(kind) => change({ kind })} />
           </View>
         )}
+        {hook && <Row label={`When ${hook.app} calls`} detail={hook.events.length ? hook.events.map((id) => called.find((e) => e.id === id)?.name ?? id).join(' · ') : 'About anything it calls about'} />}
         {watch && <Row label="When this changes" detail={watchLabel(watch)} />}
         {watch && <Row label="Looks" value={watchEvery(watch)} />}
         {draft.kind === 'daily' && (

@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { Automation, HistoryMatch, Item, ItemData, Queued, Said, Thread } from '@openkumi/shared'
+import type { Automation, HistoryMatch, Hook, Item, ItemData, Queued, Said, Thread } from '@openkumi/shared'
 import type { Seen } from './watch.ts'
 import { DATABASE, emit, privateDir } from './config.ts'
 
@@ -20,13 +20,25 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS items_thread ON items (thread_id, id);
   CREATE INDEX IF NOT EXISTS threads_parent ON threads (parent_id);
-  -- starts_on is what starts it (a time or a watch), last_check how a watch's latest look went, and
-  -- seen what that look found, which only the server reads.
+  -- starts_on is what starts it (a time, a watch or a webhook), last_check how a watch's latest look
+  -- went, and seen what that look found, or how far a webhook's calls have been read; only the
+  -- server reads it.
   CREATE TABLE IF NOT EXISTS automations (
     id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, title TEXT NOT NULL, prompt TEXT NOT NULL, starts_on TEXT NOT NULL,
     enabled INTEGER NOT NULL, created_by TEXT NOT NULL, next_run_at INTEGER, last_run_at INTEGER,
     last_status TEXT, last_error TEXT, last_thread_id TEXT, last_check TEXT, seen TEXT,
     created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  );
+  -- A webhook: one bot's app calling in. Its secret never leaves the server.
+  CREATE TABLE IF NOT EXISTS hooks (
+    id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, power TEXT NOT NULL, secret TEXT, created_at INTEGER NOT NULL,
+    last_call_at INTEGER, calls INTEGER NOT NULL DEFAULT 0, refused_at INTEGER, UNIQUE (bot_id, power)
+  );
+  -- What a webhook's calls were about: the event, and the ids that are passed on to a run. A call
+  -- is known by its body, which is what the app signs, so the same call is not taken twice.
+  CREATE TABLE IF NOT EXISTS hook_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, hook_id TEXT NOT NULL, body TEXT NOT NULL, event TEXT NOT NULL,
+    facts TEXT NOT NULL, at INTEGER NOT NULL, UNIQUE (hook_id, body)
   );
   -- The number of each thread's latest change, from one count for all of them, and whether that
   -- change removed it. An app that has seen everything up to a change asks for what came after it.
@@ -503,6 +515,16 @@ export function setSeen(id: string, seen: Seen | null) {
   db.prepare('UPDATE automations SET seen = ? WHERE id = ?').run(seen ? JSON.stringify(seen) : null, id)
 }
 
+/** How far an automation that starts on a webhook's calls has read them: the number of the last one a run was given. It is kept where a watch keeps what it saw. */
+export function getCursor(id: string): number {
+  const r = db.prepare('SELECT seen FROM automations WHERE id = ?').get(id) as { seen: string | null } | undefined
+  return (r?.seen && Number(JSON.parse(r.seen).upTo)) || 0
+}
+
+export function setCursor(id: string, upTo: number) {
+  db.prepare('UPDATE automations SET seen = ? WHERE id = ?').run(JSON.stringify({ upTo }), id)
+}
+
 /** The automations that are due by `time` (a run, or a watch's look), soonest first. */
 export function dueAutomations(time: number): Automation[] {
   return db.prepare('SELECT * FROM automations WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(time).map(toAutomation)
@@ -522,6 +544,75 @@ export function nextDue(): number | null {
   const r = db.prepare('SELECT MIN(next_run_at) AS at FROM automations WHERE enabled = 1 AND next_run_at IS NOT NULL').get() as { at: number | null }
   return r.at
 }
+
+// ---- webhooks (how a call is checked and what it starts is in hooks.ts)
+
+/** A webhook with its secret, which only the server sees. */
+export interface StoredHook extends Hook {
+  key: string | null
+}
+
+/** What one call of a webhook was about. */
+export interface HookEvent {
+  id: number
+  event: string
+  facts: Record<string, string | number | boolean>
+  at: number
+}
+
+function toHook(r: any): StoredHook {
+  return { id: r.id, botId: r.bot_id, power: r.power, secret: !!r.secret, key: r.secret, createdAt: r.created_at, lastCallAt: r.last_call_at, calls: r.calls, refusedAt: r.refused_at }
+}
+
+/** A webhook as the apps are sent it: without its secret. */
+export const shown = ({ key: _, ...hook }: StoredHook): Hook => hook
+
+export function listHooks(): StoredHook[] {
+  return db.prepare('SELECT * FROM hooks ORDER BY created_at').all().map(toHook)
+}
+
+export function getHook(id: string): StoredHook | undefined {
+  const r = db.prepare('SELECT * FROM hooks WHERE id = ?').get(id)
+  return r && toHook(r)
+}
+
+export function hookOf(botId: string, power: string): StoredHook | undefined {
+  const r = db.prepare('SELECT * FROM hooks WHERE bot_id = ? AND power = ?').get(botId, power)
+  return r && toHook(r)
+}
+
+export function saveHook(hook: StoredHook): StoredHook {
+  db.prepare(
+    `INSERT INTO hooks (id, bot_id, power, secret, created_at, last_call_at, calls, refused_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET secret = excluded.secret, last_call_at = excluded.last_call_at, calls = excluded.calls, refused_at = excluded.refused_at`,
+  ).run(hook.id, hook.botId, hook.power, hook.key, hook.createdAt, hook.lastCallAt, hook.calls, hook.refusedAt)
+  emit({ type: 'hook.upsert', hook: shown(hook) })
+  return hook
+}
+
+/** Removes a webhook, and what its calls were about. */
+export function deleteHook(id: string) {
+  db.prepare('DELETE FROM hook_events WHERE hook_id = ?').run(id)
+  db.prepare('DELETE FROM hooks WHERE id = ?').run(id)
+  emit({ type: 'hook.delete', id })
+}
+
+/** Keeps what a call was about. False when that very call was taken before. */
+export function addHookEvent(hookId: string, body: string, event: string, facts: HookEvent['facts']): boolean {
+  return db.prepare('INSERT OR IGNORE INTO hook_events (hook_id, body, event, facts, at) VALUES (?, ?, ?, ?, ?)').run(hookId, body, event, JSON.stringify(facts), Date.now()).changes > 0
+}
+
+/** What a webhook's calls after number `after` were about, oldest first, `limit` at most; only `events` when any are named. */
+export function hookEvents(hookId: string, after: number, events: string[], limit: number): HookEvent[] {
+  const named = events.length ? `AND event IN (${events.map(() => '?').join(', ')})` : ''
+  return db
+    .prepare(`SELECT * FROM hook_events WHERE hook_id = ? AND id > ? ${named} ORDER BY id LIMIT ?`)
+    .all(hookId, after, ...events, limit)
+    .map((r: any) => ({ id: r.id, event: r.event, facts: JSON.parse(r.facts), at: r.at }))
+}
+
+/** The number of the latest call any webhook has taken. */
+export const lastHookEvent = () => (db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM hook_events').get() as { id: number }).id
 
 export function closeDb() {
   db.close()

@@ -21,6 +21,7 @@ import { announceProviders, getProvider, providerInfos, refreshProviders } from 
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
 import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower, superpowerCategories, superpowerFile } from './superpowers.ts'
 import * as automations from './automations.ts'
+import * as hooks from './hooks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
 import * as ws from './workspace.ts'
 
@@ -157,6 +158,7 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     database: db.DATABASE_ID,
     seq: db.latestChange(),
     automations: db.listAutomations(),
+    hooks: hooks.listHooks(),
     queue: db.allQueued(),
     providers: providerInfos(),
     browsers: browserStates(),
@@ -166,7 +168,7 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     home: HOME_LABEL,
     settings: settings(),
     defaults: DEFAULTS,
-    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE },
+    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT },
   }
 })
 
@@ -217,6 +219,7 @@ route('DELETE', '/api/bots/:id', async ([id]) => {
   const had = enabledSuperpowers(id).length
   await mcp.closeBot(id)
   automations.forgetBot(id)
+  hooks.forgetBot(id)
   db.deleteBotThreads(id)
   deleteBot(id)
   if (had) announceSuperpowers()
@@ -349,6 +352,15 @@ route('POST', '/api/automations/:id/look', async ([id]) => {
 // An automation's runs, a page at a time, newest first: `before` is when the oldest one an app has started.
 // The runs of an automation that was deleted are still there.
 route('GET', '/api/automations/:id/runs', ([id], _, { url }) => db.runsOf(id, { before: count(url, 'before') }))
+
+// ---- webhooks: the owner sets one up for a bot's app, gives it its secret, and removes it
+// An address to suggest for them: this computer's name on Tailscale, which is where Tailscale Funnel lets the internet in.
+route('GET', '/api/hooks/address', async () => {
+  const name = (await tailscaleAddresses()).find((address) => /[a-z]/i.test(address))
+  return { port: hooks.HOOKS_PORT, suggestion: name ? `https://${name}` : null }
+})
+route('PUT', '/api/bots/:id/hooks/:power', ([id, power], body) => checked(() => hooks.setUp(needBot(id).id, power, body)))
+route('DELETE', '/api/bots/:id/hooks/:power', ([id, power]) => hooks.remove(needBot(id).id, power))
 
 // ---- threads
 // A thread, and its newest page of items (see db.PAGE); `before` asks for the page before that

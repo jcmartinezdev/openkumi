@@ -99,6 +99,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     can_message: canMessage(thread),
     automation: thread.kind === 'automation',
     watch: automation?.trigger.kind === 'watch',
+    hook: automation?.trigger.kind === 'hook',
     subagent: thread.kind === 'subagent',
     codex: bot.provider === 'codex',
     rules: bot.rules,

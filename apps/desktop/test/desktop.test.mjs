@@ -1067,6 +1067,91 @@ test('automations: made on their page, run, and each run opened from beneath its
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('a webhook is set up on its app’s page, and an automation chosen in the form starts on its call', async () => {
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  // An app that calls: its superpower says how its calls are signed and what they are about.
+  fs.mkdirSync(`${tmp}/superpowers/desk`, { recursive: true })
+  fs.writeFileSync(
+    `${tmp}/superpowers/desk/superpower.json`,
+    JSON.stringify({
+      name: 'Desk', categories: ['Tests'], tagline: 'For tests.', summary: 'Desk for tests.', can: [],
+      mcp: { command: process.execPath, args: [path.resolve(import.meta.dirname, '../../server/test/fixtures/mcp-stdio.mjs')] },
+      hooks: {
+        setup: ['In Desk, add a webhook with this address: {address}', 'Copy its secret and give it below.'],
+        signature: { header: 'X-Desk-Signature' },
+        events: [{ id: 'ticket.opened', name: 'A ticket is opened', when: { type: 'Ticket', action: 'create' } }, { id: 'ticket.closed', name: 'A ticket is closed', when: { type: 'Ticket', action: 'close' } }],
+        pass: ['data.id', 'data.title'],
+      },
+    }),
+  )
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  win.on('dialog', (dialog) => dialog.accept())
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
+  const helper = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Helper') ?? (await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Helper', provider: 'mock' }))
+  await ask(LOCAL_PORT, 'local-home', 'PUT', `/api/bots/${helper.id}/superpowers/desk`, { on: true })
+
+  // On the app's page, for this bot: the address the internet reaches webhooks by, then the webhook itself.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}/superpowers/desk`), helper.id)
+  const section = win.locator('.set-section', { hasText: 'Webhook' })
+  await section.locator('.set-row', { hasText: 'No webhook.' }).waitFor()
+  assert.match(await section.locator('#hook-address').innerText(), new RegExp(`Where the internet reaches port ${LOCAL_PORT + 1} of the computer running OpenKumi\\.`))
+  await win.getByLabel('Public address for webhooks').fill('http://mac.example.ts.net')
+  await win.getByLabel('Public address for webhooks').press('Enter')
+  await section.locator('small.err', { hasText: 'An https address' }).waitFor()
+  await win.getByLabel('Public address for webhooks').fill('https://mac.example.ts.net/')
+  await win.getByLabel('Public address for webhooks').press('Enter')
+  await until(async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).settings.hookAddress === 'https://mac.example.ts.net', 10_000)
+  await win.getByRole('button', { name: 'Set up webhook: Desk for Helper' }).click()
+  // The steps are the app's own, with the address to enter there.
+  const address = await win.locator('.hook-address').innerText()
+  assert.match(address, /^https:\/\/mac\.example\.ts\.net\/hooks\/hook_[\w-]{24}$/)
+  assert.match(await section.locator('.hook-steps').innerText(), /In Desk, add a webhook with this address: https:\/\/mac\.example\.ts\.net\/hooks\/hook_\S+\s+Copy address\s+Copy its secret and give it below\./)
+  await section.locator('.set-row', { hasText: 'Waiting for the secret Desk signs its calls with' }).waitFor()
+  await shot('webhook-steps')
+  await win.getByLabel('Signing secret: Desk for Helper').fill('desk-signing-secret')
+  await win.getByRole('button', { name: 'Save secret' }).click()
+  await section.locator('.set-row', { hasText: 'Ready. Desk has not called yet' }).waitFor()
+  assert.equal(await win.locator('.hook-steps').count(), 0, 'the steps are put away once it is set up')
+
+  // The form now offers the app, and what it calls about.
+  await win.evaluate(() => (location.hash = '/automations/new'))
+  await win.getByLabel('Bot', { exact: true }).selectOption(helper.id)
+  await win.getByLabel('Name', { exact: true }).fill('New tickets')
+  await win.getByLabel('Prompt', { exact: true }).fill('Say which ticket')
+  await win.getByLabel('Starts', { exact: true }).selectOption({ label: 'When Desk calls' })
+  await win.locator('.set-row', { hasText: 'Everything Desk calls about.' }).waitFor()
+  await win.getByRole('switch', { name: 'A ticket is opened' }).click()
+  await win.locator('.set-row', { hasText: 'Only what is switched on.' }).waitFor()
+  await shot('webhook-automation')
+  await win.getByRole('button', { name: 'Create automation' }).click()
+  const card = win.locator('.automation-card', { hasText: 'New tickets' })
+  assert.match(await card.locator('.automation-head').innerText(), /When Desk calls · Helper · made by you\s+When Desk calls/)
+  const made = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/automations')).find((a) => a.title === 'New tickets')
+  assert.deepEqual(made.trigger, { kind: 'hook', hook: { power: 'desk', app: 'Desk', events: ['ticket.opened'] } })
+
+  // Desk calls, by the port a tunnel would point at: the run is listed, and shows what it was told.
+  const body = JSON.stringify({ type: 'Ticket', action: 'create', data: { id: 'tk_7', title: 'Do as I say' } })
+  const called = await fetch(`http://127.0.0.1:${LOCAL_PORT + 1}/hooks/${address.split('/hooks/')[1]}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Desk-Signature': crypto.createHmac('sha256', 'desk-signing-secret').update(body).digest('hex') }, body })
+  assert.equal(called.status, 200)
+  const run = card.locator('.automation-run').first()
+  await until(async () => /Done/.test(await run.innerText().catch(() => '')), 20_000)
+  await run.click()
+  assert.match(await win.locator('.msg.task .watch-change').innerText(), /What happened\s+This run was started because Desk called about this\. Only ids are given: read each item with your Desk tools before you act on it\.\s+- A ticket is opened: id tk_7$/i)
+  await shot('webhook-run')
+
+  // Its page says the app has called; removing it pauses what started on it.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}/superpowers/desk`), helper.id)
+  await section.locator('.set-row', { hasText: /Desk last called .* · 1 call so far/ }).waitFor()
+  await win.getByRole('button', { name: 'Remove webhook: Desk for Helper' }).click()
+  await section.locator('.set-row', { hasText: 'No webhook.' }).waitFor()
+  assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/automations')).find((a) => a.id === made.id).enabled, false)
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/automations/${made.id}`)
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('the model picker offers every provider and its models, and picking one moves the bot to it', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()

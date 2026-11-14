@@ -3,18 +3,20 @@
 // it. Both come in two kinds: for every bot, under Superpowers, and for one bot, in its settings,
 // where activating is for that bot alone. A superpower is always activated for one bot, never for
 // all of them. Activating one that works in an app means signing the bot in to it, in this
-// computer's browser or in the bot's own.
+// computer's browser or in the bot's own. An app that can call OpenKumi when something happens
+// there has its webhook set up on its page too, once for each bot.
 import { type ReactNode, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Bot, Superpower, SuperpowerStatus } from '@openkumi/shared'
 import { control, driverOf, signInThread, windowOf } from '@openkumi/client/browser'
+import { hookAddress, hookStanding } from '@openkumi/client/webhooks'
 import { PageView } from './BrowserPane'
 import { useDesktop } from './desktop'
 import { Markdown } from './Markdown'
 import { Icon } from './Icon'
 import { Dialog } from './Modals'
-import { Page, Row, Section } from './settingsUi'
-import { api, useStore } from './store'
+import { CopyButton, Field, Page, Row, Section } from './settingsUi'
+import { api, saveSettings, useStore } from './store'
 import { BotHead } from './Mascot'
 
 /** A superpower's app icon, or its first letter when it has none. Drawn as a picture, so nothing in it can run. */
@@ -431,6 +433,95 @@ function BotSignIn({ bot, power }: { bot: Bot; power: Superpower }) {
   )
 }
 
+/**
+ * The webhook of a superpower's app: the address the internet reaches this computer's webhooks by,
+ * which is the owner's to give and serves every webhook, and then, for each bot the superpower is
+ * active for, the steps to set its webhook up in the app and how it stands.
+ */
+function Webhooks({ power, bots }: { power: Superpower; bots: Bot[] }) {
+  const base = useStore((s) => s.settings.hookAddress)
+  const port = useStore((s) => s.about.hooksPort)
+  const [suggestion, setSuggestion] = useState('')
+  useEffect(() => {
+    api<{ suggestion: string | null }>('GET', '/api/hooks/address').then((found) => setSuggestion(found.suggestion ?? ''), () => {})
+  }, [])
+  const give = async (address: string) => {
+    if (address.trim() && !/^https:\/\/[^\s/]+/.test(address.trim())) throw new Error('An https address, like https://my-mac.example.ts.net')
+    await saveSettings({ hookAddress: address.trim() })
+  }
+  return (
+    <Section title="Webhook">
+      <Row
+        title={<><Icon name="bolt" size={15} />Start automations the moment something happens</>}
+        description={`${power.name} can call OpenKumi when something happens there, so that an automation starts at once instead of at a watch’s next look. A call is taken only when ${power.name} signed it, and a run is told what it was about by id alone: the bot reads the rest itself.`}
+      />
+      <Row
+        id="hook-address"
+        title="Public address"
+        description={
+          `Where the internet reaches port ${port} of the computer running OpenKumi. That port takes the calls of webhooks and nothing else, and is open on that computer only, so a tunnel has to point at it. One address serves every webhook. ` +
+          (suggestion ? `With Tailscale Funnel it is ${suggestion}: run “tailscale funnel ${port}” on that computer.` : 'Tailscale Funnel or a tunnel of your own gives you one.')
+        }
+        control={suggestion && !base ? <button className="ghost" onClick={() => void give(suggestion).catch((e) => alert(e.message))}>Use {suggestion.replace(/^https:\/\//, '')}</button> : undefined}
+      >
+        <Field className="set-input set-line" label="Public address for webhooks" value={base} placeholder={suggestion || 'https://my-mac.example.ts.net'} onCommit={give} />
+      </Row>
+      {bots.map((bot) => <HookRow key={bot.id} power={power} bot={bot} base={base} />)}
+    </Section>
+  )
+}
+
+/** One bot's webhook for an app: set up with a press, then entered in the app by the steps the superpower gives, and given the secret the app shows. */
+function HookRow({ power, bot, base }: { power: Superpower; bot: Bot; base: string }) {
+  const hook = useStore((s) => s.hooks.find((h) => h.botId === bot.id && h.power === power.id))
+  const [secret, setSecret] = useState('')
+  const [steps, setSteps] = useState(false)
+  const [error, setError] = useState('')
+  const which = `${power.name} for ${bot.name}`
+  const path = `/api/bots/${bot.id}/hooks/${power.id}`
+  const act = (run: Promise<unknown>) => run.then(() => setError(''), (e) => setError(e.message))
+  const who = <><BotHead bot={bot} />{bot.name}</>
+  if (!hook) {
+    return <Row title={who} description="No webhook." status={error} control={<button className="primary" aria-label={`Set up webhook: ${which}`} onClick={() => act(api('PUT', path, {}))}>Set up webhook</button>} />
+  }
+  const address = hookAddress(base, hook)
+  const remove = () => confirm(`Remove ${bot.name}’s webhook for ${power.name}? Its address stops working, and the automations that start on its calls are paused.`) && act(api('DELETE', path))
+  return (
+    <Row
+      title={who}
+      description={hookStanding(hook, power.name)}
+      status={error}
+      control={
+        <>
+          {hook.secret && <button className="ghost" aria-expanded={steps} onClick={() => setSteps(!steps)}>{steps ? 'Hide the steps' : 'Show the steps'}</button>}
+          <button className="ghost" aria-label={`Remove webhook: ${which}`} onClick={remove}>Remove webhook</button>
+        </>
+      }
+    >
+      {(!hook.secret || steps) && (
+        <div className="hook-steps">
+          <ol>
+            {power.hooks!.setup.map((step, i) => {
+              const [before, after] = step.split('{address}')
+              return (
+                <li key={i}>
+                  {before}
+                  {after !== undefined && (address ? <><code className="hook-address">{address}</code> <CopyButton text={address} label="Copy address" /></> : <em>(give the public address above first)</em>)}
+                  {after}
+                </li>
+              )
+            })}
+          </ol>
+          <div className="hook-secret">
+            <input className="set-input wide" type="password" autoComplete="off" aria-label={`Signing secret: ${which}`} placeholder="Signing secret" value={secret} onChange={(e) => setSecret(e.target.value)} />
+            <button className="primary" disabled={!secret.trim()} onClick={() => act(api('PUT', path, { secret }).then(() => (setSecret(''), setSteps(false))))}>{hook.secret ? 'Change secret' : 'Save secret'}</button>
+          </div>
+        </div>
+      )}
+    </Row>
+  )
+}
+
 /** A superpower's page. Opened from a bot's settings, it is about that bot alone, whose buttons are by its name. */
 export function SuperpowerPage({ id, bot }: { id: string; bot?: Bot }) {
   const power = useStore((s) => s.superpowers.find((p) => p.id === id))
@@ -439,6 +530,7 @@ export function SuperpowerPage({ id, bot }: { id: string; bot?: Bot }) {
   useCheck(power?.service ? (bot ? [bot.id] : bots.filter((b) => b.superpowers.includes(power.id)).map((b) => b.id)) : [])
 
   const all = bot ? `#/settings/bots/${encodeURIComponent(bot.id)}/superpowers` : '#/settings/superpowers'
+  const active = (bot ? [bot] : bots).filter((b) => power && b.superpowers.includes(power.id))
   if (!power) return <Page><p className="set-intro">There is no such superpower. <a href={all}>See all superpowers.</a></p></Page>
   return (
     <Page>
@@ -478,6 +570,9 @@ export function SuperpowerPage({ id, bot }: { id: string; bot?: Bot }) {
           />
         )}
       </Section>
+
+      {/* A webhook is set up for a bot the superpower is active for; until there is one, there is nothing to set up. */}
+      {power.hooks && active.length > 0 && <Webhooks power={power} bots={active} />}
     </Page>
   )
 }

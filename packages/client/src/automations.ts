@@ -64,6 +64,7 @@ function site(url: string): string {
 /** What starts an automation, in a few words: "Weekdays at 08:00", "When Linear changes". */
 export function triggerLabel(trigger: Trigger, zone?: string): string {
   if (trigger.kind === 'time') return scheduleLabel(trigger.schedule, zone)
+  if (trigger.kind === 'hook') return `When ${trigger.hook.app} calls`
   return `When ${trigger.watch.on === 'tool' ? trigger.watch.app : site(trigger.watch.url)} changes`
 }
 
@@ -80,8 +81,9 @@ export const STATUS_LABEL: Record<NonNullable<Automation['lastStatus']>, string>
   missed: 'Missed',
 }
 
-/** When an automation runs next (a watch: when it looks next), or why it does not. */
-export const nextRun = (automation: Automation) => (!automation.enabled ? 'Paused' : automation.nextRunAt ? upper(moment(automation.nextRunAt)) : 'Will not run again')
+/** When an automation runs next (a watch: when it looks next), or why it does not. One that starts on an app's calls has no time until one comes. */
+export const nextRun = (automation: Automation) =>
+  !automation.enabled ? 'Paused' : automation.nextRunAt ? upper(moment(automation.nextRunAt)) : automation.trigger.kind === 'hook' ? `When ${automation.trigger.hook.app} calls` : 'Will not run again'
 
 /** What went wrong the last time, when the runs beneath the automation cannot say it. */
 export function trouble(automation: Automation): string | null {
@@ -142,10 +144,13 @@ export function useRuns(automationId: string | undefined): { runs: Thread[]; mor
   return { runs, more: !!own?.more, showOlder, error }
 }
 
-/** A run's first message: the automation's prompt and, when it watches something, what OpenKumi added about what changed. */
-export function runBrief(text: string): { prompt: string; change: string | null } {
-  const m = text.match(/^([\s\S]*?)\n\n<watch_change>\n([\s\S]*)\n<\/watch_change>$/)
-  return m ? { prompt: m[1], change: m[2] } : { prompt: text, change: null }
+/**
+ * A run's first message: the automation's prompt and, when a watch or an app's call started it,
+ * what OpenKumi added about that, with a heading for it.
+ */
+export function runBrief(text: string): { prompt: string; change: string | null; heading: string } {
+  const m = text.match(/^([\s\S]*?)\n\n<(watch_change|hook_events)>\n([\s\S]*)\n<\/\2>$/)
+  return m ? { prompt: m[1], change: m[3], heading: m[2] === 'hook_events' ? 'What happened' : 'What changed' } : { prompt: text, change: null, heading: '' }
 }
 
 /** Who made an automation, in words: "you", or the bot's name. */

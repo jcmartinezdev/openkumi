@@ -32,6 +32,7 @@ const EMPTY: State = {
   bots: [],
   threads: [],
   automations: [],
+  hooks: [],
   queue: [],
   providers: [],
   browsers: {},
@@ -43,7 +44,7 @@ const EMPTY: State = {
   seq: 0,
   settings: {} as Settings,
   defaults: {} as Settings,
-  about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '' },
+  about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '', hooksPort: 0 },
   items: {},
   older: {},
   partial: {},
@@ -181,6 +182,10 @@ function handle(ev: ServerEvent) {
       return set({ automations: upsert(state.automations, ev.automation) })
     case 'automation.delete':
       return set({ automations: state.automations.filter((a) => a.id !== ev.id) })
+    case 'hook.upsert':
+      return set({ hooks: upsert(state.hooks, ev.hook) })
+    case 'hook.delete':
+      return set({ hooks: state.hooks.filter((h) => h.id !== ev.id) })
     case 'item.add': {
       const { threadId, data } = ev.item
       // The thread is being fetched, or caught up, right now: the item is kept for that to put in place.

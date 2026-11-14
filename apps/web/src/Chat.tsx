@@ -287,8 +287,8 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
       else if (data.source === 'automation') blocks.push(<div key={id} data-item={id}><AutomationReport text={data.text} /></div>)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
       else if (data.source === 'trigger') {
-        const { prompt, change } = runBrief(data.text)
-        blocks.push(<div key={id} className="msg task"><div className="eyebrow">Automation</div>{prompt}{change && <div className="watch-change"><div className="eyebrow">What changed</div>{change}</div>}</div>)
+        const { prompt, change, heading } = runBrief(data.text)
+        blocks.push(<div key={id} className="msg task"><div className="eyebrow">Automation</div>{prompt}{change && <div className="watch-change"><div className="eyebrow">{heading}</div>{change}</div>}</div>)
       }
       else if (!data.attachments?.length) blocks.push(<div key={id} data-item={id} className="msg user">{data.text}</div>)
       else {
