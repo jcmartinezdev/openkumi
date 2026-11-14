@@ -1069,25 +1069,36 @@ test('engines: a message sent now is given to an engine as it works, or cuts its
   assert.deepEqual(cut.slice(0, 2), ['!busy first', 'and this'])
   assert.match(cut[2], CUT)
 
-  // Claude Code and Grok cannot be told as they work: their turn is cut short the same way.
-  for (const engine of ['claude-code', 'grok']) {
-    const runner = await api('POST', '/api/bots', { name: `Cut on ${engine}`, provider: engine })
-    const thread = await fresh(runner.id)
-    const said = spoken(await sendNow(thread, '!slow first', 'and this'))
-    assert.deepEqual(said.slice(0, 2), ['!slow first', 'and this'], engine)
-    assert.match(said[2], CUT, engine)
-    assert.equal((await api('GET', `/api/threads/${thread}`)).items.some((i) => i.data.type === 'notice'), false, `${engine}: the bot was not stopped`)
-  }
+  // So does Claude Code: sent a message to read next, it takes it up after the tool call under way.
+  const claude = await api('POST', '/api/bots', { name: 'Steered too', provider: 'claude-code' })
+  const told = await fresh(claude.id)
+  assert.deepEqual(spoken(await sendNow(told, '!slow first', 'and this')), ['!slow first', 'and this', 'Echo (turn 1): !slow first [told as it worked: and this]'])
+  assert.equal(lastText(await say(told, 'again')), 'Echo (turn 2): again', 'it is not told the message a second time')
+  // One that reaches it just as its turn ends is answered in a turn of its own, by the same program.
+  await api('POST', `/api/threads/${told}/messages`, { text: '!tool wait_subagents {}' })
+  await api('POST', `/api/threads/${told}/messages`, { text: 'just in time' })
+  await api('POST', `/api/queue/${(await waitingIn(told))[0].id}/now`)
+  const late = spoken(await settle(told, 7000))
+  assert.match(late.at(-1), /^Echo \(turn \d\): (!tool wait_subagents \{\} \[told as it worked: just in time\]|just in time)$|^Tool result: [\s\S]*\[told as it worked: just in time\]$/)
+  assert.equal(late.filter((text) => text === 'just in time').length, 1)
+
+  // Grok cannot be told as it works: its turn is cut short the same way.
+  const grok = await api('POST', '/api/bots', { name: 'Cut short', provider: 'grok' })
+  const thread = await fresh(grok.id)
+  const said = spoken(await sendNow(thread, '!slow first', 'and this'))
+  assert.deepEqual(said.slice(0, 2), ['!slow first', 'and this'])
+  assert.match(said[2], CUT)
+  assert.equal((await api('GET', `/api/threads/${thread}`)).items.some((i) => i.data.type === 'notice'), false, 'the bot was not stopped')
 
   // What a tool is doing is not cut off: one that only waits gives way, and the engine gets what it came to.
-  const waiter = await api('POST', '/api/bots', { name: 'Waiter', provider: 'claude-code' })
+  const waiter = await api('POST', '/api/bots', { name: 'Waiter', provider: 'grok' })
   const waiting = await fresh(waiter.id)
   await say(waiting, '!tool spawn_subagent {"name":"Slow","task":"!slow"}')
   const items = await sendNow(waiting, '!tool wait_subagents {}', 'now this')
   assert.match(items.findLast((d) => d.type === 'function_call_output').output, /^Stopped waiting: the user sent a message for you to read now\. The subagents carry on\./)
   assert.match(lastText(items), /^Echo \(turn \d\): (\[You were at work[^\]]*\]\n\n)?now this$/)
   await api('POST', `/api/threads/${waiting}/stop`)
-  for (const made of [steered, waiter]) await api('DELETE', `/api/bots/${made.id}`)
+  for (const made of [steered, claude, grok, waiter]) await api('DELETE', `/api/bots/${made.id}`)
 })
 
 test('engines: a thread can move to another engine, and the tool address only works during a turn', async () => {

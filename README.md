@@ -350,10 +350,13 @@ turn of its own before the next goes in. A bot that is idle takes a message up a
   phone. The **×** takes one back before the bot has read it: yours, or one from another bot.
 - **Send now** has the bot read a waiting message as it works, ahead of the others, so that you can
   change its course without stopping it. A model OpenKumi asks itself (a local model, an API) gets
-  it before its next step. Codex takes it into the turn that is running. Claude Code and Grok
-  cannot be told as they work, so their turn is cut short once the tool call under way has been
-  answered, and they read the message next, in the same conversation of their own. Nothing a tool
-  is doing is cut off half way; `wait_subagents`, which only waits, gives way at once.
+  it before its next step. Codex and Claude Code take it into the turn that is running: Codex as
+  soon as it is sent (`turn/steer`), Claude Code after the tool call under way (a message marked
+  to be read next), or once it has finished writing when no tool is in use. Grok cannot be told as
+  it works, so its turn is cut short once the tool call under way has been answered, and it reads
+  the message next, in the same conversation of its own; so does Codex in the moments it will not
+  take one. Nothing a tool is doing is cut off half way; `wait_subagents`, which only waits, gives
+  way at once.
 - **At most ten messages wait** for a bot. One more is refused: you are told the bot is busy and
   keep what you wrote; a bot is told to try later or tell you. What the bot's own work reports, and
   a reply it asked another bot for, always get in.
@@ -523,7 +526,8 @@ the `claude`, `codex` or `grok` program installed on the computer for each turn,
 what was said since it last ran, and serves the bot's tools to it over MCP at an address that
 exists only for that turn. Tool calls are carried out and recorded the same way on either path.
 Codex runs as its app server (`codex app-server`), the program its own apps talk to, which sends a
-reply as it is written and takes one more message into a turn that is running.
+reply as it is written and takes one more message into a turn that is running. Claude Code's input
+is left open while it works, for the same purpose.
 
 The engines are started with their own tools for running commands and touching files switched
 off, and without your personal setup in them (settings, instruction files, skills, plugins, MCP
