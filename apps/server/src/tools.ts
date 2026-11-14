@@ -8,7 +8,8 @@ import { settings } from './settings.ts'
 import { serviceTools } from './mcp.ts'
 import * as db from './db.ts'
 import { PAGE_GUIDE, makePage } from './pages.ts'
-import * as tasks from './tasks.ts'
+import * as automations from './automations.ts'
+import { htmlText } from './watch.ts'
 import * as ws from './workspace.ts'
 
 export interface ToolContext {
@@ -247,7 +248,7 @@ const fileTools: Tool[] = [
 
 const when = (time: number) => new Date(time).toISOString().slice(0, 16).replace('T', ' ')
 const speaker = (data: Extract<ItemData, { type: 'message' }>) =>
-  data.role === 'assistant' ? 'you' : data.source === 'user' ? 'user' : data.source === 'task' ? 'scheduled task report' : data.source === 'bot' ? `message from ${data.bot?.name ?? 'another bot'}` : 'subagent report'
+  data.role === 'assistant' ? 'you' : data.source === 'user' ? 'user' : data.source === 'automation' ? 'automation report' : data.source === 'bot' ? `message from ${data.bot?.name ?? 'another bot'}` : 'subagent report'
 
 /** The bot's own conversation, as far back as it goes: what is no longer in front of the model can be looked up here. */
 const historyTools: Tool[] = [
@@ -261,7 +262,7 @@ const historyTools: Tool[] = [
     run: (a, ctx) => {
       const matches = db.searchMessages(ctx.bot.id, String(a.query ?? ''), 20)
       if (!matches.length) return 'Nothing was found. Try fewer or different words.'
-      const from = { bot: 'you', user: 'user', subagent: 'subagent report', task: 'scheduled task report', other: 'another bot' }
+      const from = { bot: 'you', user: 'user', subagent: 'subagent report', automation: 'automation report', other: 'another bot' }
       return matches.map((m) => `[${m.itemId}] ${when(m.createdAt)} UTC, ${m.name ? `message from ${m.name}` : from[m.from]}: ${m.snippet}`).join('\n')
     },
   },
@@ -373,7 +374,7 @@ const subagentTools: Tool[] = [
   },
 ]
 
-// When a task runs: exactly one of these, which makes the four kinds of schedule a bot can ask for.
+// When an automation runs by the clock: exactly one of these, which makes the four kinds of schedule a bot can ask for.
 const runsAt = {
   at: str('Run once, at this local date and time, e.g. "2026-11-14 09:30"'),
   in_minutes: { type: 'number', description: 'Run once, this many minutes from now' },
@@ -383,61 +384,95 @@ const runsAt = {
     items: { type: 'string', enum: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] },
     description: 'With time: the days of the week to run on. Omit for every day.',
   },
-  // tasks.ts may not have loaded yet when this does (they reach each other through agent.ts), so its MIN_INTERVAL is written out.
+  // automations.ts may not have loaded yet when this does (they reach each other through agent.ts), so its MIN_INTERVAL is written out.
   every_minutes: { type: 'number', description: 'Run again and again, this many minutes apart (at least 5)' },
 }
 
-/** Scheduled tasks. Who may do what is decided in tasks.ts, not here. */
-const taskTools: Tool[] = [
-  {
-    name: 'list_scheduled_tasks',
+// Or when something changes (a watch), or when one of the bot's apps calls (a hook), in place of a time.
+const startsOn = {
+  ...runsAt,
+  hook: {
+    type: 'object',
     description:
-      'List the scheduled tasks you can see: the ones you do and the ones you made (the main assistant sees every ' +
-      'task). Also gives the date and time now.',
+      'Instead of a time: run the moment one of your apps calls OpenKumi about something that happened there. Only for an app the user ' +
+      'has set a webhook up for; list_automations names those, and what each calls about.',
+    properties: {
+      app: str('The app, by its superpower id, e.g. "linear"'),
+      events: { type: 'array', items: { type: 'string' }, description: 'What to run on, e.g. ["issue.created"]. Omit to run on everything the app calls about.' },
+    },
+  },
+  watch: {
+    type: 'object',
+    description:
+      'Instead of a time: run only when something changes. OpenKumi looks at it every few minutes without you, and starts a run when ' +
+      'what it finds differs from the last look. Give tool (with arguments) or url, not both.',
+    properties: {
+      tool: str('One of your superpower tools that only reads, by its full name, e.g. "mcp__linear__list_issues"'),
+      arguments: { type: 'object', description: 'With tool: the arguments to call it with at every look' },
+      url: str('A public https address to look at, without a sign-in'),
+      track: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'When what comes back is JSON that lists items: the field that tells items apart, then up to four fields whose change matters, ' +
+          'e.g. ["id", "status"]. The run is then told which items are new, updated or gone. Without it, any change at all starts a run.',
+      },
+      every_minutes: { type: 'number', description: 'How many minutes apart to look (at least 5; 15 when left out)' },
+    },
+  },
+}
+
+/** Automations. Who may do what is decided in automations.ts, not here. */
+const automationTools: Tool[] = [
+  {
+    name: 'list_automations',
+    description:
+      'List the automations you can see: the ones you do and the ones you made (the main assistant sees every ' +
+      'one). Also gives the date and time now.',
     parameters: params({}),
-    run: (_, ctx) => tasks.listAs(ctx.bot),
+    run: (_, ctx) => automations.listAs(ctx.bot),
   },
   {
-    name: 'schedule_task',
+    name: 'create_automation',
     description:
-      'Schedule a task: a prompt you will be given at a set time, or again and again. Each run happens in the ' +
-      'background, in a thread of its own that sees nothing of this conversation, so the prompt must be ' +
-      'self-contained; what came of it is passed to your conversation with the user. Give exactly one of at, ' +
-      'in_minutes, time (with days if not every day) or every_minutes. Times are the user\'s local time.',
+      'Make an automation: a prompt you will be given at a set time, again and again, whenever something you watch ' +
+      'changes, or when one of your apps calls. Each run happens in the background, in a thread of its own that sees nothing of this conversation, so ' +
+      'the prompt must be self-contained; what came of it is passed to your conversation with the user. Give exactly ' +
+      'one of at, in_minutes, time (with days if not every day), every_minutes, watch or hook. Times are the user\'s local time.',
     parameters: params(
       {
         title: str('A short name, e.g. "Morning news brief"'),
         prompt: str('Complete, self-contained instructions for each run, including what to report'),
-        ...runsAt,
-        bot_id: str('The main assistant only: the bot that does the task, if not you'),
+        ...startsOn,
+        bot_id: str('The main assistant only: the bot that does it, if not you'),
       },
       ['title', 'prompt'],
     ),
-    run: (a, ctx) => tasks.scheduleAs(ctx.bot, a),
+    run: (a, ctx) => automations.createAs(ctx.bot, a),
   },
   {
-    name: 'update_scheduled_task',
+    name: 'update_automation',
     description:
-      'Change a scheduled task you made (the main assistant can change any task): its name, its prompt or when it ' +
-      'runs, or pause or resume it. Giving one of at, in_minutes, time or every_minutes replaces its schedule.',
+      'Change an automation you made (the main assistant can change any): its name, its prompt or what starts it, ' +
+      'or pause or resume it. Giving one of at, in_minutes, time, every_minutes, watch or hook replaces what starts it.',
     parameters: params(
       {
-        id: str('The task id, from list_scheduled_tasks'),
+        id: str('The automation id, from list_automations'),
         title: str('A new name'),
         prompt: str('New instructions for each run'),
-        paused: { type: 'boolean', description: 'true pauses the task, false resumes it' },
-        ...runsAt,
-        bot_id: str('The main assistant only: move the task to this bot'),
+        paused: { type: 'boolean', description: 'true pauses it, false resumes it' },
+        ...startsOn,
+        bot_id: str('The main assistant only: move it to this bot'),
       },
       ['id'],
     ),
-    run: (a, ctx) => tasks.updateAs(ctx.bot, a),
+    run: (a, ctx) => automations.updateAs(ctx.bot, a),
   },
   {
-    name: 'delete_scheduled_task',
-    description: 'Delete a scheduled task you made (the main assistant can delete any task).',
-    parameters: params({ id: str('The task id, from list_scheduled_tasks') }, ['id']),
-    run: (a, ctx) => tasks.deleteAs(ctx.bot, a.id),
+    name: 'delete_automation',
+    description: 'Delete an automation you made (the main assistant can delete any).',
+    parameters: params({ id: str('The automation id, from list_automations') }, ['id']),
+    run: (a, ctx) => automations.deleteAs(ctx.bot, a.id),
   },
 ]
 
@@ -651,15 +686,7 @@ const webTools: Tool[] = [
         url = new URL(next, url)
       }
       let text = await res.text()
-      if ((res.headers.get('content-type') ?? '').includes('html')) {
-        text = text
-          .replace(/<(script|style|noscript|svg|head)[\s\S]*?<\/\1>/gi, ' ')
-          .replace(/<\/(p|div|h[1-6]|li|tr|section|article)>|<br\s*\/?>/gi, '\n')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'")
-          .replace(/[ \t]+/g, ' ')
-          .replace(/\s*\n\s*/g, '\n')
-      }
+      if ((res.headers.get('content-type') ?? '').includes('html')) text = htmlText(text)
       return `HTTP ${res.status} ${url}\n\n${text.trim()}`
     },
   },
@@ -669,16 +696,16 @@ const webTools: Tool[] = [
 export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problems: Record<string, string> }> {
   const canSpawn = agent.depthOf(thread) < settings().maxDepth
   const services = await serviceTools(thread.botId)
-  // Nobody watches a scheduled run, so there is nobody to ask to take over its browser.
-  const browsing = thread.kind === 'task' ? browserTools.filter((t) => t.name !== 'browser_ask_user') : browserTools
+  // Nobody watches a run of an automation, so there is nobody to ask to take over its browser.
+  const browsing = thread.kind === 'automation' ? browserTools.filter((t) => t.name !== 'browser_ask_user') : browserTools
   const bot = getBot(thread.botId)
   const botTools = [
     listBotsTool,
-    // Only the main assistant makes bots, and only in its conversation with the owner: never from a subagent or a scheduled run.
-    ...(bot && thread.kind === 'chat' && tasks.isMain(bot) ? [createBotTool(settings().botMessages)] : []),
+    // Only the main assistant makes bots, and only in its conversation with the owner: never from a subagent or a run of an automation.
+    ...(bot && thread.kind === 'chat' && automations.isMain(bot) ? [createBotTool(settings().botMessages)] : []),
     ...(agent.canMessage(thread) ? [messageBotTool] : []),
   ]
-  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...taskTools, ...browsing, ...webTools, pageTool]
+  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, pageTool]
   return { tools: [...own, ...services.tools], problems: services.problems }
 }
 

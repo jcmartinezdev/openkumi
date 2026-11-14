@@ -6,7 +6,7 @@
   "can": [
     "List the public holidays of a country or region, for any year",
     "Find the long weekends, and which days off would make one",
-    "Plan trips, meetings and scheduled tasks around holidays here and abroad"
+    "Plan trips, meetings and automations around holidays here and abroad"
   ],
   "site": "https://date.nager.at/"
 }

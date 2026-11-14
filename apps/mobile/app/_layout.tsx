@@ -7,7 +7,7 @@ import { restore, useSession } from '../src/session'
 import { useAppearance, useTheme } from '../src/theme'
 
 /** Pages of settings rows, drawn on the grey of the phone's own Settings. */
-const grouped = (route: string) => route.startsWith('settings/') || route.startsWith('tasks/')
+const grouped = (route: string) => route.startsWith('settings/') || route.startsWith('automations/')
 
 export default function Layout() {
   const theme = useTheme()

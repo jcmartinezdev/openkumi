@@ -2,9 +2,9 @@
   "name": "Watch a page",
   "categories": ["Everyday", "Productivity"],
   "tagline": "Tells you when a price drops, something is back in stock or a slot opens up.",
-  "summary": "Watch a web page on a schedule and tell the user only when what they care about changes: a price, stock, a new post, an appointment slot. Each watch keeps what it last saw in files/watches/ and ends when it has found what it was for.",
+  "summary": "Watch a web page and tell the user only when what they care about changes: a price, stock, a new post, an appointment slot. Each watch is an automation that runs when the page changes, keeps what it last saw in files/watches/ and ends when it has found what it was for.",
   "can": [
-    "Check a page on a schedule, signed in or not, and remember what it saw",
+    "Look at a page again and again, signed in or not, and remember what it saw",
     "Tell you only when what you asked about changes, with the old and new values",
     "Stop by itself once it has found what it was for, or on a date you choose"
   ]

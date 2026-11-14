@@ -59,12 +59,12 @@ fog; 51, 53, 55 drizzle; 56, 57 freezing drizzle; 61, 63, 65 rain (light, modera
 
 ## Regular reports and alerts
 
-A morning forecast or an alert is a scheduled task. Its runs see nothing of this conversation,
-so put the place's latitude, longitude and the units in the task's prompt. For an alert ("tell
+A morning forecast or an alert is an automation. Its runs see nothing of this conversation,
+so put the place's latitude, longitude and the units in its prompt. For an alert ("tell
 me if it will freeze"), write the threshold into the prompt and say that a run that finds
 nothing ends with exactly "Nothing to report."
 
 ## Rules
 
-- The free service allows 10,000 requests a day, for non-commercial use. A run of a scheduled
-  task makes one or two requests, never one per hour of the forecast.
+- The free service allows 10,000 requests a day, for non-commercial use. A run of an
+  automation makes one or two requests, never one per hour of the forecast.

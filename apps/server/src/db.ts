@@ -2,7 +2,8 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { HistoryMatch, Item, ItemData, Queued, Said, ScheduledTask, Thread } from '@openkumi/shared'
+import type { Automation, HistoryMatch, Hook, Item, ItemData, Queued, Said, Thread } from '@openkumi/shared'
+import type { Seen } from './watch.ts'
 import { DATABASE, emit, privateDir } from './config.ts'
 
 const db = new DatabaseSync(DATABASE)
@@ -19,10 +20,25 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS items_thread ON items (thread_id, id);
   CREATE INDEX IF NOT EXISTS threads_parent ON threads (parent_id);
-  CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, title TEXT NOT NULL, prompt TEXT NOT NULL, schedule TEXT NOT NULL,
+  -- starts_on is what starts it (a time, a watch or a webhook), last_check how a watch's latest look
+  -- went, and seen what that look found, or how far a webhook's calls have been read; only the
+  -- server reads it.
+  CREATE TABLE IF NOT EXISTS automations (
+    id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, title TEXT NOT NULL, prompt TEXT NOT NULL, starts_on TEXT NOT NULL,
     enabled INTEGER NOT NULL, created_by TEXT NOT NULL, next_run_at INTEGER, last_run_at INTEGER,
-    last_status TEXT, last_error TEXT, last_thread_id TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+    last_status TEXT, last_error TEXT, last_thread_id TEXT, last_check TEXT, seen TEXT,
+    created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+  );
+  -- A webhook: one bot's app calling in. Its secret never leaves the server.
+  CREATE TABLE IF NOT EXISTS hooks (
+    id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, power TEXT NOT NULL, secret TEXT, created_at INTEGER NOT NULL,
+    last_call_at INTEGER, calls INTEGER NOT NULL DEFAULT 0, refused_at INTEGER, UNIQUE (bot_id, power)
+  );
+  -- What a webhook's calls were about: the event, and the ids that are passed on to a run. A call
+  -- is known by its body, which is what the app signs, so the same call is not taken twice.
+  CREATE TABLE IF NOT EXISTS hook_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, hook_id TEXT NOT NULL, body TEXT NOT NULL, event TEXT NOT NULL,
+    facts TEXT NOT NULL, at INTEGER NOT NULL, UNIQUE (hook_id, body)
   );
   -- The number of each thread's latest change, from one count for all of them, and whether that
   -- change removed it. An app that has seen everything up to a change asks for what came after it.
@@ -78,10 +94,10 @@ if (!hasColumn('archived_at')) {
   `)
 }
 
-// A run of a scheduled task works in a thread of its own, which knows which task it is for.
-if (!hasColumn('task_id')) db.exec('ALTER TABLE threads ADD COLUMN task_id TEXT')
-// Every run is kept, so a task's are found by an index rather than by reading them all.
-db.exec('CREATE INDEX IF NOT EXISTS threads_task ON threads (task_id, created_at)')
+// A run of an automation works in a thread of its own, which knows which automation it is for.
+if (!hasColumn('automation_id')) db.exec('ALTER TABLE threads ADD COLUMN automation_id TEXT')
+// Every run is kept, so an automation's are found by an index rather than by reading them all.
+db.exec('CREATE INDEX IF NOT EXISTS threads_automation ON threads (automation_id, created_at)')
 
 // What waits for a bot that was stopped, or failed, is held back until the owner lets it go.
 if (!hasColumn('held')) db.exec('ALTER TABLE threads ADD COLUMN held INTEGER NOT NULL DEFAULT 0')
@@ -92,7 +108,7 @@ for (const { id } of db.prepare(`SELECT id FROM threads WHERE status = 'running'
   db.prepare(`UPDATE threads SET status = 'idle' WHERE id = ?`).run(id)
   changed(id)
 }
-db.exec(`UPDATE tasks SET last_status = 'stopped' WHERE last_status = 'running'`)
+db.exec(`UPDATE automations SET last_status = 'stopped' WHERE last_status = 'running'`)
 
 /** What a conversation is called until its first message names it. */
 export const UNTITLED = 'New chat'
@@ -106,7 +122,7 @@ function toThread(r: any): Thread {
     parentId: r.parent_id,
     title: r.title,
     kind: r.kind,
-    taskId: r.task_id ?? null,
+    automationId: r.automation_id ?? null,
     archivedAt: r.archived_at ?? null,
     status: r.status,
     model: r.model,
@@ -140,12 +156,12 @@ export function listThreads(): Thread[] {
   return db.prepare('SELECT * FROM threads ORDER BY created_at').all().map(toThread)
 }
 
-/** How long a subagent or a scheduled run stays in the apps' list after it last changed. */
+/** How long a subagent or a run of an automation stays in the apps' list after it last changed. */
 export const RECENT = 60 * 60_000
 
 /**
  * The threads the apps keep a list of: every conversation (the current ones, and the ones set
- * aside, which only the owner makes), and the subagents and scheduled runs that are at work or
+ * aside, which only the owner makes), and the subagents and runs of automations that are at work or
  * changed in the last hour, with the threads above them. Everything else stays here until it is
  * opened: a bot can leave thousands of runs and subagents behind.
  */
@@ -200,7 +216,7 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     parentId: null,
     title: UNTITLED,
     kind: 'chat',
-    taskId: null,
+    automationId: null,
     archivedAt: null,
     status: 'idle',
     model: null,
@@ -211,9 +227,9 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     ...init,
   }
   db.prepare(
-    `INSERT INTO threads (id, bot_id, parent_id, title, kind, task_id, status, model, reported, created_at, updated_at)
+    `INSERT INTO threads (id, bot_id, parent_id, title, kind, automation_id, status, model, reported, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(t.id, t.botId, t.parentId, t.title, t.kind, t.taskId, t.status, t.model, t.reported ? 1 : 0, t.createdAt, t.updatedAt)
+  ).run(t.id, t.botId, t.parentId, t.title, t.kind, t.automationId, t.status, t.model, t.reported ? 1 : 0, t.createdAt, t.updatedAt)
   emit({ type: 'thread.upsert', thread: t, seq: changed(t.id) })
   return t
 }
@@ -361,7 +377,7 @@ export function searchMessages(botId: string, query: string, limit = 30): Histor
     return {
       threadId: item.threadId,
       itemId: item.id,
-      from: data.role === 'assistant' ? 'bot' : data.source === 'user' ? 'user' : data.source === 'task' ? 'task' : data.source === 'bot' ? 'other' : 'subagent',
+      from: data.role === 'assistant' ? 'bot' : data.source === 'user' ? 'user' : data.source === 'automation' ? 'automation' : data.source === 'bot' ? 'other' : 'subagent',
       ...(data.role === 'user' && data.source === 'bot' && data.bot ? { name: data.bot.name } : {}),
       snippet,
       createdAt: item.createdAt,
@@ -437,15 +453,15 @@ export function removeQueued(id: number) {
   emit({ type: 'queue.remove', id })
 }
 
-// ---- scheduled tasks (the rules for them are in tasks.ts)
+// ---- automations (the rules for them are in automations.ts)
 
-function toTask(r: any): ScheduledTask {
+function toAutomation(r: any): Automation {
   return {
     id: r.id,
     botId: r.bot_id,
     title: r.title,
     prompt: r.prompt,
-    schedule: JSON.parse(r.schedule),
+    trigger: JSON.parse(r.starts_on),
     enabled: !!r.enabled,
     createdBy: r.created_by,
     nextRunAt: r.next_run_at,
@@ -453,57 +469,150 @@ function toTask(r: any): ScheduledTask {
     lastStatus: r.last_status,
     lastError: r.last_error,
     lastThreadId: r.last_thread_id,
+    lastCheck: r.last_check ? JSON.parse(r.last_check) : null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
 }
 
-export const newTaskId = () => newId('task')
+export const newAutomationId = () => newId('auto')
 
-export function listTasks(): ScheduledTask[] {
-  return db.prepare('SELECT * FROM tasks ORDER BY created_at').all().map(toTask)
+export function listAutomations(): Automation[] {
+  return db.prepare('SELECT * FROM automations ORDER BY created_at').all().map(toAutomation)
 }
 
-export function getTask(id: string): ScheduledTask | undefined {
-  const r = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id)
-  return r && toTask(r)
+export function getAutomation(id: string): Automation | undefined {
+  const r = db.prepare('SELECT * FROM automations WHERE id = ?').get(id)
+  return r && toAutomation(r)
 }
 
-/** Writes a task as it is given, new or changed. */
-export function saveTask(task: ScheduledTask): ScheduledTask {
-  const t = { ...task, updatedAt: Date.now() }
+/** Writes an automation as it is given, new or changed. What its watch last saw is kept apart (setSeen). */
+export function saveAutomation(automation: Automation): Automation {
+  const a = { ...automation, updatedAt: Date.now() }
   db.prepare(
-    `INSERT OR REPLACE INTO tasks (id, bot_id, title, prompt, schedule, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(t.id, t.botId, t.title, t.prompt, JSON.stringify(t.schedule), t.enabled ? 1 : 0, t.createdBy, t.nextRunAt, t.lastRunAt, t.lastStatus, t.lastError, t.lastThreadId, t.createdAt, t.updatedAt)
-  emit({ type: 'task.upsert', task: t })
-  return t
+    `INSERT INTO automations (id, bot_id, title, prompt, starts_on, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, last_check, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET bot_id = excluded.bot_id, title = excluded.title, prompt = excluded.prompt, starts_on = excluded.starts_on,
+       enabled = excluded.enabled, next_run_at = excluded.next_run_at, last_run_at = excluded.last_run_at, last_status = excluded.last_status,
+       last_error = excluded.last_error, last_thread_id = excluded.last_thread_id, last_check = excluded.last_check, updated_at = excluded.updated_at`,
+  ).run(a.id, a.botId, a.title, a.prompt, JSON.stringify(a.trigger), a.enabled ? 1 : 0, a.createdBy, a.nextRunAt, a.lastRunAt, a.lastStatus, a.lastError, a.lastThreadId, a.lastCheck ? JSON.stringify(a.lastCheck) : null, a.createdAt, a.updatedAt)
+  emit({ type: 'automation.upsert', automation: a })
+  return a
 }
 
-export function deleteTask(id: string) {
-  db.prepare('DELETE FROM tasks WHERE id = ?').run(id)
-  emit({ type: 'task.delete', id })
+export function deleteAutomation(id: string) {
+  db.prepare('DELETE FROM automations WHERE id = ?').run(id)
+  emit({ type: 'automation.delete', id })
 }
 
-/** The tasks that are due by `time`, soonest first. */
-export function dueTasks(time: number): ScheduledTask[] {
-  return db.prepare('SELECT * FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(time).map(toTask)
+/** What an automation's watch found at its last look that worked. The apps are never sent it. */
+export function getSeen(id: string): Seen | null {
+  const r = db.prepare('SELECT seen FROM automations WHERE id = ?').get(id) as { seen: string | null } | undefined
+  return r?.seen ? JSON.parse(r.seen) : null
 }
 
-/** The runs of a task, newest first, `limit` at a time: the ones that started before `before`. `more` says whether older ones are left. */
-export function runsOf(taskId: string, { before, limit = 20 }: { before?: number; limit?: number } = {}): { runs: Thread[]; more: boolean } {
+export function setSeen(id: string, seen: Seen | null) {
+  db.prepare('UPDATE automations SET seen = ? WHERE id = ?').run(seen ? JSON.stringify(seen) : null, id)
+}
+
+/** How far an automation that starts on a webhook's calls has read them: the number of the last one a run was given. It is kept where a watch keeps what it saw. */
+export function getCursor(id: string): number {
+  const r = db.prepare('SELECT seen FROM automations WHERE id = ?').get(id) as { seen: string | null } | undefined
+  return (r?.seen && Number(JSON.parse(r.seen).upTo)) || 0
+}
+
+export function setCursor(id: string, upTo: number) {
+  db.prepare('UPDATE automations SET seen = ? WHERE id = ?').run(JSON.stringify({ upTo }), id)
+}
+
+/** The automations that are due by `time` (a run, or a watch's look), soonest first. */
+export function dueAutomations(time: number): Automation[] {
+  return db.prepare('SELECT * FROM automations WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(time).map(toAutomation)
+}
+
+/** The runs of an automation, newest first, `limit` at a time: the ones that started before `before`. `more` says whether older ones are left. */
+export function runsOf(automationId: string, { before, limit = 20 }: { before?: number; limit?: number } = {}): { runs: Thread[]; more: boolean } {
   const rows = db
-    .prepare('SELECT * FROM threads WHERE task_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?')
-    .all(taskId, before ?? Number.MAX_SAFE_INTEGER, limit + 1)
+    .prepare('SELECT * FROM threads WHERE automation_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?')
+    .all(automationId, before ?? Number.MAX_SAFE_INTEGER, limit + 1)
     .map(toThread)
   return { runs: rows.slice(0, limit), more: rows.length > limit }
 }
 
-/** When the next task is due, or null when none is. */
+/** When the next automation is due, or null when none is. */
 export function nextDue(): number | null {
-  const r = db.prepare('SELECT MIN(next_run_at) AS at FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL').get() as { at: number | null }
+  const r = db.prepare('SELECT MIN(next_run_at) AS at FROM automations WHERE enabled = 1 AND next_run_at IS NOT NULL').get() as { at: number | null }
   return r.at
 }
+
+// ---- webhooks (how a call is checked and what it starts is in hooks.ts)
+
+/** A webhook with its secret, which only the server sees. */
+export interface StoredHook extends Hook {
+  key: string | null
+}
+
+/** What one call of a webhook was about. */
+export interface HookEvent {
+  id: number
+  event: string
+  facts: Record<string, string | number | boolean>
+  at: number
+}
+
+function toHook(r: any): StoredHook {
+  return { id: r.id, botId: r.bot_id, power: r.power, secret: !!r.secret, key: r.secret, createdAt: r.created_at, lastCallAt: r.last_call_at, calls: r.calls, refusedAt: r.refused_at }
+}
+
+/** A webhook as the apps are sent it: without its secret. */
+export const shown = ({ key: _, ...hook }: StoredHook): Hook => hook
+
+export function listHooks(): StoredHook[] {
+  return db.prepare('SELECT * FROM hooks ORDER BY created_at').all().map(toHook)
+}
+
+export function getHook(id: string): StoredHook | undefined {
+  const r = db.prepare('SELECT * FROM hooks WHERE id = ?').get(id)
+  return r && toHook(r)
+}
+
+export function hookOf(botId: string, power: string): StoredHook | undefined {
+  const r = db.prepare('SELECT * FROM hooks WHERE bot_id = ? AND power = ?').get(botId, power)
+  return r && toHook(r)
+}
+
+export function saveHook(hook: StoredHook): StoredHook {
+  db.prepare(
+    `INSERT INTO hooks (id, bot_id, power, secret, created_at, last_call_at, calls, refused_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET secret = excluded.secret, last_call_at = excluded.last_call_at, calls = excluded.calls, refused_at = excluded.refused_at`,
+  ).run(hook.id, hook.botId, hook.power, hook.key, hook.createdAt, hook.lastCallAt, hook.calls, hook.refusedAt)
+  emit({ type: 'hook.upsert', hook: shown(hook) })
+  return hook
+}
+
+/** Removes a webhook, and what its calls were about. */
+export function deleteHook(id: string) {
+  db.prepare('DELETE FROM hook_events WHERE hook_id = ?').run(id)
+  db.prepare('DELETE FROM hooks WHERE id = ?').run(id)
+  emit({ type: 'hook.delete', id })
+}
+
+/** Keeps what a call was about. False when that very call was taken before. */
+export function addHookEvent(hookId: string, body: string, event: string, facts: HookEvent['facts']): boolean {
+  return db.prepare('INSERT OR IGNORE INTO hook_events (hook_id, body, event, facts, at) VALUES (?, ?, ?, ?, ?)').run(hookId, body, event, JSON.stringify(facts), Date.now()).changes > 0
+}
+
+/** What a webhook's calls after number `after` were about, oldest first, `limit` at most; only `events` when any are named. */
+export function hookEvents(hookId: string, after: number, events: string[], limit: number): HookEvent[] {
+  const named = events.length ? `AND event IN (${events.map(() => '?').join(', ')})` : ''
+  return db
+    .prepare(`SELECT * FROM hook_events WHERE hook_id = ? AND id > ? ${named} ORDER BY id LIMIT ?`)
+    .all(hookId, after, ...events, limit)
+    .map((r: any) => ({ id: r.id, event: r.event, facts: JSON.parse(r.facts), at: r.at }))
+}
+
+/** The number of the latest call any webhook has taken. */
+export const lastHookEvent = () => (db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM hook_events').get() as { id: number }).id
 
 export function closeDb() {
   db.close()

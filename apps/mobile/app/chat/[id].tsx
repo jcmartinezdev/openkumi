@@ -7,6 +7,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Attachment, Bot, BotRef, Item, Thread } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
+import { runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { describe } from '@openkumi/client/steps'
@@ -33,7 +34,12 @@ type Row =
   | { key: string; kind: 'between'; from?: string; to?: BotRef; text: string; replyWanted: boolean; messageKey?: string }
 
 /** Who a message the user did not write is from. */
-const FROM = { parent: 'From the chat above', subagent: 'From a subagent', schedule: 'Scheduled task', task: 'From a scheduled task' }
+/** A run's first message as a notice shows it: the prompt, then what its watch found changed. */
+const brief = (text: string) => {
+  const { prompt, change } = runBrief(text)
+  return change ? `${prompt}\n\n${change}` : prompt
+}
+const FROM = { parent: 'From the chat above', subagent: 'From a subagent', trigger: 'Automation', automation: 'From an automation' }
 
 function rows(items: Item[]): Row[] {
   const failed = new Set(items.flatMap(({ data: d }) => (d.type === 'function_call_output' && d.output.startsWith('Error:') ? [d.call_id] : [])))
@@ -47,7 +53,7 @@ function rows(items: Item[]): Row[] {
     const d = item.data
     const key = String(item.id)
     if (d.type === 'message' && d.role === 'user' && d.source === 'bot') out.push({ key, kind: 'between', from: d.bot?.name ?? 'another bot', text: d.text, replyWanted: !!d.replyWanted, messageKey: d.key })
-    else if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId } : { key, kind: 'notice', text: `${FROM[d.source as keyof typeof FROM]}: ${d.text}` })
+    else if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId } : { key, kind: 'notice', text: `${FROM[d.source as keyof typeof FROM]}: ${d.source === 'trigger' ? brief(d.text) : d.text}` })
     else if (d.type === 'sent') out.push({ key, kind: 'between', to: d.to, text: d.text, replyWanted: d.replyWanted, messageKey: d.key })
     // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
     else if (d.type === 'function_call' && ((d.name !== 'show_page' && d.name !== 'message_bot') || failed.has(d.call_id))) step(key, describe(d))
@@ -209,7 +215,7 @@ export default function Chat() {
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
   const connected = useStore((s) => s.connected)
   const threads = useStore((s) => s.threads)
-  const task = useStore((s) => (thread?.taskId ? s.tasks.find((t) => t.id === thread.taskId) : undefined))
+  const automation = useStore((s) => (thread?.automationId ? s.automations.find((a) => a.id === thread.automationId) : undefined))
   const scale = useTextScale()
   const [text, setText] = useState('')
   const [error, setError] = useState('')
@@ -394,12 +400,12 @@ export default function Chat() {
           ListHeaderComponent={
             older ? (
               <View style={styles.older}>{fetchingOlder ? <ActivityIndicator size="small" color={theme.muted} /> : <Pressable accessibilityRole="button" hitSlop={8} onPress={showOlder}><Text style={{ color: theme.faint, fontSize: 13 }}>Show earlier messages</Text></Pressable>}</View>
-            ) : // A run leads back to its task, as on the computer.
-            task ? (
-              <Pressable accessibilityRole="link" hitSlop={6} onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: task.id } })}>
-                <Text style={[styles.notice, { color: theme.faint }]}>A run of the scheduled task <Text style={{ color: theme.text, textDecorationLine: 'underline' }}>{task.title}</Text></Text>
+            ) : // A run leads back to its automation, as on the computer.
+            automation ? (
+              <Pressable accessibilityRole="link" hitSlop={6} onPress={() => router.push({ pathname: '/automations/[id]', params: { id: automation.id } })}>
+                <Text style={[styles.notice, { color: theme.faint }]}>A run of the automation <Text style={{ color: theme.text, textDecorationLine: 'underline' }}>{automation.title}</Text></Text>
               </Pressable>
-            ) : parent ? <Text style={[styles.notice, { color: theme.faint }]}>{thread?.kind === 'task' ? 'A run of a scheduled task' : parent.parentId ? `A subagent of “${parent.title}”` : 'A subagent of this bot’s conversation'}</Text> : undefined
+            ) : parent ? <Text style={[styles.notice, { color: theme.faint }]}>{thread?.kind === 'automation' ? 'A run of an automation' : parent.parentId ? `A subagent of “${parent.title}”` : 'A subagent of this bot’s conversation'}</Text> : undefined
           }
           ListFooterComponent={tail}
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}

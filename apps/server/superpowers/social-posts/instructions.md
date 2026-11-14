@@ -76,7 +76,7 @@ day.
 ## A calendar
 
 For posting regularly, keep `files/marketing/social/calendar.md`: date, platform, post, and
-whether it is an idea, a draft, approved or posted. A scheduled task can draft the coming
+whether it is an idea, a draft, approved or posted. An automation can draft the coming
 week's posts from it, say every Monday, as drafts only.
 
 ## With Typefully

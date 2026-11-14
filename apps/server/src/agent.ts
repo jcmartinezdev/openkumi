@@ -1,10 +1,10 @@
 // The agent loop: runs a thread against its bot's model until the model stops calling tools, and
 // coordinates subagents (child threads that run concurrently and report back to their parent).
 // A bot has one conversation with its owner (see mainThread), which can be started afresh.
-// Runs of scheduled tasks (tasks.ts) are threads beneath the conversation too, and report to it.
+// Runs of automations (automations.ts) are threads beneath the conversation too, and report to it.
 //
-// Everything said to a thread (by the owner, another bot, a subagent or a scheduled run reporting
-// back) waits in the thread's queue and is let in one message at a time: the bot answers each in a
+// Everything said to a thread (by the owner, another bot, a subagent or a run of an automation
+// reporting back) waits in the thread's queue and is let in one message at a time: the bot answers each in a
 // turn of its own. The owner can have a waiting message read at once, by the bot as it works.
 import crypto from 'node:crypto'
 import type { Bot, Item, ItemData, Partial, Queued, Said, Thread } from '@openkumi/shared'
@@ -19,7 +19,7 @@ import { getProvider } from './providers/index.ts'
 import type { ModelEvent, Steering } from './providers/types.ts'
 import { settings } from './settings.ts'
 import { superpowerIndex, superpowerNames } from './superpowers.ts'
-import { TIME_ZONE, finishRun, isMain } from './tasks.ts'
+import { TIME_ZONE, finishRun, isMain } from './automations.ts'
 import { type ToolEndpoint, openToolEndpoint } from './tool-endpoint.ts'
 import { runTool, toolsFor } from './tools.ts'
 import { agentsFile, memoryIndex } from './workspace.ts'
@@ -87,8 +87,9 @@ export const canMessage = (thread: Thread) => thread.kind === 'chat' && settings
 
 /** The system prompt: the master prompt, filled in from the bot's folder on every step so its own edits take effect at once. */
 function instructions(bot: Bot, thread: Thread, problems: Record<string, string>): string {
-  // Who wrote a scheduled task decides whether it counts as the user's say-so; a task deleted since is not taken to be theirs.
-  const by = (thread.kind === 'task' && thread.taskId && db.getTask(thread.taskId)?.createdBy) || ''
+  // Who wrote an automation decides whether it counts as the user's say-so; one deleted since is not taken to be theirs.
+  const automation = thread.kind === 'automation' && thread.automationId ? db.getAutomation(thread.automationId) : undefined
+  const by = automation?.createdBy ?? ''
   return masterPrompt({
     bot_name: bot.name,
     today: new Date().toDateString(),
@@ -96,7 +97,9 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     main: isMain(bot),
     chat: thread.kind === 'chat',
     can_message: canMessage(thread),
-    task: thread.kind === 'task',
+    automation: thread.kind === 'automation',
+    watch: automation?.trigger.kind === 'watch',
+    hook: automation?.trigger.kind === 'hook',
     subagent: thread.kind === 'subagent',
     codex: bot.provider === 'codex',
     rules: bot.rules,
@@ -105,12 +108,12 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     agents_md: agentsFile(bot.id),
     memory: memoryIndex(bot.id).join('\n'),
     superpowers: superpowerIndex(bot.id, problems).join('\n'),
-    task_title: thread.title,
+    automation_title: thread.title,
     by_user: by === 'user',
     by_you: by === bot.id,
     by_other: !!by && by !== 'user' && by !== bot.id,
-    task_author: by ? (getBot(by)?.name ?? 'another bot') : '',
-    task_gone: !by,
+    automation_author: by ? (getBot(by)?.name ?? 'another bot') : '',
+    automation_gone: !by,
   })
 }
 
@@ -164,8 +167,8 @@ function letIn(waiting: Queued, thread: Thread): Item {
   return item
 }
 
-/** What the bot's own work comes back with: a subagent's report, or what a scheduled run came to. */
-const isReport = (said: Pick<Said, 'source'>) => said.source === 'subagent' || said.source === 'task'
+/** What the bot's own work comes back with: a subagent's report, or what a run of an automation came to. */
+const isReport = (said: Pick<Said, 'source'>) => said.source === 'subagent' || said.source === 'automation'
 
 /** How a message stands once it has been sent: `place` is where it waits in the queue, 0 when the bot took it up at once. */
 export interface Delivery {
@@ -186,7 +189,7 @@ export function postMessage(threadId: string, said: Omit<Said, 'type' | 'role' |
   const thread = db.getThread(threadId)
   if (!thread) throw new Error('No such thread')
   if (thread.archivedAt) throw new Error('This is an earlier conversation, which can only be read. Continue it to write in it again.')
-  // What its own subagents and scheduled runs report always gets in: there is nobody to tell that the bot is busy.
+  // What its own subagents and runs of automations report always gets in: there is nobody to tell that the bot is busy.
   // Where the bot was stopped, it goes straight into the conversation, unanswered, for the bot to see when it goes on.
   if (isReport(said) && thread.held) {
     db.addItem(threadId, { type: 'message', role: 'user', ...said })
@@ -487,9 +490,9 @@ async function turn(threadId: string, state: Run) {
 }
 
 function finished(thread: Thread) {
-  // A subagent's or a scheduled run's browser window is closed a little after its work is done.
+  // A subagent's or an automation's run's browser window is closed a little after its work is done.
   if (thread.kind !== 'chat') retireWindow(thread.botId, thread.id)
-  if (thread.kind === 'task') return finishRun(thread)
+  if (thread.kind === 'automation') return finishRun(thread)
   if (thread.kind !== 'subagent' || !thread.parentId) return
   const blocked = waiters.get(thread.id)
   if (blocked?.size) {
@@ -527,7 +530,7 @@ export function basisOf(thread: Thread): Basis {
   let causes = asked.filter((m) => m.source !== 'subagent')
   if (!causes.length) causes = db.listItems(thread.id).map((i) => i.data).filter((d): d is Said => d.type === 'message' && d.role === 'user' && d.source !== 'subagent').slice(-1)
   const bots = causes.filter((m) => m.source === 'bot')
-  // The owner's word, a scheduled task of its own, or nothing at all: it may message whom it likes.
+  // The owner's word, an automation of its own, or nothing at all: it may message whom it likes.
   if (!bots.length || causes.some((m) => m.source === 'user')) return { owner, mayMessage: null, chain: 0 }
   return {
     owner,
@@ -626,7 +629,7 @@ export function resume(thread: Thread): Thread {
   return db.updateThread(thread.id, { archivedAt: null })!
 }
 
-/** Stops a thread and every subagent (and scheduled run) beneath it. */
+/** Stops a thread and every subagent (and run of an automation) beneath it. */
 export function stop(threadId: string) {
   for (const child of db.childrenOf(threadId)) {
     // The parent is being stopped too, so there is nobody to report to.
@@ -656,7 +659,7 @@ export function spawnSubagent(parent: Thread, opts: { task: string; name: string
   return child
 }
 
-/** The subagents a thread has spawned. Scheduled runs beneath a conversation are not among them. */
+/** The subagents a thread has spawned. Runs of automations beneath a conversation are not among them. */
 export const subagentsOf = (parent: Thread) => db.childrenOf(parent.id).filter((c) => c.kind === 'subagent')
 
 /** The child of `parent` with this id; agents may only control subagents they spawned themselves. */
@@ -673,7 +676,7 @@ export function subagentStatus(thread: Thread): 'running' | 'completed' | 'faile
   return last?.type === 'notice' ? 'stopped' : 'completed'
 }
 
-/** How the work of a subagent (or a scheduled run) ended, and what it came to: its last message, or what went wrong. */
+/** How the work of a subagent (or a run of an automation) ended, and what it came to: its last message, or what went wrong. */
 export function outcome(thread: Thread): { status: ReturnType<typeof subagentStatus>; body: string } {
   const status = subagentStatus(thread)
   const items = db.listItems(thread.id)

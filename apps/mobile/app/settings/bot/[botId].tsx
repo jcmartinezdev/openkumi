@@ -8,7 +8,7 @@ import * as WebBrowser from 'expo-web-browser'
 import type { Bot, Superpower, SuperpowerStatus } from '@openkumi/shared'
 import { signInThread, windowCount } from '@openkumi/client/browser'
 import { api, useStore } from '@openkumi/client/store'
-import { scheduleLabel } from '@openkumi/client/tasks'
+import { triggerLabel } from '@openkumi/client/automations'
 import { ProviderIcon, SuperpowerIcon } from '../../../src/icons'
 import { useBotModel } from '../../../src/ModelChip'
 import { Field, ICON_INSET, Row, Section, SettingsPage, Slot, SwitchRow } from '../../../src/SettingsUi'
@@ -26,7 +26,7 @@ export default function BotSettings() {
   const powers = useStore((s) => s.superpowers)
   const statuses = useStore((s) => s.superpowerStatus[botId])
   const zone = useStore((s) => s.about.timeZone)
-  const allTasks = useStore((s) => s.tasks)
+  const allAutomations = useStore((s) => s.automations)
   /** What was just changed, shown at once instead of when the server has said so. */
   const [changed, setChanged] = useState<Partial<Bot> | null>(null)
   // Nothing connects until it is needed, so how the bot's services stand is asked for here.
@@ -36,7 +36,7 @@ export default function BotSettings() {
   // Gone, because it was deleted here or elsewhere.
   if (!stored) return null
   const bot = { ...stored, ...changed }
-  const tasks = allTasks.filter((t) => t.botId === bot.id)
+  const automations = allAutomations.filter((a) => a.botId === bot.id)
 
   const save = (patch: Partial<Bot>) => {
     setChanged((before) => ({ ...before, ...patch }))
@@ -169,18 +169,18 @@ export default function BotSettings() {
         })}
       </Section>
 
-      <Section title="Scheduled tasks" inset={ICON_INSET}>
-        {tasks.map((task) => (
+      <Section title="Automations" inset={ICON_INSET}>
+        {automations.map((automation) => (
           <Row
-            key={task.id}
+            key={automation.id}
             icon="clock"
-            label={task.title}
-            detail={task.enabled ? scheduleLabel(task.schedule, zone) : 'Paused'}
+            label={automation.title}
+            detail={automation.enabled ? triggerLabel(automation.trigger, zone) : 'Paused'}
             opens
-            onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: task.id } })}
+            onPress={() => router.push({ pathname: '/automations/[id]', params: { id: automation.id } })}
           />
         ))}
-        <Row icon="plus" label="New task" tone="action" onPress={() => router.push({ pathname: '/tasks/[id]', params: { id: 'new', botId: bot.id } })} />
+        <Row icon="plus" label="New automation" tone="action" onPress={() => router.push({ pathname: '/automations/[id]', params: { id: 'new', botId: bot.id } })} />
       </Section>
 
       <Section footer="Removes its conversations, files, memory and saved logins.">

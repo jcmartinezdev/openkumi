@@ -18,8 +18,8 @@ export function fromWhom(message: Said): string {
     case 'user': return 'You'
     case 'bot': return message.bot?.name ?? 'Another bot'
     case 'subagent': return 'A subagent'
-    case 'task': return 'A scheduled task'
-    case 'schedule': return 'Scheduled task'
+    case 'automation': return 'An automation'
+    case 'trigger': return 'Automation'
     case 'parent': return 'The conversation above'
   }
 }
@@ -29,7 +29,7 @@ export function fromWhom(message: Said): string {
  * wrapped in tags meant for the bot, so it is told in a line: "Subagent “Compare prices” completed".
  */
 export function waitingText(message: Said): string {
-  const report = message.text.match(/^<(?:subagent_notification|scheduled_task_result)>\n(Subagent|Scheduled task) "(.*?)" \(.*?\) — (\w+)/)
+  const report = message.text.match(/^<(?:subagent_notification|automation_result)>\n(Subagent|Automation) "(.*?)" \(.*?\) — (\w+)/)
   if (report) return `${report[1]} “${report[2]}” ${report[3] === 'completed' && report[1] !== 'Subagent' ? 'ran' : report[3]}`
   return message.text
 }

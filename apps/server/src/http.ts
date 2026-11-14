@@ -20,7 +20,8 @@ import { homeAddresses, nearby, tailscaleAddresses } from './network.ts'
 import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
 import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower, superpowerCategories, superpowerFile } from './superpowers.ts'
-import * as tasks from './tasks.ts'
+import * as automations from './automations.ts'
+import * as hooks from './hooks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
 import * as ws from './workspace.ts'
 
@@ -132,7 +133,7 @@ const route = (method: string, pattern: string, handler: Handler, raw = false) =
 
 const needBot = (id: string) => getBot(id) ?? fail(404, 'No such bot')
 const needThread = (id: string) => db.getThread(id) ?? fail(404, 'No such thread')
-const needTask = (id: string) => db.getTask(id) ?? fail(404, 'No such task')
+const needAutomation = (id: string) => db.getAutomation(id) ?? fail(404, 'No such automation')
 function fail(status: number, message: string): never {
   throw new HttpError(status, message)
 }
@@ -156,7 +157,8 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     ...(changes ? { removed: changes.removed } : {}),
     database: db.DATABASE_ID,
     seq: db.latestChange(),
-    tasks: db.listTasks(),
+    automations: db.listAutomations(),
+    hooks: hooks.listHooks(),
     queue: db.allQueued(),
     providers: providerInfos(),
     browsers: browserStates(),
@@ -166,7 +168,7 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     home: HOME_LABEL,
     settings: settings(),
     defaults: DEFAULTS,
-    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: tasks.TIME_ZONE },
+    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT },
   }
 })
 
@@ -216,7 +218,8 @@ route('DELETE', '/api/bots/:id', async ([id]) => {
   await stopBrowser(id)
   const had = enabledSuperpowers(id).length
   await mcp.closeBot(id)
-  tasks.forgetBot(id)
+  automations.forgetBot(id)
+  hooks.forgetBot(id)
   db.deleteBotThreads(id)
   deleteBot(id)
   if (had) announceSuperpowers()
@@ -323,23 +326,41 @@ route('POST', '/api/bots/:id/fresh', ([id]) => unless(() => agent.startFresh(nee
 route('GET', '/api/bots/:id/search', ([id], _, { url }) => ({ matches: db.searchMessages(needBot(id).id, url.searchParams.get('q') ?? '') }))
 route('POST', '/api/threads/:id/resume', ([id]) => unless(() => agent.resume(needThread(id))))
 
-// ---- scheduled tasks: the owner may make, change, run and delete any of them
-// What the owner asked for that cannot be done (a time that has passed, a name left empty) is theirs to put right.
-const checked = <T>(act: () => T): T => {
+// ---- automations: the owner may make, change, run and delete any of them
+// What the owner asked for that cannot be done (a time that has passed, a name left empty, a page
+// that cannot be watched) is theirs to put right.
+const checked = async <T>(act: () => T | Promise<T>): Promise<T> => {
   try {
-    return act()
+    return await act()
   } catch (e: any) {
     fail(400, e.message)
   }
 }
-route('GET', '/api/tasks', () => db.listTasks())
-route('POST', '/api/tasks', (_, body) => checked(() => tasks.createTask(body, 'user')))
-route('PATCH', '/api/tasks/:id', ([id], body) => checked(() => tasks.updateTask(needTask(id), body)))
-route('DELETE', '/api/tasks/:id', ([id]) => tasks.deleteTask(needTask(id)))
-route('POST', '/api/tasks/:id/run', ([id]) => unless(() => tasks.runNow(needTask(id))))
-// A task's runs, a page at a time, newest first: `before` is when the oldest one an app has started.
-// The runs of a task that was deleted are still there.
-route('GET', '/api/tasks/:id/runs', ([id], _, { url }) => db.runsOf(id, { before: count(url, 'before') }))
+route('GET', '/api/automations', () => db.listAutomations())
+route('POST', '/api/automations', (_, body) => checked(() => automations.createAutomation(body, 'user')))
+route('PATCH', '/api/automations/:id', ([id], body) => checked(() => automations.updateAutomation(needAutomation(id), body)))
+route('DELETE', '/api/automations/:id', ([id]) => automations.deleteAutomation(needAutomation(id)))
+route('POST', '/api/automations/:id/run', ([id]) => unless(() => automations.runNow(needAutomation(id))))
+// A look at what a watch watches, now instead of when it is due; a run starts if it changed.
+route('POST', '/api/automations/:id/look', async ([id]) => {
+  try {
+    return await automations.check(needAutomation(id), true)
+  } catch (e: any) {
+    fail(e instanceof HttpError ? e.status : 409, e.message)
+  }
+})
+// An automation's runs, a page at a time, newest first: `before` is when the oldest one an app has started.
+// The runs of an automation that was deleted are still there.
+route('GET', '/api/automations/:id/runs', ([id], _, { url }) => db.runsOf(id, { before: count(url, 'before') }))
+
+// ---- webhooks: the owner sets one up for a bot's app, gives it its secret, and removes it
+// An address to suggest for them: this computer's name on Tailscale, which is where Tailscale Funnel lets the internet in.
+route('GET', '/api/hooks/address', async () => {
+  const name = (await tailscaleAddresses()).find((address) => /[a-z]/i.test(address))
+  return { port: hooks.HOOKS_PORT, suggestion: name ? `https://${name}` : null }
+})
+route('PUT', '/api/bots/:id/hooks/:power', ([id, power], body) => checked(() => hooks.setUp(needBot(id).id, power, body)))
+route('DELETE', '/api/bots/:id/hooks/:power', ([id, power]) => hooks.remove(needBot(id).id, power))
 
 // ---- threads
 // A thread, and its newest page of items (see db.PAGE); `before` asks for the page before that

@@ -127,7 +127,7 @@ function digest(items: Item[]): string {
   return items.flatMap(({ data }) => {
     if (data.type === 'message' && data.role === 'assistant') return [`Bot: ${data.text.slice(0, 6000)}`]
     if (data.type === 'message') {
-      const who = data.source === 'user' ? 'User' : data.source === 'task' ? 'Scheduled task report' : data.source === 'bot' ? `Message from ${data.bot?.name ?? 'another bot'}` : 'Subagent report'
+      const who = data.source === 'user' ? 'User' : data.source === 'automation' ? 'Automation report' : data.source === 'bot' ? `Message from ${data.bot?.name ?? 'another bot'}` : 'Subagent report'
       return [`${who}: ${withFiles(data.text.slice(0, 6000), data.attachments)}`]
     }
     if (data.type === 'sent') return [`(the bot wrote to ${data.to.name}: ${data.text.slice(0, 2000)})`]

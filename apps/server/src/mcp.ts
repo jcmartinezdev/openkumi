@@ -26,6 +26,18 @@ import { emit, privateDir, workspaceDir } from './config.ts'
 import { type Service, enabledSuperpowers, serviceOf, signedIn } from './superpowers.ts'
 import type { Tool } from './tools.ts'
 
+/** A bot's account with a service has lapsed, or does not allow what was asked: the owner has to sign it in again. */
+export class NeedsSignIn extends Error {}
+
+/** A service's tool, with what a watch needs of it (watch.ts): whether it only reads, and its result as the service gave it. */
+export interface ServiceTool extends Tool {
+  /** The service it belongs to, by name. */
+  app: string
+  /** It only reads: the service marks it so, or the superpower's manifest lists it. */
+  readOnly: boolean
+  call(args: Record<string, unknown>, signal?: AbortSignal): Promise<CallToolResult>
+}
+
 /** The superpowers switched on for a bot that bring a service. */
 const services = (botId: string) => enabledSuperpowers(botId).filter((id) => serviceOf(id))
 
@@ -203,7 +215,7 @@ export function cancelLogin(botId: string, id: string) {
 
 interface Live {
   client: Client
-  tools: Tool[]
+  tools: ServiceTool[]
 }
 
 const key = (botId: string, id: string) => `${botId}\n${id}`
@@ -227,6 +239,10 @@ export function superpowerStatuses(): Record<string, Record<string, SuperpowerSt
   return out
 }
 
+/** What a bot calls a service's tool: its superpower's id, then the service's own name for it. */
+const toolName = (id: string, name: string) => `mcp__${id}__${name}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64)
+const lapsed = (service: string) => `you are not signed in to ${service} any more. Ask the user to sign you in again, under Superpowers in your settings.`
+
 /** A tool result as text for the model. Pictures and other attachments are described, not included. */
 function resultText(result: CallToolResult): string {
   const parts = (result.content ?? []).map((block) => {
@@ -245,29 +261,35 @@ async function open(botId: string, id: string): Promise<Live> {
   const k = key(botId, id)
   const result: Live = { client: null as unknown as Client, tools: [] }
 
-  const toTools = (list: { name: string; description?: string; inputSchema?: unknown }[]): Tool[] =>
-    list.map((t) => ({
-      // Model APIs accept only these characters in a tool name, and at most 64 of them.
-      name: `mcp__${id}__${t.name}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64),
-      description: `[${service.name}] ${t.description ?? t.name}`.slice(0, 1200),
-      parameters: { type: 'object', properties: {}, ...(t.inputSchema as object) },
-      run: async (args, ctx) => {
+  const toTools = (list: { name: string; description?: string; inputSchema?: unknown; annotations?: { readOnlyHint?: boolean } }[]): ServiceTool[] =>
+    list.map((t) => {
+      const call: ServiceTool['call'] = async (args, signal) => {
         const current = await connect(botId, id)
         try {
-          return resultText(await current.client.callTool({ name: t.name, arguments: args }, { signal: ctx.signal, timeout: 120_000 }))
+          return (await current.client.callTool({ name: t.name, arguments: args }, { signal, timeout: 120_000 })) as CallToolResult
         } catch (e) {
           // Some services let a bot connect and list its tools without its account, and
           // only ask for the account when a tool is used, so this is where a lapsed sign-in shows.
           if (!(e instanceof UnauthorizedError || e instanceof InsufficientScopeError)) throw e
           await signedOut(botId, id)
-          throw new Error(
+          throw new NeedsSignIn(
             e instanceof UnauthorizedError
-              ? `you are not signed in to ${service.name} any more. Ask the user to sign you in again, under Superpowers in your settings.`
+              ? lapsed(service.name)
               : `your sign-in to ${service.name} does not allow this. Ask the user to sign you in again, under Superpowers in your settings, and to allow everything ${service.name} asks about.`,
           )
         }
-      },
-    }))
+      }
+      return {
+        // Model APIs accept only these characters in a tool name, and at most 64 of them.
+        name: toolName(id, t.name),
+        description: `[${service.name}] ${t.description ?? t.name}`.slice(0, 1200),
+        parameters: { type: 'object', properties: {}, ...(t.inputSchema as object) },
+        app: service.name,
+        readOnly: t.annotations?.readOnlyHint === true || !!service.reads?.includes(t.name),
+        call,
+        run: async (args, ctx) => resultText(await call(args, ctx.signal)),
+      }
+    })
 
   const make = () =>
     new Client(
@@ -408,6 +430,23 @@ export async function serviceTools(botId: string): Promise<{ tools: Tool[]; prob
   )
   tools.sort((a, b) => a.name.localeCompare(b.name))
   return { tools, problems }
+}
+
+/**
+ * One of a bot's service tools, by the name the bot calls it by, for a watch to call without a
+ * model. Undefined when the bot has no such tool; an error when its service cannot be asked.
+ */
+export async function serviceTool(botId: string, name: string): Promise<ServiceTool | undefined> {
+  // A tool's name begins with its superpower's, so only that one service is asked.
+  const id = services(botId).find((id) => name.startsWith(toolName(id, '')))
+  if (!id) return undefined
+  try {
+    return (await connect(botId, id)).tools.find((t) => t.name === name)
+  } catch {
+    const service = needService(id).name
+    if (statuses.get(key(botId, id))?.state === 'needs-login') throw new NeedsSignIn(lapsed(service))
+    throw new Error(`${service} is not reachable right now.`)
+  }
 }
 
 /** Ends a bot's connections, when the bot is deleted. */

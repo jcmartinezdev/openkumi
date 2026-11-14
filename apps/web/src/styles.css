@@ -342,6 +342,7 @@ a.row { text-decoration: none; }
 .msg { overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; max-width: 85%; padding: 8px 14px; border-radius: 16px; background: var(--user); white-space: pre-wrap; }
 .msg.task { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); white-space: pre-wrap; color: var(--muted); }
+.msg.task .watch-change { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 /* A message between bots: one that came from another bot sits on the left, one this bot sent on the right, like the owner's own. */
 .msg.between { max-width: 85%; padding: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
 .msg.between.from { align-self: flex-start; }
@@ -813,26 +814,26 @@ a.set-link:hover { background: var(--hover); }
 .set-menu-items button { justify-content: flex-start; height: 30px; border: none; font-weight: 400; }
 .picker.environment { max-width: 130px; margin-left: 6px; }
 
-/* ---- scheduled tasks: shown in the conversation's place, built from the settings' rows */
+/* ---- automations: shown in the conversation's place, built from the settings' rows */
 
-.tasks-body { grid-row: scroll / foot; grid-column: 1 / -1; min-height: 0; display: flex; flex-direction: column; }
-.task-card .task-head .set-row-main { flex-direction: row; align-items: center; gap: 12px; }
-.task-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
-.task-open:hover h3 { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-.task-head .set-control { flex: none; }
-.task-head .err { margin-top: 8px; font-size: 12px; }
-a.task-run, button.task-run { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 16px 6px 60px; font-size: 13px; color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums; }
-.set-group > a.task-run:first-child { padding-left: 16px; }
-a.task-run:hover, button.task-run:hover { background: var(--hover); color: var(--text); }
-button.task-run { width: 100%; border: 0; border-radius: 0; background: none; text-align: left; font-family: inherit; cursor: pointer; }
-a.task-run .ic:last-child { color: var(--faint); }
-.task-run.task-more { color: var(--faint); font-size: 12px; }
+.automations-body { grid-row: scroll / foot; grid-column: 1 / -1; min-height: 0; display: flex; flex-direction: column; }
+.automation-card .automation-head .set-row-main { flex-direction: row; align-items: center; gap: 12px; }
+.automation-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.automation-open:hover h3 { text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+.automation-head .set-control { flex: none; }
+.automation-head .err { margin-top: 8px; font-size: 12px; }
+a.automation-run, button.automation-run { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 16px 6px 60px; font-size: 13px; color: var(--muted); text-decoration: none; font-variant-numeric: tabular-nums; }
+.set-group > a.automation-run:first-child { padding-left: 16px; }
+a.automation-run:hover, button.automation-run:hover { background: var(--hover); color: var(--text); }
+button.automation-run { width: 100%; border: 0; border-radius: 0; background: none; text-align: left; font-family: inherit; cursor: pointer; }
+a.automation-run .ic:last-child { color: var(--faint); }
+.automation-run.automation-more { color: var(--faint); font-size: 12px; }
 .set-input.time { width: 120px; }
 .days { display: flex; gap: 4px; }
 button.day { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-size: 12px; font-weight: 500; }
 button.day.on, button.day.on:hover:not(:disabled) { background: var(--primary); color: var(--on-primary); border-color: transparent; }
-.task-actions { display: flex; align-items: center; gap: 8px; margin-top: -14px; padding: 0 4px; }
-.row.tasks-link { margin-bottom: 0; }
+.automation-actions { display: flex; align-items: center; gap: 8px; margin-top: -14px; padding: 0 4px; }
+.row.automations-link { margin-bottom: 0; }
 
 /* ---- narrow screens */
 
@@ -1023,6 +1024,12 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 @media (max-width: 560px) { .power-head-action { justify-items: start; max-width: none; } .power-standing { text-align: left; } }
 /* What a superpower gives a bot to read: its files, then the one open, read-only. */
 .skill { display: grid; gap: 10px; margin-top: 12px; }
+/* A webhook's steps: what to enter in the app, its address to copy, and where its secret goes. */
+.hook-steps { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.hook-steps ol { margin: 0 0 12px; padding-left: 20px; display: grid; gap: 8px; }
+.hook-steps li button { height: 24px; padding: 0 8px; font-size: 12px; vertical-align: middle; }
+.hook-address { overflow-wrap: anywhere; color: var(--text); }
+.hook-secret { display: flex; gap: 8px; flex-wrap: wrap; }
 .skill-files { display: flex; flex-wrap: wrap; gap: 4px; }
 .skill-files .file-row { width: auto; max-width: 100%; padding: 0 10px; border: 1px solid var(--border); }
 .skill-view { min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); overflow: hidden; }

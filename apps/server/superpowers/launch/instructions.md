@@ -103,13 +103,13 @@ Save the drafts beside the plan, in `files/marketing/launch/<name>/`, one file p
 
 ## Reminders
 
-Schedule a task for each key moment of the day and of the days just before, not for every
+Make an automation for each key moment of the day and of the days just before, not for every
 small step. A run sees nothing of this conversation, so its prompt says what to remind the user
 of, and where the draft for it is; its final message is the reminder.
 
 ## How it went
 
-Offer a scheduled task for the day after and the week after. Its prompt lists the launch's
+Offer an automation for the day after and the week after. Its prompt lists the launch's
 public pages (the Product Hunt page, the Hacker News thread, the Reddit posts) and asks for the
 ranking, points, comments and the questions people asked, read with `web_fetch` or the browser.
 Add what people asked and objected to to the brief.

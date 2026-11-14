@@ -20,6 +20,7 @@ export const DEFAULTS: Settings = {
   maxSubagents: 8,
   maxDepth: 2,
   botMessages: true,
+  hookAddress: '',
   instructionsLimit: 12_000,
   historyLimit: 60_000,
   debugEngines: false,
@@ -49,6 +50,8 @@ const ACCEPT: { [K in keyof Settings]: (v: unknown) => Settings[K] | undefined }
   maxSubagents: whole(1, 16),
   maxDepth: whole(0, 3),
   botMessages: bool,
+  // Apps only call an https address, and the address of a webhook is this with its own end added.
+  hookAddress: (v) => (typeof v === 'string' && (!v.trim() || /^https:\/\/[^\s/]+/.test(v.trim())) ? v.trim().replace(/\/+$/, '').slice(0, 300) : undefined),
   instructionsLimit: whole(2000, 60_000),
   historyLimit: whole(2000, 1_000_000),
   debugEngines: bool,

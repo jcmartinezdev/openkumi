@@ -65,7 +65,7 @@ function inTurn<T>(job: () => Promise<T>): Promise<T> {
 }
 
 /** The parts of the state that are kept; the live state of the bots' browsers is not. */
-const KEPT = ['bots', 'threads', 'tasks', 'providers', 'superpowers', 'superpowerCategories', 'superpowerStatus', 'home', 'settings', 'defaults', 'about'] as const
+const KEPT = ['bots', 'threads', 'automations', 'hooks', 'providers', 'superpowers', 'superpowerCategories', 'superpowerStatus', 'home', 'settings', 'defaults', 'about'] as const
 
 const stateKey = (environment: string) => `${environment}/state`
 const threadKey = (environment: string, id: string) => `${environment}/thread/${id}`

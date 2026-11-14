@@ -6,10 +6,11 @@ import { stopAllBrowsers } from './browser.ts'
 import { workspaceDir } from './config.ts'
 import { closeAll } from './mcp.ts'
 import * as db from './db.ts'
+import { closeHooks, listen as openHooks } from './hooks.ts'
 import { startServer } from './http.ts'
 import { refreshProviders } from './providers/index.ts'
 import { moveToSuperpowers } from './superpowers.ts'
-import { startScheduler } from './tasks.ts'
+import { startAutomations } from './automations.ts'
 import { commit, scaffold } from './workspace.ts'
 
 // Bots used to live in the database; write them out as folders once.
@@ -41,8 +42,10 @@ if (!listBots().length) {
 
 const server = startServer()
 
-// Scheduled tasks start once the server is up, since a bot on an engine reaches its tools through it.
-startScheduler()
+// Automations start once the server is up, since a bot on an engine reaches its tools through it.
+startAutomations()
+// And the door for webhooks, when any is set up.
+openHooks()
 // So do the bots that had messages waiting for them when the server last stopped.
 agent.resumeQueues()
 
@@ -54,6 +57,7 @@ async function shutdown() {
   if (closing) return
   closing = true
   server.close()
+  closeHooks()
   // Replies being written are stopped first, so that what they had is saved before the database closes.
   await agent.stopAll()
   await Promise.all([stopAllBrowsers(), closeAll()])

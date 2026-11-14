@@ -146,7 +146,7 @@ scorecard with `show_page`.
 For real search figures, ask the user to export the Performance report (and the Generative AI
 performance report) from Google Search Console and attach it.
 
-Offer to check again every month: a scheduled task whose prompt names the site, the pages and
+Offer to check again every month: an automation whose prompt names the site, the pages and
 the last report, compares with it, saves a new report, and reports only what got worse or
 better, ending with exactly "Nothing to report." when nothing changed.
 

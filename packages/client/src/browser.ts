@@ -1,5 +1,5 @@
 // What every app needs to show a bot's browser: which window is whose, and who is driving it. Each
-// thread of a bot (its conversation, a subagent, a scheduled run) browses in a window of its own;
+// thread of a bot (its conversation, a subagent, a run of an automation) browses in a window of its own;
 // the owner watches one, and takes control of it to use the page themselves.
 import type { BrowserState, BrowserWindow, Thread } from '@openkumi/shared'
 import { mainThread, send } from './store'
@@ -37,7 +37,7 @@ export function sessionName(threads: Thread[], threadId: string | null | undefin
   if (threadId?.startsWith('sign-in:')) return 'Signing in'
   const thread = threads.find((t) => t.id === threadId)
   if (!thread || thread.kind === 'chat') return 'Conversation'
-  return thread.kind === 'task' ? `Scheduled: ${thread.title}` : thread.title
+  return thread.kind === 'automation' ? `Automation: ${thread.title}` : thread.title
 }
 
 /** "2 windows": one for each thread of the bot that is browsing. */

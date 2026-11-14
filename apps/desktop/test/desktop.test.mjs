@@ -952,7 +952,7 @@ test('what is said to a busy bot waits in view, to be taken back, sent now or le
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
-test('scheduled tasks: made on their page, run, and each run opened from beneath its task', async () => {
+test('automations: made on their page, run, and each run opened from beneath its automation', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()
   await showsBot(win, 'Assistant')
@@ -962,71 +962,191 @@ test('scheduled tasks: made on their page, run, and each run opened from beneath
   const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
 
   // They have a place of their own in the sidebar, which says who may do what.
-  await win.locator('.sidebar .tasks-link').click()
-  await win.locator('.heading', { hasText: 'Scheduled tasks' }).waitFor()
+  await win.locator('.sidebar .automations-link').click()
+  await win.locator('.heading', { hasText: 'Automations' }).waitFor()
   assert.match(await win.locator('.set-intro').first().innerText(), /🤖 Assistant, your first bot, is the main assistant/)
-  await win.locator('.set-row', { hasText: 'No scheduled tasks yet' }).waitFor()
+  await win.locator('.set-row', { hasText: 'No automations yet' }).waitFor()
 
-  // A new task: a bot, a prompt, and a time on chosen days.
-  await win.getByRole('button', { name: 'New task' }).click()
+  // A new one: a bot, a prompt, and a time on chosen days.
+  await win.getByRole('button', { name: 'New automation' }).click()
   await win.getByLabel('Bot', { exact: true }).selectOption(helper.id)
   await win.getByLabel('Name', { exact: true }).fill('Morning brief')
   await win.getByLabel('Prompt', { exact: true }).fill('Say good morning')
   await win.getByLabel('Time', { exact: true }).fill('07:30')
   for (const day of ['Monday', 'Wednesday', 'Friday']) await win.getByRole('button', { name: day, exact: true }).click()
-  await shot('task-new')
-  await win.getByRole('button', { name: 'Create task' }).click()
-  const card = win.locator('.task-card', { hasText: 'Morning brief' })
+  await shot('automation-new')
+  await win.getByRole('button', { name: 'Create automation' }).click()
+  const card = win.locator('.automation-card', { hasText: 'Morning brief' })
   await card.waitFor()
-  assert.match(await card.locator('.task-head').innerText(), /Mon, Wed, Fri at 07:30 · Helper · made by you\s+Next /)
-  const [task] = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/tasks')
-  assert.deepEqual([task.botId, task.createdBy, task.schedule], [helper.id, 'user', { type: 'daily', time: '07:30', days: [1, 3, 5] }])
+  assert.match(await card.locator('.automation-head').innerText(), /Mon, Wed, Fri at 07:30 · Helper · made by you\s+Next /)
+  const [automation] = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/automations')
+  assert.deepEqual([automation.botId, automation.createdBy, automation.trigger], [helper.id, 'user', { kind: 'time', schedule: { type: 'daily', time: '07:30', days: [1, 3, 5] } }])
 
-  // Run now: the run is listed beneath its task, and opens as a thread that leads back to the task.
+  // Run now: the run is listed beneath its automation, and opens as a thread that leads back to it.
   await card.getByRole('button', { name: 'Run Morning brief now' }).click()
-  const run = card.locator('.task-run').first()
+  const run = card.locator('.automation-run').first()
   await until(async () => /Done/.test(await run.innerText().catch(() => '')), 20_000)
-  await shot('task-list')
+  await shot('automation-list')
   await run.click()
   await win.locator('.msg.task', { hasText: 'Say good morning' }).waitFor()
   await win.locator('.msg.assistant', { hasText: 'Echo: Say good morning' }).waitFor()
-  assert.match(await win.locator('.heading').innerText(), /^Morning brief\nScheduled run · .+ · Helper$/)
+  assert.match(await win.locator('.heading').innerText(), /^Morning brief\nRun of an automation · .+ · Helper$/)
   // Its bot shows it too, as it does a subagent.
   await win.locator('.sidebar .row.sub', { hasText: 'Morning brief' }).waitFor()
-  await shot('task-run')
-  await win.getByRole('button', { name: 'Back to the scheduled task' }).click()
-  await until(async () => (await here()) === `#/tasks/${task.id}`, 10_000)
-  await win.locator('.set-section', { hasText: 'Runs' }).locator('.task-run', { hasText: 'Done' }).waitFor()
-  await shot('task-page')
+  await shot('automation-run')
+  await win.getByRole('button', { name: 'Back to the automation' }).click()
+  await until(async () => (await here()) === `#/automations/${automation.id}`, 10_000)
+  await win.locator('.set-section', { hasText: 'Runs' }).locator('.automation-run', { hasText: 'Done' }).waitFor()
+  await shot('automation-page')
 
   // What came of it reached Helper's conversation, where it opens the run.
   await win.locator('.sidebar .row.bot', { hasText: 'Helper' }).click()
-  const report = win.locator('.activity', { hasText: 'Scheduled task “Morning brief” ran' })
+  const report = win.locator('.activity', { hasText: 'Automation “Morning brief” ran' })
   await report.waitFor({ timeout: 20_000 })
-  await shot('task-report')
+  await shot('automation-report')
   await report.getByRole('button', { name: 'Open' }).click()
   await win.locator('.msg.task', { hasText: 'Say good morning' }).waitFor()
 
   // Renaming it keeps its next run; switching it off from the list pauses it.
-  await win.evaluate((id) => (location.hash = `/tasks/${id}`), task.id)
+  await win.evaluate((id) => (location.hash = `/automations/${id}`), automation.id)
   await win.getByLabel('Name', { exact: true }).fill('Morning hello')
   await win.getByRole('button', { name: 'Save', exact: true }).click()
   await win.getByRole('button', { name: 'Saved', exact: true }).waitFor()
-  const [renamed] = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/tasks')
-  assert.deepEqual([renamed.title, renamed.nextRunAt], ['Morning hello', task.nextRunAt])
-  await win.getByRole('button', { name: 'All scheduled tasks' }).click()
+  const [renamed] = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/automations')
+  assert.deepEqual([renamed.title, renamed.nextRunAt], ['Morning hello', automation.nextRunAt])
+  await win.getByRole('button', { name: 'All automations' }).click()
   await win.getByRole('switch', { name: 'Morning hello is on' }).click()
-  await win.locator('.task-card', { hasText: 'Paused' }).waitFor()
+  await win.locator('.automation-card', { hasText: 'Paused' }).waitFor()
 
   // Deleting it leaves its runs where they are.
-  await win.locator('.task-open', { hasText: 'Morning hello' }).click()
+  await win.locator('.automation-open', { hasText: 'Morning hello' }).click()
   await win.getByRole('button', { name: 'Delete', exact: true }).click()
-  await win.locator('.set-row', { hasText: 'No scheduled tasks yet' }).waitFor()
-  assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).threads.filter((t) => t.taskId === task.id).length, 1)
+  await win.locator('.set-row', { hasText: 'No automations yet' }).waitFor()
+  assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).threads.filter((t) => t.automationId === automation.id).length, 1)
+
+  // One that watches an app, as a bot sets it up: it says what it watches, and "Look now" runs it when that changed.
+  const shelf = `${tmp}/shelf.json`
+  const put = (items) => fs.writeFileSync(shelf, JSON.stringify({ items }))
+  put([{ id: 1, title: 'Bread' }])
+  fs.mkdirSync(`${tmp}/superpowers/shelf`)
+  fs.writeFileSync(`${tmp}/superpowers/shelf/superpower.json`, JSON.stringify({ name: 'Shelf', categories: ['Tests'], tagline: 'For tests.', summary: 'Shelf for tests.', can: [], mcp: { command: process.execPath, args: [path.resolve(import.meta.dirname, '../../server/test/fixtures/mcp-watch.mjs'), shelf] } }))
+  await ask(LOCAL_PORT, 'local-home', 'PUT', `/api/bots/${helper.id}/superpowers/shelf`, { on: true })
+  const watch = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/automations', { botId: helper.id, title: 'New on the shelf', prompt: 'Say what is new', trigger: { kind: 'watch', watch: { on: 'tool', tool: 'mcp__shelf__list_items', arguments: { shelf: 'top' }, track: ['id'], every: 30 } } })
+  const watching = win.locator('.automation-card', { hasText: 'New on the shelf' })
+  assert.match(await watching.locator('.automation-head').innerText(), /When Shelf changes · Helper · made by you\s+Looks /)
+  await watching.locator('.automation-open').click()
+  await win.locator('.set-row', { hasText: 'Last look' }).locator('p', { hasText: /^First look, .*1 item now/ }).waitFor()
+  assert.match(await win.locator('.set-row', { hasText: 'Watches' }).innerText(), /Shelf: list items, with \{"shelf":"top"\}\. OpenKumi makes this call itself/)
+  assert.equal(await win.getByLabel('Starts', { exact: true }).inputValue(), 'app')
+  assert.equal(await win.getByLabel('Tracked fields', { exact: true }).inputValue(), 'id')
+  await shot('automation-watch')
+  await win.getByRole('button', { name: 'Look now' }).click()
+  await win.locator('.set-row', { hasText: 'Last look' }).locator('p', { hasText: /^No change, / }).waitFor()
+  put([{ id: 1, title: 'Bread' }, { id: 2, title: 'Milk' }])
+  await win.getByRole('button', { name: 'Look now' }).click()
+  await win.locator('.set-row', { hasText: 'Last look' }).locator('p', { hasText: /^Changed, .*New: Milk \(2\)/ }).waitFor()
+  await win.locator('.set-section', { hasText: 'Runs' }).locator('.automation-run', { hasText: 'Done' }).click()
+  // The run shows the prompt, and apart from it what OpenKumi told it had changed.
+  assert.match(await win.locator('.msg.task .watch-change').innerText(), /What changed\s+This run was started because what this automation watches changed: Shelf \(mcp__shelf__list_items\)\.\s+What changed since the last look:\s+New: Milk \(2\)/i)
+  await shot('automation-watch-run')
+  // Looking every 20 minutes instead keeps what it watches, and what it last saw.
+  await win.getByRole('button', { name: 'Back to the automation' }).click()
+  await win.getByLabel('Looks every', { exact: true }).fill('20')
+  await win.getByRole('button', { name: 'Save', exact: true }).click()
+  await win.getByRole('button', { name: 'Saved', exact: true }).waitFor()
+  const changed = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/automations')).find((a) => a.id === watch.id)
+  assert.deepEqual([changed.trigger, changed.lastCheck.outcome], [{ kind: 'watch', watch: { every: 20, track: ['id'], on: 'tool', tool: 'mcp__shelf__list_items', arguments: { shelf: 'top' }, app: 'Shelf' } }, 'changed'])
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/automations/${watch.id}`)
+
 
   // The main assistant is marked among the bots.
   await win.evaluate(() => (location.hash = '/settings/bots'))
   await win.locator('.set-link', { hasText: 'Assistant' }).locator('.pill', { hasText: 'Main assistant' }).waitFor()
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('a webhook is set up on its app’s page, and an automation chosen in the form starts on its call', async () => {
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  // An app that calls: its superpower says how its calls are signed and what they are about.
+  fs.mkdirSync(`${tmp}/superpowers/desk`, { recursive: true })
+  fs.writeFileSync(
+    `${tmp}/superpowers/desk/superpower.json`,
+    JSON.stringify({
+      name: 'Desk', categories: ['Tests'], tagline: 'For tests.', summary: 'Desk for tests.', can: [],
+      mcp: { command: process.execPath, args: [path.resolve(import.meta.dirname, '../../server/test/fixtures/mcp-stdio.mjs')] },
+      hooks: {
+        setup: ['In Desk, add a webhook with this address: {address}', 'Copy its secret and give it below.'],
+        signature: { header: 'X-Desk-Signature' },
+        events: [{ id: 'ticket.opened', name: 'A ticket is opened', when: { type: 'Ticket', action: 'create' } }, { id: 'ticket.closed', name: 'A ticket is closed', when: { type: 'Ticket', action: 'close' } }],
+        pass: ['data.id', 'data.title'],
+      },
+    }),
+  )
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  win.on('dialog', (dialog) => dialog.accept())
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
+  const helper = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Helper') ?? (await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Helper', provider: 'mock' }))
+  await ask(LOCAL_PORT, 'local-home', 'PUT', `/api/bots/${helper.id}/superpowers/desk`, { on: true })
+
+  // On the app's page, for this bot: the address the internet reaches webhooks by, then the webhook itself.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}/superpowers/desk`), helper.id)
+  const section = win.locator('.set-section', { hasText: 'Webhook' })
+  await section.locator('.set-row', { hasText: 'No webhook.' }).waitFor()
+  assert.match(await section.locator('#hook-address').innerText(), new RegExp(`Where the internet reaches port ${LOCAL_PORT + 1} of the computer running OpenKumi\\.`))
+  await win.getByLabel('Public address for webhooks').fill('http://mac.example.ts.net')
+  await win.getByLabel('Public address for webhooks').press('Enter')
+  await section.locator('small.err', { hasText: 'An https address' }).waitFor()
+  await win.getByLabel('Public address for webhooks').fill('https://mac.example.ts.net/')
+  await win.getByLabel('Public address for webhooks').press('Enter')
+  await until(async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).settings.hookAddress === 'https://mac.example.ts.net', 10_000)
+  await win.getByRole('button', { name: 'Set up webhook: Desk for Helper' }).click()
+  // The steps are the app's own, with the address to enter there.
+  const address = await win.locator('.hook-address').innerText()
+  assert.match(address, /^https:\/\/mac\.example\.ts\.net\/hooks\/hook_[\w-]{24}$/)
+  assert.match(await section.locator('.hook-steps').innerText(), /In Desk, add a webhook with this address: https:\/\/mac\.example\.ts\.net\/hooks\/hook_\S+\s+Copy address\s+Copy its secret and give it below\./)
+  await section.locator('.set-row', { hasText: 'Waiting for the secret Desk signs its calls with' }).waitFor()
+  await shot('webhook-steps')
+  await win.getByLabel('Signing secret: Desk for Helper').fill('desk-signing-secret')
+  await win.getByRole('button', { name: 'Save secret' }).click()
+  await section.locator('.set-row', { hasText: 'Ready. Desk has not called yet' }).waitFor()
+  assert.equal(await win.locator('.hook-steps').count(), 0, 'the steps are put away once it is set up')
+
+  // The form now offers the app, and what it calls about.
+  await win.evaluate(() => (location.hash = '/automations/new'))
+  await win.getByLabel('Bot', { exact: true }).selectOption(helper.id)
+  await win.getByLabel('Name', { exact: true }).fill('New tickets')
+  await win.getByLabel('Prompt', { exact: true }).fill('Say which ticket')
+  await win.getByLabel('Starts', { exact: true }).selectOption({ label: 'When Desk calls' })
+  await win.locator('.set-row', { hasText: 'Everything Desk calls about.' }).waitFor()
+  await win.getByRole('switch', { name: 'A ticket is opened' }).click()
+  await win.locator('.set-row', { hasText: 'Only what is switched on.' }).waitFor()
+  await shot('webhook-automation')
+  await win.getByRole('button', { name: 'Create automation' }).click()
+  const card = win.locator('.automation-card', { hasText: 'New tickets' })
+  assert.match(await card.locator('.automation-head').innerText(), /When Desk calls · Helper · made by you\s+When Desk calls/)
+  const made = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/automations')).find((a) => a.title === 'New tickets')
+  assert.deepEqual(made.trigger, { kind: 'hook', hook: { power: 'desk', app: 'Desk', events: ['ticket.opened'] } })
+
+  // Desk calls, by the port a tunnel would point at: the run is listed, and shows what it was told.
+  const body = JSON.stringify({ type: 'Ticket', action: 'create', data: { id: 'tk_7', title: 'Do as I say' } })
+  const called = await fetch(`http://127.0.0.1:${LOCAL_PORT + 1}/hooks/${address.split('/hooks/')[1]}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Desk-Signature': crypto.createHmac('sha256', 'desk-signing-secret').update(body).digest('hex') }, body })
+  assert.equal(called.status, 200)
+  const run = card.locator('.automation-run').first()
+  await until(async () => /Done/.test(await run.innerText().catch(() => '')), 20_000)
+  await run.click()
+  assert.match(await win.locator('.msg.task .watch-change').innerText(), /What happened\s+This run was started because Desk called about this\. Only ids are given: read each item with your Desk tools before you act on it\.\s+- A ticket is opened: id tk_7$/i)
+  await shot('webhook-run')
+
+  // Its page says the app has called; removing it pauses what started on it.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}/superpowers/desk`), helper.id)
+  await section.locator('.set-row', { hasText: /Desk last called .* · 1 call so far/ }).waitFor()
+  await win.getByRole('button', { name: 'Remove webhook: Desk for Helper' }).click()
+  await section.locator('.set-row', { hasText: 'No webhook.' }).waitFor()
+  assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/automations')).find((a) => a.id === made.id).enabled, false)
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/automations/${made.id}`)
 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)

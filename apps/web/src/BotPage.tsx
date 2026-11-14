@@ -165,7 +165,7 @@ function General({ bot }: { bot: Bot }) {
         />
         <Row
           title="Its browser"
-          description={browser?.running ? `Running, with ${windowCount(browser)} open: one for each conversation, subagent or scheduled run that is browsing. They share its logins.` : 'Not running. It starts when the bot needs it.'}
+          description={browser?.running ? `Running, with ${windowCount(browser)} open: one for each conversation, subagent or run of an automation that is browsing. They share its logins.` : 'Not running. It starts when the bot needs it.'}
           control={browser?.running && <button onClick={() => run(() => api('POST', `/api/bots/${bot.id}/browser/stop`))}>Stop</button>}
         />
       </Section>

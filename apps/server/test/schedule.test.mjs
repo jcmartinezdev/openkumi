@@ -1,4 +1,4 @@
-// Scheduled tasks across time: runs that fell due while OpenKumi was not running, and times of day
+// Automations across time: runs that fell due while OpenKumi was not running, and times of day
 // across a change of the clocks. Each test has a data folder of its own.
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
@@ -63,9 +63,9 @@ test('runs that fell due while OpenKumi was off: a time of day long past is miss
     const db = new DatabaseSync(path.join(home, 'openkumi.db'))
     const add = (id, schedule, nextRunAt, lastStatus = null) =>
       db.prepare(
-        `INSERT INTO tasks (id, bot_id, title, prompt, schedule, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, created_at, updated_at)
+        `INSERT INTO automations (id, bot_id, title, prompt, starts_on, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, 1, 'user', ?, NULL, ?, NULL, NULL, ?, ?)`,
-      ).run(id, botId, id, `do ${id}`, JSON.stringify(schedule), nextRunAt, lastStatus, now, now)
+      ).run(id, botId, id, `do ${id}`, JSON.stringify({ kind: 'time', schedule }), nextRunAt, lastStatus, now, now)
     const at = (minutesAgo) => new Date(now - minutesAgo * 60_000)
     const clock = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
     add('long-past', { type: 'daily', time: clock(at(120)), days: [] }, at(120).getTime())
@@ -76,22 +76,22 @@ test('runs that fell due while OpenKumi was off: a time of day long past is miss
     db.close()
 
     await withServer(home, async (api) => {
-      const tasks = await until(async () => {
-        const all = (await api('GET', '/api/tasks')).filter((t) => t.id !== 'cut-off')
+      const automations = await until(async () => {
+        const all = (await api('GET', '/api/automations')).filter((t) => t.id !== 'cut-off')
         return all.every((t) => t.lastStatus && t.lastStatus !== 'running') && all
       })
-      const of = (id) => tasks.find((t) => t.id === id)
+      const of = (id) => automations.find((t) => t.id === id)
       assert.equal(of('long-past').lastStatus, 'missed')
       assert.ok(of('long-past').nextRunAt > Date.now() + 20 * 3_600_000, 'the next one is tomorrow')
       assert.equal(of('just-past').lastStatus, 'completed', 'a few minutes late is still on time')
       assert.equal(of('hourly').lastStatus, 'completed')
       assert.ok(Math.abs(of('hourly').nextRunAt - (Date.now() + 3_600_000)) < 60_000, 'it carries on an hour from now')
       assert.deepEqual([of('once').lastStatus, of('once').nextRunAt], ['completed', null])
-      assert.equal((await api('GET', '/api/tasks')).find((t) => t.id === 'cut-off').lastStatus, 'stopped')
+      assert.equal((await api('GET', '/api/automations')).find((t) => t.id === 'cut-off').lastStatus, 'stopped')
 
       // Each run that happened reported to the bot's conversation; the missed one did not run at all.
       const { threads } = await api('GET', '/api/state')
-      assert.deepEqual(threads.filter((t) => t.kind === 'task').map((t) => t.taskId).sort(), ['hourly', 'just-past', 'once'])
+      assert.deepEqual(threads.filter((t) => t.kind === 'automation').map((t) => t.automationId).sort(), ['hourly', 'just-past', 'once'])
     })
   } finally {
     fs.rmSync(home, { recursive: true, force: true })
@@ -102,7 +102,7 @@ test('a time of day stays that time across a change of the clocks', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-schedule-'))
   try {
     const script = `
-      const { nextRun } = await import('./src/tasks.ts')
+      const { nextRun } = await import('./src/automations.ts')
       const after = (y, m, d, h) => new Date(y, m, d, h).getTime()
       const show = (t) => { const d = new Date(t); return [d.getDate(), d.getHours(), d.getMinutes()].join(' ') }
       console.log(JSON.stringify([

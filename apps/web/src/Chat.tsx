@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Bot, Item, ItemData, Thread } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
+import { runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { SentFiles, Tray, picked } from './Attachments'
 import { DictationFailed, Listening, MicButton, useListener } from './Dictation'
@@ -13,7 +14,7 @@ import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { describe, parse, site } from '@openkumi/client/steps'
-import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, openTasks, openThread, recentSubagents, rootOf, useStore } from './store'
+import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openAutomations, openSettings, openThread, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
 
 type Call = Extract<ItemData, { type: 'function_call' }>
@@ -22,7 +23,7 @@ const FILE_TOOLS = new Set(['list_files', 'read_file', 'write_file', 'edit_file'
 const toolIcon = (name: string) =>
   name.startsWith('browser_') || name === 'web_fetch' ? 'globe'
   : name.includes('subagent') ? 'agents'
-  : name.includes('scheduled_task') || name === 'schedule_task' ? 'clock'
+  : name.endsWith('_automation') || name === 'list_automations' ? 'clock'
   : FILE_TOOLS.has(name) ? 'file'
   : name.startsWith('mcp__') ? 'sparkles'
   : 'bolt'
@@ -103,14 +104,14 @@ function SubagentReport({ text }: { text: string }) {
   )
 }
 
-/** What a scheduled run came to, as it arrives in the bot's conversation; it opens the run. */
-function TaskReport({ text }: { text: string }) {
-  const m = text.match(/Scheduled task "(.*?)" \(task: (\S+), run: (\S+)\) — (\w+)\n([\s\S]*?)\n?<\/scheduled_task_result>/)
+/** What a run of an automation came to, as it arrives in the bot's conversation; it opens the run. A watch that was paused has no run. */
+function AutomationReport({ text }: { text: string }) {
+  const m = text.match(/Automation "(.*?)" \(automation: ([^\s,)]+)(?:, run: (\S+))?\) — (\w+)\n([\s\S]*?)\n?<\/automation_result>/)
   if (!m) return <div className="notice">{text}</div>
   const [, name, , run, status, body] = m
   return (
     <div className="activity">
-      <Step icon="clock" label={`Scheduled task “${name}” ${status === 'completed' ? 'ran' : status}`} trailing={<SubagentLink id={run} />}>
+      <Step icon="clock" label={`Automation “${name}” ${status === 'completed' ? 'ran' : status === 'paused' ? 'was paused' : status}`} trailing={run ? <SubagentLink id={run} /> : undefined}>
         <Markdown text={body} />
       </Step>
     </div>
@@ -283,9 +284,12 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
       }
       else if (data.source === 'bot') blocks.push(<BotMessage key={id} id={id} from={data.bot?.name ?? 'another bot'} text={data.text} replyWanted={!!data.replyWanted} messageKey={data.key} />)
       else if (data.source === 'subagent') blocks.push(<div key={id} data-item={id}><SubagentReport text={data.text} /></div>)
-      else if (data.source === 'task') blocks.push(<div key={id} data-item={id}><TaskReport text={data.text} /></div>)
+      else if (data.source === 'automation') blocks.push(<div key={id} data-item={id}><AutomationReport text={data.text} /></div>)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
-      else if (data.source === 'schedule') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Scheduled task</div>{data.text}</div>)
+      else if (data.source === 'trigger') {
+        const { prompt, change, heading } = runBrief(data.text)
+        blocks.push(<div key={id} className="msg task"><div className="eyebrow">Automation</div>{prompt}{change && <div className="watch-change"><div className="eyebrow">{heading}</div>{change}</div>}</div>)
+      }
       else if (!data.attachments?.length) blocks.push(<div key={id} data-item={id} className="msg user">{data.text}</div>)
       else {
         blocks.push(
@@ -537,12 +541,12 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
       (e) => setError(e.message),
     )
   }
-  // Where "back" leads: from a scheduled run to its task, from a subagent to whoever started it, from
+  // Where "back" leads: from a run to its automation, from a subagent to whoever started it, from
   // an earlier conversation to the current one.
-  const task = useStore((s) => (thread?.taskId ? s.tasks.find((t) => t.id === thread.taskId) : undefined))
+  const automation = useStore((s) => (thread?.automationId ? s.automations.find((a) => a.id === thread.automationId) : undefined))
   const back = parent ? { to: parent, label: `Back to ${parent.kind === 'subagent' ? parent.title : 'the conversation'}` } : archived ? { to: null, label: 'Back to the current conversation' } : null
   const goBack = () => {
-    if (task) return openTasks(task.id)
+    if (automation) return openAutomations(automation.id)
     if (back?.to && back.to.id !== mainThread(threads, back.to.botId)?.id) return navigate(back.to.botId, back.to.id)
     navigate(back?.to?.botId ?? bot.id)
   }
@@ -569,13 +573,13 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
       <header>
         <button className="icon menu" aria-label="Menu" onClick={openNav}><Icon name="menu" size={18} /></button>
         {back && (
-          <button className="icon" title={task ? 'Back to the scheduled task' : back.label} aria-label={task ? 'Back to the scheduled task' : back.label} onClick={goBack}>
+          <button className="icon" title={automation ? 'Back to the automation' : back.label} aria-label={automation ? 'Back to the automation' : back.label} onClick={goBack}>
             <Icon name="back" />
           </button>
         )}
         <div className="heading">
           <span className="title">{main ? bot.name : thread.title}</span>
-          {!main && <span className="faint">{archived ? `Earlier conversation · ${day(thread.createdAt)}` : thread.kind === 'task' ? `Scheduled run · ${day(thread.createdAt)} · ${bot.name}` : bot.name}</span>}
+          {!main && <span className="faint">{archived ? `Earlier conversation · ${day(thread.createdAt)}` : thread.kind === 'automation' ? `Run of an automation · ${day(thread.createdAt)} · ${bot.name}` : bot.name}</span>}
         </div>
         {main && (
           <>
@@ -666,7 +670,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               rows={1}
               // While it listens, the words are the microphone's to write.
               readOnly={speaking}
-              placeholder={speaking ? 'Listening…' : !connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'task' ? 'Message this run' : `Message ${bot.name}`}
+              placeholder={speaking ? 'Listening…' : !connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'automation' ? 'Message this run' : `Message ${bot.name}`}
               aria-label="Message"
               onChange={(e) => setDraft(e.target.value)}
               // Files pasted (a screenshot, a picture copied from a page, a file copied in Finder)
