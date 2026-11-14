@@ -1,4 +1,5 @@
-// A picture from a conversation on its own, full screen, to be pinched and moved around.
+// A picture on its own, full screen, to be pinched and moved around: one sent in a conversation
+// (`threadId` and `id`), or one at a server path of its own, such as a file of a bot's workspace (`path`).
 import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -7,8 +8,8 @@ import { useServerFile } from '@openkumi/client/store'
 import { Glyph } from '../src/icons'
 
 export default function Picture() {
-  const { threadId, id, name } = useLocalSearchParams<{ threadId: string; id: string; name: string }>()
-  const source = useServerFile(keptAt(threadId, id))
+  const { threadId, id, path, name } = useLocalSearchParams<{ threadId?: string; id?: string; path?: string; name: string }>()
+  const source = useServerFile(path ?? keptAt(threadId ?? '', id ?? ''))
   const router = useRouter()
   const insets = useSafeAreaInsets()
   return (

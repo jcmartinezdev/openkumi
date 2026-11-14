@@ -24,6 +24,7 @@
     "./mascot": "./src/mascot.ts",
     "./browser": "./src/browser.ts",
     "./attachments": "./src/attachments.ts",
+    "./workspace": "./src/workspace.ts",
     "./dictation": "./src/dictation.ts"
   },
   "scripts": {

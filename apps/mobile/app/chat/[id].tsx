@@ -335,7 +335,7 @@ export default function Chat() {
   const openFile = (path: string) => {
     if (!bot) return
     api<{ content: string; binary: boolean }>('GET', `/api/bots/${bot.id}/file?path=${encodeURIComponent(path)}`).then(
-      (found) => (found.binary ? Alert.alert(path, 'This file can be opened in OpenKumi on the computer, under the bot’s files.') : setFile({ path, content: found.content })),
+      (found) => (found.binary ? router.push({ pathname: '/workspace/[botId]/file', params: { botId: bot.id, path } }) : setFile({ path, content: found.content })),
       (e) => Alert.alert(path, (e as Error).message),
     )
   }

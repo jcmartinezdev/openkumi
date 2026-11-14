@@ -1,21 +1,26 @@
 // One bot's settings, as pages inside Settings. Each tab only reads and writes the bot's folder on
 // the server: the owner's settings (Bot), what more the bot may do (Superpowers) and what the bot
-// itself keeps (Files).
-import { useEffect, useRef, useState } from 'react'
+// itself keeps (Workspace: its instructions, its memory and its working files).
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Bot, Effort, FileEntry, HistoryEntry, Look } from '@openkumi/shared'
 import { Icon } from './Icon'
+import { triggerLabel } from '@openkumi/client/automations'
+import { sizeOf } from '@openkumi/client/attachments'
 import { windowCount } from '@openkumi/client/browser'
 import { describeLook } from '@openkumi/client/mascot'
 import { EFFORT_LABEL, effortsOf, useModels } from '@openkumi/client/models'
+import { INSTRUCTIONS, authorOf, byDay, childrenOf, clockOf, fileUrl, findFiles, folderOf, hintOf, isRecorded, kindOfFile, lastChange, nameOf, notesAndFiles, parseDiff, since, summarize } from '@openkumi/client/workspace'
 import { type Dress, LookEditor } from './LookEditor'
+import { FileLinks, Markdown } from './Markdown'
 import { Mascot } from './Mascot'
-import { ago } from './Sidebar'
 import { Field, Page, Pick, Row, Section, Switch, onServer } from './settingsUi'
-import { api, download, openSettings, request, useStore } from './store'
+import { api, download, openAutomations, openSettings, request, useChanges, useFiles, useStore } from './store'
 import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
 
-export type BotTab = 'bot' | 'superpowers' | 'files'
-export const TABS: [BotTab, string][] = [['bot', 'Bot'], ['superpowers', 'Superpowers'], ['files', 'Files']]
+export type BotTab = 'bot' | 'superpowers' | 'workspace'
+export const TABS: [BotTab, string][] = [['bot', 'Bot'], ['superpowers', 'Superpowers'], ['workspace', 'Workspace']]
+
+const workspaceLink = (botId: string, path = '') => `#/settings/bots/${encodeURIComponent(botId)}/workspace${path ? `/${path.split('/').map(encodeURIComponent).join('/')}` : ''}`
 
 /** Runs something that talks to the server and shows what went wrong, if anything did. */
 function useAction() {
@@ -55,7 +60,7 @@ function LookRow({ bot }: { bot: Bot }) {
   )
 }
 
-/** `file` is the file open in Files; `power`, the superpower whose page is open in Superpowers. */
+/** `file` is the file open in Workspace; `power`, the superpower whose page is open in Superpowers. */
 export function BotPage({ botId, tab, file, power }: { botId: string; tab: BotTab; file?: string; power?: string }) {
   const bot = useStore((s) => s.bots).find((b) => b.id === botId)
   // The bot can be deleted from here or from another window.
@@ -76,7 +81,7 @@ export function BotPage({ botId, tab, file, power }: { botId: string; tab: BotTa
       </div>
       {tab === 'bot' && <General bot={bot} />}
       {tab === 'superpowers' && (power ? <SuperpowerPage id={power} bot={bot} /> : <SuperpowerCatalog bot={bot} />)}
-      {tab === 'files' && <Files key={file} bot={bot} initial={file} />}
+      {tab === 'workspace' && <Workspace key={file} bot={bot} initial={file} />}
     </>
   )
 }
@@ -87,6 +92,9 @@ function General({ bot }: { bot: Bot }) {
   const providers = useStore((s) => s.providers)
   const home = useStore((s) => s.home)
   const browser = useStore((s) => s.browsers[bot.id])
+  const zone = useStore((s) => s.about.timeZone)
+  const automations = useStore((s) => s.automations).filter((a) => a.botId === bot.id)
+  const { entries } = useFiles(bot.id)
   const { run, note } = useAction()
   const save = (patch: Partial<Bot>) => run(() => api('PATCH', `/api/bots/${bot.id}`, patch))
   const provider = providers.find((p) => p.id === bot.provider)
@@ -133,10 +141,24 @@ function General({ bot }: { bot: Bot }) {
         <Row
           id="bot-rules"
           title="Rules from you"
-          description={<>The bot follows these and cannot change them. Its own instructions, which it writes and updates itself, are in <a href={`#/settings/bots/${encodeURIComponent(bot.id)}/files`}>Files</a>, in AGENTS.md.</>}
+          description={<>The bot follows these and cannot change them. Its own instructions, which it writes and updates itself, are in <a href={workspaceLink(bot.id, INSTRUCTIONS)}>its workspace</a>, in AGENTS.md.</>}
         >
           <Field label="Rules" rows={4} className="set-input set-area" value={bot.rules} placeholder="For example: never send an email without asking me first." onCommit={(rules) => api('PATCH', `/api/bots/${bot.id}`, { rules })} />
         </Row>
+      </Section>
+
+      <Section title="Workspace">
+        <Row
+          id="bot-workspace"
+          title="Its workspace"
+          description={<>{entries ? `AGENTS.md · ${notesAndFiles(summarize(entries))}` : 'AGENTS.md, its memory and its working files'}<br />{bot.name} keeps these itself. Its changes to instructions and memory can be undone.</>}
+          control={<a className="button" href={workspaceLink(bot.id)}>Explore <Icon name="chevron" size={13} /></a>}
+        />
+        <Row
+          title="Where it lives"
+          description={<code>{home}/bots/{bot.id}</code>}
+          control={onServer() && <button onClick={() => run(() => api('POST', '/api/reveal', { botId: bot.id }))}><Icon name="folder" size={14} /> Open folder</button>}
+        />
       </Section>
 
       <Section title="Model">
@@ -157,6 +179,22 @@ function General({ bot }: { bot: Bot }) {
         <Row title="Web search" description="Use the model’s built-in search." control={<Switch label="Web search" checked={bot.webSearch} onChange={(webSearch) => save({ webSearch })} />} />
       </Section>
 
+      <Section title="Automations" action={<button onClick={() => openAutomations('new', bot.id)}><Icon name="plus" size={14} /> New automation</button>}>
+        {automations.map((automation) => (
+          <a key={automation.id} className="set-row set-link" href={`#/automations/${encodeURIComponent(automation.id)}`}>
+            <div className="set-row-main">
+              <span className="row-ic"><Icon name={automation.trigger.kind === 'time' ? 'clock' : automation.trigger.kind === 'watch' ? 'eye' : 'bolt'} size={15} /></span>
+              <div className="set-row-text">
+                <h3>{automation.title}</h3>
+                <p>{automation.enabled ? triggerLabel(automation.trigger, zone) : 'Paused'}</p>
+              </div>
+              <Icon name="chevron" size={14} />
+            </div>
+          </a>
+        ))}
+        {!automations.length && <Row title="No automations yet" description={`Make one with New automation, or ask ${bot.name}, for example “every weekday at 8, send me a short news brief”.`} />}
+      </Section>
+
       <Section title="Browser">
         <Row
           title="Show the browser window"
@@ -170,14 +208,6 @@ function General({ bot }: { bot: Bot }) {
         />
       </Section>
 
-      <Section title="Folder">
-        <Row
-          title="Where this bot lives"
-          description={<code>{home}/bots/{bot.id}</code>}
-          control={onServer() && <button onClick={() => run(() => api('POST', '/api/reveal', { botId: bot.id }))}><Icon name="folder" size={14} /> Open folder</button>}
-        />
-      </Section>
-
       <Section title="Danger zone">
         <Row title="Delete this bot" description="Removes its conversations, files, memory and saved logins. This cannot be undone." control={<button className="danger" onClick={remove}>Delete bot</button>} />
       </Section>
@@ -185,7 +215,36 @@ function General({ bot }: { bot: Bot }) {
   )
 }
 
-// ---- Files: the bot's own workspace, and the history of what changed in it
+// ---- Workspace: what the bot keeps for itself, and the recorded changes to it
+
+/**
+ * The bot's own folder: Files, a tree beside the file open (to read, or to edit), and Changes, what
+ * was recorded about its instructions and memory, each with what it changed and a way to undo it.
+ */
+function Workspace({ bot, initial }: { bot: Bot; initial?: string }) {
+  const [view, setView] = useState<'files' | 'changes'>('files')
+  /** A change asked for from a file ("See change"), opened when Changes shows. */
+  const [shown, setShown] = useState<string | null>(null)
+  /** A file asked for from Changes ("Open people.md"). */
+  const [wanted, setWanted] = useState<{ path: string } | null>(null)
+  const { entries } = useFiles(bot.id)
+  const changes = useChanges(bot.id)
+  const switcher = (
+    <div className="segmented" role="group" aria-label="View">
+      <button className={view === 'files' ? 'active' : ''} aria-pressed={view === 'files'} onClick={() => setView('files')}>Files</button>
+      <button className={view === 'changes' ? 'active' : ''} aria-pressed={view === 'changes'} onClick={() => setView('changes')}>Changes</button>
+    </div>
+  )
+  return (
+    <div className="files-tab">
+      {/* Files stays as it was while Changes shows, edits included. */}
+      <div className="files-part" hidden={view !== 'files'}>
+        <Files bot={bot} entries={entries} changes={changes.data?.changes ?? []} initial={initial} wanted={wanted} switcher={switcher} seeChange={(id) => (setShown(id), setView('changes'))} />
+      </div>
+      {view === 'changes' && <Changes bot={bot} entries={entries} switcher={switcher} shown={shown} openFile={(path) => (setWanted({ path }), setView('files'))} {...changes} />}
+    </div>
+  )
+}
 
 interface OpenFile {
   path: string
@@ -194,38 +253,48 @@ interface OpenFile {
   size: number
 }
 
-function Files({ bot, initial }: { bot: Bot; initial?: string }) {
+const ICONS = { instructions: 'book', markdown: 'file', picture: 'image', table: 'table', text: 'file' } as const
+
+/** The order of the top of the workspace, last first, as the tree shows it: what is not named comes after. */
+const TOP = ['files', 'memory', INSTRUCTIONS]
+
+/** The folders a path is in: "files/drafts/a.md" is in "files" and "files/drafts". */
+const foldersOf = (path: string) => path.split('/').slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join('/'))
+
+function Files({ bot, entries, changes, initial, wanted, switcher, seeChange }: {
+  bot: Bot
+  entries: FileEntry[] | null
+  changes: HistoryEntry[]
+  initial?: string
+  wanted: { path: string } | null
+  switcher: ReactNode
+  seeChange: (id: string) => void
+}) {
   const version = useStore((s) => s.filesVersion[bot.id] ?? 0)
   // Above this the bot's instructions are cut off when they are loaded.
   const limit = useStore((s) => s.settings.instructionsLimit)
-  const [view, setView] = useState<'files' | 'history'>('files')
-  const [entries, setEntries] = useState<FileEntry[] | null>(null)
-  const [open, setOpen] = useState<string | null>(initial ?? 'AGENTS.md')
+  const [open, setOpen] = useState<string | null>(initial ?? INSTRUCTIONS)
   const [file, setFile] = useState<OpenFile | null>(null)
   const [draft, setDraft] = useState('')
+  const [mode, setMode] = useState<'read' | 'edit'>('read')
   const [adding, setAdding] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  // The top folders start open, and so does every folder the open file is in.
+  const [expanded, setExpanded] = useState(() => new Set(['memory', 'files', ...foldersOf(initial ?? '')]))
   const { run, note } = useAction()
   const picker = useRef<HTMLInputElement>(null)
+  const find = useRef<HTMLInputElement>(null)
   const dirty = !!file && !file.binary && draft !== file.content
   const unsaved = useRef(false)
   unsaved.current = dirty
-  const url = (path: string) => `/api/bots/${bot.id}/file?path=${encodeURIComponent(path)}`
-  const name = (path: string) => path.split('/').pop() || 'file'
-
-  useEffect(() => {
-    let current = true
-    api<{ entries: FileEntry[] }>('GET', `/api/bots/${bot.id}/files`).then((r) => current && setEntries(r.entries)).catch(() => {})
-    return () => {
-      current = false
-    }
-  }, [bot.id, version])
+  const summary = summarize(entries ?? [])
 
   // The open file follows the bot's own edits, unless the owner is in the middle of changing it.
   useEffect(() => {
     if (!open) return setFile(null)
     if (unsaved.current) return
     let current = true
-    api<OpenFile>('GET', url(open))
+    api<OpenFile>('GET', fileUrl(bot.id, open))
       .then((f) => {
         if (!current) return
         setFile(f)
@@ -237,16 +306,32 @@ function Files({ bot, initial }: { bot: Bot; initial?: string }) {
     }
   }, [bot.id, open, version])
 
-  const select = (path: string | null) => {
+  useEffect(() => void (wanted && select(wanted.path)), [wanted])
+
+  // ⌘F finds a file by name, while the files show.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'f' || !find.current?.offsetParent) return
+      e.preventDefault()
+      find.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const select = (path: string | null, as: 'read' | 'edit' = 'read') => {
     if (path === open) return
     if (dirty && !confirm(`Discard your unsaved changes to ${file!.path}?`)) return
     unsaved.current = false
     setFile(null)
+    setMode(as)
     setOpen(path)
+    if (path) setExpanded((had) => new Set([...had, ...foldersOf(path)]))
   }
+  const toggle = (dir: string) => setExpanded((had) => (had.has(dir) ? new Set([...had].filter((d) => d !== dir)) : new Set([...had, dir])))
   const save = () =>
     run(async () => {
-      await api('PUT', url(file!.path), { content: draft })
+      await api('PUT', fileUrl(bot.id, file!.path), { content: draft })
       setFile({ ...file!, content: draft })
     })
   const create = () =>
@@ -254,14 +339,14 @@ function Files({ bot, initial }: { bot: Bot; initial?: string }) {
       const path = (adding ?? '').trim().replace(/^\/+/, '')
       if (!path || path.endsWith('/')) throw new Error('Give the file a name, for example memory/people.md')
       if (entries?.some((e) => e.path === path)) throw new Error(`${path} already exists.`)
-      await api('PUT', url(path), { content: '' })
+      await api('PUT', fileUrl(bot.id, path), { content: '' })
       setAdding(null)
-      select(path)
+      select(path, 'edit')
     })
   const remove = () => {
     if (!confirm(`Delete ${file!.path}?`)) return
     run(async () => {
-      await api('DELETE', url(file!.path))
+      await api('DELETE', fileUrl(bot.id, file!.path))
       unsaved.current = false
       setFile(null)
       setOpen(null)
@@ -274,128 +359,227 @@ function Files({ bot, initial }: { bot: Bot; initial?: string }) {
       }
     })
 
+  const row = (entry: FileEntry, depth: number, count = 0) => {
+    const name = nameOf(entry.path)
+    const hint = hintOf(entry.path, summary) || (entry.dir && depth ? String(count) : '')
+    const style = { paddingLeft: 6 + depth * 14 }
+    if (entry.dir) {
+      const on = expanded.has(entry.path)
+      return (
+        <button key={entry.path} className="file-row dir" style={style} aria-expanded={on} onClick={() => toggle(entry.path)}>
+          <span className="twisty"><Icon name="chevron" size={11} /></span>
+          <Icon name="folder" size={14} />
+          <span className="title">{name}</span>
+          {hint && <span className="hint">{hint}</span>}
+        </button>
+      )
+    }
+    return (
+      <button key={entry.path} className={`file-row ${entry.path === open ? 'active' : ''}`} style={style} aria-current={entry.path === open} onClick={() => select(entry.path)}>
+        <span className="twisty" />
+        <Icon name={ICONS[kindOfFile(entry.path)]} size={14} />
+        <span className="title">{name}</span>
+        {hint && <span className="hint">{hint}</span>}
+      </button>
+    )
+  }
+  const tree = (dir: string, depth: number): ReactNode[] =>
+    childrenOf(entries ?? [], dir)
+      // At the top: the bot's instructions on their own, then its memory, then its working files.
+      .sort((a, b) => TOP.indexOf(b.entry.path) - TOP.indexOf(a.entry.path))
+      .flatMap(({ entry, count }) => [
+        row(entry, depth, count),
+        ...(entry.path === INSTRUCTIONS && !depth ? [<div key="sep" className="tree-sep" />] : []),
+        ...(entry.dir && expanded.has(entry.path) ? tree(entry.path, depth + 1) : []),
+      ])
+  const found = query.trim() ? findFiles(entries ?? [], query) : null
+
   return (
-    <div className="files-tab">
+    <>
       <div className="files-bar">
-        <div className="segmented" role="group" aria-label="View">
-          <button className={view === 'files' ? 'active' : ''} aria-pressed={view === 'files'} onClick={() => setView('files')}>Files</button>
-          <button className={view === 'history' ? 'active' : ''} aria-pressed={view === 'history'} onClick={() => setView('history')}>History</button>
-        </div>
+        {switcher}
+        <label className="file-find">
+          <Icon name="search" size={14} />
+          <input ref={find} aria-label="Find a file" placeholder="Find a file" value={query} spellCheck={false} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setQuery(''))} />
+          {!query && <kbd>⌘F</kbd>}
+        </label>
         <span className="grow" />
-        {view === 'files' && (
-          <>
-            <button className="ghost" onClick={() => setAdding(adding === null ? 'memory/' : null)}><Icon name="plus" size={14} /> New file</button>
-            <button className="ghost" onClick={() => picker.current?.click()}><Icon name="upload" size={14} /> Upload</button>
-            <input ref={picker} type="file" multiple hidden onChange={(e) => (upload(e.target.files), (e.target.value = ''))} />
-          </>
-        )}
+        <button className="ghost" onClick={() => setAdding(adding === null ? 'memory/' : null)}><Icon name="plus" size={14} /> New file</button>
+        <button className="ghost" onClick={() => picker.current?.click()}><Icon name="upload" size={14} /> Upload</button>
+        <input ref={picker} type="file" multiple hidden onChange={(e) => (upload(e.target.files), (e.target.value = ''))} />
       </div>
       {note}
-      {view === 'history' ? (
-        <History bot={bot} version={version} />
-      ) : (
-        <div className={`files ${open ? 'has-open' : ''}`}>
-          <div className="file-list">
+      <div className={`files ${open ? 'has-open' : ''}`}>
+        <div className="file-list">
+          <div className="file-tree">
             {adding !== null && (
               <form className="new-file" onSubmit={(e) => (e.preventDefault(), create())}>
                 <input autoFocus aria-label="Path of the new file" value={adding} spellCheck={false} autoCapitalize="off" onChange={(e) => setAdding(e.target.value)} />
                 <button className="primary">Create</button>
               </form>
             )}
-            {entries?.map((entry) => {
-              const depth = entry.path.split('/').length - 1
-              const name = entry.path.split('/').pop()
-              const style = { paddingLeft: 8 + depth * 14 }
-              return entry.dir ? (
-                <div key={entry.path} className="file-row dir" style={style}><Icon name="folder" size={14} /><span className="title">{name}</span></div>
-              ) : (
-                <button key={entry.path} className={`file-row ${entry.path === open ? 'active' : ''}`} style={style} aria-current={entry.path === open} onClick={() => select(entry.path)}>
-                  <Icon name="file" size={14} /><span className="title">{name}</span>
-                </button>
-              )
-            })}
+            {found
+              ? found.map((entry) => (
+                  <button key={entry.path} className={`file-row ${entry.path === open ? 'active' : ''}`} style={{ paddingLeft: 6 }} onClick={() => select(entry.path)}>
+                    <Icon name={ICONS[kindOfFile(entry.path)]} size={14} />
+                    <span className="title">{nameOf(entry.path)}</span>
+                    <span className="hint">{folderOf(entry.path)}</span>
+                  </button>
+                ))
+              : tree('', 0)}
+            {found && !found.length && <p className="muted pad">No file is called that.</p>}
             {!entries && <p className="muted">Loading…</p>}
           </div>
-          <div className="file-view">
-            {file ? (
-              <>
-                <div className="file-head">
-                  <button className="icon file-back" aria-label="Back to the file list" onClick={() => select(null)}><Icon name="back" /></button>
-                  <span className="grow title mono">{file.path}</span>
-                  <button className="ghost" title="Download" aria-label="Download" onClick={() => run(() => download(`${url(file.path)}&download=1`, name(file.path)))}><Icon name="download" size={14} /></button>
-                  <button className="icon" title="Delete" aria-label="Delete this file" onClick={remove}><Icon name="trash" size={14} /></button>
-                  {!file.binary && <button className="primary" disabled={!dirty} onClick={save}>{dirty ? 'Save' : 'Saved'}</button>}
-                </div>
-                {file.path === 'AGENTS.md' && (
-                  <p className="faint">
-                    The bot’s own instructions, loaded into every conversation. It keeps this file up to date itself; you can edit it too.
-                    {draft.length > limit && <span className="err"> It is {draft.length.toLocaleString()} characters long; only the first {limit.toLocaleString()} are loaded.</span>}
-                  </p>
-                )}
-                {file.binary ? (
-                  <p className="muted">This file cannot be shown here ({Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB). Download it to open it.</p>
-                ) : (
-                  <textarea className="editor" aria-label={`Contents of ${file.path}`} value={draft} spellCheck={false} onChange={(e) => setDraft(e.target.value)} />
-                )}
-              </>
-            ) : (
-              <p className="muted file-empty">{open ? 'Loading…' : 'Choose a file to read or edit it.'}</p>
-            )}
+          <div className="file-foot">
+            <span className="grow">{summary.files} {summary.files === 1 ? 'file' : 'files'} · {sizeOf(summary.bytes)}</span>
+            {onServer() && <button className="ghost" onClick={() => run(() => api('POST', '/api/reveal', { botId: bot.id }))}><Icon name="folder" size={13} /> Open folder</button>}
           </div>
         </div>
-      )}
-    </div>
+        <div className="file-view">
+          {file ? (
+            <>
+              <div className="file-head">
+                <button className="icon file-back" aria-label="Back to the file list" onClick={() => select(null)}><Icon name="back" /></button>
+                <nav className="file-crumbs grow" aria-label="Where the file is">
+                  {foldersOf(file.path).map((dir) => (
+                    <span key={dir}>{nameOf(dir)}<Icon name="chevron" size={11} /></span>
+                  ))}
+                  <b>{nameOf(file.path)}</b>
+                </nav>
+                {!file.binary && (
+                  <div className="segmented" role="group" aria-label="Read or edit">
+                    <button className={mode === 'read' ? 'active' : ''} aria-pressed={mode === 'read'} onClick={() => setMode('read')}><Icon name="eye" size={13} /> Read</button>
+                    <button className={mode === 'edit' ? 'active' : ''} aria-pressed={mode === 'edit'} onClick={() => setMode('edit')}><Icon name="compose" size={13} /> Edit</button>
+                  </div>
+                )}
+                <button className="icon" title="Download" aria-label="Download" onClick={() => run(() => download(`${fileUrl(bot.id, file.path)}&download=1`, nameOf(file.path)))}><Icon name="download" size={15} /></button>
+                <details className="set-menu">
+                  <summary className="icon" title="More" aria-label={`More for ${nameOf(file.path)}`}><Icon name="more" /></summary>
+                  <div className="set-menu-items">
+                    <button className="danger" onClick={(e) => (e.currentTarget.closest('details')!.removeAttribute('open'), remove())}>Delete file</button>
+                  </div>
+                </details>
+                {(mode === 'edit' || dirty) && !file.binary && <button className="primary" disabled={!dirty} onClick={save}>{dirty ? 'Save' : 'Saved'}</button>}
+              </div>
+              <FileMeta bot={bot} path={file.path} size={file.size} entries={entries} changes={changes} seeChange={seeChange} />
+              {file.path === INSTRUCTIONS && (
+                <p className="faint">
+                  The bot’s own instructions, loaded into every conversation. It keeps this file up to date itself; you can edit it too.
+                  {draft.length > limit && <span className="err"> It is {draft.length.toLocaleString()} characters long; only the first {limit.toLocaleString()} are loaded.</span>}
+                </p>
+              )}
+              {file.binary ? (
+                kindOfFile(file.path) === 'picture' ? (
+                  <Picture url={`${fileUrl(bot.id, file.path)}&download=1`} name={nameOf(file.path)} />
+                ) : (
+                  <p className="muted">This file cannot be shown here ({sizeOf(file.size)}). Download it to open it.</p>
+                )
+              ) : mode === 'edit' ? (
+                <textarea className="editor" aria-label={`Contents of ${file.path}`} value={draft} spellCheck={false} autoFocus={!draft} onChange={(e) => setDraft(e.target.value)} />
+              ) : kindOfFile(file.path) === 'markdown' || kindOfFile(file.path) === 'instructions' ? (
+                <div className="file-read">
+                  <FileLinks.Provider value={(path) => select(path)}>
+                    <Markdown text={draft} />
+                  </FileLinks.Provider>
+                  {!draft.trim() && <p className="muted">This file is empty. Edit it to write something.</p>}
+                </div>
+              ) : (
+                <pre className="file-read plain">{draft}</pre>
+              )}
+            </>
+          ) : (
+            <p className="muted file-empty">{open ? 'Loading…' : 'Choose a file to read or edit it.'}</p>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 
-const AUTHOR = { bot: 'Bot', you: 'You', system: 'OpenKumi' } as const
-
-/** A change as git reports it, reduced to file names and added, removed and unchanged lines. */
-function Diff({ text }: { text: string }) {
-  const rows: { kind: 'file' | 'gap' | 'add' | 'del' | 'same'; text: string }[] = []
-  for (const line of text.split('\n')) {
-    const file = line.match(/^diff --git a\/.* b\/(.*)$/)
-    if (file) rows.push({ kind: 'file', text: file[1] })
-    else if (line.startsWith('@@')) rows.at(-1)?.kind !== 'file' && rows.push({ kind: 'gap', text: '⋯' })
-    else if (/^(index |--- |\+\+\+ |new file|deleted file|similarity|rename |\\ No newline)/.test(line)) continue
-    else if (line.startsWith('+')) rows.push({ kind: 'add', text: line.slice(1) })
-    else if (line.startsWith('-')) rows.push({ kind: 'del', text: line.slice(1) })
-    else if (line.startsWith(' ')) rows.push({ kind: 'same', text: line.slice(1) })
+/**
+ * What is known of a file: for the instructions and memory, who changed it last and when, from
+ * the recorded changes; for a working file, only when it changed, since those are not recorded.
+ */
+function FileMeta({ bot, path, size, entries, changes, seeChange }: { bot: Bot; path: string; size: number; entries: FileEntry[] | null; changes: HistoryEntry[]; seeChange: (id: string) => void }) {
+  const modified = entries?.find((e) => e.path === path)?.modified
+  if (!isRecorded(path)) {
+    return (
+      <p className="file-meta">
+        Working file{modified ? ` · changed ${since(modified)}` : ''} · {sizeOf(size)} · Changes to working files are not recorded.
+      </p>
+    )
   }
-  const sign = { add: '+', del: '−', same: ' ', file: '', gap: '' }
+  const last = lastChange(changes, path)
+  return (
+    <p className="file-meta">
+      {last ? <>{authorOf(last, bot.name)} changed this {since(last.time)} · </> : modified ? <>Changed {since(modified)} · </> : null}
+      {sizeOf(size)}
+      {last && <> · <button className="link" onClick={() => seeChange(last.id)}>See change</button></>}
+    </p>
+  )
+}
+
+/** A picture from the workspace, fetched with the access code, as the window cannot ask for it by address. */
+function Picture({ url, name }: { url: string; name: string }) {
+  const [src, setSrc] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let made = ''
+    let current = true
+    request('GET', url)
+      .then((res) => res.blob())
+      .then((blob) => current && setSrc((made = URL.createObjectURL(blob))), () => current && setFailed(true))
+    return () => {
+      current = false
+      if (made) URL.revokeObjectURL(made)
+    }
+  }, [url])
+  if (failed) return <p className="muted">This picture could not be loaded. Download it to open it.</p>
+  return <div className="file-picture">{src ? <img src={src} alt={name} /> : <p className="muted">Loading…</p>}</div>
+}
+
+/** A change, file by file: added, removed and unchanged lines. */
+function Diff({ text }: { text: string }) {
+  const sign = { add: '+', del: '−', same: ' ', gap: '' }
   return (
     <pre className="diff">
-      {rows.map((row, i) => (
-        <span key={i} className={row.kind}>
-          {row.kind !== 'file' && row.kind !== 'gap' && <span className="sign">{sign[row.kind]}</span>}
-          {row.text + '\n'}
+      {parseDiff(text).map(({ file, lines }) => (
+        <span key={file} className="diff-file">
+          <span className="file">{file}</span>
+          {lines.map((line, i) => (
+            <span key={i} className={line.kind}>
+              {line.kind !== 'gap' && <span className="sign">{sign[line.kind]}</span>}
+              {line.text + '\n'}
+            </span>
+          ))}
         </span>
       ))}
     </pre>
   )
 }
 
-function History({ bot, version }: { bot: Bot; version: number }) {
-  const [data, setData] = useState<{ available: boolean; entries: HistoryEntry[]; problem?: string } | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
+function Changes({ bot, entries, switcher, shown, openFile, data, error: failed, showOlder }: {
+  bot: Bot
+  entries: FileEntry[] | null
+  switcher: ReactNode
+  shown: string | null
+  openFile: (path: string) => void
+} & ReturnType<typeof useChanges>) {
+  const [openId, setOpenId] = useState<string | null>(shown)
   const [diff, setDiff] = useState<string | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
+    if (!openId) return
     let current = true
-    api<{ available: boolean; entries: HistoryEntry[]; problem?: string }>('GET', `/api/bots/${bot.id}/history`).then((d) => current && setData(d)).catch((e) => current && setError(e.message))
+    setDiff(null)
+    setError('')
+    api<{ diff: string }>('GET', `/api/bots/${bot.id}/history/${openId}`).then((d) => current && setDiff(d.diff), (e) => current && setError(e.message))
     return () => {
       current = false
     }
-  }, [bot.id, version])
+  }, [bot.id, openId])
 
-  const toggle = (id: string) => {
-    setDiff(null)
-    setError('')
-    if (openId === id) return setOpenId(null)
-    setOpenId(id)
-    api<{ diff: string }>('GET', `/api/bots/${bot.id}/history/${id}`).then((d) => setDiff(d.diff)).catch((e) => setError(e.message))
-  }
   const undo = async (entry: HistoryEntry) => {
     if (!confirm(`Undo “${entry.message}”? Later changes are kept.`)) return
     setError('')
@@ -407,29 +591,50 @@ function History({ bot, version }: { bot: Bot; version: number }) {
     }
   }
 
-  if (!data) return <p className="muted pad">{error || 'Loading…'}</p>
-  if (!data.available) return <p className="muted pad">History needs git, which was not found on this computer. Install git and restart OpenKumi to record changes.</p>
-  return (
+  const body = !data ? (
+    <p className="muted pad">{failed || 'Loading…'}</p>
+  ) : !data.available ? (
+    <p className="muted pad">History needs git, which was not found on this computer. Install git and restart OpenKumi to record changes.</p>
+  ) : (
     <div className="history">
       {error && <div className="notice error">{error}</div>}
       {data.problem && <div className="notice error">Changes are not being recorded right now: {data.problem}</div>}
-      {data.entries.map((entry) => (
-        <div key={entry.id} className="change">
-          <button className="change-head" aria-expanded={openId === entry.id} onClick={() => toggle(entry.id)}>
-            <span className={`pill ${entry.author === 'bot' ? 'warn' : ''}`}>{AUTHOR[entry.author]}</span>
-            <span className="grow title">{entry.message}</span>
-            <span className="time">{ago(entry.time)}</span>
-          </button>
-          {openId === entry.id && (
-            <div className="change-body">
-              {diff === null ? <p className="muted">Loading…</p> : <Diff text={diff} />}
-              {entry.author !== 'system' && <button onClick={() => undo(entry)}><Icon name="undo" size={14} /> Undo this change</button>}
-            </div>
-          )}
+      {byDay(data.changes).map(({ day, changes }) => (
+        <div key={day}>
+          <div className="change-day">{day}</div>
+          {changes.map((entry) => {
+            const only = entry.files.length === 1 && entries?.some((e) => e.path === entry.files[0]) ? entry.files[0] : null
+            return (
+              <div key={entry.id} className={`change ${openId === entry.id ? 'open' : ''}`}>
+                <button className="change-head" aria-expanded={openId === entry.id} onClick={() => setOpenId(openId === entry.id ? null : entry.id)}>
+                  <span className={`pill ${entry.author === 'bot' ? 'warn' : ''}`}>{authorOf(entry, bot.name)}</span>
+                  <span className="grow title">{entry.message}</span>
+                  <span className="time">{clockOf(entry.time)}</span>
+                  <span className="twisty"><Icon name="chevron" size={12} /></span>
+                </button>
+                {openId === entry.id && (
+                  <div className="change-body">
+                    {diff === null ? <p className="muted">Loading…</p> : <Diff text={diff} />}
+                    <div className="change-actions">
+                      {entry.author !== 'system' && <button onClick={() => undo(entry)}><Icon name="undo" size={14} /> Undo this change…</button>}
+                      {only && <button className="ghost" onClick={() => openFile(only)}><Icon name="file" size={14} /> Open {nameOf(only)}</button>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       ))}
-      {!data.entries.length && <p className="muted pad">Nothing has changed yet.</p>}
-      <p className="faint pad">Changes to AGENTS.md and memory are recorded here. Working files under files/ are not.</p>
+      {data.more && <button className="ghost change-more" onClick={showOlder}>Show older changes</button>}
+      {!data.changes.length && <p className="muted pad">Nothing has changed yet.</p>}
+      <p className="faint pad">Changes to its instructions and memory are recorded here, and each can be undone. Changes to working files are not recorded.</p>
     </div>
+  )
+  return (
+    <>
+      <div className="files-bar">{switcher}</div>
+      {body}
+    </>
   )
 }

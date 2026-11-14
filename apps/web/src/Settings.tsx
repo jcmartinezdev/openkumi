@@ -14,7 +14,7 @@ import { desktop, reason, useDesktop } from './desktop'
 import { Icon } from './Icon'
 import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
-import { api, closeSettings, openSettings, saveSettings, useStore } from './store'
+import { api, closeSettings, navigate, openSettings, saveSettings, useStore } from './store'
 import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
 import { BotHead } from './Mascot'
 
@@ -59,7 +59,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'providers', id: 'provider-local', sub: 'local', title: 'Local models', also: 'ollama lm studio offline private free' },
   { page: 'providers', id: 'provider-claude-code', sub: 'claude-code', title: 'Claude Code', also: 'anthropic claude plan program path sign in' },
   { page: 'providers', id: 'provider-openai-compatible', sub: 'openai-compatible', title: 'Other models', also: 'api key base url ollama openrouter' },
-  { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot' },
+  { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot workspace files memory instructions agents.md changes history' },
   { page: 'bots', id: 'bot-messages', title: 'Bots can message each other', also: 'messages between bots talk work together pass hand over' },
   { page: 'prompt', id: 'team', title: 'What each bot is for', also: 'description team hand over handoff delegate other bots' },
   { page: 'prompt', id: 'told', title: 'What a bot is told', also: 'master prompt system prompt principles instructions behaviour behavior all bots preview read' },
@@ -217,6 +217,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           </nav>
           <span className="grow" />
           {!bot && <RestoreDefaults page={page} />}
+          {bot && <button className="ghost set-restore" onClick={() => navigate(bot.id)}><Icon name="message" size={14} /> <span>Open chat</span></button>}
           <button className="icon" title="Close" aria-label="Close settings" onClick={closeSettings}><Icon name="x" /></button>
         </header>
         {/* Keyed by page so each one starts scrolled to the top. */}
