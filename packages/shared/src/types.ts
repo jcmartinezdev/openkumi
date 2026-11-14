@@ -150,19 +150,19 @@ export type ThreadStatus = 'idle' | 'running' | 'error'
 export interface Thread {
   id: string
   botId: string
-  /** Set for subagent threads and scheduled runs: the thread they belong under. */
+  /** Set for subagent threads and runs of automations: the thread they belong under. */
   parentId: string | null
   title: string
-  /** 'task' is one run of a scheduled task, beneath the bot's conversation. */
-  kind: 'chat' | 'subagent' | 'task'
-  /** For a run of a scheduled task: which task. */
-  taskId: string | null
+  /** 'automation' is one run of an automation, beneath the bot's conversation. */
+  kind: 'chat' | 'subagent' | 'automation'
+  /** For a run of an automation: which one. */
+  automationId: string | null
   /** When the owner started fresh and left this conversation behind; null for the current one. Archived ones are read-only. */
   archivedAt: number | null
   status: ThreadStatus
   /** Model override for this thread (subagents may run on a different model). */
   model: string | null
-  /** Subagents and scheduled runs: whether the latest result has been delivered. */
+  /** Subagents and runs of automations: whether the latest result has been delivered. */
   reported: boolean
   createdAt: number
   updatedAt: number
@@ -171,10 +171,10 @@ export interface Thread {
 export type ItemData =
   /**
    * Who a user-role message is from: the owner; the thread above, handing a subagent its task; a
-   * subagent reporting back; a scheduled task handing a run its prompt ('schedule'); or a scheduled
-   * run reporting back to the bot's conversation ('task').
+   * subagent reporting back; an automation handing a run its prompt ('trigger'); or a run of one
+   * reporting back to the bot's conversation ('automation').
    */
-  | { type: 'message'; role: 'user'; text: string; source: 'user' | 'parent' | 'subagent' | 'schedule' | 'task'; attachments?: Attachment[] }
+  | { type: 'message'; role: 'user'; text: string; source: 'user' | 'parent' | 'subagent' | 'trigger' | 'automation'; attachments?: Attachment[] }
   /** `stopped`: cut off before it was finished (stopped, failed, or the server shut down); `text` is what had been written. */
   | { type: 'message'; role: 'assistant'; text: string; stopped?: true }
   | { type: 'reasoning'; summary: string; encrypted?: string | null; model?: string }
@@ -198,7 +198,7 @@ export interface Item {
 }
 
 /**
- * When a scheduled task runs. Times of day are in the time zone of the computer running OpenKumi.
+ * When an automation that goes by the clock runs. Times of day are in the time zone of the computer running OpenKumi.
  * 'daily' runs at `time` ("HH:MM") on the days of the week in `days` (0 is Sunday), every day when it is empty.
  */
 export type Schedule =
@@ -207,22 +207,48 @@ export type Schedule =
   | { type: 'interval'; minutes: number }
 
 /**
- * A prompt a bot is given at set times. Each run happens in the background, in a thread of its own
- * beneath the bot's conversation, and what came of it is passed to the conversation for the bot to
- * tell the user. The owner makes tasks in Settings; bots make them with their tools.
+ * What an automation that runs "when something changes" looks at. OpenKumi itself, not a model,
+ * looks every `every` minutes and starts a run only when what it finds differs from last time.
+ * `track` is for a result in JSON that lists items: the objects in a list that have the first field
+ * are the items, that field tells them apart, and the others are what counts as an item changing.
+ * The run is then told which items are new, updated or gone. Without it, any change counts.
  */
-export interface ScheduledTask {
+export type Watch = { every: number; track: string[] } & (
+  /** One of the bot's superpower tools that only reads, called with the same arguments each time. `app` is the service it belongs to, for display. */
+  | { on: 'tool'; tool: string; arguments: Record<string, unknown>; app: string }
+  /** A public web address, fetched without a sign-in. */
+  | { on: 'page'; url: string }
+)
+
+/** What starts an automation: the clock, or a change in something it watches. */
+export type Trigger = { kind: 'time'; schedule: Schedule } | { kind: 'watch'; watch: Watch }
+
+/** How a watch's latest look went. 'baseline' is a look that only noted where things stand. */
+export interface WatchCheck {
+  at: number
+  outcome: 'baseline' | 'unchanged' | 'changed' | 'failed'
+  /** What changed, or why the look failed. */
+  detail: string | null
+}
+
+/**
+ * A prompt a bot is given without being asked: at set times, or when something it watches changes.
+ * Each run happens in the background, in a thread of its own beneath the bot's conversation, and
+ * what came of it is passed to the conversation for the bot to tell the user. The owner makes
+ * automations in the app; bots make them with their tools.
+ */
+export interface Automation {
   id: string
-  /** The bot that does the task. */
+  /** The bot that does it. */
   botId: string
   title: string
   prompt: string
-  schedule: Schedule
+  trigger: Trigger
   /** Paused when false. */
   enabled: boolean
-  /** Who made it: 'user' for the owner, or the id of the bot that scheduled it. */
+  /** Who made it: 'user' for the owner, or the id of the bot that made it. */
   createdBy: string
-  /** When it runs next. Null when it is paused, or will not run again. */
+  /** When it runs next, or for a watch when it looks next. Null when it is paused, or will not run again. */
   nextRunAt: number | null
   lastRunAt: number | null
   /** How the last run went. 'missed' when the computer was off or asleep at the time it was due. */
@@ -230,6 +256,8 @@ export interface ScheduledTask {
   lastError: string | null
   /** The thread of the last run. */
   lastThreadId: string | null
+  /** For a watch: how its latest look went. */
+  lastCheck: WatchCheck | null
   createdAt: number
   updatedAt: number
 }
@@ -238,8 +266,8 @@ export interface ScheduledTask {
 export interface HistoryMatch {
   threadId: string
   itemId: number
-  /** Who said it: the owner, the bot, a subagent reporting back, or a scheduled task's run reporting back. */
-  from: 'user' | 'bot' | 'subagent' | 'task'
+  /** Who said it: the owner, the bot, a subagent reporting back, or a run of an automation reporting back. */
+  from: 'user' | 'bot' | 'subagent' | 'automation'
   /** The part of the message around the first word that matched. */
   snippet: string
   createdAt: number
@@ -288,7 +316,7 @@ export interface About {
   port: number
   /** Started with --lan, so the network setting cannot be switched off from the app. */
   lanForced: boolean
-  /** The time zone scheduled tasks keep to, such as "Europe/Berlin". */
+  /** The time zone automations keep to, such as "Europe/Berlin". */
   timeZone: string
 }
 
@@ -319,8 +347,8 @@ export interface BrowserTab {
 }
 
 /**
- * A window of a bot's browser. Every thread that browses (the conversation, a subagent, a scheduled
- * run) has one of its own, so sessions running at once never get in each other's way, while all of
+ * A window of a bot's browser. Every thread that browses (the conversation, a subagent, a run of an
+ * automation) has one of its own, so sessions running at once never get in each other's way, while all of
  * them share the bot's profile: its cookies and logins.
  */
 export interface BrowserWindow {
@@ -358,8 +386,8 @@ export type ServerEvent =
   /** `seq`: the number of the change, from one count for every thread (see AppState.seq). */
   | { type: 'thread.upsert'; thread: Thread; seq: number }
   | { type: 'thread.delete'; id: string; seq: number }
-  | { type: 'task.upsert'; task: ScheduledTask }
-  | { type: 'task.delete'; id: string }
+  | { type: 'automation.upsert'; automation: Automation }
+  | { type: 'automation.delete'; id: string }
   | { type: 'item.add'; item: Item }
   | { type: 'stream.delta'; threadId: string; kind: 'text' | 'reasoning'; delta: string }
   | { type: 'providers'; providers: ProviderInfo[] }
@@ -410,7 +438,7 @@ export interface AppState {
    * changed after that change, and these are the ones removed since.
    */
   removed?: string[]
-  tasks: ScheduledTask[]
+  automations: Automation[]
   providers: ProviderInfo[]
   browsers: Record<string, BrowserState>
   superpowers: Superpower[]

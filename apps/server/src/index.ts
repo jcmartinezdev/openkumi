@@ -9,7 +9,7 @@ import * as db from './db.ts'
 import { startServer } from './http.ts'
 import { refreshProviders } from './providers/index.ts'
 import { moveToSuperpowers } from './superpowers.ts'
-import { startScheduler } from './tasks.ts'
+import { startAutomations } from './automations.ts'
 import { commit, scaffold } from './workspace.ts'
 
 // Bots used to live in the database; write them out as folders once.
@@ -41,8 +41,8 @@ if (!listBots().length) {
 
 const server = startServer()
 
-// Scheduled tasks start once the server is up, since a bot on an engine reaches its tools through it.
-startScheduler()
+// Automations start once the server is up, since a bot on an engine reaches its tools through it.
+startAutomations()
 
 // Whether Claude Code and Codex are installed and signed in; found out in the background.
 void refreshProviders()

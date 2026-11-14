@@ -343,7 +343,7 @@ function Bots({ newBot }: { newBot: () => void }) {
             <div className="set-row-main">
               <BotHead bot={bot} />
               <div className="set-row-text">
-                <h3>{bot.name}{bot.id === bots[0]?.id && <span className="pill" title="The first bot. It can schedule, change and delete tasks for every bot.">Main assistant</span>}</h3>
+                <h3>{bot.name}{bot.id === bots[0]?.id && <span className="pill" title="The first bot. It can make, change and delete automations for every bot.">Main assistant</span>}</h3>
                 {bot.description && <p>{bot.description}</p>}
                 <p>Runs on {providers.find((p) => p.id === bot.provider)?.name ?? bot.provider} · {count(bot.superpowers.length, 'superpower')}</p>
               </div>

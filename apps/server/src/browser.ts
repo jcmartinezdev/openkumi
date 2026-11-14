@@ -1,6 +1,6 @@
 // One Chromium instance per bot, each with its own persistent profile directory, so cookies and
 // logins belong to that bot alone and survive restarts. Inside it, every thread that browses (the
-// conversation, a subagent, a scheduled run) gets a window of its own, so sessions that run at the
+// conversation, a subagent, a run of an automation) gets a window of its own, so sessions that run at the
 // same time never get in each other's way. The UI watches a window's tabs through a CDP screencast
 // and, once the owner takes control of it, drives them; agent tools drive them through Playwright.
 import crypto from 'node:crypto'
@@ -336,7 +336,7 @@ class BotBrowser {
 
   /**
    * The page a thread's bot works in: the active tab of the thread's own window, so subagents and
-   * scheduled runs can browse at the same time. Acting is refused while the owner has control.
+   * runs of automations can browse at the same time. Acting is refused while the owner has control.
    */
   async pageFor(threadId: string, headless: boolean, act = true): Promise<Page> {
     await this.start(headless)

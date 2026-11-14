@@ -25,7 +25,7 @@ is JSON. Countries are two-letter codes (ES, DE, US, GB, …).
 - For a trip, say which days fall on holidays where the user is going: shops and offices may
   be shut, and travel busier.
 - For a meeting across countries, check every country taking part, regions included.
-- A scheduled task does not know about holidays. When the user wants one skipped on holidays,
+- An automation does not know about holidays. When the user wants one skipped on holidays,
   write into its prompt: check `PublicHolidays` for this year and their country (and region);
   if today is a public holiday there, end with exactly "Nothing to report."
 - For a country Nager.Date does not have, or a date that matters (a deadline, a bank or court

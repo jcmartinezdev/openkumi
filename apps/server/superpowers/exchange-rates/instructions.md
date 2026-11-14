@@ -45,9 +45,9 @@ rate a day, from several public sources; codes are in lower case.
 
 ## Alerts
 
-"Tell me when the dollar goes above 1.15 euros" is a scheduled task. For currencies Frankfurter
+"Tell me when the dollar goes above 1.15 euros" is an automation. For currencies Frankfurter
 has, run it Monday to Friday at a time after 16:30 Central European Time (times are the user's
 local time, so work out theirs); for the others, once a day. Its runs see nothing of this
 conversation, so put the two currencies, the level and the direction in the prompt, and say that
 a run where the rate has not crossed it ends with exactly "Nothing to report." When a run
-reports that it crossed, tell the user and delete the task, unless they asked to keep it.
+reports that it crossed, tell the user and delete the automation, unless they asked to keep it.

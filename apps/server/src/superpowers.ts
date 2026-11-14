@@ -23,6 +23,8 @@ export interface Service {
   args?: string[]
   /** What the bot asks the service for when it signs in. Without them, whatever the service offers. */
   scopes?: string[]
+  /** Its tools that only read, by the service's own names, where the service does not say so itself. Only these can be watched. */
+  reads?: string[]
 }
 
 interface Manifest {
@@ -33,7 +35,7 @@ interface Manifest {
   /** What the bot is told the superpower is for, in a line. */
   summary: string
   can: string[]
-  mcp?: { url: string; scopes?: string[] } | { command: string; args?: string[] }
+  mcp?: ({ url: string; scopes?: string[] } | { command: string; args?: string[] }) & { reads?: string[] }
   site?: string
 }
 
@@ -114,7 +116,8 @@ export function superpowerFile(id: string, rel: string): { path: string; text: s
 export function serviceOf(id: string): Service | null {
   const m = manifest(id)
   if (!m?.mcp) return null
-  return 'url' in m.mcp ? { name: m.name, url: m.mcp.url, scopes: m.mcp.scopes } : { name: m.name, command: m.mcp.command, args: m.mcp.args }
+  const reads = Array.isArray(m.mcp.reads) ? m.mcp.reads.map(String) : undefined
+  return 'url' in m.mcp ? { name: m.name, url: m.mcp.url, scopes: m.mcp.scopes, reads } : { name: m.name, command: m.mcp.command, args: m.mcp.args, reads }
 }
 
 /** A superpower that works in an app on the web is active only once the bot is signed in to it. */

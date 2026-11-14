@@ -52,11 +52,11 @@ await openThread(conv)
 assert.deepEqual(texts(conv), ['one', 'Echo: one'])
 assert.ok(now.seq > firstSeq, 'thread events move the change number on')
 
-// 1. Away while two more turns happen and a run of a task is made and deleted.
-const runTask = await http('POST', '/api/tasks', { botId: bot.id, title: 'Doomed', prompt: '!say Nothing to report.', schedule: { type: 'interval', minutes: 60 } })
-await http('POST', `/api/tasks/${runTask.id}/run`)
-await until(() => now.threads.some((t) => t.taskId === runTask.id && t.status === 'idle'))
-const run = now.threads.find((t) => t.taskId === runTask.id)!
+// 1. Away while two more turns happen and a run of an automation is made and deleted.
+const runTask = await http('POST', '/api/automations', { botId: bot.id, title: 'Doomed', prompt: '!say Nothing to report.', trigger: { kind: 'time', schedule: { type: 'interval', minutes: 60 } } })
+await http('POST', `/api/automations/${runTask.id}/run`)
+await until(() => now.threads.some((t) => t.automationId === runTask.id && t.status === 'idle'))
+const run = now.threads.find((t) => t.automationId === runTask.id)!
 const heldBefore = now.items[conv]
 away()
 await until(() => !now.connected)

@@ -1,9 +1,9 @@
 // The bots on the paired server. Each has one conversation, so a bot is a row, like a contact.
-// Under them, as at the bottom of the computer's sidebar, the scheduled tasks; Settings is the gear.
+// Under them, as at the bottom of the computer's sidebar, the automations; Settings is the gear.
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import { mainThread, useStore } from '@openkumi/client/store'
-import { moment } from '@openkumi/client/tasks'
+import { moment } from '@openkumi/client/automations'
 import { Glyph } from '../src/icons'
 import { forget, useSession } from '../src/session'
 import { useTheme } from '../src/theme'
@@ -28,7 +28,7 @@ export default function Home() {
   const refused = useStore((s) => s.refused)
   const outdated = useStore((s) => s.outdated)
   const failures = useStore((s) => s.failures)
-  const tasks = useStore((s) => s.tasks)
+  const automations = useStore((s) => s.automations)
 
   const unpair = () => Alert.alert('Unpair this phone?', 'The phone forgets the server. To use it again, pair it again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Unpair', style: 'destructive', onPress: () => void forget() }])
   const header = (
@@ -36,16 +36,16 @@ export default function Home() {
       <Stack.Toolbar.Button icon="gearshape" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
     </Stack.Toolbar>
   )
-  // The task that runs soonest, for the line under Scheduled tasks.
-  const next = tasks.reduce<number | null>((soonest, t) => (t.enabled && t.nextRunAt && (soonest === null || t.nextRunAt < soonest) ? t.nextRunAt : soonest), null)
+  // The one that runs (or looks) soonest, for the line under Automations.
+  const next = automations.reduce<number | null>((soonest, t) => (t.enabled && t.nextRunAt && (soonest === null || t.nextRunAt < soonest) ? t.nextRunAt : soonest), null)
   const scheduled = (
-    <Pressable accessibilityRole="button" style={({ pressed }) => [styles.bot, styles.tasks, { borderTopColor: theme.border }, pressed && { backgroundColor: theme.side }]} onPress={() => router.push('/tasks')}>
+    <Pressable accessibilityRole="button" style={({ pressed }) => [styles.bot, styles.automations, { borderTopColor: theme.border }, pressed && { backgroundColor: theme.side }]} onPress={() => router.push('/automations')}>
       <View style={styles.avatar}><Glyph name="clock" size={22} color={theme.muted} weight={1.7} /></View>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.text, fontSize: 17, fontWeight: '500' }}>Scheduled tasks</Text>
-        <Text style={{ color: theme.faint, fontSize: 13 }} numberOfLines={1}>{!tasks.length ? 'None yet' : next ? `Next ${moment(next)}` : `${tasks.length} paused or done`}</Text>
+        <Text style={{ color: theme.text, fontSize: 17, fontWeight: '500' }}>Automations</Text>
+        <Text style={{ color: theme.faint, fontSize: 13 }} numberOfLines={1}>{!automations.length ? 'None yet' : next ? `Next ${moment(next)}` : `${automations.length} paused or done`}</Text>
       </View>
-      {tasks.some((t) => t.lastStatus === 'running') && <ActivityIndicator size="small" color={theme.run} />}
+      {automations.some((t) => t.lastStatus === 'running') && <ActivityIndicator size="small" color={theme.run} />}
     </Pressable>
   )
 
@@ -105,6 +105,6 @@ const styles = StyleSheet.create({
   bot: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: 60 },
   avatar: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   botName: { flex: 1, fontSize: 17, fontWeight: '600' },
-  tasks: { height: 64, marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  automations: { height: 64, marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   unpair: { height: 46, paddingHorizontal: 22, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
 })

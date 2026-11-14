@@ -57,7 +57,7 @@ and the comparisons it can make honestly. Save the comparison to
 ## Keeping it current
 
 With the **Watch a page** superpower active, offer to watch each competitor's pricing page and
-changelog, once a day or once a week. Without it, offer a monthly scheduled task. Its runs see
+changelog, once a day or once a week. Without it, offer a monthly automation. Its runs see
 nothing of this conversation, so its prompt lists the profile files and says: re-read each
 pricing page and changelog, update the profile and its date, report what changed with links,
 and end with exactly "Nothing to report." when nothing did.

@@ -1,7 +1,7 @@
 // The agent loop: runs a thread against its bot's model until the model stops calling tools, and
 // coordinates subagents (child threads that run concurrently and report back to their parent).
 // A bot has one conversation with its owner (see mainThread), which can be started afresh.
-// Runs of scheduled tasks (tasks.ts) are threads beneath the conversation too, and report to it.
+// Runs of automations (automations.ts) are threads beneath the conversation too, and report to it.
 import type { Bot, Item, ItemData, Partial, Thread } from '@openkumi/shared'
 import { attach, toShow, withFiles } from './attachments.ts'
 import { getBot, listBots } from './bots.ts'
@@ -14,7 +14,7 @@ import { getProvider } from './providers/index.ts'
 import type { ModelEvent } from './providers/types.ts'
 import { settings } from './settings.ts'
 import { superpowerIndex, superpowerNames } from './superpowers.ts'
-import { TIME_ZONE, finishRun, isMain } from './tasks.ts'
+import { TIME_ZONE, finishRun, isMain } from './automations.ts'
 import { openToolEndpoint } from './tool-endpoint.ts'
 import { runTool, toolsFor } from './tools.ts'
 import { agentsFile, memoryIndex } from './workspace.ts'
@@ -62,8 +62,9 @@ function team(bot: Bot): string {
 
 /** The system prompt: the master prompt, filled in from the bot's folder on every step so its own edits take effect at once. */
 function instructions(bot: Bot, thread: Thread, problems: Record<string, string>): string {
-  // Who wrote a scheduled task decides whether it counts as the user's say-so; a task deleted since is not taken to be theirs.
-  const by = (thread.kind === 'task' && thread.taskId && db.getTask(thread.taskId)?.createdBy) || ''
+  // Who wrote an automation decides whether it counts as the user's say-so; one deleted since is not taken to be theirs.
+  const automation = thread.kind === 'automation' && thread.automationId ? db.getAutomation(thread.automationId) : undefined
+  const by = automation?.createdBy ?? ''
   // A subagent may have been handed its task by another bot, rather than split off by this one.
   const from = thread.kind === 'subagent' && thread.parentId ? db.getThread(thread.parentId) : undefined
   const handedBy = from && from.botId !== bot.id ? getBot(from.botId) : undefined
@@ -73,7 +74,8 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     other_bots: team(bot),
     main: isMain(bot),
     can_hand_over: depthOf(thread) < settings().maxDepth,
-    task: thread.kind === 'task',
+    automation: thread.kind === 'automation',
+    watch: automation?.trigger.kind === 'watch',
     subagent: thread.kind === 'subagent',
     codex: bot.provider === 'codex',
     rules: bot.rules,
@@ -82,12 +84,12 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     agents_md: agentsFile(bot.id),
     memory: memoryIndex(bot.id).join('\n'),
     superpowers: superpowerIndex(bot.id, problems).join('\n'),
-    task_title: thread.title,
+    automation_title: thread.title,
     by_user: by === 'user',
     by_you: by === bot.id,
     by_other: !!by && by !== 'user' && by !== bot.id,
-    task_author: by ? (getBot(by)?.name ?? 'another bot') : '',
-    task_gone: !by,
+    automation_author: by ? (getBot(by)?.name ?? 'another bot') : '',
+    automation_gone: !by,
     handed_by: handedBy?.name ?? '',
   })
 }
@@ -271,9 +273,9 @@ async function loop(threadId: string, state: Run) {
 }
 
 function finished(thread: Thread) {
-  // A subagent's or a scheduled run's browser window is closed a little after its work is done.
+  // A subagent's or an automation's run's browser window is closed a little after its work is done.
   if (thread.kind !== 'chat') retireWindow(thread.botId, thread.id)
-  if (thread.kind === 'task') return finishRun(thread)
+  if (thread.kind === 'automation') return finishRun(thread)
   if (thread.kind !== 'subagent' || !thread.parentId) return
   const blocked = waiters.get(thread.id)
   if (blocked?.size) {
@@ -354,7 +356,7 @@ export function resume(thread: Thread): Thread {
   return db.updateThread(thread.id, { archivedAt: null })!
 }
 
-/** Stops a thread and every subagent (and scheduled run) beneath it. */
+/** Stops a thread and every subagent (and run of an automation) beneath it. */
 export function stop(threadId: string) {
   for (const child of db.childrenOf(threadId)) {
     // The parent is being stopped too, so there is nobody to report to.
@@ -385,7 +387,7 @@ export function spawnSubagent(parent: Thread, opts: { task: string; name: string
   return child
 }
 
-/** The subagents a thread has spawned. Scheduled runs beneath a conversation are not among them. */
+/** The subagents a thread has spawned. Runs of automations beneath a conversation are not among them. */
 export const subagentsOf = (parent: Thread) => db.childrenOf(parent.id).filter((c) => c.kind === 'subagent')
 
 /** The child of `parent` with this id; agents may only control subagents they spawned themselves. */
@@ -402,7 +404,7 @@ export function subagentStatus(thread: Thread): 'running' | 'completed' | 'faile
   return last?.type === 'notice' ? 'stopped' : 'completed'
 }
 
-/** How the work of a subagent (or a scheduled run) ended, and what it came to: its last message, or what went wrong. */
+/** How the work of a subagent (or a run of an automation) ended, and what it came to: its last message, or what went wrong. */
 export function outcome(thread: Thread): { status: ReturnType<typeof subagentStatus>; body: string } {
   const status = subagentStatus(thread)
   const items = db.listItems(thread.id)

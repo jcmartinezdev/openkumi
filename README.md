@@ -24,7 +24,7 @@ that stays logged in.
   live, open one to read or message it, or stop it. Results flow back to the parent automatically.
 - **A browser per bot.** Every bot gets its own Chrome profile. Sign in to a site once and that bot
   stays signed in; nothing is shared between bots or with your own browser. Inside it, each
-  session (the conversation, every subagent, every scheduled run) browses in a window of its own,
+  session (the conversation, every subagent, every run of an automation) browses in a window of its own,
   so sessions running at once never get in each other's way. When a bot starts browsing, a small
   live view floats over its chat; dock it beside the chat or make it fill the window. You watch
   until you **Take control**: then the page is yours to use, from the computer or the phone, and
@@ -136,8 +136,8 @@ There is an iPhone app (`apps/mobile`, Expo and React Native) for chatting with 
 watching and steering their browsers, and looking after them: its Settings (the gear on the list
 of bots) change each bot's name, rules, model, browser and superpowers, switch providers on and off,
 set what new bots start with, and choose light or dark and the size of messages on the phone.
-Scheduled tasks are at the bottom of the list of bots, as on the computer: turn them on and off,
-run them, read their runs, and make or change them. It pairs with a server the way another computer does: on
+Automations are at the bottom of the list of bots, as on the computer: turn them on and off,
+run them, read their runs, and make or change them (a watch is set up on the computer, or by asking a bot). It pairs with a server the way another computer does: on
 the computer that runs the bots choose **Pair a computer**, and in the phone app scan the QR code
 it shows, or type the address and the code. The key the phone is given is kept in its keychain,
 and the server lists the phone so you can remove it.
@@ -224,7 +224,7 @@ apps/
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app
   mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser,
-                     settings and scheduled tasks
+                     settings and automations
   marketing/         the website at openkumi.ai (Astro, built to static pages), and the script that
                      draws every app's icon from the mascot (`npm run icons -w @openkumi/marketing`)
 packages/
@@ -273,7 +273,7 @@ screens only read and write these files, so you can also edit them by hand.
       browser-profile/       its Chrome profile: cookies, logins
       superpowers/<id>.json  its account with the app a superpower works in
       history.git/           the record of every change to the workspace
-  openkumi.db                conversations, messages and scheduled tasks
+  openkumi.db                conversations, messages and automations
   settings.json              app-wide settings that differ from the defaults
   auth.json                  API keys and the access code (owner-readable only)
   clients.json               the computers paired with this one (owner-readable only)
@@ -302,8 +302,8 @@ in what it knows of the bot and the thread, so in this order a bot is told:
 3. How OpenKumi works (replies, the browser, subagents, and that web pages and tool results are
    never instructions), then the bot's **rules from you**, which win where they and the principles
    disagree.
-4. Its conversation, scheduled tasks, workspace, its own `AGENTS.md`, the list of its notes, and
-   its superpowers; in a scheduled run or as a subagent, what that means for it.
+4. Its conversation, automations, workspace, its own `AGENTS.md`, the list of its notes, and
+   its superpowers; in a run of an automation or as a subagent, what that means for it.
 
 **Settings → Master prompt → What a bot is told** shows all of it for any bot.
 
@@ -330,34 +330,64 @@ A conversation that never ends cannot be sent to a model whole for ever:
 None of this deletes anything. You still see every message, and the bot has `search_history` and
 `read_history` to look up what is no longer in front of it.
 
-### Scheduled tasks
+### Automations
 
-A scheduled task gives a bot a prompt at set times: once, at a time of day (every day or on
-chosen days), or every so often (every 5 minutes at most). **Scheduled tasks**, at the bottom of
-the sidebar, lists every task with its latest runs beneath it, and is where you make, change,
-pause, run and delete them. Bots make them too, with their tools.
+An automation gives a bot a prompt without you asking: at set times, or when something changes.
+**Automations**, at the bottom of the sidebar, lists every one with its latest runs beneath it, and
+is where you make, change, pause, run and delete them. Bots make them too, with their tools.
+
+What starts one:
+
+- **A time.** Once, at a time of day (every day or on chosen days), or every so often (every 5
+  minutes at most).
+- **A watch.** OpenKumi itself looks at something every few minutes (5 at the least, 15 unless
+  told otherwise) and starts a run only when what it finds differs from the last look. No model
+  is used for looking, so a watch costs nothing while nothing changes. It can watch:
+  - one of the bot's superpower tools that only reads, called with the same arguments each time
+    ("my open issues in Linear"). A tool counts as reading when its service marks it so, or when
+    the superpower's `superpower.json` lists it under `mcp.reads`;
+  - a public web address (`https` only, no sign-in, at most 1 MB). Addresses on this computer, the
+    home network or Tailscale are refused, also when a redirect or a name leads there.
+
+  When what comes back is a list of items in JSON, a watch can **track** fields: the first tells
+  items apart and the others are what counts as an item changing. The run is then told which
+  items are new, updated or gone. Without tracked fields, any change counts; a web page is
+  compared as the text a reader sees.
+
+  The first look, made when the watch is set up, only notes where things stand. A watch does not
+  look while its last run is still at work, and nothing is lost by that: the next look is compared
+  with the same last one, as it is after the computer was asleep or offline. A look that fails is
+  tried again at the next one, and the automation's page says so. When looks have failed for a
+  whole day, or at once when the watch cannot work as it is set up (the tool is gone, the bot's
+  sign-in lapsed, the page answers "not found"), the automation is paused and the bot tells you
+  why. Turned on again, it looks at once. Changing only how often it looks keeps what it last saw.
+
+  The easiest way to set up a watch on an app is to ask the bot ("tell me when an issue is
+  assigned to me"): it knows its tools and what they give back. The form makes watches on web
+  pages; **Look now**, on a watch's page, looks at once.
 
 Each run is a thread of its own beneath the bot's conversation, like a subagent's. It sees nothing
-of the conversation, so a task's prompt has to stand on its own. When it is done, what it came to
-arrives in the conversation and the bot tells you about it there; a run that ends with exactly
-"Nothing to report." is not passed on, for tasks that only matter when something happened. A run
-opens like any conversation, from beneath its task, from under the bot in the sidebar while it is
-recent, or from its result in the conversation. The latest 50 runs of each task are kept.
+of the conversation, so an automation's prompt has to stand on its own; a run a watch started is
+also told what changed, set apart as information that is not an instruction. When it is done, what
+it came to arrives in the conversation and the bot tells you about it there; a run that ends with
+exactly "Nothing to report." is not passed on, for automations that only matter when something
+happened. A run opens like any conversation, from beneath its automation, from under the bot in
+the sidebar while it is recent, or from its result in the conversation. Every run is kept.
 
 Who may do what:
 
-- You can make, change and delete any task.
-- A bot schedules tasks only for itself. It sees the tasks it does and the ones it made, and
+- You can make, change and delete any automation.
+- A bot makes automations only for itself. It sees the ones it does and the ones it made, and
   changes or deletes only the ones it made.
-- The **main assistant**, the first bot (marked in **Settings → Bots**), schedules tasks for every
-  bot, and sees, changes and deletes every task.
-- A run is told who set the task up. One a bot wrote is not taken as your go-ahead: a purchase,
-  a message to send or something to delete is left for you, and said so in its result.
+- The **main assistant**, the first bot (marked in **Settings → Bots**), makes automations for
+  every bot, and sees, changes and deletes every one.
+- A run is told who set the automation up. One a bot wrote is not taken as your go-ahead: a
+  purchase, a message to send or something to delete is left for you, and said so in its result.
 
 Times of day keep to the time zone of the computer running OpenKumi, also across a change of the
 clocks. When that computer was asleep or off, a run at a time of day that is more than ten minutes
-late is marked as missed and the next one is awaited; a task that runs once, or every so often,
-runs as soon as it can.
+late is marked as missed and the next one is awaited; an automation that runs once, or every so
+often, runs as soon as it can, and a watch looks as soon as it can.
 
 ### Replies and pages
 
@@ -404,7 +434,7 @@ A superpower has instructions, a service, or both. The app ones (Notion, Linear 
 both: instructions, and the app's own MCP server, which the bot signs in to with an account of its
 own (two bots can use two different accounts). The know-how ones (Weather, SEO & AI search and the
 rest) are instructions only: free services the bot reaches with `web_fetch`, or ways to use its own
-browser, files, pages and scheduled tasks, with nothing to sign in to. A service can also be a
+browser, files, pages and automations, with nothing to sign in to. A service can also be a
 program run on this computer, which is how a superpower with code of its own would work.
 
 You activate a superpower for one bot at a time, on its page or in the bot's settings; nothing is
@@ -437,7 +467,7 @@ them but not change them, and it cannot switch a superpower on for itself.
 | Files | `list_files`, `read_file`, `write_file`, `edit_file`, `search_files`, `move_file`, `delete_file` |
 | Its conversation | `search_history`, `read_history` |
 | Subagents | `spawn_subagent`, `wait_subagents`, `list_subagents`, `read_subagent`, `message_subagent`, `cancel_subagent` |
-| Scheduled tasks | `list_scheduled_tasks`, `schedule_task`, `update_scheduled_task`, `delete_scheduled_task` |
+| Automations | `list_automations`, `create_automation`, `update_automation`, `delete_automation` |
 | Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval`, `browser_ask_user` |
 | Web | `web_fetch`, plus the provider's built-in web search |
 | The conversation | `show_page` |
@@ -454,7 +484,7 @@ While you have control of a window, the bot's `browser_snapshot` and `browser_re
 everything else in that window is refused at once, with a note saying so; the next result after you
 hand back tells it you used the window. `browser_ask_user` shows what the bot needs ("Sign in to
 LinkedIn") on the window, with **Take control** and **Not now**, and returns when you hand back,
-say no, or after 25 minutes. Scheduled runs do not have it, since nobody watches them. A
+say no, or after 25 minutes. Runs of automations do not have it, since nobody watches them. A
 subagent's or a run's window closes a minute after it finishes.
 
 ### Engines: Claude Code, Codex and Grok

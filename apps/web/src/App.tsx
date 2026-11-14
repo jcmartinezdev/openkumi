@@ -10,7 +10,7 @@ import { NewBot } from './Modals'
 import { usePrefs } from './prefs'
 import { SettingsView } from './Settings'
 import { Sidebar } from './Sidebar'
-import { Tasks } from './Tasks'
+import { Automations } from './Automations'
 import { type Route, loadThread, mainThread, navigate, openSettings, useRoute, useStore } from './store'
 
 export type Modal = { kind: 'new-bot' } | null
@@ -76,10 +76,10 @@ export function App() {
   // Land on the first bot when the URL names nothing that exists.
   useEffect(() => {
     // Not while the settings are showing: they may have been opened directly, with no chat underneath yet.
-    if (loaded && !current.settings && !route.tasks && !bot && bots.length) navigate(bots[0].id)
-  }, [loaded, bot, bots, current.settings, route.tasks])
+    if (loaded && !current.settings && !route.automations && !bot && bots.length) navigate(bots[0].id)
+  }, [loaded, bot, bots, current.settings, route.automations])
 
-  const pane = bot && !route.tasks ? panes[bot.id] : undefined
+  const pane = bot && !route.automations ? panes[bot.id] : undefined
   // The pane shows the window of the thread the chat shows, unless one was docked from picture in picture.
   const chatBrowsing = browsingThread(threads, thread)?.id
   const paneThread = pane?.threadId ?? chatBrowsing
@@ -127,7 +127,7 @@ export function App() {
     setPane(bot.id, showPane ? undefined : { full: false, threadId: null })
     setAutoStart(showPane ? null : bot.id)
   }
-  const pipThread = bot && !route.tasks ? pips[bot.id] : undefined
+  const pipThread = bot && !route.automations ? pips[bot.id] : undefined
   const showPip = !!bot && !!pipThread && !(pane && paneThread === pipThread) && !!windowOf(browsers[bot.id], pipThread)
   /** Moves the floating window into the pane, optionally taking control of it on the way. */
   const dock = (full: boolean, take?: string) => {
@@ -139,14 +139,14 @@ export function App() {
 
   return (
     <div className="app">
-      <Sidebar bot={route.tasks ? undefined : bot} thread={route.tasks ? undefined : thread} tasksOpen={!!route.tasks} openModal={(m) => (setNavOpen(false), setModal(m))} open={navOpen} close={() => setNavOpen(false)} />
+      <Sidebar bot={route.automations ? undefined : bot} thread={route.automations ? undefined : thread} automationsOpen={!!route.automations} openModal={(m) => (setNavOpen(false), setModal(m))} open={navOpen} close={() => setNavOpen(false)} />
       {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
       <main
         className={`chat ${pane && !pane.full ? 'with-pane' : ''}`}
         style={pane && !pane.full && paneWidth ? ({ '--pane-width': `${paneWidth}px` } as React.CSSProperties) : undefined}
       >
-        {route.tasks ? (
-          <Tasks path={route.tasks} openNav={() => setNavOpen(true)} />
+        {route.automations ? (
+          <Automations path={route.automations} openNav={() => setNavOpen(true)} />
         ) : bot ? (
           <>
             <Chat

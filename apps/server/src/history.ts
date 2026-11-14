@@ -115,7 +115,7 @@ export const SUMMARISE =
 function digest(items: Item[]): string {
   return items.flatMap(({ data }) => {
     if (data.type === 'message' && data.role === 'assistant') return [`Bot: ${data.text.slice(0, 6000)}`]
-    if (data.type === 'message') return [`${data.source === 'user' ? 'User' : data.source === 'task' ? 'Scheduled task report' : 'Subagent report'}: ${withFiles(data.text.slice(0, 6000), data.attachments)}`]
+    if (data.type === 'message') return [`${data.source === 'user' ? 'User' : data.source === 'automation' ? 'Automation report' : 'Subagent report'}: ${withFiles(data.text.slice(0, 6000), data.attachments)}`]
     if (data.type === 'function_call') return [`(the bot used ${data.name} ${data.arguments.slice(0, 160)})`]
     return []
   }).join('\n\n')

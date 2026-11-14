@@ -31,7 +31,7 @@ export interface State extends AppState {
 const EMPTY: State = {
   bots: [],
   threads: [],
-  tasks: [],
+  automations: [],
   providers: [],
   browsers: {},
   superpowers: [],
@@ -176,10 +176,10 @@ function handle(ev: ServerEvent) {
     case 'thread.delete':
       if (ev.seq <= state.seq) return
       return set({ threads: state.threads.filter((t) => t.id !== ev.id), items: omit(state.items, ev.id), older: omit(state.older, ev.id), seq: ev.seq })
-    case 'task.upsert':
-      return set({ tasks: upsert(state.tasks, ev.task) })
-    case 'task.delete':
-      return set({ tasks: state.tasks.filter((t) => t.id !== ev.id) })
+    case 'automation.upsert':
+      return set({ automations: upsert(state.automations, ev.automation) })
+    case 'automation.delete':
+      return set({ automations: state.automations.filter((a) => a.id !== ev.id) })
     case 'item.add': {
       const { threadId, data } = ev.item
       // The thread is being fetched, or caught up, right now: the item is kept for that to put in place.
@@ -616,7 +616,7 @@ export function mainThread(threads: Thread[], botId: string): Thread | undefined
   return threads.find((t) => t.botId === botId && !t.parentId && !t.archivedAt)
 }
 
-/** The subagents (and scheduled runs) under a thread, at every depth, that are at work or were until a moment ago: the ones worth showing beside it. */
+/** The subagents (and runs of automations) under a thread, at every depth, that are at work or were until a moment ago: the ones worth showing beside it. */
 export function recentSubagents(threads: Thread[], root: Thread, withinMs = 60 * 60_000): Thread[] {
   const found: Thread[] = []
   const collect = (parent: Thread) => {
