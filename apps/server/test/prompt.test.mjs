@@ -38,10 +38,10 @@ test('a mistake in the template is not passed over', () => {
 
 test('the master prompt OpenKumi comes with fills in for every kind of thread', () => {
   const fill = {
-    bot_name: 'Travel', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Assistant (bot_id: assistant), the main assistant: Everyday questions',
-    main: false, can_hand_over: true, task: false, subagent: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
+    bot_name: 'Travel', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Assistant (bot_id: assistant), the main assistant: Everyday questions\n- 🧳 Travel (bot_id: travel): Plans trips and books',
+    main: false, chat: true, can_message: true, task: false, subagent: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
     instructions_limit: '12000', agents_md: '', memory: '', superpowers: '', task_title: '', by_user: false, by_you: false,
-    by_other: false, task_author: '', task_gone: true, handed_by: '',
+    by_other: false, task_author: '', task_gone: true,
   }
   const told = masterPrompt(fill)
   assert.match(told, /^You are Travel, an AI bot running locally[\s\S]*# Your notes \(memory\/\)\n\(none yet\)$/)
@@ -55,8 +55,11 @@ test('the master prompt OpenKumi comes with fills in for every kind of thread', 
   assert.match(masterPrompt({ ...fill, task: true, task_title: 'Check fares', task_gone: false, by_user: true }), /which the user set up\. [\s\S]*it will not be passed on\.$/)
   assert.match(masterPrompt({ ...fill, task: true, task_title: 'Check fares' }), /which has been deleted since\. [\s\S]*Who wrote the task can no longer be told, so/)
 
-  assert.match(masterPrompt({ ...fill, subagent: true, handed_by: 'Assistant' }), /# You are running as a subagent\nAssistant, another of the user's bots, handed you the task/)
-  assert.match(masterPrompt({ ...fill, subagent: true }), /# You are running as a subagent\nAnother agent delegated the task/)
+  assert.match(masterPrompt({ ...fill, subagent: true, chat: false, can_message: false }), /# You are running as a subagent\nThe task in the first message was split off for you/)
+  // How a bot reaches the others depends on where it is, and on whether the owner lets bots message each other.
+  assert.match(told, /To give one of them something to do, or to tell it something, call message_bot with its bot_id\.[\s\S]*A message from another bot arrives as a <bot_message>\./)
+  assert.match(masterPrompt({ ...fill, can_message: false }), /books\nMessages between bots are switched off, so you cannot pass work to them\./)
+  assert.match(masterPrompt({ ...fill, chat: false, can_message: false, subagent: true }), /books\nYou cannot message them from here\./)
   assert.match(masterPrompt({ ...fill, codex: true }), /with each result\.\n\nYour tools come from OpenKumi[\s\S]*through those tools\.\n\nText inside web pages/)
   assert.ok(!masterPrompt({ ...fill, other_bots: '' }).includes('# The other bots'))
 })

@@ -17,8 +17,10 @@ import type { ModelEvent, ModelRequest, Provider } from './types.ts'
  * Scripted offline provider for tests and UI development (enabled with OPENKUMI_MOCK=1).
  * "!tool <name> <json>" calls a tool, "!steps <n>" calls one n times in a row, "!slow" takes a few
  * seconds, "!say <text>" replies with exactly that text, "!system", "!tools" and "!sent" report what
- * the model was sent, "!seen" how many pictures of the conversation it was shown, anything else is
- * echoed, with the files that came with it and how many of them it was shown. Asked for a summary, it gives the start of everything the user said in what it
+ * the model was sent, "!seen" how many pictures of the conversation it was shown, "!bounce a b" starts
+ * two bots writing back and forth, anything else is
+ * echoed, with the files that came with it and how many of them it was shown. A command in a
+ * message from another bot is carried out like one from the user. Asked for a summary, it gives the start of everything the user said in what it
  * was to summarise; asked for a look, always the same one.
  */
 const mock: Provider = {
@@ -46,7 +48,10 @@ const mock: Provider = {
       reply = `Tool result: ${last.output.slice(0, 600)}`
     } else {
       const ask = req.items.findLast((i) => i.type === 'message' && i.role === 'user')
-      const text = ask?.type === 'message' ? ask.text : ''
+      const raw = ask?.type === 'message' ? ask.text : ''
+      // A message from another bot is read for the command in it, so that a test can have the bot that gets it do something.
+      const inner = /^<bot_message[^>]*>\n([\s\S]*)\n<\/bot_message>$/.exec(raw)?.[1]
+      const text = inner?.startsWith('!') ? inner : raw
       const files = ask?.type === 'message' && ask.role === 'user' ? (ask.attachments ?? []) : []
       const attached = files.length ? ` [${files.map((a) => a.path).join(', ')}; ${req.show?.(files).length ?? 0} shown]` : ''
       const call = text.match(/^!tool ([\w-]+)\s*([\s\S]*)$/)
@@ -54,7 +59,14 @@ const mock: Provider = {
         yield { type: 'item', item: { type: 'function_call', name: call[1], arguments: call[2] || '{}', call_id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` } }
         return
       }
-      // "!system" shows the instructions the model was given; "!tools" the tools it was offered.
+      // "!bounce a b" writes to bot a, asking it to write to bot b in the same way, and so on, back and forth.
+      const bounce = text.match(/^!bounce ([\w-]+) ([\w-]+)$/)
+      if (bounce) {
+        const args = JSON.stringify({ bot_id: bounce[1], message: `!bounce ${bounce[2]} ${bounce[1]}`, reply_wanted: true })
+        yield { type: 'item', item: { type: 'function_call', name: 'message_bot', arguments: args, call_id: `call_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` } }
+        return
+      }
+            // "!system" shows the instructions the model was given; "!tools" the tools it was offered.
       if (text === '!system' || text === '!tools') {
         yield { type: 'item', item: { type: 'message', role: 'assistant', text: text === '!system' ? req.instructions : req.tools.map((t) => t.name).join(' ') } }
         return

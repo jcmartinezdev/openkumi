@@ -14,18 +14,43 @@ interface Turn {
   bot: Bot
   tools: Tool[]
   signal: AbortSignal
+  /** The signal for a tool that only waits to give way (see ToolContext.hurry), as it is when the tool is called. */
+  hurry: () => AbortSignal
 }
 
-const turns = new Map<string, Turn>()
+interface Open extends Turn {
+  /** Requests with a tool call that have not been answered yet. */
+  inFlight: number
+  /** No further call is carried out: the turn is about to be cut short. */
+  shut: boolean
+  idle: (() => void)[]
+}
+
+const turns = new Map<string, Open>()
+
+export interface ToolEndpoint {
+  url: string
+  close: () => void
+  /** Stops taking calls, and resolves once the ones under way have been answered: nothing is cut off half done. */
+  settle: () => Promise<void>
+}
 
 /** Makes the tools available until `close` is called. The address is the only way in. */
-export function openToolEndpoint(turn: Turn): { url: string; close: () => void } {
+export function openToolEndpoint(turn: Turn): ToolEndpoint {
   const token = crypto.randomBytes(24).toString('base64url')
-  turns.set(token, turn)
-  return { url: `http://127.0.0.1:${PORT}/mcp/${token}`, close: () => turns.delete(token) }
+  const open: Open = { ...turn, inFlight: 0, shut: false, idle: [] }
+  turns.set(token, open)
+  return {
+    url: `http://127.0.0.1:${PORT}/mcp/${token}`,
+    close: () => turns.delete(token),
+    settle: () => {
+      open.shut = true
+      return open.inFlight ? new Promise<void>((resolve) => open.idle.push(resolve)) : Promise.resolve()
+    },
+  }
 }
 
-async function answer(turn: Turn, method: string, params: any): Promise<unknown> {
+async function answer(turn: Open, method: string, params: any): Promise<unknown> {
   if (method === 'initialize') {
     return {
       // Agreeing to whatever version the client speaks keeps older and newer programs working.
@@ -39,6 +64,8 @@ async function answer(turn: Turn, method: string, params: any): Promise<unknown>
     return { tools: turn.tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.parameters })) }
   }
   if (method === 'tools/call') {
+    // The turn is being cut short for a message the owner wants read now; what the model meant to do next it can do after reading it.
+    if (turn.shut) return { content: [{ type: 'text', text: 'Error: not carried out. The user sent a message for you to read now; it comes next.' }], isError: true }
     const call = {
       type: 'function_call' as const,
       name: String(params?.name ?? ''),
@@ -46,7 +73,7 @@ async function answer(turn: Turn, method: string, params: any): Promise<unknown>
       call_id: `call_${crypto.randomBytes(9).toString('base64url')}`,
     }
     db.addItem(turn.thread.id, call)
-    const output = await runTool(turn.tools, call, turn)
+    const output = await runTool(turn.tools, call, { thread: turn.thread, bot: turn.bot, signal: turn.signal, hurry: turn.hurry() })
     db.addItem(turn.thread.id, { type: 'function_call_output', call_id: call.call_id, output })
     return { content: [{ type: 'text', text: output }], isError: output.startsWith('Error:') }
   }
@@ -74,6 +101,14 @@ export async function handleToolEndpoint(req: http.IncomingMessage, res: http.Se
     body = JSON.parse(raw)
   } catch {
     return send(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } })
+  }
+
+  // A call counts as under way until its answer has left, so that a turn is never cut short before the engine has it.
+  if ((Array.isArray(body) ? body : [body]).some((msg) => msg?.method === 'tools/call')) {
+    turn.inFlight++
+    res.once('close', () => {
+      if (--turn.inFlight === 0) turn.idle.splice(0).forEach((resolve) => resolve())
+    })
   }
 
   const reply = async (msg: any) => {

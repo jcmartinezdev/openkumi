@@ -173,7 +173,7 @@ function start(task: ScheduledTask, scheduled: boolean): ScheduledTask {
   const conversation = agent.conversation(task.botId)
   const thread = db.createThread({ botId: task.botId, parentId: conversation.id, kind: 'task', taskId: task.id, title: task.title })
   const saved = db.saveTask({ ...task, nextRunAt: next, lastRunAt: now, lastStatus: 'running', lastError: null, lastThreadId: thread.id })
-  agent.postMessage(thread.id, task.prompt, 'schedule')
+  agent.postMessage(thread.id, { source: 'schedule', text: task.prompt })
   // Every run is kept, however many there are; the apps are only ever sent a page of them.
   return saved
 }
@@ -231,11 +231,10 @@ export function finishRun(thread: Thread) {
   db.updateThread(thread.id, { reported: true })
   if (status === 'completed' && NOTHING.test(body.trim())) return
   const conversation = agent.conversation(thread.botId)
-  agent.postMessage(
-    conversation.id,
-    `<scheduled_task_result>\nScheduled task "${thread.title}" (task: ${thread.taskId}, run: ${thread.id}) — ${status}\n${body}\n</scheduled_task_result>`,
-    'task',
-  )
+  agent.postMessage(conversation.id, {
+    source: 'task',
+    text: `<scheduled_task_result>\nScheduled task "${thread.title}" (task: ${thread.taskId}, run: ${thread.id}) — ${status}\n${body}\n</scheduled_task_result>`,
+  })
 }
 
 // ---- what bots may do

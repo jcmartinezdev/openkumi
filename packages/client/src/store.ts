@@ -32,6 +32,7 @@ const EMPTY: State = {
   bots: [],
   threads: [],
   tasks: [],
+  queue: [],
   providers: [],
   browsers: {},
   superpowers: [],
@@ -206,6 +207,10 @@ function handle(ev: ServerEvent) {
         partial: cleared ? { ...state.partial, [threadId]: cleared } : state.partial,
       })
     }
+    case 'queue.upsert':
+      return set({ queue: state.queue.some((w) => w.id === ev.message.id) ? state.queue.map((w) => (w.id === ev.message.id ? ev.message : w)) : [...state.queue, ev.message] })
+    case 'queue.remove':
+      return set({ queue: state.queue.filter((w) => w.id !== ev.id) })
     case 'stream.delta': {
       const during = loading.get(ev.threadId)
       if (during) during[ev.kind] += ev.delta

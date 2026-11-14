@@ -342,6 +342,26 @@ a.row { text-decoration: none; }
 .msg { overflow-wrap: anywhere; }
 .msg.user { align-self: flex-end; max-width: 85%; padding: 8px 14px; border-radius: 16px; background: var(--user); white-space: pre-wrap; }
 .msg.task { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); white-space: pre-wrap; color: var(--muted); }
+/* A message between bots: one that came from another bot sits on the left, one this bot sent on the right, like the owner's own. */
+.msg.between { max-width: 85%; padding: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
+.msg.between.from { align-self: flex-start; }
+.msg.between.to { align-self: flex-end; }
+.between-head { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0; margin: 0 0 2px; border: none; color: var(--faint); font-weight: 400; max-width: 100%; }
+.between-head:hover:not(:disabled) { background: none; color: var(--text); }
+.between-head .eyebrow { margin: 0; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.between-head .faint { white-space: nowrap; }
+.between-text { white-space: pre-wrap; }
+/* What waits for the bot, under what it is doing now. */
+.waiting { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border: 1px dashed var(--border-strong); border-radius: 14px; }
+.waiting-head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.waiting-head .eyebrow { margin: 0; flex: none; }
+.waiting-head .faint { line-height: 1.4; text-wrap: pretty; }
+.waiting-head > button { flex: none; height: 28px; }
+.waiting-card { display: flex; align-items: center; gap: 4px; padding: 8px 6px 8px 12px; border-radius: 10px; background: var(--hover); }
+.waiting-card.now { background: var(--active); }
+.waiting-body { flex: 1; min-width: 0; }
+.waiting-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.waiting-card > button { flex: none; }
 
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }

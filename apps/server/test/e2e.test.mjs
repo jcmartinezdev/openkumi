@@ -13,6 +13,9 @@ import { startOAuthServer } from './fixtures/mcp-oauth.mjs'
 const PORT = 4400 + Math.floor(Math.random() * 500)
 const BASE = `http://127.0.0.1:${PORT}`
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-test-'))
+/** The user's own Codex folder, with servers they set up for themselves, which no bot is to get. */
+const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-codex-home-'))
+fs.writeFileSync(path.join(codexHome, 'config.toml'), 'model = "their-model"\n\n[mcp_servers.calendar]\ncommand = "calendar"\n\n[mcp_servers.calendar.env]\nKEY = "1"\n\n[mcp_servers."my notes"]\nurl = "https://example.com/mcp"\n')
 /** The superpowers the server offers: the ones that ship, and any the tests add. */
 const powers = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-superpowers-'))
 fs.cpSync(path.resolve('superpowers'), powers, { recursive: true })
@@ -56,6 +59,13 @@ async function settle(threadId, timeoutMs = 30_000) {
   }
   throw new Error('Thread did not settle in time')
 }
+
+/** The bot's conversation, once something has been said in it. */
+const conversationOf = async (botId) => (await api('GET', '/api/state')).threads.find((t) => t.botId === botId && !t.parentId && !t.archivedAt)
+/** What waits for the bot in a thread, oldest first. */
+const waitingIn = async (threadId) => (await api('GET', '/api/state')).queue.filter((w) => w.threadId === threadId)
+/** What was said in a thread: the messages, in order. */
+const spoken = (items) => items.filter((d) => d.type === 'message').map((d) => d.text)
 
 const lastText = (items) => items.findLast((d) => d.type === 'message' && d.role === 'assistant')?.text
 /** Starts a bot's conversation afresh and gives its id, so that a test begins with nothing said. */
@@ -148,6 +158,7 @@ before(async () => {
       // Scripted stand-ins for the Claude Code and Codex programs.
       OPENKUMI_CLAUDE_BIN: path.resolve('test/fixtures/fake-claude.mjs'),
       OPENKUMI_CODEX_BIN: path.resolve('test/fixtures/fake-codex.mjs'),
+      CODEX_HOME: codexHome,
       OPENKUMI_GROK_BIN: path.resolve('test/fixtures/fake-grok.mjs'),
       // And for Tailscale's, which says this computer is on a tailnet.
       OPENKUMI_TAILSCALE_BIN: path.resolve('test/fixtures/fake-tailscale.mjs'),
@@ -166,6 +177,7 @@ after(async () => {
   server.kill('SIGTERM')
   await new Promise((r) => server.on('exit', r))
   fs.rmSync(home, { recursive: true, force: true })
+  fs.rmSync(codexHome, { recursive: true, force: true })
   fs.rmSync(powers, { recursive: true, force: true })
 })
 
@@ -288,12 +300,86 @@ test('a bot has one conversation: messages go to it, starting fresh sets it asid
   await settle(first.id)
 })
 
-test('what is said while the bot is working is answered when it is done', async () => {
+test('what is said while the bot is working waits in a queue, and is read one message at a time, in order', async () => {
+  const id = await fresh()
+  await api('POST', `/api/threads/${id}/messages`, { text: '!drip one two three four five six' })
+  await api('POST', `/api/threads/${id}/messages`, { text: 'second' })
+  await api('POST', `/api/threads/${id}/messages`, { text: 'third' })
+  // They wait where the apps can show them, and are not part of the conversation yet.
+  const waiting = await waitingIn(id)
+  assert.deepEqual(waiting.map((w) => [w.message.text, w.message.source, w.now]), [['second', 'user', false], ['third', 'user', false]])
+  assert.deepEqual(spoken((await api('GET', `/api/threads/${id}`)).items.map((i) => i.data)), ['!drip one two three four five six'])
+  // Each is answered in a turn of its own, in the order it came.
+  assert.deepEqual(spoken(await settle(id)), ['!drip one two three four five six', 'one two three four five six', 'second', 'Echo: second', 'third', 'Echo: third'])
+  assert.deepEqual(await waitingIn(id), [])
+})
+
+test('a waiting message can be taken back, or read at once by the bot as it works', async () => {
+  const id = await fresh()
+  await api('PATCH', '/api/settings', { maxSteps: 300 })
+  try {
+    await api('POST', `/api/threads/${id}/messages`, { text: '!steps 200' })
+    for (const text of ['never mind', 'later', 'read this now']) await api('POST', `/api/threads/${id}/messages`, { text })
+    const [gone, , now] = await waitingIn(id)
+    // One taken back is never read.
+    await api('DELETE', `/api/queue/${gone.id}`)
+    await assert.rejects(api('POST', `/api/queue/${gone.id}/now`), /no longer waiting/)
+    // One sent now goes in before the bot's next step, ahead of what was waiting longer.
+    await api('POST', `/api/queue/${now.id}/now`)
+    const items = await settle(id)
+    assert.deepEqual(spoken(items), ['!steps 200', 'read this now', 'Echo: read this now', 'later', 'Echo: later'])
+    const at = items.findIndex((d) => d.text === 'read this now')
+    const steps = items.slice(0, at).filter((d) => d.type === 'function_call').length
+    assert.ok(steps > 0 && steps < 200, `it arrived as the bot worked, after ${steps} steps`)
+    assert.equal(items[at - 1].type, 'function_call_output', 'the step under way was finished first')
+  } finally {
+    await api('PATCH', '/api/settings', { maxSteps: 80 })
+  }
+})
+
+test('at most ten messages wait for a bot; a bot that is stopped does not start again by itself on what was waiting', async () => {
   const id = await fresh()
   await api('POST', `/api/threads/${id}/messages`, { text: '!slow first' })
+  for (let n = 1; n <= 10; n++) await api('POST', `/api/threads/${id}/messages`, { text: `waiting ${n}` })
+  await assert.rejects(api('POST', `/api/threads/${id}/messages`, { text: 'one too many' }), /Tester is busy: 10 messages are already waiting for it\./)
+  await assert.rejects(api('POST', `/api/bots/${bot.id}/messages`, { text: 'one too many' }), /Tester is busy/)
+  assert.equal((await waitingIn(id)).length, 10)
+
+  // Stopped, the bot leaves what was waiting where it is: held back, for the owner to let go.
+  await api('POST', `/api/threads/${id}/stop`)
+  assert.deepEqual(spoken(await settle(id)), ['!slow first'])
   await new Promise((r) => setTimeout(r, 200))
-  await api('POST', `/api/threads/${id}/messages`, { text: 'second' })
-  assert.deepEqual((await settle(id)).filter((d) => d.type === 'message').map((d) => d.text), ['!slow first', 'second', 'Echo: !slow first', 'Echo: second'])
+  const held = async () => (await api('GET', `/api/threads/${id}`)).thread.held
+  assert.deepEqual([await held(), (await waitingIn(id)).length], [true, 10])
+  // It cannot be set aside with messages still waiting in it.
+  await assert.rejects(api('POST', `/api/bots/${bot.id}/fresh`), /Messages are still waiting for the bot/)
+
+  // One sent now is read, and only that one.
+  const waiting = await waitingIn(id)
+  for (const w of waiting.slice(0, 7)) await api('DELETE', `/api/queue/${w.id}`)
+  await api('POST', `/api/queue/${waiting[9].id}/now`)
+  assert.deepEqual(spoken(await settle(id)).slice(1), ['waiting 10', 'Echo: waiting 10'])
+  assert.deepEqual([await held(), (await waitingIn(id)).map((w) => w.message.text)], [true, ['waiting 8', 'waiting 9']])
+
+  // The owner writing to the bot lets the rest go, in order, ahead of what they wrote.
+  await api('POST', `/api/threads/${id}/messages`, { text: 'carry on' })
+  assert.deepEqual(spoken(await settle(id)).slice(3), ['waiting 8', 'Echo: waiting 8', 'waiting 9', 'Echo: waiting 9', 'carry on', 'Echo: carry on'])
+  assert.deepEqual([await held(), await waitingIn(id)], [false, []])
+
+  // So does letting them go without writing; and a queue emptied by hand is no longer held back.
+  await api('POST', `/api/threads/${id}/messages`, { text: '!slow again' })
+  await api('POST', `/api/threads/${id}/messages`, { text: 'held one' })
+  await api('POST', `/api/threads/${id}/stop`)
+  await settle(id)
+  assert.equal(await held(), true)
+  await api('POST', `/api/threads/${id}/queue/go`)
+  assert.equal(lastText(await settle(id)), 'Echo: held one')
+  await api('POST', `/api/threads/${id}/messages`, { text: '!slow once more' })
+  await api('POST', `/api/threads/${id}/messages`, { text: 'not after all' })
+  await api('POST', `/api/threads/${id}/stop`)
+  await settle(id)
+  await api('DELETE', `/api/queue/${(await waitingIn(id))[0].id}`)
+  assert.equal(await held(), false)
 })
 
 test('history: the owner and the bot find what was said earlier, also in conversations that were set aside', async () => {
@@ -361,17 +447,48 @@ test('a long conversation is shortened for the model: a summary stands in for it
   }
 })
 
-test('bots can be created from chat', async () => {
-  const id = await fresh()
-  const items = await say(id, '!tool create_bot {"name":"Researcher","instructions":"Dig deep.","emoji":"🔎"}')
-  assert.match(lastText(items), /Created bot/)
-  const { bots } = await api('GET', '/api/state')
-  const made = bots.find((b) => b.name === 'Researcher')
-  assert.equal(made.emoji, '🔎')
-  assert.equal(made.provider, 'mock', 'inherits the creating bot\'s provider')
-  assert.equal(made.id, 'researcher', 'the folder is named after the bot')
-  assert.equal(made.description, 'Dig deep.', 'without a description, the first sentence of what it is for stands in')
-  assert.match(fs.readFileSync(path.join(home, 'bots', 'researcher', 'workspace', 'AGENTS.md'), 'utf8'), /Dig deep\./, 'the instructions start its own file')
+test('bots are created from chat by the main assistant alone, on the owner’s word, and can be started on a first message', async () => {
+  const main = (await api('GET', '/api/state')).bots[0]
+  assert.equal(main.name, 'Assistant')
+  await api('PATCH', `/api/bots/${main.id}`, { provider: 'mock' })
+  // Only the main assistant is offered it, and only in its conversation with the owner.
+  assert.doesNotMatch(await told('!tools'), /create_bot/)
+  assert.match(await told('!tools', main.id), /list_bots create_bot message_bot/)
+  const id = await fresh(main.id)
+  await say(id, '!tool spawn_subagent {"name":"Offered","task":"!tools"}')
+  const child = await until(async () => (await api('GET', '/api/state')).threads.find((t) => t.parentId === id && t.kind === 'subagent'))
+  assert.doesNotMatch(lastText(await settle(child.id)), /create_bot|message_bot/, 'a subagent neither makes bots nor messages them')
+  await settle(id)
+
+  // A new bot runs on what new bots run on, not on what its maker does.
+  await api('PATCH', '/api/settings', { defaultProvider: 'claude-code' })
+  try {
+    const items = await say(await fresh(main.id), '!tool create_bot {"name":"Researcher","description":"Looks things up.","instructions":"Dig deep.","emoji":"🔎","first_message":"find out about herons"}')
+    assert.match(lastText(items), /Created bot[\s\S]*It has your first message and has started on it/)
+    const { bots } = await api('GET', '/api/state')
+    const made = bots.find((b) => b.name === 'Researcher')
+    assert.deepEqual([made.emoji, made.provider, made.id, made.description], ['🔎', 'claude-code', 'researcher', 'Looks things up.'])
+    assert.match(fs.readFileSync(path.join(home, 'bots', 'researcher', 'workspace', 'AGENTS.md'), 'utf8'), /Dig deep\./, 'the instructions start its own file')
+    // The first message is in its own conversation, which is named after it, and it has set to work.
+    const started = await until(() => conversationOf('researcher'))
+    const said = await settle(started.id)
+    assert.deepEqual([said[0].source, said[0].bot, said[0].text], ['bot', { id: 'assistant', name: 'Assistant' }, 'find out about herons'])
+    assert.match(lastText(said), /^Echo \(turn 1\): <bot_message from="Assistant" bot_id="assistant" reply_wanted="no">\nfind out about herons\n<\/bot_message>$/)
+    assert.equal((await conversationOf('researcher')).title, 'find out about herons')
+    // Without a description, the first sentence of what it is for stands in.
+    await say(await fresh(main.id), '!tool create_bot {"name":"Plain","description":"","instructions":"Keeps lists. Likes order."}')
+    assert.equal((await api('GET', '/api/state')).bots.find((b) => b.id === 'plain').description, 'Keeps lists.')
+    assert.equal(await conversationOf('plain'), undefined, 'with no first message it waits for the owner')
+  } finally {
+    await api('PATCH', '/api/settings', { defaultProvider: '' })
+  }
+
+  // Asked by another bot, the main assistant makes none: that is not the owner's word.
+  await say(await fresh(), `!tool message_bot ${JSON.stringify({ bot_id: main.id, message: '!tool create_bot {"name":"Sneak","description":"x","instructions":"y"}' })}`)
+  const asked = await settle((await conversationOf(main.id)).id)
+  assert.match(asked.findLast((d) => d.type === 'function_call_output').output, /^Error: A bot can only be created when the user has just asked you for one\./)
+  assert.ok(!(await api('GET', '/api/state')).bots.some((b) => b.name === 'Sneak'))
+  for (const made of ['researcher', 'plain']) await api('DELETE', `/api/bots/${made}`)
 })
 
 test('looks: a new bot\'s own model dresses it, and the owner changes it a part at a time', async () => {
@@ -444,7 +561,7 @@ test('master prompt: every bot is told the one OpenKumi comes with, filled in, a
   await assert.rejects(api('PUT', '/api/principles', { text: 'Always answer in French.' }), /Not found/)
 })
 
-test('the other bots: each bot is told who the others are and what each is for, and hands one a task as a subagent', async () => {
+test('the other bots: each bot is told who the others are and what each is for', async () => {
   const travel = await api('POST', '/api/bots', { name: 'Travel', emoji: '🧳', provider: 'mock', description: 'Plans trips\n and books   travel.' })
   assert.equal(travel.description, 'Plans trips and books travel.', 'a description is one line')
   assert.match(fs.readFileSync(path.join(home, 'bots', 'travel', 'bot.md'), 'utf8'), /\ndescription: Plans trips and books travel\.\n/)
@@ -454,7 +571,7 @@ test('the other bots: each bot is told who the others are and what each is for, 
   assert.match(prompt, /\n- 🧳 Travel \(bot_id: travel\): Plans trips and books travel\.\n/)
   assert.match(prompt, /\n- 🤖 Assistant \(bot_id: assistant\), the main assistant: Everyday questions and tasks/)
   assert.ok(!prompt.includes('(bot_id: tester)'), 'a bot is not listed among the others')
-  assert.match(prompt, /To hand a task to one of them, call spawn_subagent with its bot_id\./)
+  assert.match(prompt, /To give one of them something to do, or to tell it something, call message_bot with its bot_id\./)
   assert.match(await told('!system', 'assistant'), /# The other bots\nYou are the main assistant: the user comes to you first/)
   // What a bot may use is listed with it, and a bot with no description is said to have none.
   await api('PUT', `/api/bots/travel/superpowers/field-guide`, { on: true })
@@ -462,29 +579,102 @@ test('the other bots: each bot is told who the others are and what each is for, 
   assert.match(await told(), /- 🧳 Travel \(bot_id: travel\): \(no description yet\) Superpowers: Field guide\.\n/)
   await api('PATCH', '/api/bots/travel', { description: 'Plans trips and books travel.' })
 
-  // Handed a task, the other bot does it as itself, and knows who handed it over.
+  // A subagent is the bot itself: it cannot be another bot, and cannot message one.
   const id = await fresh()
   await api('POST', `/api/threads/${id}/messages`, { text: '!tool spawn_subagent {"name":"Plan a trip","task":"!system","bot_id":"travel"}' })
   const child = await until(async () => (await api('GET', '/api/state')).threads.find((t) => t.parentId === id && t.kind === 'subagent'))
-  assert.equal(child.botId, 'travel')
-  const handed = lastText(await settle(child.id))
+  assert.equal(child.botId, bot.id)
+  const split = lastText(await settle(child.id))
   // The scripted model would now read the whole report back, a word at a time; that is not what is tested here.
   await api('POST', `/api/threads/${id}/stop`)
   await settle(id)
-  assert.match(handed, /^You are Travel,/)
-  assert.match(handed, /# You are running as a subagent\nTester, another of the user's bots, handed you the task in the first message\./)
-  assert.match(handed, /\n- \S+ Tester \(bot_id: tester\): /)
-
-  // Where no subagent can be started, a bot is told it cannot hand tasks over.
-  await api('PATCH', '/api/settings', { maxDepth: 0 })
-  assert.match(await told(), /You cannot hand tasks to them from here\./)
-  await api('PATCH', '/api/settings', { maxDepth: 2 })
+  assert.match(split, /# You are running as a subagent\nThe task in the first message was split off for you by the thread above this one\./)
+  assert.match(split, /You cannot message them from here\. If part of your task belongs to one of them, say so in your final message\./)
 
   // The owner can read all a bot is told.
   const { text } = await api('GET', `/api/bots/${bot.id}/instructions`)
   assert.match(text, /^You are Tester,[\s\S]*# Principles[\s\S]*# The other bots[\s\S]*# Your instructions \(AGENTS\.md\)/)
   await api('DELETE', '/api/bots/travel')
   assert.ok(!(await told()).includes('Travel'))
+})
+
+test('messages between bots: one bot writes into another’s conversation, which answers it in its turn; the owner sees it on both sides', async () => {
+  const travel = await api('POST', '/api/bots', { name: 'Travel', emoji: '🧳', provider: 'mock', description: 'Plans trips and books travel.' })
+  const send = (args, from = bot.id) => tool('message_bot', args, from)
+  try {
+    assert.match(await told('!tools'), /list_bots message_bot /)
+    const id = await fresh()
+    const out = (await say(id, '!tool message_bot {"bot_id":"travel","message":"plan a trip to Lisbon"}')).findLast((d) => d.type === 'function_call_output').output
+    assert.equal(out, 'Delivered. Travel has started on it. It answers the user in its own conversation, not you.')
+
+    // It is in the other bot's own conversation, as a message from this bot, and that bot answers it there.
+    const theirs = await until(() => conversationOf(travel.id))
+    const got = await settle(theirs.id)
+    assert.deepEqual([got[0].source, got[0].bot, got[0].text, got[0].replyWanted, got[0].chain], ['bot', { id: 'tester', name: 'Tester' }, 'plan a trip to Lisbon', false, 1])
+    assert.equal(lastText(got), 'Echo: <bot_message from="Tester" bot_id="tester" reply_wanted="no">\nplan a trip to Lisbon\n</bot_message>', 'its model is told whose message it is')
+    assert.equal((await conversationOf(travel.id)).title, 'plan a trip to Lisbon')
+    // The sender's conversation keeps a record of it, and each is found from the other.
+    const sent = (await settle(id)).find((d) => d.type === 'sent')
+    assert.deepEqual(sent, { type: 'sent', to: { id: 'travel', name: 'Travel' }, threadId: theirs.id, text: 'plan a trip to Lisbon', replyWanted: false, key: got[0].key })
+    const where = await api('GET', `/api/messages/${sent.key}`)
+    assert.deepEqual([where.sent.botId, where.sent.threadId, where.received.botId, where.received.threadId], ['tester', id, 'travel', theirs.id])
+    const { items } = await api('GET', `/api/threads/${theirs.id}`)
+    assert.equal(items.find((i) => i.id === where.received.itemId).data.text, 'plan a trip to Lisbon')
+    // It is found later as what that bot said, by the owner and by the bot.
+    const [match] = (await api('GET', '/api/bots/travel/search?q=lisbon')).matches.filter((m) => m.from === 'other')
+    assert.deepEqual([match.name, match.snippet], ['Tester', 'plan a trip to Lisbon'])
+    assert.match(await tool('search_history', { query: 'Lisbon' }, 'travel'), /UTC, message from Tester: plan a trip to Lisbon/)
+
+    // A bot answering a bot may write back only when it was asked to, and to nobody else.
+    const answer = async (message, replyWanted) => {
+      await send({ bot_id: 'travel', message, reply_wanted: replyWanted })
+      const conversation = await until(() => conversationOf(travel.id))
+      return (await settle(conversation.id)).findLast((d) => d.type === 'function_call_output').output
+    }
+    assert.match(await answer('!tool message_bot {"bot_id":"tester","message":"thanks!"}', false), /^Error: You are answering a message from another bot that did not ask for a reply, so you cannot message a bot now\./)
+    assert.match(await answer('!tool message_bot {"bot_id":"assistant","message":"hello"}', true), /^Error: You are answering a message from another bot, so the only bot you can write to now is the one that asked you for a reply\./)
+    assert.match(await answer('!tool message_bot {"bot_id":"tester","message":"Lisbon is planned"}', true), /^Delivered\./)
+    // The reply arrives in the asker's conversation as a message from that bot, and wakes it.
+    const mine = await until(() => conversationOf(bot.id))
+    const back = (await until(async () => (await settle(mine.id)).find((d) => d.source === 'bot')))
+    assert.deepEqual([back.bot.name, back.text, back.chain], ['Travel', 'Lisbon is planned', 2])
+    await settle(mine.id)
+    assert.match(await send({ bot_id: 'tester', message: 'me' }), /^Error: That is you\./)
+    assert.match(await send({ bot_id: 'nobody', message: 'hi' }), /^Error: No bot with id nobody\./)
+
+    // A busy bot reads it in turn; the sender is told where it stands, and the owner can take it back.
+    const busy = (await conversationOf(travel.id)).id
+    await api('POST', `/api/threads/${busy}/messages`, { text: '!slow' })
+    assert.match(await send({ bot_id: 'travel', message: 'when you can', reply_wanted: true }), /^Delivered\. Travel is busy: your message is 1st in its queue, and it will read it in turn\. Its reply will arrive here/)
+    const [waiting] = await waitingIn(busy)
+    assert.deepEqual([waiting.message.source, waiting.message.bot.name, waiting.message.text], ['bot', 'Tester', 'when you can'])
+    // Stopped, it holds back what waits for it, and a bot that writes to it is told so.
+    await api('POST', `/api/threads/${busy}/stop`)
+    await settle(busy)
+    assert.match(await send({ bot_id: 'travel', message: 'and this' }), /^Delivered, but Travel was stopped and what waits for it is held back until the user lets it go on\. Tell the user\./)
+    for (const w of await waitingIn(busy)) await api('DELETE', `/api/queue/${w.id}`)
+
+    // Messages that lead from one to the next stop by themselves, however the bots go on.
+    await say(await fresh(), '!bounce travel tester')
+    const ends = async () => {
+      const [a, b] = await Promise.all([conversationOf(bot.id), conversationOf(travel.id)])
+      return a.status !== 'running' && b.status !== 'running' && !(await api('GET', '/api/state')).queue.length && [await settle(a.id), await settle(b.id)]
+    }
+    await new Promise((r) => setTimeout(r, 300))
+    const [here, there] = await until(ends, 30_000)
+    const all = [...here, ...there]
+    assert.equal(all.filter((d) => d.type === 'sent' && d.text.startsWith('!bounce')).length, 20)
+    assert.match(all.findLast((d) => d.type === 'function_call_output' && d.output.startsWith('Error: 20 messages')).output, /without the user saying anything\. Send no more/)
+    assert.match(all.find((d) => d.type === 'notice' && d.level === 'info' && d.text.startsWith('20 messages')).text, /^20 messages have gone between bots without you saying anything/)
+
+    // The owner can switch messages between bots off altogether.
+    await api('PATCH', '/api/settings', { botMessages: false })
+    assert.doesNotMatch(await told('!tools'), /message_bot/)
+    assert.match(await told(), /Messages between bots are switched off, so you cannot pass work to them\./)
+    await api('PATCH', '/api/settings', { botMessages: true })
+  } finally {
+    await api('DELETE', '/api/bots/travel')
+  }
 })
 
 test('file tools stay inside the workspace', async () => {
@@ -848,9 +1038,67 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
       assert.equal(started.config.sandbox_mode, 'read-only')
       assert.equal(started.config['skills.include_instructions'], false)
       for (const feature of ['shell_tool', 'unified_exec', 'multi_agent', 'plugins']) assert.ok(started.disabled.includes(feature), feature)
-      assert.ok(started.flags.includes('--ignore-user-config'))
+      // It runs as Codex's app server, which reads the user's own setup: the servers they have there are switched off by name.
+      assert.deepEqual([started.opened.sandbox, started.opened.approvalPolicy, started.opened.model], ['read-only', 'never', null])
+      assert.deepEqual([started.config['mcp_servers.calendar.enabled'], started.config['mcp_servers.my notes.enabled'], started.config.notify], [false, false, []])
+      assert.ok(!Object.keys(started.config).some((key) => key.startsWith('mcp_servers.calendar.env')))
     }
   }
+})
+
+test('engines: a message sent now is given to an engine as it works, or cuts its turn short once the step under way is done', async () => {
+  /** Has the bot at work on `first`, with `then` waiting, and has it read `then` now. */
+  const sendNow = async (id, first, then) => {
+    await api('POST', `/api/threads/${id}/messages`, { text: first })
+    await api('POST', `/api/threads/${id}/messages`, { text: then })
+    // The engine's program has to be up and at work on the turn.
+    await new Promise((r) => setTimeout(r, 700))
+    await api('POST', `/api/queue/${(await waitingIn(id))[0].id}/now`)
+    return settle(id, 7000)
+  }
+  const CUT = /^Echo \(turn 2\): \[You were at work on what came before when the user had this put in front of you[^\]]*\]\n\nand this$/
+
+  // Codex takes one more message into a turn that is running: it answers both in the one turn.
+  const steered = await api('POST', '/api/bots', { name: 'Steered', provider: 'codex' })
+  const id = await fresh(steered.id)
+  assert.deepEqual(spoken(await sendNow(id, '!slow first', 'and this')), ['!slow first', 'and this', 'Echo (turn 1): !slow first [told as it worked: and this]'])
+  assert.equal(lastText(await say(id, 'again')), 'Echo (turn 2): again', 'it is not told the message a second time')
+  // When Codex will not take it (it is compacting), its turn is cut short and the message is read next, in the same conversation of its own.
+  const refused = await fresh(steered.id)
+  const cut = spoken(await sendNow(refused, '!busy first', 'and this'))
+  assert.deepEqual(cut.slice(0, 2), ['!busy first', 'and this'])
+  assert.match(cut[2], CUT)
+
+  // So does Claude Code: sent a message to read next, it takes it up after the tool call under way.
+  const claude = await api('POST', '/api/bots', { name: 'Steered too', provider: 'claude-code' })
+  const told = await fresh(claude.id)
+  assert.deepEqual(spoken(await sendNow(told, '!slow first', 'and this')), ['!slow first', 'and this', 'Echo (turn 1): !slow first [told as it worked: and this]'])
+  assert.equal(lastText(await say(told, 'again')), 'Echo (turn 2): again', 'it is not told the message a second time')
+  // One that reaches it just as its turn ends is answered in a turn of its own, by the same program.
+  await api('POST', `/api/threads/${told}/messages`, { text: '!tool wait_subagents {}' })
+  await api('POST', `/api/threads/${told}/messages`, { text: 'just in time' })
+  await api('POST', `/api/queue/${(await waitingIn(told))[0].id}/now`)
+  const late = spoken(await settle(told, 7000))
+  assert.match(late.at(-1), /^Echo \(turn \d\): (!tool wait_subagents \{\} \[told as it worked: just in time\]|just in time)$|^Tool result: [\s\S]*\[told as it worked: just in time\]$/)
+  assert.equal(late.filter((text) => text === 'just in time').length, 1)
+
+  // Grok cannot be told as it works: its turn is cut short the same way.
+  const grok = await api('POST', '/api/bots', { name: 'Cut short', provider: 'grok' })
+  const thread = await fresh(grok.id)
+  const said = spoken(await sendNow(thread, '!slow first', 'and this'))
+  assert.deepEqual(said.slice(0, 2), ['!slow first', 'and this'])
+  assert.match(said[2], CUT)
+  assert.equal((await api('GET', `/api/threads/${thread}`)).items.some((i) => i.data.type === 'notice'), false, 'the bot was not stopped')
+
+  // What a tool is doing is not cut off: one that only waits gives way, and the engine gets what it came to.
+  const waiter = await api('POST', '/api/bots', { name: 'Waiter', provider: 'grok' })
+  const waiting = await fresh(waiter.id)
+  await say(waiting, '!tool spawn_subagent {"name":"Slow","task":"!slow"}')
+  const items = await sendNow(waiting, '!tool wait_subagents {}', 'now this')
+  assert.match(items.findLast((d) => d.type === 'function_call_output').output, /^Stopped waiting: the user sent a message for you to read now\. The subagents carry on\./)
+  assert.match(lastText(items), /^Echo \(turn \d\): (\[You were at work[^\]]*\]\n\n)?now this$/)
+  await api('POST', `/api/threads/${waiting}/stop`)
+  for (const made of [steered, claude, grok, waiter]) await api('DELETE', `/api/bots/${made.id}`)
 })
 
 test('engines: a thread can move to another engine, and the tool address only works during a turn', async () => {

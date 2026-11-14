@@ -11,6 +11,7 @@ import { ModelPicker } from './ModelPicker'
 import { PageFrame, PageViewer } from './PageFrame'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
+import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { describe, parse, site } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openSettings, openTasks, openThread, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
@@ -116,6 +117,79 @@ function TaskReport({ text }: { text: string }) {
   )
 }
 
+/**
+ * A message between bots, as the owner reads it in either conversation: whose it is, or whom it
+ * went to, and what it says. It opens the other end: the same message in the other bot's conversation.
+ */
+function BotMessage({ id, from, to, text, replyWanted, messageKey }: { id: number; from?: string; to?: { id: string; name: string }; text: string; replyWanted: boolean; messageKey?: string }) {
+  const [error, setError] = useState('')
+  const open = () => {
+    if (!messageKey) return
+    bothEnds(messageKey).then(
+      (ends) => {
+        const other = to ? ends.received : ends.sent
+        // Not read yet: it waits at the foot of the other bot's conversation.
+        if (other) navigate(other.botId, other.threadId, other.itemId)
+        else if (to) navigate(to.id)
+        else setError('The bot that sent this is gone, and its conversation with it.')
+      },
+      (e) => setError(e.message),
+    )
+  }
+  return (
+    <div data-item={id} className={`msg between ${to ? 'to' : 'from'}`}>
+      <button className="between-head" title={to ? `Show it in ${to.name}’s conversation` : `Show it in ${from}’s conversation`} onClick={open}>
+        <Icon name="agents" size={13} />
+        <span className="eyebrow">{to ? `To ${to.name}` : `From ${from}`}</span>
+        {replyWanted && <span className="faint">{to ? 'asked for a reply' : 'asks for a reply'}</span>}
+        <Icon name="chevron" size={12} />
+      </button>
+      <div className="between-text">{text}</div>
+      {error && <div className="faint">{error}</div>}
+    </div>
+  )
+}
+
+/**
+ * What waits for the bot in this thread, under what it is doing now: each message is read in its
+ * turn, unless it is taken back first or sent now, to be read as the bot works. When the bot was
+ * stopped, or failed, they are held back until the owner writes or lets them go.
+ */
+function Waiting({ thread, bot, setError }: { thread: Thread; bot: Bot; setError: (message: string) => void }) {
+  const waiting = useWaiting(thread)
+  if (!waiting.length) return null
+  const act = (doing: Promise<unknown>) => doing.catch((e) => setError(e.message))
+  const running = thread.status === 'running'
+  return (
+    <div className="waiting" role="group" aria-label={`Messages waiting for ${bot.name}`}>
+      <div className="waiting-head">
+        <span className="eyebrow">{thread.held ? 'Held back' : 'Waiting'}</span>
+        <span className="faint grow">
+          {thread.held
+            ? `${bot.name} was stopped, so ${waiting.length === 1 ? 'this waits' : 'these wait'} until you write to it or let ${waiting.length === 1 ? 'it' : 'them'} go.`
+            : `${bot.name} reads ${waiting.length === 1 ? 'this' : 'these, one at a time,'} when it is done with what it is doing.`}
+        </span>
+        {thread.held && <button onClick={() => act(letGo(thread.id))}>Resume</button>}
+      </div>
+      {waiting.map((w) => (
+        <div key={w.id} className={`waiting-card ${w.now ? 'now' : ''}`}>
+          <div className="waiting-body">
+            <div className="eyebrow">{fromWhom(w.message)}{w.message.replyWanted ? ' · asks for a reply' : ''}{w.now ? ' · next' : ''}</div>
+            <div className="waiting-text">{waitingText(w.message)}</div>
+            {!!w.message.attachments?.length && <div className="faint">{w.message.attachments.map((a) => a.name).join(', ')}</div>}
+          </div>
+          {!w.now && (
+            <button className="quiet" title={running ? `Have ${bot.name} read it now, as it works` : `Have ${bot.name} read this one now`} onClick={() => act(sendNow(w.id))}>Send now</button>
+          )}
+          {canTakeBack(w.message) && (
+            <button className="icon" title="Take it back" aria-label="Take this message back" onClick={() => act(takeBack(w.id))}><Icon name="x" size={14} /></button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const isStep = (d: ItemData) => d.type === 'function_call' || d.type === 'web_search_call' || (d.type === 'reasoning' && !!d.summary)
 
 const duration = (ms: number) => {
@@ -174,8 +248,8 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
   let marked = false
   for (const { id, threadId, data, createdAt } of items) {
     if (data.type === 'function_call_output' || data.type === 'summary') continue
-    // A page stands for the call that showed it; the call is only listed when it failed.
-    if (data.type === 'function_call' && data.name === 'show_page' && !outputs.get(data.call_id)?.startsWith('Error:')) continue
+    // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
+    if (data.type === 'function_call' && (data.name === 'show_page' || data.name === 'message_bot') && !outputs.get(data.call_id)?.startsWith('Error:')) continue
     if (summary && !marked && id > summary.upTo) {
       marked = true
       flush(-id)
@@ -207,6 +281,7 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
           </div>,
         )
       }
+      else if (data.source === 'bot') blocks.push(<BotMessage key={id} id={id} from={data.bot?.name ?? 'another bot'} text={data.text} replyWanted={!!data.replyWanted} messageKey={data.key} />)
       else if (data.source === 'subagent') blocks.push(<div key={id} data-item={id}><SubagentReport text={data.text} /></div>)
       else if (data.source === 'task') blocks.push(<div key={id} data-item={id}><TaskReport text={data.text} /></div>)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
@@ -224,6 +299,8 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
       blocks.push(<div key={id} className={`notice ${data.level}`}>{data.text}</div>)
     } else if (data.type === 'page') {
       blocks.push(<div key={id} data-item={id}><PageFrame title={data.title} html={data.html} height={data.height} /></div>)
+    } else if (data.type === 'sent') {
+      blocks.push(<BotMessage key={id} id={id} to={data.to} text={data.text} replyWanted={data.replyWanted} messageKey={data.key} />)
     }
   }
   flush(-1, running)
@@ -564,6 +641,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
           )}
           {partial?.text && <div className="msg assistant"><Markdown text={partial.text} live /></div>}
           {running && !partial?.text && !partial?.reasoning && <div className="working"><BotHead bot={bot} sign={false} className="bob" /> Working</div>}
+          {thread && <Waiting thread={thread} bot={bot} setError={setError} />}
           {error && <div className="notice error">{error}</div>}
         </div>
         </FileLinks.Provider>

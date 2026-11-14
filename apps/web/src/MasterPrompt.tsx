@@ -1,5 +1,5 @@
 // Settings › Master prompt: what each bot is for (which the others are told, so they know when to
-// hand it work), and a way to read all a bot is told. The master prompt itself comes with OpenKumi
+// pass it work), and a way to read all a bot is told. The master prompt itself comes with OpenKumi
 // and is the same for every bot: nothing here changes it.
 import { useState } from 'react'
 import type { Bot } from '@openkumi/shared'
@@ -21,7 +21,7 @@ export function MasterPrompt() {
         <Row
           id="team"
           title="The team"
-          description="Every bot is told the others’ names and these lines, so it knows when to hand a task over. It hands one over as a subagent: the other bot does the task as itself, with its own logins and superpowers, and reports back. A bot cannot change its own line."
+          description="Every bot is told the others’ names and these lines, so it knows when to pass a task on. It does so with a message into the other bot’s own conversation, where that bot does the work as itself, with its own logins and superpowers. A bot cannot change its own line."
         />
         {bots.map((bot, i) => (
           <Row key={bot.id} title={<><BotHead bot={bot} />{bot.name}{i === 0 && bots.length > 1 && <span className="pill">Main assistant</span>}</>}>

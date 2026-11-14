@@ -59,14 +59,22 @@ export interface Exit {
   stderr: string
 }
 
+/** A program's input, for one that is written to again after it has started. */
+export interface Pipe {
+  /** Writes to it; false when it no longer takes anything. */
+  write(text: string): boolean
+  end(): void
+}
+
 /**
  * Starts a program, feeds it `input`, and yields each line it prints. `exit` is filled in when it
- * ends. The program is stopped when the signal fires or the caller stops reading.
+ * ends. The program is stopped when the signal fires or the caller stops reading. With `open`, its
+ * input is left open after `input` and handed over, for the caller to write more and to end.
  */
 export async function* lines(
   bin: string,
   args: string[],
-  opts: { cwd: string; env: NodeJS.ProcessEnv; input: string; signal: AbortSignal },
+  opts: { cwd: string; env: NodeJS.ProcessEnv; input: string; signal: AbortSignal; open?: (pipe: Pipe) => void },
   exit: Exit,
 ): AsyncGenerator<string> {
   const proc = spawn(bin, args, { cwd: opts.cwd, env: opts.env, stdio: ['pipe', 'pipe', 'pipe'] })
@@ -81,7 +89,11 @@ export async function* lines(
   opts.signal.addEventListener('abort', stop, { once: true })
   proc.stderr.on('data', (d) => (exit.stderr = (exit.stderr + String(d)).slice(-4000)))
   proc.stdin.on('error', () => {})
-  proc.stdin.end(opts.input)
+  if (opts.open) {
+    const write = (text: string) => proc.stdin.writable && (proc.stdin.write(text), true)
+    if (opts.input) write(opts.input)
+    opts.open({ write, end: () => void proc.stdin.end() })
+  } else proc.stdin.end(opts.input)
   try {
     for await (const line of readline.createInterface({ input: proc.stdout })) {
       // Shows everything an engine prints, for working out why a turn went wrong.
