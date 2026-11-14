@@ -29,7 +29,7 @@ export interface Bot {
   name: string
   emoji: string
   /**
-   * What the bot is for, in a line. The other bots are told it, so they know when to hand it work.
+   * What the bot is for, in a line. The other bots are told it, so they know what to pass on to it.
    * The owner's, like the rules: a bot cannot change how the others see it.
    */
   description: string
@@ -164,17 +164,44 @@ export interface Thread {
   model: string | null
   /** Subagents and runs of automations: whether the latest result has been delivered. */
   reported: boolean
+  /**
+   * The messages waiting for the bot in this thread (see Queued) are held back: it was stopped, or
+   * failed, while they waited. They go in once the owner writes to it or lets them go.
+   */
+  held: boolean
   createdAt: number
   updatedAt: number
 }
 
+/** A bot as a message names it: its name is kept as it was, for when the bot is gone. */
+export interface BotRef {
+  id: string
+  name: string
+}
+
+/**
+ * Something said to a bot. Who it is from: the owner; the thread above, handing a subagent its
+ * task; a subagent reporting back; an automation handing a run its prompt ('trigger'); a run of
+ * one reporting back to the bot's conversation ('automation'); or another bot ('bot').
+ */
+export interface Said {
+  type: 'message'
+  role: 'user'
+  text: string
+  source: 'user' | 'parent' | 'subagent' | 'trigger' | 'automation' | 'bot'
+  attachments?: Attachment[]
+  /** From another bot: which one. */
+  bot?: BotRef
+  /** From another bot: it asked to be written back to. Only then may this bot message it in answer. */
+  replyWanted?: boolean
+  /** From another bot: what this message and the sender's record of it (a 'sent' item) have in common, to find one from the other. */
+  key?: string
+  /** From another bot: how many messages between bots in a row led to this one, the owner having said nothing in between. */
+  chain?: number
+}
+
 export type ItemData =
-  /**
-   * Who a user-role message is from: the owner; the thread above, handing a subagent its task; a
-   * subagent reporting back; an automation handing a run its prompt ('trigger'); or a run of one
-   * reporting back to the bot's conversation ('automation').
-   */
-  | { type: 'message'; role: 'user'; text: string; source: 'user' | 'parent' | 'subagent' | 'trigger' | 'automation'; attachments?: Attachment[] }
+  | Said
   /** `stopped`: cut off before it was finished (stopped, failed, or the server shut down); `text` is what had been written. */
   | { type: 'message'; role: 'assistant'; text: string; stopped?: true }
   | { type: 'reasoning'; summary: string; encrypted?: string | null; model?: string }
@@ -189,6 +216,26 @@ export type ItemData =
   | { type: 'page'; title: string; html: string; height: number }
   /** Stands in, for the model, for every item of the thread up to and including item `upTo`. */
   | { type: 'summary'; text: string; upTo: number }
+  /**
+   * A message this bot sent to another bot with message_bot, for the owner to read here. It went to
+   * the conversation `threadId`, where the message with the same `key` is.
+   */
+  | { type: 'sent'; to: BotRef; threadId: string; text: string; replyWanted: boolean; key: string }
+
+/**
+ * A message waiting for a bot. Everything said to a bot (by the owner, another bot, a subagent or a
+ * run of an automation reporting back) waits in its thread's queue, and the server lets one in at a time:
+ * the bot answers it in a turn of its own before the next goes in.
+ */
+export interface Queued {
+  id: number
+  threadId: string
+  /** The message as it will go into the conversation. Its files have no path until then: the bot gets its copies when it reads the message. */
+  message: Said
+  /** The owner asked for it to be read now, ahead of the others, by the bot as it works. */
+  now: boolean
+  createdAt: number
+}
 
 export interface Item {
   id: number
@@ -266,8 +313,10 @@ export interface Automation {
 export interface HistoryMatch {
   threadId: string
   itemId: number
-  /** Who said it: the owner, the bot, a subagent reporting back, or a run of an automation reporting back. */
-  from: 'user' | 'bot' | 'subagent' | 'automation'
+  /** Who said it: the owner, the bot, a subagent reporting back, a run of an automation reporting back, or another bot (named in `name`). */
+  from: 'user' | 'bot' | 'subagent' | 'automation' | 'other'
+  /** The other bot's name. */
+  name?: string
   /** The part of the message around the first word that matched. */
   snippet: string
   createdAt: number
@@ -297,6 +346,8 @@ export interface Settings {
   maxSubagents: number
   /** How many levels of subagents may spawn subagents. 0 switches subagents off. */
   maxDepth: number
+  /** Bots may send each other messages (message_bot), and a new bot may be given a first one. */
+  botMessages: boolean
   /** How much of a bot's AGENTS.md is loaded into each conversation, in characters. */
   instructionsLimit: number
   /**
@@ -389,6 +440,10 @@ export type ServerEvent =
   | { type: 'automation.upsert'; automation: Automation }
   | { type: 'automation.delete'; id: string }
   | { type: 'item.add'; item: Item }
+  /** A message began to wait for a bot, or one that waits changed. */
+  | { type: 'queue.upsert'; message: Queued }
+  /** A waiting message went into its conversation, or was taken back. */
+  | { type: 'queue.remove'; id: number }
   | { type: 'stream.delta'; threadId: string; kind: 'text' | 'reasoning'; delta: string }
   | { type: 'providers'; providers: ProviderInfo[] }
   | { type: 'settings'; settings: Settings }
@@ -439,6 +494,8 @@ export interface AppState {
    */
   removed?: string[]
   automations: Automation[]
+  /** Every message that waits for a bot, oldest first. */
+  queue: Queued[]
   providers: ProviderInfo[]
   browsers: Record<string, BrowserState>
   superpowers: Superpower[]

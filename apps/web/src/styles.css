@@ -343,6 +343,26 @@ a.row { text-decoration: none; }
 .msg.user { align-self: flex-end; max-width: 85%; padding: 8px 14px; border-radius: 16px; background: var(--user); white-space: pre-wrap; }
 .msg.task { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border); white-space: pre-wrap; color: var(--muted); }
 .msg.task .watch-change { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+/* A message between bots: one that came from another bot sits on the left, one this bot sent on the right, like the owner's own. */
+.msg.between { max-width: 85%; padding: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
+.msg.between.from { align-self: flex-start; }
+.msg.between.to { align-self: flex-end; }
+.between-head { display: flex; align-items: center; gap: 6px; height: 24px; padding: 0; margin: 0 0 2px; border: none; color: var(--faint); font-weight: 400; max-width: 100%; }
+.between-head:hover:not(:disabled) { background: none; color: var(--text); }
+.between-head .eyebrow { margin: 0; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.between-head .faint { white-space: nowrap; }
+.between-text { white-space: pre-wrap; }
+/* What waits for the bot, under what it is doing now. */
+.waiting { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border: 1px dashed var(--border-strong); border-radius: 14px; }
+.waiting-head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
+.waiting-head .eyebrow { margin: 0; flex: none; }
+.waiting-head .faint { line-height: 1.4; text-wrap: pretty; }
+.waiting-head > button { flex: none; height: 28px; }
+.waiting-card { display: flex; align-items: center; gap: 4px; padding: 8px 6px 8px 12px; border-radius: 10px; background: var(--hover); }
+.waiting-card.now { background: var(--active); }
+.waiting-body { flex: 1; min-width: 0; }
+.waiting-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.waiting-card > button { flex: none; }
 
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
@@ -459,6 +479,24 @@ details[open] > summary.step-head > .ic:last-child { transform: rotate(90deg); }
 .composer-bar > button.icon.attach { border-radius: 50%; }
 .composer-bar > button.icon.attach:hover { background: var(--hover); }
 .composer-bar > .model-picker { margin-right: 4px; }
+
+/* Dictation: the microphone, and while it listens a bar in its place (and the model's): give up, how loud, how long, finish. */
+.composer-bar > button.icon.mic { border-radius: 50%; margin-right: 4px; }
+.composer-bar > button.icon.mic:hover { background: var(--hover); }
+.listening { display: flex; align-items: center; gap: 8px; height: 30px; margin-right: 6px; padding: 0 2px; border-radius: 15px; background: var(--hover); }
+.listening > button.icon { width: 26px; height: 26px; border-radius: 50%; }
+/* Finishing leaves the words to read over; sending, beside it, stays the one that stands out. */
+.listening > button.icon.done { background: var(--active); color: var(--text); }
+.listening > button.icon.done:hover:not(:disabled) { background: var(--border-strong); }
+.listening .rec { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--faint); transition: background 0.2s; }
+.listening .rec.on { background: var(--err); }
+.listening .elapsed { min-width: 28px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.listening-note { display: flex; align-items: center; gap: 8px; padding: 0 4px; font-size: 12.5px; color: var(--muted); }
+.level { display: flex; align-items: center; gap: 2px; height: 16px; }
+.level > span { width: 2px; height: 100%; border-radius: 1px; background: var(--text); opacity: 0.55; transform: scaleY(0.12); transition: transform 0.1s ease-out; }
+.dictation-failed { display: flex; align-items: center; gap: 8px; margin: 8px 8px 0; padding: 4px 4px 4px 10px; border-radius: 10px; font-size: 12.5px; color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); }
+.dictation-failed > button.icon { width: 24px; height: 24px; }
+@media (prefers-reduced-motion: reduce) { .level > span, .listening .rec { transition: none; } }
 
 /* Files waiting in the composer to go with the message: pictures as small squares, anything else as a card. */
 .tray { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 10px 0; }

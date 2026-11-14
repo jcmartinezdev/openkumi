@@ -104,8 +104,9 @@ export function checkWaiting(botId: string, given: unknown): string[] {
 }
 
 /**
- * Sends the waiting files with a message in a thread: the conversation keeps them, and the bot gets
- * its copies in files/inbox/. Gives what the message says about them.
+ * Sends the waiting files with a message in a thread: the conversation keeps them from here on.
+ * The bot gets its copies when it reads the message (see handOver), which may be a while if it is
+ * busy, so they have no path yet.
  */
 export function attach(botId: string, threadId: string, ids: string[]): Attachment[] {
   return checkWaiting(botId, ids).map((id) => {
@@ -116,8 +117,21 @@ export function attach(botId: string, threadId: string, ids: string[]): Attachme
     fs.renameSync(from, file)
     fs.rmSync(path.dirname(from), { recursive: true, force: true })
     const name = path.basename(file)
-    return { id, name, path: copyIn(botId, file, name), type: typeOf(name), size: fs.statSync(file).size }
+    return { id, name, path: '', type: typeOf(name), size: fs.statSync(file).size }
   })
+}
+
+/** Puts the bot's copies of a message's files in files/inbox/. A file that has its copy already is left as it is. */
+export function handOver(botId: string, threadId: string, attachments: Attachment[]): Attachment[] {
+  return attachments.map((a) => {
+    const file = a.path ? null : kept(botId, threadId, a.id)
+    return file ? { ...a, path: copyIn(botId, file, a.name) } : a
+  })
+}
+
+/** Throws away the files of a message that was taken back before the bot read it. */
+export function discard(botId: string, threadId: string, attachments: Attachment[]) {
+  for (const a of attachments) if (kept(botId, threadId, a.id)) fs.rmSync(path.join(keptIn(botId), threadId, a.id), { recursive: true, force: true })
 }
 
 /** Where a thread keeps a file that was sent in it, or null when it does not have it. */

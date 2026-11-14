@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import type { Automation, HistoryMatch, Item, ItemData, Thread } from '@openkumi/shared'
+import type { Automation, HistoryMatch, Item, ItemData, Queued, Said, Thread } from '@openkumi/shared'
 import type { Seen } from './watch.ts'
 import { DATABASE, emit, privateDir } from './config.ts'
 
@@ -33,6 +33,14 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS changes (thread_id TEXT PRIMARY KEY, seq INTEGER NOT NULL, removed INTEGER NOT NULL DEFAULT 0);
   CREATE INDEX IF NOT EXISTS changes_seq ON changes (seq);
   CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  -- Messages waiting for a bot, each in the queue of its thread. \`now\` is when the owner asked
+  -- for one to be read ahead of the others (0: it waits its turn).
+  CREATE TABLE IF NOT EXISTS queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT NOT NULL, data TEXT NOT NULL, now INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS queue_thread ON queue (thread_id, id);
+  -- A message between bots is found by its key, from the sender's record of it and back.
+  CREATE INDEX IF NOT EXISTS items_key ON items (json_extract(data, '$.key')) WHERE json_extract(data, '$.key') IS NOT NULL;
 `)
 
 /**
@@ -79,6 +87,9 @@ if (!hasColumn('automation_id')) db.exec('ALTER TABLE threads ADD COLUMN automat
 // Every run is kept, so an automation's are found by an index rather than by reading them all.
 db.exec('CREATE INDEX IF NOT EXISTS threads_automation ON threads (automation_id, created_at)')
 
+// What waits for a bot that was stopped, or failed, is held back until the owner lets it go.
+if (!hasColumn('held')) db.exec('ALTER TABLE threads ADD COLUMN held INTEGER NOT NULL DEFAULT 0')
+
 // Nothing survives a restart mid-run, so no thread can still be running. That is a change like any
 // other, or an app's copy would show those threads at work for good.
 for (const { id } of db.prepare(`SELECT id FROM threads WHERE status = 'running'`).all() as { id: string }[]) {
@@ -104,6 +115,7 @@ function toThread(r: any): Thread {
     status: r.status,
     model: r.model,
     reported: !!r.reported,
+    held: !!r.held,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
@@ -197,6 +209,7 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     status: 'idle',
     model: null,
     reported: false,
+    held: false,
     createdAt: now,
     updatedAt: now,
     ...init,
@@ -209,12 +222,12 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
   return t
 }
 
-export function updateThread(id: string, patch: Partial<Pick<Thread, 'title' | 'status' | 'reported' | 'archivedAt'>>): Thread | undefined {
+export function updateThread(id: string, patch: Partial<Pick<Thread, 'title' | 'status' | 'reported' | 'archivedAt' | 'held'>>): Thread | undefined {
   const t = getThread(id)
   if (!t) return
   const next = { ...t, ...patch, updatedAt: Date.now() }
-  db.prepare('UPDATE threads SET title = ?, status = ?, reported = ?, archived_at = ?, updated_at = ? WHERE id = ?').run(
-    next.title, next.status, next.reported ? 1 : 0, next.archivedAt, next.updatedAt, id,
+  db.prepare('UPDATE threads SET title = ?, status = ?, reported = ?, archived_at = ?, held = ?, updated_at = ? WHERE id = ?').run(
+    next.title, next.status, next.reported ? 1 : 0, next.archivedAt, next.held ? 1 : 0, next.updatedAt, id,
   )
   emit({ type: 'thread.upsert', thread: next, seq: changed(id) })
   return next
@@ -254,6 +267,7 @@ export function deleteThread(id: string) {
   // The files sent in it go with it (the bot's own copies stay in its files).
   const botId = getThread(id)?.botId
   if (botId) fs.rmSync(path.join(privateDir(botId), 'attachments', id), { recursive: true, force: true })
+  for (const waiting of queueOf(id)) removeQueued(waiting.id)
   db.prepare('DELETE FROM items WHERE thread_id = ?').run(id)
   db.prepare('DELETE FROM threads WHERE id = ?').run(id)
   emit({ type: 'thread.delete', id, seq: changed(id, true) })
@@ -351,7 +365,8 @@ export function searchMessages(botId: string, query: string, limit = 30): Histor
     return {
       threadId: item.threadId,
       itemId: item.id,
-      from: data.role === 'assistant' ? 'bot' : data.source === 'user' ? 'user' : data.source === 'automation' ? 'automation' : 'subagent',
+      from: data.role === 'assistant' ? 'bot' : data.source === 'user' ? 'user' : data.source === 'automation' ? 'automation' : data.source === 'bot' ? 'other' : 'subagent',
+      ...(data.role === 'user' && data.source === 'bot' && data.bot ? { name: data.bot.name } : {}),
       snippet,
       createdAt: item.createdAt,
     }
@@ -366,6 +381,64 @@ export function addItem(threadId: string, data: ItemData): Item {
   const item: Item = { id: Number(r.lastInsertRowid), threadId, data, createdAt }
   emit({ type: 'item.add', item })
   return item
+}
+
+/** Where a message between bots is, by its key: the sender's record of it ('sent') and the message as the other bot got it. */
+export function itemsWithKey(key: string): Item[] {
+  return db.prepare(`SELECT * FROM items WHERE json_extract(data, '$.key') = ? ORDER BY id`).all(key).map(toItem)
+}
+
+// ---- messages waiting for a bot (when each goes in is decided in agent.ts)
+
+function toQueued(r: any): Queued {
+  return { id: r.id, threadId: r.thread_id, message: JSON.parse(r.data), now: !!r.now, createdAt: r.created_at }
+}
+
+// The ones the owner asked to be read now go first, in the order they were asked for; then the rest, oldest first.
+const IN_TURN = 'ORDER BY now = 0, now, id'
+
+/** Every message that waits, oldest first. */
+export function allQueued(): Queued[] {
+  return db.prepare('SELECT * FROM queue ORDER BY id').all().map(toQueued)
+}
+
+/** The messages waiting in a thread, in the order they will go in. */
+export function queueOf(threadId: string): Queued[] {
+  return db.prepare(`SELECT * FROM queue WHERE thread_id = ? ${IN_TURN}`).all(threadId).map(toQueued)
+}
+
+export function getQueued(id: number): Queued | undefined {
+  const r = db.prepare('SELECT * FROM queue WHERE id = ?').get(id)
+  return r && toQueued(r)
+}
+
+/** The threads that have messages waiting. */
+export function threadsWithQueue(): string[] {
+  return (db.prepare('SELECT DISTINCT thread_id FROM queue').all() as { thread_id: string }[]).map((r) => r.thread_id)
+}
+
+export function addQueued(threadId: string, message: Said): Queued {
+  const createdAt = Date.now()
+  const r = db.prepare('INSERT INTO queue (thread_id, data, created_at) VALUES (?, ?, ?)').run(threadId, JSON.stringify(message), createdAt)
+  const waiting: Queued = { id: Number(r.lastInsertRowid), threadId, message, now: false, createdAt }
+  emit({ type: 'queue.upsert', message: waiting })
+  return waiting
+}
+
+/** Changes a waiting message: what it will say (its files got their paths), or that it is to be read now. */
+export function updateQueued(id: number, patch: { message?: Said; now?: boolean }): Queued | undefined {
+  const was = getQueued(id)
+  if (!was) return
+  if (patch.message) db.prepare('UPDATE queue SET data = ? WHERE id = ?').run(JSON.stringify(patch.message), id)
+  if (patch.now !== undefined && patch.now !== was.now) db.prepare('UPDATE queue SET now = ? WHERE id = ?').run(patch.now ? Date.now() : 0, id)
+  const waiting = getQueued(id)!
+  emit({ type: 'queue.upsert', message: waiting })
+  return waiting
+}
+
+export function removeQueued(id: number) {
+  db.prepare('DELETE FROM queue WHERE id = ?').run(id)
+  emit({ type: 'queue.remove', id })
 }
 
 // ---- automations (the rules for them are in automations.ts)

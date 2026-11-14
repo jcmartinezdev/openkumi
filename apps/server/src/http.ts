@@ -157,6 +157,7 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     database: db.DATABASE_ID,
     seq: db.latestChange(),
     automations: db.listAutomations(),
+    queue: db.allQueued(),
     providers: providerInfos(),
     browsers: browserStates(),
     superpowers: listSuperpowers(),
@@ -315,7 +316,7 @@ const unless = <T>(act: () => T): T => {
 route('POST', '/api/bots/:id/messages', ([id], body) => {
   const { text, files } = message(needBot(id).id, body)
   const thread = agent.conversation(id)
-  agent.postMessage(thread.id, text, 'user', files)
+  unless(() => agent.postMessage(thread.id, { source: 'user', text }, { files }))
   return db.getThread(thread.id)
 })
 route('POST', '/api/bots/:id/fresh', ([id]) => unless(() => agent.startFresh(needBot(id).id)))
@@ -361,7 +362,21 @@ route('GET', '/api/threads/:id', ([id], _, { url }) => {
 route('POST', '/api/threads/:id/messages', ([id], body) => {
   const thread = needThread(id)
   const { text, files } = message(thread.botId, body)
-  unless(() => agent.postMessage(thread.id, text, 'user', files))
+  unless(() => agent.postMessage(thread.id, { source: 'user', text }, { files }))
+})
+
+// ---- what waits for a bot: each message is read in its turn, unless the owner takes it back or has it read now
+const needQueued = (id: string) => db.getQueued(Number(id)) ?? fail(404, 'That message is no longer waiting')
+route('DELETE', '/api/queue/:id', ([id]) => unless(() => agent.takeBack(needQueued(id).id)))
+// Has the bot read it now, as it works, rather than when its turn comes.
+route('POST', '/api/queue/:id/now', ([id]) => unless(() => agent.sendNow(needQueued(id).id)))
+// Lets a bot that was stopped, or failed, go on with what was held back for it.
+route('POST', '/api/threads/:id/queue/go', ([id]) => agent.letGo(needThread(id).id))
+// Where a message between bots is: the sender's record of it, and the message as the other bot got it (not there while it still waits).
+route('GET', '/api/messages/:key', ([key]) => {
+  const found = db.itemsWithKey(key)
+  const place = (item?: { threadId: string; id: number }) => (item ? { botId: db.getThread(item.threadId)?.botId, threadId: item.threadId, itemId: item.id } : null)
+  return { sent: place(found.find((i) => i.data.type === 'sent')), received: place(found.find((i) => i.data.type === 'message')) }
 })
 // A file the owner sent in a thread, as the conversation keeps it.
 route('GET', '/api/threads/:id/attachments/:file', ([id, file], _, { res }) => {

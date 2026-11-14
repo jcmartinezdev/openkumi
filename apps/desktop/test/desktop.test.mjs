@@ -882,6 +882,76 @@ test('a bot has one conversation: starting fresh sets it aside, and earlier ones
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('what is said to a busy bot waits in view, to be taken back, sent now or let go; a message between bots shows in both conversations', async () => {
+  fs.mkdirSync(`${tmp}/app`, { recursive: true })
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  const busy = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Busy', provider: 'mock' })
+  const other = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Other', provider: 'mock' })
+  await ask(LOCAL_PORT, 'local-home', 'PATCH', '/api/settings', { maxSteps: 500 })
+  const here = () => win.evaluate(() => location.hash)
+  const send = async (text) => {
+    await win.locator('.composer textarea').fill(text)
+    await win.keyboard.press('Meta+Enter')
+  }
+  const waiting = (text) => win.locator('.waiting-card', { hasText: text })
+  await win.locator('.sidebar .row.bot', { hasText: 'Busy' }).click()
+  await win.locator('.empty h1', { hasText: 'Busy' }).waitFor()
+
+  // What is said while the bot works waits under what it is doing, in the order it will be read.
+  await send('!steps 400')
+  await win.locator('.msg.user', { hasText: '!steps 400' }).waitFor()
+  await send('never mind')
+  await send('read this now')
+  await waiting('read this now').waitFor()
+  assert.deepEqual(await win.locator('.waiting-card .waiting-text').allInnerTexts(), ['never mind', 'read this now'])
+  assert.match(await win.locator('.waiting-head').innerText(), /^waiting\s+Busy reads these, one at a time, when it is done with what it is doing\.$/i)
+  // One is taken back, and never read; the other is sent now, and read as the bot works.
+  await waiting('never mind').getByRole('button', { name: 'Take this message back' }).click()
+  await waiting('never mind').waitFor({ state: 'detached' })
+  await waiting('read this now').getByRole('button', { name: 'Send now' }).click()
+  await win.locator('.msg.assistant', { hasText: 'Echo: read this now' }).waitFor({ timeout: 30_000 })
+  await win.locator('.waiting').waitFor({ state: 'detached' })
+  assert.equal(await win.locator('.msg.user', { hasText: 'never mind' }).count(), 0)
+  const calls = (await ask(LOCAL_PORT, 'local-home', 'GET', `/api/threads/${(await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).threads.find((t) => t.botId === busy.id).id}`)).items.filter((i) => i.data.type === 'function_call').length
+  assert.ok(calls > 0 && calls < 400, `the bot was told as it worked, after ${calls} steps`)
+
+  // A bot that is stopped holds back what was waiting, until it is let go.
+  await send('!slow')
+  await win.locator('.msg.user', { hasText: '!slow' }).waitFor()
+  await send('held one')
+  await waiting('held one').waitFor()
+  await win.getByRole('button', { name: 'Stop', exact: true }).click()
+  await win.locator('.waiting-head', { hasText: /held back/i }).waitFor()
+  assert.equal(await win.locator('.msg.assistant', { hasText: 'Echo: held one' }).count(), 0)
+  await win.locator('.waiting-head').getByRole('button', { name: 'Resume' }).click()
+  await win.locator('.msg.assistant', { hasText: 'Echo: held one' }).waitFor({ timeout: 20_000 })
+
+  // A message to another bot is shown here as what was sent, and there as what came; each opens the other.
+  await send(`!tool message_bot {"bot_id":"${other.id}","message":"plan a trip to Lisbon","reply_wanted":true}`)
+  const sent = win.locator('.msg.between.to', { hasText: 'plan a trip to Lisbon' })
+  await sent.waitFor({ timeout: 20_000 })
+  assert.match(await sent.locator('.between-head').innerText(), /^to other\s*asked for a reply$/i)
+  assert.equal(await win.locator('.step', { hasText: 'Write to' }).count(), 0, 'the card stands for the call that sent it')
+  await sent.locator('.between-head').click()
+  const came = win.locator('.msg.between.from.found', { hasText: 'plan a trip to Lisbon' })
+  await came.waitFor({ timeout: 20_000 })
+  assert.match(await here(), new RegExp(`^#/${other.id}/t_[\\w-]+/\\d+$`))
+  assert.match(await came.locator('.between-head').innerText(), /^from busy\s*asks for a reply$/i)
+  await came.locator('.between-head').click()
+  await win.locator('.msg.between.to.found', { hasText: 'plan a trip to Lisbon' }).waitFor({ timeout: 20_000 })
+  assert.match(await here(), new RegExp(`^#/${busy.id}/t_[\\w-]+/\\d+$`))
+
+  // Messages between bots are switched off in the settings.
+  await win.evaluate(() => (location.hash = '/settings/bots'))
+  await win.locator('#bot-messages .switch').click()
+  await until(async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).settings.botMessages === false, 10_000)
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('automations: made on their page, run, and each run opened from beneath its automation', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()
@@ -1131,6 +1201,61 @@ test('master prompt: each bot’s line set from one page, and all a bot is told 
   await win.evaluate(() => (location.hash = '/settings/bots/assistant'))
   assert.equal(await win.getByLabel('What it is for', { exact: true }).inputValue(), 'Runs the household.')
 
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('dictation: what is said goes into the message where the cursor was, and only the words are sent', async (t) => {
+  // It is written down on the Mac itself, so it needs macOS 26 and the program built beside the app.
+  const program = path.resolve(import.meta.dirname, '../dist/dictation')
+  const check = process.platform === 'darwin' && fs.existsSync(program) ? await new Promise((resolve) => spawn(program, ['--check']).stdout.on('data', (d) => resolve(String(d)))) : ''
+  if (!check.includes('"available":true')) return t.skip('dictation needs a Mac with macOS 26 or later')
+  // A recording stands in for the microphone, heard all at once and then nothing until it is stopped.
+  const recording = `${tmp}/said.aiff`
+  await new Promise((resolve, reject) => spawn('say', ['-o', recording, 'Could you check my calendar for tomorrow?']).on('exit', (code) => (code ? reject(new Error('say failed')) : resolve())))
+  env.OPENKUMI_DICTATION_RECORDING = recording
+  t.after(() => delete env.OPENKUMI_DICTATION_RECORDING)
+
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Listener', provider: 'mock' })
+  await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
+  const message = win.locator('.composer textarea')
+  await message.waitFor()
+
+  // Spoken after what was typed, and between it and what follows the cursor.
+  await message.fill('Hi. Thanks!')
+  await message.evaluate((el) => el.setSelectionRange(3, 3))
+  await win.getByRole('button', { name: 'Dictate' }).click()
+  await win.locator('.listening .rec.on').waitFor()
+  await until(async () => (await message.inputValue()).includes('tomorrow'), 20_000)
+  // While it listens the words are the microphone's: typing does not mix with them.
+  assert.equal(await message.getAttribute('readonly'), '')
+  await win.getByRole('button', { name: 'Finish dictation' }).click()
+  await win.locator('.listening').waitFor({ state: 'detached' })
+  assert.equal(await message.inputValue(), 'Hi. Could you check my calendar for tomorrow? Thanks!')
+  // The cursor is left after the words that were spoken in.
+  assert.deepEqual(await message.evaluate((el) => [el.selectionStart, document.activeElement === el]), ['Hi. Could you check my calendar for tomorrow?'.length, true])
+
+  // Escape gives up, and the message is as it was.
+  await win.getByRole('button', { name: 'Dictate' }).click()
+  await until(async () => (await message.inputValue()).split('tomorrow').length > 2, 20_000)
+  await message.press('Escape')
+  await win.locator('.listening').waitFor({ state: 'detached' })
+  assert.equal(await message.inputValue(), 'Hi. Could you check my calendar for tomorrow? Thanks!')
+
+  // Sending while it listens puts the last words in first; the bot gets the text, as if it were typed.
+  await message.fill('')
+  await win.getByRole('button', { name: 'Dictate' }).click()
+  await until(async () => (await message.inputValue()).includes('calendar'), 20_000)
+  await message.press('Enter')
+  await win.locator('.msg.assistant', { hasText: 'Echo: Could you check my calendar for tomorrow?' }).waitFor()
+  assert.equal(await message.inputValue(), '')
+  const { threads } = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
+  const { items } = await ask(LOCAL_PORT, 'local-home', 'GET', `/api/threads/${threads.find((th) => th.botId === bot.id).id}`)
+  assert.deepEqual(items.filter((i) => i.data.role === 'user').map((i) => i.data), [{ type: 'message', role: 'user', source: 'user', text: 'Could you check my calendar for tomorrow?' }])
+
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${bot.id}`)
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })

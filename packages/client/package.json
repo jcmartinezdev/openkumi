@@ -18,9 +18,11 @@
     "./models": "./src/models.ts",
     "./marks": "./src/marks.ts",
     "./automations": "./src/automations.ts",
+    "./queue": "./src/queue.ts",
     "./mascot": "./src/mascot.ts",
     "./browser": "./src/browser.ts",
-    "./attachments": "./src/attachments.ts"
+    "./attachments": "./src/attachments.ts",
+    "./dictation": "./src/dictation.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

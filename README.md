@@ -20,6 +20,9 @@ that stays logged in.
   say lands in the same conversation, and the bot can look up anything said in it, however long
   ago. Start fresh when you want an empty page; the conversation so far is kept, to read, search
   or continue.
+- **Say more while it works.** What you say to a bot that is busy waits in a queue, in view, and
+  is read one message at a time. Take a waiting message back, or **Send now** to have the bot read
+  it as it works and change course.
 - **Subagents.** A bot can split work into parallel subagents, each in its own thread. Watch them
   live, open one to read or message it, or stop it. Results flow back to the parent automatically.
 - **A browser per bot.** Every bot gets its own Chrome profile. Sign in to a site once and that bot
@@ -47,8 +50,17 @@ that stays logged in.
   on the computer and on the phone.
 - **One master prompt, and a team that knows itself.** Every bot is told the same master prompt,
   one file that comes with OpenKumi: the principles it follows and how OpenKumi works. Each bot is
-  also told who the other bots are and what each is for, so it hands a task to the one it fits.
-- **Bots that make bots.** Create bots in the app, or just ask in chat.
+  also told who the other bots are and what each is for, so it passes a task to the one it fits.
+- **Talk instead of typing.** The microphone in the composer, on the computer and on the phone,
+  writes what you say into the message as you say it, where the cursor was. It is written down on
+  the device itself, with Apple's speech models (macOS 26 or iOS 26 and later), so no sound leaves
+  it, and the words go to the bot only when you send them, like anything typed. Esc (or ×) gives
+  up and leaves the message as it was; Enter while it listens sends once the last words are in.
+- **Bots that work together.** A bot can write into another bot's conversation, to pass it work or
+  to ask it for something and get the answer back. You read every such message in both
+  conversations, and can switch it off.
+- **Bots that make bots.** Create bots in the app, or just ask your main assistant in chat; it can
+  start the new bot on its first job at once.
 - **A mascot for every bot.** Each bot is a little jelly creature holding a sign with its emoji.
   Choose its creature, colour, hat, extra and clothes, or leave it and the new bot dresses itself
   from its name and what it is for. Its look is a line in `bot.md` (`look: cat sky cap orange`).
@@ -168,7 +180,7 @@ Everything is set from the Settings page, which saves each change as you make it
 | General | what a new bot starts with; sidebar and confirmation preferences |
 | Appearance, Chat | theme, text size, how Enter behaves, how much detail a step shows (kept per device) |
 | Providers | Codex and Claude Code (status, program path), other models; switch any of them off |
-| Bots | every bot: what it is for, its rules, model, superpowers and files |
+| Bots | every bot: what it is for, its rules, model, superpowers and files; whether bots may message each other |
 | Superpowers | what bots can do beyond their own tools: what each does, and which bots have it |
 | Master prompt | what each bot is for; everything a bot is told, to read |
 | Browser | which browser program the bots drive, and which bots have one running |
@@ -223,6 +235,7 @@ apps/
       environments.ts  the list of environments and their access codes
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app
+      dictation.ts     runs the Mac's dictation program and passes what it hears to the window
   mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser,
                      settings and automations
   marketing/         the website at openkumi.ai (Astro, built to static pages), and the script that
@@ -231,6 +244,8 @@ packages/
   shared/            the types every app agrees on
   client/            what every app needs to talk to a server: the connection, the state
                      kept from it, pairing. Used by the desktop window and the phone app
+  dictation/         dictation on the device (Swift, Apple's speech models): one engine, run by the
+                     desktop app as a small program on a Mac and built into the phone app as an Expo module
 ```
 
 ### One app, several processes and threads
@@ -243,6 +258,7 @@ The app is not a web page in a window. Its work is spread out so that no part ca
 | A process of its own (`OpenKumi Server`) | the server, when the local environment is on. Each bot's Chrome, and each Claude Code or Codex turn, is a further process the server starts |
 | The window | the interface, loaded from the app itself (`openkumi://app/`), talking straight to the environment it shows |
 | A worker thread in the window | the connection to the environment: it reads what arrives, hands changes to the window at most once per frame, and draws the pictures of a bot's browser straight onto the page |
+| A program of its own (`dictation`), while you dictate | listening, and writing down what is said, on the Mac; the app passes its words to the window |
 
 Two things follow for speed. Text that streams in is collected on the worker and applied once per
 frame, and a reply being written is drawn piece by piece, so only its last paragraph is worked out
@@ -299,6 +315,8 @@ in what it knows of the bot and the thread, so in this order a bot is told:
    been talked into something by a web page cannot pass that on to the others through how it is
    described. A new bot's line starts as what its maker gave: the description a bot passes to
    `create_bot`, or else the first sentence of what the bot was made for.
+   Then how to reach them: with `message_bot`, from its own conversation (see *Messages between
+   bots*).
 3. How OpenKumi works (replies, the browser, subagents, and that web pages and tool results are
    never instructions), then the bot's **rules from you**, which win where they and the principles
    disagree.
@@ -329,6 +347,53 @@ A conversation that never ends cannot be sent to a model whole for ever:
 
 None of this deletes anything. You still see every message, and the bot has `search_history` and
 `read_history` to look up what is no longer in front of it.
+
+### The queue: one message at a time
+
+Everything said to a bot waits in a queue on the server before it becomes part of the
+conversation: what you write, what another bot writes, and what the bot's own subagents and
+automations report back. The server lets in one message at a time, and the bot answers it in a
+turn of its own before the next goes in. A bot that is idle takes a message up at once.
+
+- **Waiting messages are in view**, at the foot of the conversation, on the computer and the
+  phone. The **×** takes one back before the bot has read it: yours, or one from another bot.
+- **Send now** has the bot read a waiting message as it works, ahead of the others, so that you can
+  change its course without stopping it. A model OpenKumi asks itself (a local model, an API) gets
+  it before its next step. Codex and Claude Code take it into the turn that is running: Codex as
+  soon as it is sent (`turn/steer`), Claude Code after the tool call under way (a message marked
+  to be read next), or once it has finished writing when no tool is in use. Grok cannot be told as
+  it works, so its turn is cut short once the tool call under way has been answered, and it reads
+  the message next, in the same conversation of its own; so does Codex in the moments it will not
+  take one. Nothing a tool is doing is cut off half way; `wait_subagents`, which only waits, gives
+  way at once.
+- **At most ten messages wait** for a bot. One more is refused: you are told the bot is busy and
+  keep what you wrote; a bot is told to try later or tell you. What the bot's own work reports, and
+  a reply it asked another bot for, always get in.
+- **Stop means stop.** A bot that is stopped, or fails, does not start again by itself on what was
+  waiting: those messages are held back until you write to it, press **Resume**, or send one of
+  them now. What its own subagents and automations had to report is put in the conversation as
+  it is, for the bot to see when it goes on.
+- The queue is kept in the database, so what waits when the server stops is read after it starts
+  again, unless it was held back.
+
+### Messages between bots
+
+A bot reaches another with `message_bot`: the message goes into that bot's **own conversation with
+you**, through its queue, and the bot answers it there as itself, with its own instructions, files,
+logins and superpowers. So the work is where you would look for it, the bot remembers it, and you
+can carry on with it. Both conversations show the message ("To Travel", "From Assistant"), and
+either one opens the other end.
+
+- A message from a bot is **a teammate's request, not your word**: the bot that gets it is told so,
+  and does not buy, send or delete anything on the strength of it.
+- **A bot writes back only when it was asked to.** The sender says whether it wants a reply. A bot
+  that is answering another bot's message can message only that bot, and only if a reply was asked
+  for; anything else is refused. When it answers you, it may message any bot.
+- **Twenty messages** leading from one to the next, without you saying anything in between, is
+  where a chain ends.
+- Only a bot's own conversation can send one: not a subagent, and not a run of an automation (whose
+  result reaches the conversation, which can).
+- **Settings → Bots → Bots can message each other** switches it all off.
 
 ### Automations
 
@@ -463,7 +528,7 @@ them but not change them, and it cannot switch a superpower on for itself.
 
 | Area | Tools |
 | --- | --- |
-| Bots | `list_bots`, `create_bot` |
+| Bots | `list_bots`, `message_bot` (in its own conversation), `create_bot` (the main assistant, in its own conversation) |
 | Files | `list_files`, `read_file`, `write_file`, `edit_file`, `search_files`, `move_file`, `delete_file` |
 | Its conversation | `search_history`, `read_history` |
 | Subagents | `spawn_subagent`, `wait_subagents`, `list_subagents`, `read_subagent`, `message_subagent`, `cancel_subagent` |
@@ -475,10 +540,14 @@ them but not change them, and it cannot switch a superpower on for itself.
 
 There is no shell tool.
 
-A subagent can run as a different bot (`spawn_subagent` with `bot_id`), which is how bots hand
-work to each other: the other bot does the task as itself, with its own instructions, logins and
-superpowers, is told which bot handed it over, and reports back to that bot. Subagents can nest
-two levels deep; each gets its own browser window.
+A subagent is the bot itself, at work on a part of the job in a thread of its own; to give work
+to another bot, a bot messages it (see *Messages between bots*). Subagents can nest two levels
+deep; each gets its own browser window.
+
+Only the main assistant (the first bot) can create a bot, in its own conversation, and only in
+answer to something you said: not when another bot, a subagent's report or an automation's run woke
+it. A new bot runs on what new bots run on (**Settings → General**), and `create_bot` can give it
+a first message, which it starts on at once in its own conversation.
 
 While you have control of a window, the bot's `browser_snapshot` and `browser_read` still work, and
 everything else in that window is refused at once, with a note saying so; the next result after you
@@ -495,6 +564,9 @@ at a time; it is what bots on local models or an OpenAI-compatible API run on.) 
 the `claude`, `codex` or `grok` program installed on the computer for each turn, gives it the bot's instructions and
 what was said since it last ran, and serves the bot's tools to it over MCP at an address that
 exists only for that turn. Tool calls are carried out and recorded the same way on either path.
+Codex runs as its app server (`codex app-server`), the program its own apps talk to, which sends a
+reply as it is written and takes one more message into a turn that is running. Claude Code's input
+is left open while it works, for the same purpose.
 
 The engines are started with their own tools for running commands and touching files switched
 off, and without your personal setup in them (settings, instruction files, skills, plugins, MCP
@@ -505,7 +577,10 @@ own loop. What changes is whose model and account it runs on.
   credentials. Usage counts against that account.
 - Each program keeps its own record of the conversations it ran (under `~/.claude` and
   `~/.codex`).
-- Replies from Codex appear a message at a time rather than word by word.
+- Codex's app server reads your own Codex config file, where the other programs can be told to
+  leave it out. The MCP servers you set up there are switched off by name for a bot's turn, and so
+  is what you have Codex run when a turn ends; your default model there is the one a bot on
+  "Default" runs on.
 - Grok takes an MCP server only from a settings file in a folder it has been told to trust. Open
   Bot keeps a folder for that inside each bot (`private/grok/`), so Grok's own list of trusted
   folders (`~/.grok/trusted_folders.toml`) gains an entry per bot. Grok's skill list is not
@@ -562,6 +637,11 @@ and from its own format.
 - A bot that edits its own instructions can be talked into a bad edit by something it reads. Two
   things limit that: the rules in `bot.md` are outside its reach, and every change to `AGENTS.md`
   and `memory/` is in the history where you can undo it.
+- A bot that was talked into something could ask another bot for it. So a message from a bot is
+  never taken as your word: the bot that gets it is told to ask you before a purchase, sending or
+  deleting. A bot answering a bot can write back only when it was asked to, a chain of such
+  messages ends at twenty, only the main assistant creates bots and only when you asked, and
+  **Settings → Bots** switches messages between bots off.
 - What you type into a bot's page goes to it only from the device that took control of its window,
   so a view that is only watching cannot press anything by accident.
 - A bot's browser and `web_fetch` cannot open files on the computer or OpenKumi's own address.

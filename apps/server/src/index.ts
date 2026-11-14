@@ -43,6 +43,8 @@ const server = startServer()
 
 // Automations start once the server is up, since a bot on an engine reaches its tools through it.
 startAutomations()
+// So do the bots that had messages waiting for them when the server last stopped.
+agent.resumeQueues()
 
 // Whether Claude Code and Codex are installed and signed in; found out in the background.
 void refreshProviders()

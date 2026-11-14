@@ -1,13 +1,15 @@
 // Claude Code as an engine. OpenKumi starts the user's own installed `claude` program for each
-// turn; it is signed in with the user's own account, runs the model-and-tools loop itself, and
-// reaches the bot's tools over MCP. All of its built-in tools are switched off, so the bot can do
-// exactly what it could do on OpenKumi's own loop and nothing more.
+// turn, and can send it one more message while the turn runs; it is signed in with the user's own
+// account, runs the model-and-tools loop itself, and reaches the bot's tools over MCP. All of its
+// built-in tools are switched off, so the bot can do exactly what it could do on OpenKumi's own
+// loop and nothing more.
 import { spawn } from 'node:child_process'
+import crypto from 'node:crypto'
 import os from 'node:os'
 import readline from 'node:readline'
 import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { type Shown, base64 } from '../attachments.ts'
-import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
+import { type Exit, type Pipe, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
@@ -127,13 +129,22 @@ async function refresh() {
 }
 
 /** What was said, as the one line of its stream-json input: the text, then the pictures and PDFs that came with it. */
-function message(input: string, files: Shown[]): string {
+/**
+ * What is said to the program, as one line of its input: the text, then any pictures and PDFs.
+ * One sent while it is at work is marked to be read next (`uuid`): it then takes it in after the
+ * tool call under way, in the turn that is running, and says when it has (see `turn`).
+ */
+function message(input: string, files: Shown[], uuid?: string): string {
   const block = (file: Shown) => {
     const source = { type: 'base64', media_type: file.type, data: base64(file) }
     return file.type === 'application/pdf' ? { type: 'document', source } : { type: 'image', source }
   }
-  return JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: input }, ...files.map(block)] } }) + '\n'
+  const said = { type: 'user', message: { role: 'user', content: [{ type: 'text', text: input }, ...files.map(block)] }, parent_tool_use_id: null }
+  return JSON.stringify(uuid ? { ...said, priority: 'next', uuid } : said) + '\n'
 }
+
+/** How long the program is given to take up a message it was sent as its turn ended, before it is taken not to have. */
+const TAKE_UP = 5000
 
 async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   const program = bin()
@@ -170,33 +181,85 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   const emitted = new Set<string>()
   let finished = false
 
-  for await (const line of lines(program, args, { cwd: req.cwd, env, input: message(req.input, req.files), signal: req.signal }, exit)) {
-    let ev: any
-    try {
-      ev = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (ev.type === 'system' && ev.subtype === 'init' && ev.session_id) {
-      yield { type: 'session', id: ev.session_id }
-    } else if (ev.type === 'stream_event' && ev.event?.type === 'content_block_delta' && !ev.parent_tool_use_id) {
-      const delta = ev.event.delta
-      if (delta?.type === 'text_delta' && delta.text) yield { type: 'text_delta', delta: delta.text }
-      else if (delta?.type === 'thinking_delta' && delta.thinking) yield { type: 'reasoning_delta', delta: delta.thinking }
-    } else if (ev.type === 'assistant' && !ev.parent_tool_use_id && !ev.error) {
-      // Each part of a reply (a thought, some text, a tool call) arrives as its own event.
-      if (ev.uuid && emitted.has(ev.uuid)) continue
-      emitted.add(ev.uuid)
-      for (const block of ev.message?.content ?? []) {
-        if (block.type === 'text' && block.text?.trim()) yield { type: 'item', item: { type: 'message', role: 'assistant', text: block.text } }
-        else if (block.type === 'thinking' && block.thinking?.trim()) yield { type: 'item', item: { type: 'reasoning', summary: block.thinking } }
-        else if (block.type === 'tool_use' && block.name === 'WebSearch') yield { type: 'item', item: { type: 'web_search_call', action: { query: block.input?.query } } }
-        // Calls to OpenKumi's own tools are recorded where they are carried out (tool-endpoint.ts).
+  // The program's input stays open while it works, so that it can be sent one more message. Each
+  // such message is named, and the program says when it takes one up ("started") and when it is
+  // done with it ("completed"): in the turn that is running, or as a turn of its own if that one
+  // was just ending.
+  let pipe: Pipe | undefined
+  /** Messages sent and not yet taken up, each with the answer to whoever sent it. */
+  const sent = new Map<string, (taken: boolean) => void>()
+  /** Messages taken up that the program is still at work on. */
+  const working = new Set<string>()
+  /** At work on a turn: from a message going in until its result. */
+  let busy = true
+  let closed = false
+  let giveUp: NodeJS.Timeout | undefined
+  const close = () => {
+    closed = true
+    clearTimeout(giveUp)
+    if (req.steering) req.steering.deliver = undefined
+    for (const answer of sent.values()) answer(false)
+    sent.clear()
+    pipe?.end()
+  }
+  /** With its turn over and nothing more to read, the program is let go: closing its input ends it. */
+  const settle = () => {
+    clearTimeout(giveUp)
+    if (closed || busy || working.size) return
+    if (!sent.size) return close()
+    // A message that went in as the turn ended is taken up next, at once; if it is not, it was not read.
+    giveUp = setTimeout(close, TAKE_UP)
+  }
+  if (req.steering) {
+    req.steering.deliver = (input, files) =>
+      new Promise<boolean>((resolve) => {
+        const uuid = crypto.randomUUID()
+        if (closed || !pipe?.write(message(input, files, uuid))) return resolve(false)
+        sent.set(uuid, resolve)
+      })
+  }
+
+  try {
+    for await (const line of lines(program, args, { cwd: req.cwd, env, input: message(req.input, req.files), signal: req.signal, open: (opened) => (pipe = opened) }, exit)) {
+      let ev: any
+      try {
+        ev = JSON.parse(line)
+      } catch {
+        continue
       }
-    } else if (ev.type === 'result') {
-      finished = true
-      if (ev.is_error) throw new Error(String(ev.result || ev.errors?.join?.('; ') || ev.subtype || 'Claude Code reported an error').slice(0, 600))
+      if (ev.type === 'system' && ev.subtype === 'init' && ev.session_id) {
+        yield { type: 'session', id: ev.session_id }
+      } else if (ev.type === 'stream_event' && ev.event?.type === 'content_block_delta' && !ev.parent_tool_use_id) {
+        const delta = ev.event.delta
+        if (delta?.type === 'text_delta' && delta.text) yield { type: 'text_delta', delta: delta.text }
+        else if (delta?.type === 'thinking_delta' && delta.thinking) yield { type: 'reasoning_delta', delta: delta.thinking }
+      } else if (ev.type === 'assistant' && !ev.parent_tool_use_id && !ev.error) {
+        // Each part of a reply (a thought, some text, a tool call) arrives as its own event.
+        if (ev.uuid && emitted.has(ev.uuid)) continue
+        emitted.add(ev.uuid)
+        for (const block of ev.message?.content ?? []) {
+          if (block.type === 'text' && block.text?.trim()) yield { type: 'item', item: { type: 'message', role: 'assistant', text: block.text } }
+          else if (block.type === 'thinking' && block.thinking?.trim()) yield { type: 'item', item: { type: 'reasoning', summary: block.thinking } }
+          else if (block.type === 'tool_use' && block.name === 'WebSearch') yield { type: 'item', item: { type: 'web_search_call', action: { query: block.input?.query } } }
+          // Calls to OpenKumi's own tools are recorded where they are carried out (tool-endpoint.ts).
+        }
+      } else if (ev.type === 'command_lifecycle' && ev.command_uuid) {
+        if (ev.state === 'started') {
+          busy = true
+          working.add(ev.command_uuid)
+          sent.get(ev.command_uuid)?.(true)
+          sent.delete(ev.command_uuid)
+        } else if (ev.state === 'completed') working.delete(ev.command_uuid)
+        settle()
+      } else if (ev.type === 'result') {
+        finished = true
+        busy = false
+        if (ev.is_error) throw new Error(String(ev.result || ev.errors?.join?.('; ') || ev.subtype || 'Claude Code reported an error').slice(0, 600))
+        settle()
+      }
     }
+  } finally {
+    close()
   }
   if (req.signal.aborted) return
   if (!finished) throw new Error(`Claude Code stopped unexpectedly: ${lastError(exit, `exit code ${exit.code}`)}`)

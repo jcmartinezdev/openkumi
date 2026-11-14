@@ -2,7 +2,9 @@ import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import type { Bot, Item, ItemData, Thread } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { runBrief } from '@openkumi/client/automations'
+import { useDictation } from '@openkumi/client/dictation'
 import { SentFiles, Tray, picked } from './Attachments'
+import { DictationFailed, Listening, MicButton, useListener } from './Dictation'
 import { History, day } from './History'
 import { Icon } from './Icon'
 import { CopyButton, FileLinks, Markdown } from './Markdown'
@@ -10,6 +12,7 @@ import { ModelPicker } from './ModelPicker'
 import { PageFrame, PageViewer } from './PageFrame'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
+import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { describe, parse, site } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openAutomations, openSettings, openThread, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
@@ -115,6 +118,79 @@ function AutomationReport({ text }: { text: string }) {
   )
 }
 
+/**
+ * A message between bots, as the owner reads it in either conversation: whose it is, or whom it
+ * went to, and what it says. It opens the other end: the same message in the other bot's conversation.
+ */
+function BotMessage({ id, from, to, text, replyWanted, messageKey }: { id: number; from?: string; to?: { id: string; name: string }; text: string; replyWanted: boolean; messageKey?: string }) {
+  const [error, setError] = useState('')
+  const open = () => {
+    if (!messageKey) return
+    bothEnds(messageKey).then(
+      (ends) => {
+        const other = to ? ends.received : ends.sent
+        // Not read yet: it waits at the foot of the other bot's conversation.
+        if (other) navigate(other.botId, other.threadId, other.itemId)
+        else if (to) navigate(to.id)
+        else setError('The bot that sent this is gone, and its conversation with it.')
+      },
+      (e) => setError(e.message),
+    )
+  }
+  return (
+    <div data-item={id} className={`msg between ${to ? 'to' : 'from'}`}>
+      <button className="between-head" title={to ? `Show it in ${to.name}’s conversation` : `Show it in ${from}’s conversation`} onClick={open}>
+        <Icon name="agents" size={13} />
+        <span className="eyebrow">{to ? `To ${to.name}` : `From ${from}`}</span>
+        {replyWanted && <span className="faint">{to ? 'asked for a reply' : 'asks for a reply'}</span>}
+        <Icon name="chevron" size={12} />
+      </button>
+      <div className="between-text">{text}</div>
+      {error && <div className="faint">{error}</div>}
+    </div>
+  )
+}
+
+/**
+ * What waits for the bot in this thread, under what it is doing now: each message is read in its
+ * turn, unless it is taken back first or sent now, to be read as the bot works. When the bot was
+ * stopped, or failed, they are held back until the owner writes or lets them go.
+ */
+function Waiting({ thread, bot, setError }: { thread: Thread; bot: Bot; setError: (message: string) => void }) {
+  const waiting = useWaiting(thread)
+  if (!waiting.length) return null
+  const act = (doing: Promise<unknown>) => doing.catch((e) => setError(e.message))
+  const running = thread.status === 'running'
+  return (
+    <div className="waiting" role="group" aria-label={`Messages waiting for ${bot.name}`}>
+      <div className="waiting-head">
+        <span className="eyebrow">{thread.held ? 'Held back' : 'Waiting'}</span>
+        <span className="faint grow">
+          {thread.held
+            ? `${bot.name} was stopped, so ${waiting.length === 1 ? 'this waits' : 'these wait'} until you write to it or let ${waiting.length === 1 ? 'it' : 'them'} go.`
+            : `${bot.name} reads ${waiting.length === 1 ? 'this' : 'these, one at a time,'} when it is done with what it is doing.`}
+        </span>
+        {thread.held && <button onClick={() => act(letGo(thread.id))}>Resume</button>}
+      </div>
+      {waiting.map((w) => (
+        <div key={w.id} className={`waiting-card ${w.now ? 'now' : ''}`}>
+          <div className="waiting-body">
+            <div className="eyebrow">{fromWhom(w.message)}{w.message.replyWanted ? ' · asks for a reply' : ''}{w.now ? ' · next' : ''}</div>
+            <div className="waiting-text">{waitingText(w.message)}</div>
+            {!!w.message.attachments?.length && <div className="faint">{w.message.attachments.map((a) => a.name).join(', ')}</div>}
+          </div>
+          {!w.now && (
+            <button className="quiet" title={running ? `Have ${bot.name} read it now, as it works` : `Have ${bot.name} read this one now`} onClick={() => act(sendNow(w.id))}>Send now</button>
+          )}
+          {canTakeBack(w.message) && (
+            <button className="icon" title="Take it back" aria-label="Take this message back" onClick={() => act(takeBack(w.id))}><Icon name="x" size={14} /></button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 const isStep = (d: ItemData) => d.type === 'function_call' || d.type === 'web_search_call' || (d.type === 'reasoning' && !!d.summary)
 
 const duration = (ms: number) => {
@@ -173,8 +249,8 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
   let marked = false
   for (const { id, threadId, data, createdAt } of items) {
     if (data.type === 'function_call_output' || data.type === 'summary') continue
-    // A page stands for the call that showed it; the call is only listed when it failed.
-    if (data.type === 'function_call' && data.name === 'show_page' && !outputs.get(data.call_id)?.startsWith('Error:')) continue
+    // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
+    if (data.type === 'function_call' && (data.name === 'show_page' || data.name === 'message_bot') && !outputs.get(data.call_id)?.startsWith('Error:')) continue
     if (summary && !marked && id > summary.upTo) {
       marked = true
       flush(-id)
@@ -206,6 +282,7 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
           </div>,
         )
       }
+      else if (data.source === 'bot') blocks.push(<BotMessage key={id} id={id} from={data.bot?.name ?? 'another bot'} text={data.text} replyWanted={!!data.replyWanted} messageKey={data.key} />)
       else if (data.source === 'subagent') blocks.push(<div key={id} data-item={id}><SubagentReport text={data.text} /></div>)
       else if (data.source === 'automation') blocks.push(<div key={id} data-item={id}><AutomationReport text={data.text} /></div>)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
@@ -226,6 +303,8 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
       blocks.push(<div key={id} className={`notice ${data.level}`}>{data.text}</div>)
     } else if (data.type === 'page') {
       blocks.push(<div key={id} data-item={id}><PageFrame title={data.title} html={data.html} height={data.height} /></div>)
+    } else if (data.type === 'sent') {
+      blocks.push(<BotMessage key={id} id={id} to={data.to} text={data.text} replyWanted={data.replyWanted} messageKey={data.key} />)
     }
   }
   flush(-1, running)
@@ -330,6 +409,17 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
   const uploading = !ready(files)
   const sendable = files.some((f) => f.staged)
 
+  // Speaking instead of typing: the words go into the draft as they are heard, where the cursor was.
+  const listener = useListener()
+  const cursor = useRef<number | null>(null)
+  const dictating = useDictation(listener, (text, at) => ((cursor.current = at), setDraft(text)))
+  const speaking = dictating.phase !== 'off'
+  const startDictating = () => {
+    const el = input.current
+    dictating.start(draft, el?.selectionStart ?? draft.length, el?.selectionEnd ?? draft.length)
+    el?.focus()
+  }
+
   const connected = useStore((s) => s.connected)
   useEffect(() => {
     // Shows what is kept of the chat at once, then brings it up to date; again when the connection comes back.
@@ -399,12 +489,16 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
     return () => observer.disconnect()
   }, [])
 
-  // Grow the composer with its content.
+  // Grow the composer with its content. Words that were spoken in leave the cursor after them, in view.
   useLayoutEffect(() => {
     const el = input.current
     if (!el) return
     el.style.height = 'auto'
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+    if (cursor.current === null) return
+    el.setSelectionRange(cursor.current, cursor.current)
+    if (speaking) el.scrollTop = el.scrollHeight
+    cursor.current = null
   }, [draft])
 
   /** Files of a message that is on its way, so a message sent right after it does not take them again. */
@@ -551,6 +645,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
           )}
           {partial?.text && <div className="msg assistant"><Markdown text={partial.text} live /></div>}
           {running && !partial?.text && !partial?.reasoning && <div className="working"><BotHead bot={bot} sign={false} className="bob" /> Working</div>}
+          {thread && <Waiting thread={thread} bot={bot} setError={setError} />}
           {error && <div className="notice error">{error}</div>}
         </div>
         </FileLinks.Provider>
@@ -567,12 +662,15 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
             </div>
           ) : (
           <div className="composer">
+            <DictationFailed dictating={dictating} />
             <Tray files={files} remove={(id) => removeFile(draftKey, id)} />
             <textarea
               ref={input}
               value={draft}
               rows={1}
-              placeholder={!connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'automation' ? 'Message this run' : `Message ${bot.name}`}
+              // While it listens, the words are the microphone's to write.
+              readOnly={speaking}
+              placeholder={speaking ? 'Listening…' : !connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : thread?.kind === 'automation' ? 'Message this run' : `Message ${bot.name}`}
               aria-label="Message"
               onChange={(e) => setDraft(e.target.value)}
               // Files pasted (a screenshot, a picture copied from a page, a file copied in Finder)
@@ -589,9 +687,14 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
                 const desktop = matchMedia('(hover: hover) and (pointer: fine)').matches
                 // With "Enter sends" off, Enter makes a new line and Cmd or Ctrl with Enter sends.
                 const sends = e.metaKey || e.ctrlKey || (desktop && prefs.enterSends && !e.shiftKey)
-                if (e.key === 'Enter' && sends && !e.nativeEvent.isComposing) {
+                if (speaking && e.key === 'Escape') {
                   e.preventDefault()
-                  submit()
+                  dictating.cancel()
+                } else if (e.key === 'Enter' && sends && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  // While it listens, the last words go in first.
+                  if (speaking) dictating.finish((text) => submit(text))
+                  else submit()
                 }
               }}
             />
@@ -601,7 +704,14 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               </button>
               <input ref={filePicker} type="file" multiple hidden onChange={(e) => (attach(e.target.files ?? []), (e.target.value = ''))} />
               <span className="grow" />
-              <ModelPicker bot={bot} />
+              {speaking && listener ? (
+                <Listening dictating={dictating} listener={listener} />
+              ) : (
+                <>
+                  <ModelPicker bot={bot} />
+                  {listener && <MicButton start={startDictating} />}
+                </>
+              )}
               {running && (
                 <button className="send stop" title="Stop" aria-label="Stop" onClick={() => api('POST', `/api/threads/${thread.id}/stop`).catch((e) => setError(e.message))}>
                   <Icon name="stop" size={18} />
@@ -613,9 +723,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
                   className="send"
                   title={!connected ? 'Offline' : uploading ? 'Waiting for the files' : 'Send'}
                   aria-label="Send"
-                  disabled={(!draft.trim() && !sendable) || uploading || !connected}
+                  disabled={(!draft.trim() && !sendable && !speaking) || uploading || !connected}
                   onPointerDown={(e) => e.preventDefault()}
-                  onClick={() => submit()}
+                  onClick={() => (speaking ? dictating.finish((text) => submit(text)) : submit())}
                 >
                   <Icon name="up" size={18} />
                 </button>

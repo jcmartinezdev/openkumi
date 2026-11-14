@@ -5,15 +5,18 @@ import { ActionSheetIOS, ActivityIndicator, Alert, Keyboard, KeyboardAvoidingVie
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Attachment, Item } from '@openkumi/shared'
+import type { Attachment, Bot, BotRef, Item, Thread } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { runBrief } from '@openkumi/client/automations'
+import { useDictation } from '@openkumi/client/dictation'
+import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { describe } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
 import { BrowserPip } from '../../src/BrowserPip'
+import { ListeningBar, MicButton, listener, useDictationChecks } from '../../src/Dictation'
 import { ModelChip } from '../../src/ModelChip'
 import { PageSheet, PageView, Sheet } from '../../src/PageView'
 import { useTextScale } from '../../src/prefs'
@@ -27,6 +30,8 @@ type Row =
   /** What the bot did between two messages, folded into one line. */
   | { key: string; kind: 'steps'; steps: string[] }
   | { key: string; kind: 'page'; title: string; html: string; height: number }
+  /** A message between bots: one that came from another bot (`from`), or one this bot sent (`to`). */
+  | { key: string; kind: 'between'; from?: string; to?: BotRef; text: string; replyWanted: boolean; messageKey?: string }
 
 /** Who a message the user did not write is from. */
 /** A run's first message as a notice shows it: the prompt, then what its watch found changed. */
@@ -47,9 +52,11 @@ function rows(items: Item[]): Row[] {
   for (const item of items) {
     const d = item.data
     const key = String(item.id)
-    if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId } : { key, kind: 'notice', text: `${FROM[d.source]}: ${d.source === 'trigger' ? brief(d.text) : d.text}` })
-    // A page stands for the call that showed it; the call is only listed when it failed.
-    else if (d.type === 'function_call' && (d.name !== 'show_page' || failed.has(d.call_id))) step(key, describe(d))
+    if (d.type === 'message' && d.role === 'user' && d.source === 'bot') out.push({ key, kind: 'between', from: d.bot?.name ?? 'another bot', text: d.text, replyWanted: !!d.replyWanted, messageKey: d.key })
+    else if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId } : { key, kind: 'notice', text: `${FROM[d.source as keyof typeof FROM]}: ${d.source === 'trigger' ? brief(d.text) : d.text}` })
+    else if (d.type === 'sent') out.push({ key, kind: 'between', to: d.to, text: d.text, replyWanted: d.replyWanted, messageKey: d.key })
+    // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
+    else if (d.type === 'function_call' && ((d.name !== 'show_page' && d.name !== 'message_bot') || failed.has(d.call_id))) step(key, describe(d))
     else if (d.type === 'web_search_call') step(key, 'Search the web')
     else if (d.type === 'page') out.push({ key, kind: 'page', title: d.title, html: d.html, height: d.height })
     else if (d.type === 'notice') out.push({ key, kind: 'notice', text: d.text, error: d.level === 'error' })
@@ -116,8 +123,77 @@ function Said({ row, theme, scale }: { row: Row & { kind: 'user' }; theme: Theme
   )
 }
 
+/** Opens the other end of a message between bots: the same message, in the other bot's conversation. */
+const OpenOtherEnd = createContext<(row: Row & { kind: 'between' }) => void>(() => {})
+
+/** A message between bots, as the owner reads it in either conversation: whose it is, or whom it went to, and what it says. */
+function Between({ row, theme, scale }: { row: Row & { kind: 'between' }; theme: Theme; scale: number }) {
+  const open = useContext(OpenOtherEnd)
+  const who = row.to ? `To ${row.to.name}` : `From ${row.from}`
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${who}: ${row.text}`}
+      accessibilityHint="Opens it in the other bot’s conversation"
+      onPress={() => open(row)}
+      onLongPress={() => offerCopy(row.text)}
+      style={[styles.between, { borderColor: theme.border, alignSelf: row.to ? 'flex-end' : 'flex-start' }]}
+    >
+      <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{who}{row.replyWanted ? (row.to ? ' · asked for a reply' : ' · asks for a reply') : ''}  ›</Text>
+      <Text style={{ color: theme.text, fontSize: 16 * scale, lineHeight: 22 * scale }}>{row.text}</Text>
+    </Pressable>
+  )
+}
+
+/**
+ * What waits for the bot in this thread, under what it is doing now: each message is read in its
+ * turn, unless it is taken back first or sent now, to be read as the bot works. When the bot was
+ * stopped, or failed, they are held back until the owner writes or lets them go.
+ */
+function Waiting({ thread, bot, theme, onError }: { thread: Thread; bot: Bot; theme: Theme; onError: (message: string) => void }) {
+  const waiting = useWaiting(thread)
+  if (!waiting.length) return null
+  const act = (doing: Promise<unknown>) => void doing.catch((e) => onError((e as Error).message))
+  const one = waiting.length === 1
+  return (
+    <View style={[styles.waiting, { borderColor: theme.border }]}>
+      <View style={styles.waitingHead}>
+        <Text style={{ flex: 1, color: theme.faint, fontSize: 13, lineHeight: 18 }}>
+          <Text style={[styles.eyebrow, { color: theme.muted }]}>{thread.held ? 'Held back  ' : 'Waiting  '}</Text>
+          {thread.held ? `${bot.name} was stopped, so ${one ? 'this waits' : 'these wait'} until you write to it or let ${one ? 'it' : 'them'} go.` : `${bot.name} reads ${one ? 'this' : 'these, one at a time,'} when it is done with what it is doing.`}
+        </Text>
+        {thread.held && (
+          <Pressable accessibilityRole="button" hitSlop={6} style={[styles.pill, { borderColor: theme.border }]} onPress={() => act(letGo(thread.id))}>
+            <Text style={{ color: theme.text, fontSize: 13, fontWeight: '600' }}>Resume</Text>
+          </Pressable>
+        )}
+      </View>
+      {waiting.map((w) => (
+        <View key={w.id} style={[styles.waitingCard, { backgroundColor: theme.bubble }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{fromWhom(w.message)}{w.message.replyWanted ? ' · asks for a reply' : ''}{w.now ? ' · next' : ''}</Text>
+            <Text style={{ color: theme.muted, fontSize: 15, lineHeight: 20 }} numberOfLines={4}>{waitingText(w.message)}</Text>
+            {!!w.message.attachments?.length && <Text style={{ color: theme.faint, fontSize: 12 }} numberOfLines={1}>{w.message.attachments.map((a) => a.name).join(', ')}</Text>}
+          </View>
+          {!w.now && (
+            <Pressable accessibilityRole="button" accessibilityHint={`Has ${bot.name} read it now, as it works`} hitSlop={6} style={[styles.pill, { borderColor: theme.border }]} onPress={() => act(sendNow(w.id))}>
+              <Text style={{ color: theme.text, fontSize: 13 }}>Send now</Text>
+            </Pressable>
+          )}
+          {canTakeBack(w.message) && (
+            <Pressable accessibilityRole="button" accessibilityLabel="Take this message back" hitSlop={8} style={styles.takeBack} onPress={() => act(takeBack(w.id))}>
+              <Glyph name="x" size={15} color={theme.muted} weight={2} />
+            </Pressable>
+          )}
+        </View>
+      ))}
+    </View>
+  )
+}
+
 const Line = memo(function Line({ row, theme, scale }: { row: Row; theme: Theme; scale: number }) {
   if (row.kind === 'user') return <Said row={row as Row & { kind: 'user' }} theme={theme} scale={scale} />
+  if (row.kind === 'between') return <Between row={row} theme={theme} scale={scale} />
   if (row.kind === 'bot') return <View style={styles.bot}><Markdown text={row.text} /><CopyReply text={row.text} theme={theme} /></View>
   if (row.kind === 'steps') return <Steps steps={row.steps} theme={theme} />
   if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
@@ -128,7 +204,7 @@ export default function Chat() {
   const theme = useTheme()
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, item } = useLocalSearchParams<{ id: string; item?: string }>()
   // "bot:<bot>" is that bot's conversation, which does not exist until its first message is sent
   // and is another thread after its owner starts fresh. Anything else is a thread, such as a subagent's.
   const forBot = id.startsWith('bot:') ? id.slice(4) : null
@@ -170,6 +246,39 @@ export default function Chat() {
   }
 
   const shown = useMemo(() => rows(items ?? []), [items])
+
+  // Opened for one message (the other end of a message between bots): it is brought into view once it is there.
+  const sought = useRef(item)
+  useEffect(() => {
+    const at = sought.current ? shown.findIndex((row) => row.key === sought.current) : -1
+    if (at < 0) return
+    sought.current = undefined
+    // After the list has laid itself out at its end.
+    const wait = setTimeout(() => void list.current?.scrollToIndex({ index: at, animated: false, viewPosition: 0.3 }), 350)
+    return () => clearTimeout(wait)
+  }, [shown])
+
+  const otherEnd = useMemo(
+    () => (row: Row & { kind: 'between' }) => {
+      if (!row.messageKey) return
+      const go = (botId: string, threadId?: string, itemId?: number) => {
+        // A bot's own conversation is opened as that, so that it stays the one the bot goes on in.
+        const own = !threadId || mainThread(threads, botId)?.id === threadId
+        router.push({ pathname: '/chat/[id]', params: { id: own ? `bot:${botId}` : threadId!, ...(itemId ? { item: String(itemId) } : {}) } })
+      }
+      bothEnds(row.messageKey).then(
+        (ends) => {
+          const other = row.to ? ends.received : ends.sent
+          // Not read yet: it waits at the foot of the other bot's conversation.
+          if (other) go(other.botId, other.threadId, other.itemId)
+          else if (row.to) go(row.to.id)
+          else setError('The bot that sent this is gone, and its conversation with it.')
+        },
+        (e) => setError((e as Error).message),
+      )
+    },
+    [threads],
+  )
   const running = thread?.status === 'running'
   const subagents = thread ? recentSubagents(threads, thread) : []
 
@@ -190,6 +299,17 @@ export default function Chat() {
   const files = usePending(id)
   const uploading = !ready(files)
   const sendable = files.some((f) => f.staged)
+
+  // Speaking instead of typing: the words go into the draft as they are heard, where the cursor was.
+  const dictating = useDictation(listener, (draft) => setText(draft))
+  const speaking = dictating.phase !== 'off'
+  const selection = useRef({ start: 0, end: 0 })
+  useDictationChecks(dictating)
+  const startDictating = () => {
+    Keyboard.dismiss()
+    const { start, end } = selection.current
+    dictating.start(text, Math.min(start, text.length), Math.min(end, text.length))
+  }
 
   const send = async () => {
     const message = text.trim()
@@ -216,6 +336,7 @@ export default function Chat() {
     <View style={{ paddingBottom: 12 }}>
       {!!partial?.text && <View style={styles.bot}><Markdown text={partial.text} live /></View>}
       {running && !partial?.text && <View style={styles.working}>{bot ? <Bobbing><BotHead bot={bot} size={24} sign={false} /></Bobbing> : <ActivityIndicator size="small" color={theme.muted} />}<Text style={{ color: theme.muted, fontSize: 14 }}>Working</Text></View>}
+      {thread && bot && <Waiting thread={thread} bot={bot} theme={theme} onError={setError} />}
       {subagents.length > 0 && (
         <View style={styles.chips}>
           {subagents.map((t) => (
@@ -260,6 +381,7 @@ export default function Chat() {
       ) : (
         <FileLinks.Provider value={openFile}>
         <ShowText.Provider value={showText}>
+        <OpenOtherEnd.Provider value={otherEnd}>
         <LegendList
           ref={list}
           data={shown}
@@ -289,6 +411,7 @@ export default function Chat() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}
           keyboardDismissMode="interactive"
         />
+        </OpenOtherEnd.Provider>
         </ShowText.Provider>
         </FileLinks.Provider>
       )}
@@ -316,38 +439,50 @@ export default function Chat() {
             style={[styles.input, { color: theme.text }]}
             value={text}
             onChangeText={setText}
-            placeholder={!connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
+            onSelectionChange={(e) => (selection.current = e.nativeEvent.selection)}
+            // While it listens, the words are the microphone's to write.
+            editable={!speaking}
+            placeholder={speaking ? 'Listening…' : !connected ? 'Offline. You can send once the connection is back.' : thread?.kind === 'subagent' ? 'Message this subagent' : bot ? `Message ${bot.name}` : 'Message'}
             placeholderTextColor={theme.faint}
             multiline
           />
           <View style={styles.bar}>
-            {bot && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Add photos and files"
-                hitSlop={6}
-                style={({ pressed }) => [styles.attach, { borderColor: theme.border }, pressed && { backgroundColor: theme.bubble }]}
-                onPress={() => chooseFiles(MAX - files.length, (picked) => addFiles(id, bot.id, picked))}
-              >
-                <Glyph name="plus" size={18} color={theme.text} weight={2} />
-              </Pressable>
-            )}
-            <View style={{ flex: 1 }} />
-            {bot && <ModelChip bot={bot} onPress={() => (Keyboard.dismiss(), router.push({ pathname: '/model/[botId]', params: { botId: bot.id } }))} />}
-            {running ? (
-              <Pressable accessibilityRole="button" accessibilityLabel="Stop" style={[styles.send, { backgroundColor: theme.bubble }]} onPress={() => api('POST', `/api/threads/${thread!.id}/stop`).catch((e) => setError(e.message))}>
-                <View style={{ width: 12, height: 12, borderRadius: 2.5, backgroundColor: theme.text }} />
-              </Pressable>
+            {speaking && listener ? (
+              <ListeningBar dictating={dictating} listener={listener} />
             ) : (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={!connected ? 'Send, once the connection is back' : uploading ? 'Send, once the files are added' : 'Send'}
-                disabled={sending || uploading || !connected || (!text.trim() && !sendable)}
-                style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || !connected || (!text.trim() && !sendable) ? 0.35 : 1 }]}
-                onPress={send}
-              >
-                <Glyph name="up" size={19} color={theme.onPrimary} weight={2.4} />
-              </Pressable>
+              <>
+                {bot && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Add photos and files"
+                    hitSlop={6}
+                    style={({ pressed }) => [styles.attach, { borderColor: theme.border }, pressed && { backgroundColor: theme.bubble }]}
+                    onPress={() => chooseFiles(MAX - files.length, (picked) => addFiles(id, bot.id, picked))}
+                  >
+                    <Glyph name="plus" size={18} color={theme.text} weight={2} />
+                  </Pressable>
+                )}
+                <View style={{ flex: 1 }} />
+                {bot && <ModelChip bot={bot} onPress={() => (Keyboard.dismiss(), router.push({ pathname: '/model/[botId]', params: { botId: bot.id } }))} />}
+                {bot && listener && <MicButton onPress={startDictating} />}
+                {running && (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Stop" style={[styles.send, { backgroundColor: theme.bubble }]} onPress={() => api('POST', `/api/threads/${thread!.id}/stop`).catch((e) => setError(e.message))}>
+                    <View style={{ width: 12, height: 12, borderRadius: 2.5, backgroundColor: theme.text }} />
+                  </Pressable>
+                )}
+                {/* What is sent while the bot works waits its turn, so there is something to send then too. */}
+                {(!running || !!text.trim() || sendable) && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={!connected ? 'Send, once the connection is back' : uploading ? 'Send, once the files are added' : 'Send'}
+                    disabled={sending || uploading || !connected || (!text.trim() && !sendable)}
+                    style={[styles.send, { backgroundColor: theme.primary, opacity: sending || uploading || !connected || (!text.trim() && !sendable) ? 0.35 : 1 }]}
+                    onPress={send}
+                  >
+                    <Glyph name="up" size={19} color={theme.onPrimary} weight={2.4} />
+                  </Pressable>
+                )}
+              </>
             )}
           </View>
         </View>
@@ -368,6 +503,13 @@ const styles = StyleSheet.create({
   notice: { fontSize: 13, lineHeight: 18, paddingVertical: 6 },
   working: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 6 },
+  between: { maxWidth: '86%', marginVertical: 6, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, gap: 3 },
+  eyebrow: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
+  waiting: { marginTop: 8, padding: 10, gap: 6, borderWidth: StyleSheet.hairlineWidth, borderStyle: 'dashed', borderRadius: 16 },
+  waitingHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 2, paddingBottom: 2 },
+  waitingCard: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingRight: 8, paddingVertical: 8, borderRadius: 12 },
+  pill: { height: 30, paddingHorizontal: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  takeBack: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%', height: 32, paddingHorizontal: 12, borderWidth: 1, borderRadius: 16 },
   dock: { paddingHorizontal: 10, paddingTop: 6 },
   composer: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 26 },

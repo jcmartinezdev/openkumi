@@ -1,7 +1,7 @@
 // Function tools the model can call. Each returns a string that goes back to the model.
 import type { Bot, ItemData, Thread } from '@openkumi/shared'
 import * as agent from './agent.ts'
-import { createBot, listBots } from './bots.ts'
+import { createBot, getBot, listBots } from './bots.ts'
 import { browserFor, byRef, isWebPage, snapshot } from './browser.ts'
 import { PORT } from './config.ts'
 import { settings } from './settings.ts'
@@ -16,6 +16,8 @@ export interface ToolContext {
   thread: Thread
   bot: Bot
   signal: AbortSignal
+  /** Fires when the owner wants the bot to read a message now: a tool that is only waiting gives way to it. */
+  hurry: AbortSignal
 }
 
 export interface Tool {
@@ -65,34 +67,97 @@ const botSummary = (b: Bot) => ({
   model: b.model || '(provider default)',
 })
 
-const botTools: Tool[] = [
-  {
-    name: 'list_bots',
-    description: 'List every bot that exists in this OpenKumi installation, including yourself.',
-    parameters: params({}),
-    run: (_, ctx) => JSON.stringify(listBots().map((b) => ({ ...botSummary(b), you: b.id === ctx.bot.id })), null, 1),
+const listBotsTool: Tool = {
+  name: 'list_bots',
+  description: 'List every bot that exists in this OpenKumi installation, including yourself.',
+  parameters: params({}),
+  run: (_, ctx) => JSON.stringify(listBots().map((b) => ({ ...botSummary(b), you: b.id === ctx.bot.id })), null, 1),
+}
+
+/** How a message to another bot stands, as the bot that sent it is told. */
+function delivered({ place, held, bot }: ReturnType<typeof agent.messageBot>, replyWanted: boolean): string {
+  const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')}`
+  const where = held
+    ? `Delivered, but ${bot.name} was stopped and what waits for it is held back until the user lets it go on. Tell the user.`
+    : place
+      ? `Delivered. ${bot.name} is busy: your message is ${ordinal(place)} in its queue, and it will read it in turn.`
+      : `Delivered. ${bot.name} has started on it.`
+  return `${where} ${replyWanted ? 'Its reply will arrive here as a message from it, which wakes you: end your turn rather than wait.' : `It answers the user in its own conversation, not you.`}`
+}
+
+/** Messaging another bot: offered in a bot's own conversation, while the owner has it switched on. Who may be written to when is decided in agent.ts. */
+const messageBotTool: Tool = {
+  name: 'message_bot',
+  description:
+    'Send a message to another of the user\'s bots. It goes into that bot\'s own conversation with the user, where the ' +
+    'bot reads it in its turn and does what it asks as itself, with its own instructions, files, logins and ' +
+    'superpowers. It sees nothing of your conversation, so the message must stand on its own. The user sees it in ' +
+    'both conversations.',
+  parameters: params(
+    {
+      bot_id: str('The bot to write to, from the list of the other bots or list_bots'),
+      message: str('What you ask of it or tell it, complete in itself'),
+      reply_wanted: {
+        type: 'boolean',
+        description: 'Set it when you need what comes of this: the bot then writes back to you. Without it, it answers the user in its own conversation.',
+      },
+    },
+    ['bot_id', 'message'],
+  ),
+  run: (a, ctx) => {
+    try {
+      return delivered(agent.messageBot(ctx.thread, ctx.bot, a.bot_id, a.message, a.reply_wanted === true), a.reply_wanted === true)
+    } catch (e) {
+      if (e instanceof agent.Busy) throw new Error(`${e.message} Try again later, or tell the user.`)
+      throw e
+    }
   },
-  {
+}
+
+/**
+ * Creating a bot: the main assistant's, in its conversation, and only on the owner's word. With
+ * messages between bots switched on, the new bot can be given a first one to start on.
+ */
+function createBotTool(firstMessage: boolean): Tool {
+  return {
     name: 'create_bot',
     description:
       'Create a new bot. It appears in the app sidebar with its own conversation, workspace and browser profile. ' +
-      'Use this when the user asks for a new bot or persona.',
+      'Use this only when the user has just asked you for a new bot or persona: it is refused at any other time.' +
+      (firstMessage ? ' Give first_message to start the new bot on its work at once.' : ''),
     parameters: params(
       {
         name: str('Short display name'),
-        description: str('One line saying what the bot is for, e.g. "Plans trips and books travel". Every other bot is told it, to know when to hand it work.'),
+        description: str('One line saying what the bot is for, e.g. "Plans trips and books travel". Every other bot is told it, to know what to pass on to it.'),
         instructions: str('What the bot is for and how it should behave. This starts its own instructions file, which it maintains itself from then on.'),
         emoji: str('A single emoji for the sign its mascot holds. Omit it and the new bot chooses its own look and emoji.'),
-        model: str('Model id. Omit to use the provider default.'),
+        ...(firstMessage
+          ? {
+              first_message: str(
+                'A first message to the new bot, which it starts on as soon as it exists, in its own conversation with the user: ' +
+                  'what to do first, with everything it needs to know, since it has seen nothing of this conversation. ' +
+                  'Omit it and the bot waits for the user.',
+              ),
+            }
+          : {}),
       },
       ['name', 'description', 'instructions'],
     ),
     run: async (a, ctx) => {
-      const bot = await createBot({ name: a.name, description: a.description, purpose: a.instructions, emoji: a.emoji, model: a.model, provider: ctx.bot.provider })
-      return `Created bot ${JSON.stringify(botSummary(bot))}`
+      if (!agent.basisOf(ctx.thread).owner) throw new Error('A bot can only be created when the user has just asked you for one. Ask them first.')
+      const bot = await createBot({ name: a.name, description: a.description, purpose: a.instructions, emoji: a.emoji })
+      const made = `Created bot ${JSON.stringify(botSummary(bot))}`
+      const first = firstMessage && typeof a.first_message === 'string' ? a.first_message.trim() : ''
+      if (!first) return made
+      try {
+        agent.messageBot(ctx.thread, ctx.bot, bot.id, first, false)
+        return `${made}\nIt has your first message and has started on it, in its own conversation with the user.`
+      } catch (e: any) {
+        return `${made}\nYour first message did not reach it: ${e?.message ?? e}`
+      }
     },
-  },
-]
+  }
+}
 
 const filePath = str('Path inside your workspace, e.g. "memory/people.md"')
 
@@ -183,22 +248,22 @@ const fileTools: Tool[] = [
 
 const when = (time: number) => new Date(time).toISOString().slice(0, 16).replace('T', ' ')
 const speaker = (data: Extract<ItemData, { type: 'message' }>) =>
-  data.role === 'assistant' ? 'you' : data.source === 'user' ? 'user' : data.source === 'automation' ? 'automation report' : 'subagent report'
+  data.role === 'assistant' ? 'you' : data.source === 'user' ? 'user' : data.source === 'automation' ? 'automation report' : data.source === 'bot' ? `message from ${data.bot?.name ?? 'another bot'}` : 'subagent report'
 
 /** The bot's own conversation, as far back as it goes: what is no longer in front of the model can be looked up here. */
 const historyTools: Tool[] = [
   {
     name: 'search_history',
     description:
-      'Search everything that was said between you and the user, including the parts of the conversation you can no ' +
+      'Search everything that was said in your conversation with the user (by them, by you, and by other bots that wrote to you), including the parts you can no ' +
       'longer see (summarised, or set aside when the user started fresh). Returns the messages that contain every ' +
       'word of the query, newest first, each with an id for read_history.',
     parameters: params({ query: str('Words to look for, e.g. "dentist appointment"') }, ['query']),
     run: (a, ctx) => {
       const matches = db.searchMessages(ctx.bot.id, String(a.query ?? ''), 20)
       if (!matches.length) return 'Nothing was found. Try fewer or different words.'
-      const from = { bot: 'you', user: 'user', subagent: 'subagent report', automation: 'automation report' }
-      return matches.map((m) => `[${m.itemId}] ${when(m.createdAt)} UTC, ${from[m.from]}: ${m.snippet}`).join('\n')
+      const from = { bot: 'you', user: 'user', subagent: 'subagent report', automation: 'automation report', other: 'another bot' }
+      return matches.map((m) => `[${m.itemId}] ${when(m.createdAt)} UTC, ${m.name ? `message from ${m.name}` : from[m.from]}: ${m.snippet}`).join('\n')
     },
   },
   {
@@ -229,20 +294,17 @@ const spawnTool: Tool = {
   name: 'spawn_subagent',
   description:
     'Start a subagent that works on a task in the background, in parallel with you. Returns immediately with its id. ' +
-    'The subagent has the same tools as you but none of this conversation, so the task must be fully self-contained. ' +
-    'Pass bot_id to hand the task to another of the user\'s bots instead: it does it as itself, with its own ' +
-    'instructions, files, browser logins and superpowers.',
+    'The subagent is you, with the same tools, files and logins, but none of this conversation, so the task must be fully self-contained.',
   parameters: params(
     {
       name: str('Short label shown in the UI, e.g. "Compare prices"'),
       task: str('Complete, self-contained instructions, including what to report back'),
-      bot_id: str('Hand the task to this bot instead of doing it yourself'),
       model: str('Model id override for this subagent'),
     },
     ['name', 'task'],
   ),
   run: (a, ctx) => {
-    const child = agent.spawnSubagent(ctx.thread, { task: String(a.task), name: String(a.name), botId: a.bot_id, model: a.model })
+    const child = agent.spawnSubagent(ctx.thread, { task: String(a.task), name: String(a.name), model: a.model })
     return JSON.stringify({ id: child.id, name: child.title, status: 'running' })
   },
 }
@@ -252,14 +314,15 @@ const subagentTools: Tool[] = [
     name: 'wait_subagents',
     description:
       'Block until subagents finish, then return their final reports. With no ids, waits for all of your subagents ' +
-      'whose results you have not received. Subagents still running at the timeout keep running.',
+      'whose results you have not received. Subagents still running at the timeout keep running. It also returns ' +
+      'early when the user sends a message for you to read now.',
     parameters: params({
       ids: { type: 'array', items: { type: 'string' }, description: 'Subagent ids to wait for' },
       timeout_seconds: { type: 'number', description: 'Maximum time to wait (default 300, max 1800)' },
     }),
     run: (a, ctx) => {
       const seconds = Math.min(Math.max(Number(a.timeout_seconds) || 300, 1), 1800)
-      return agent.waitSubagents(ctx.thread, a.ids, seconds * 1000, ctx.signal)
+      return agent.waitSubagents(ctx.thread, a.ids, seconds * 1000, ctx.signal, ctx.hurry)
     },
   },
   {
@@ -289,13 +352,13 @@ const subagentTools: Tool[] = [
   },
   {
     name: 'message_subagent',
-    description: 'Send a follow-up message to one of your subagents. It keeps its context; if it had finished, it starts working again.',
+    description: 'Send a follow-up message to one of your subagents. It keeps its context; if it had finished, it starts working again, and if it is still at work it reads the message once it is done with what it has.',
     parameters: params({ id: str('Subagent id'), message: str('The message') }, ['id', 'message']),
     run: (a, ctx) => {
       const child = agent.ownSubagent(ctx.thread, a.id)
+      const { place } = agent.postMessage(child.id, { source: 'parent', text: String(a.message) })
       db.updateThread(child.id, { reported: false })
-      agent.postMessage(child.id, String(a.message), 'parent')
-      return 'Sent. The subagent is working on it.'
+      return place ? 'Sent. The subagent reads it once it is done with what it has.' : 'Sent. The subagent is working on it.'
     },
   },
   {
@@ -625,6 +688,13 @@ export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problem
   const services = await serviceTools(thread.botId)
   // Nobody watches a run of an automation, so there is nobody to ask to take over its browser.
   const browsing = thread.kind === 'automation' ? browserTools.filter((t) => t.name !== 'browser_ask_user') : browserTools
+  const bot = getBot(thread.botId)
+  const botTools = [
+    listBotsTool,
+    // Only the main assistant makes bots, and only in its conversation with the owner: never from a subagent or a run of an automation.
+    ...(bot && thread.kind === 'chat' && automations.isMain(bot) ? [createBotTool(settings().botMessages)] : []),
+    ...(agent.canMessage(thread) ? [messageBotTool] : []),
+  ]
   const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, pageTool]
   return { tools: [...own, ...services.tools], problems: services.problems }
 }

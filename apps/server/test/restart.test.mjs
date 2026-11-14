@@ -74,6 +74,39 @@ test('a reply being written when the server shuts down is kept as it stood', () 
     }
   }))
 
+test('what was waiting for a bot when the server stopped is read once it starts again, unless it was held back', () =>
+  withHome(async (home) => {
+    let server = await start(home)
+    const bot = await server.api('POST', '/api/bots', { name: 'Waiter', provider: 'mock' })
+    const other = await server.api('POST', '/api/bots', { name: 'Held', provider: 'mock' })
+    const said = async (id) => (await server.api('GET', `/api/threads/${id}`)).items.map((i) => i.data).filter((d) => d.type === 'message').map((d) => d.text)
+    const working = (id) => until(async () => (await server.api('GET', `/api/threads/${id}`)).partial.text.includes('two'))
+
+    // One bot is at work with a message waiting; the other was stopped, so what waited for it is held back.
+    const thread = await server.api('POST', `/api/bots/${bot.id}/messages`, { text: '!drip one two three four five six seven eight nine ten' })
+    await server.api('POST', `/api/bots/${bot.id}/messages`, { text: 'after the restart' })
+    const stopped = await server.api('POST', `/api/bots/${other.id}/messages`, { text: '!drip one two three four five six seven eight nine ten' })
+    await server.api('POST', `/api/bots/${other.id}/messages`, { text: 'only when let go' })
+    await working(stopped.id)
+    await server.api('POST', `/api/threads/${stopped.id}/stop`)
+    await working(thread.id)
+    await server.stop()
+
+    server = await start(home)
+    try {
+      // The reply that was being written is lost with the turn; the message that waited is read.
+      await until(async () => (await said(thread.id)).includes('Echo: after the restart'))
+      const { queue, threads } = await server.api('GET', '/api/state')
+      assert.deepEqual(queue.map((w) => [w.threadId, w.message.text]), [[stopped.id, 'only when let go']])
+      assert.equal(threads.find((t) => t.id === stopped.id).held, true)
+      assert.ok(!(await said(stopped.id)).includes('only when let go'))
+      await server.api('POST', `/api/threads/${stopped.id}/queue/go`)
+      await until(async () => (await said(stopped.id)).includes('Echo: only when let go'))
+    } finally {
+      await server.stop()
+    }
+  }))
+
 test('an app that has seen up to a change is sent only what changed after it, and what was removed', () =>
   withHome(async (home) => {
     const server = await start(home)

@@ -1,15 +1,15 @@
 // Settings, opened from the gear on the list of bots. Laid out as T3 Code's phone app has it: the
 // server this phone is paired with at the top, then a row per page. What this phone prefers is
 // kept on it; the rest is kept on the server and is the same on every device, as on the computer.
-import { StyleSheet, View } from 'react-native'
+import { Alert, StyleSheet, View } from 'react-native'
 import { useRouter } from 'expo-router'
 import type { Bot } from '@openkumi/shared'
-import { useStore } from '@openkumi/client/store'
+import { saveSettings, useStore } from '@openkumi/client/store'
 import { Glyph } from '../../src/icons'
 import { useBotModel } from '../../src/ModelChip'
 import { THEME_LABEL, usePrefs } from '../../src/prefs'
 import { useServerStatus, useSession } from '../../src/session'
-import { Avatar, ICON_INSET, Row, Section, SettingsPage } from '../../src/SettingsUi'
+import { Avatar, ICON_INSET, Row, Section, SettingsPage, SwitchRow } from '../../src/SettingsUi'
 import { useTheme } from '../../src/theme'
 
 export default function Settings() {
@@ -23,6 +23,7 @@ export default function Settings() {
   const providers = useStore((s) => s.providers)
   const automations = useStore((s) => s.automations)
   const version = useStore((s) => s.about.version)
+  const botMessages = useStore((s) => s.settings.botMessages)
   const connected = providers.filter((p) => p.connected && p.enabled !== false).length
   const name = server?.name ?? 'the server'
 
@@ -50,6 +51,12 @@ export default function Settings() {
       {loaded && (
         <Section title="Bots" inset={60} footer={bots.length ? 'Name, what it is for, rules, model, browser and superpowers of each bot.' : 'There are no bots on this server yet. Create one in the app on your computer, or ask a bot to make one.'}>
           {bots.map((bot, i) => <BotRow key={bot.id} bot={bot} main={i === 0 && bots.length > 1} />)}
+        </Section>
+      )}
+
+      {loaded && (
+        <Section footer="A bot can write into another bot’s conversation, to pass it work or ask it for something. You see the message in both.">
+          <SwitchRow label="Bots can message each other" value={botMessages} onChange={(on) => void saveSettings({ botMessages: on }).catch((e) => Alert.alert('Not saved', (e as Error).message))} />
         </Section>
       )}
 

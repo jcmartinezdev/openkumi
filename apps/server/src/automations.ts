@@ -231,7 +231,7 @@ function start(automation: Automation, scheduled: boolean, told = ''): Automatio
   const conversation = agent.conversation(automation.botId)
   const thread = db.createThread({ botId: automation.botId, parentId: conversation.id, kind: 'automation', automationId: automation.id, title: automation.title })
   const saved = db.saveAutomation({ ...automation, nextRunAt: next, lastRunAt: now, lastStatus: 'running', lastError: null, lastThreadId: thread.id })
-  agent.postMessage(thread.id, automation.prompt + told, 'trigger')
+  agent.postMessage(thread.id, { source: 'trigger', text: automation.prompt + told })
   // Every run is kept, however many there are; the apps are only ever sent a page of them.
   return saved
 }
@@ -292,11 +292,10 @@ function failed(automation: Automation, seen: watching.Seen | null, error: unkno
   const pause = automation.enabled && (error instanceof watching.WatchError || Date.now() - failingSince >= PATIENCE)
   const saved = db.saveAutomation({ ...automation, lastCheck: { at: Date.now(), outcome: 'failed', detail: reason }, ...(pause ? { enabled: false, nextRunAt: null } : {}) })
   if (pause) {
-    agent.postMessage(
-      agent.conversation(automation.botId).id,
-      `<automation_result>\nAutomation "${automation.title}" (automation: ${automation.id}) — paused\nIt was paused because what it watches could not be looked at: ${reason}\nNothing ran. Once that is put right it can be turned on again, and it will catch up with what changed meanwhile.\n</automation_result>`,
-      'automation',
-    )
+    agent.postMessage(agent.conversation(automation.botId).id, {
+      source: 'automation',
+      text: `<automation_result>\nAutomation "${automation.title}" (automation: ${automation.id}) — paused\nIt was paused because what it watches could not be looked at: ${reason}\nNothing ran. Once that is put right it can be turned on again, and it will catch up with what changed meanwhile.\n</automation_result>`,
+    })
     plan()
   }
   return saved
@@ -355,11 +354,10 @@ export function finishRun(thread: Thread) {
   db.updateThread(thread.id, { reported: true })
   if (status === 'completed' && NOTHING.test(body.trim())) return
   const conversation = agent.conversation(thread.botId)
-  agent.postMessage(
-    conversation.id,
-    `<automation_result>\nAutomation "${thread.title}" (automation: ${thread.automationId}, run: ${thread.id}) — ${status}\n${body}\n</automation_result>`,
-    'automation',
-  )
+  agent.postMessage(conversation.id, {
+    source: 'automation',
+    text: `<automation_result>\nAutomation "${thread.title}" (automation: ${thread.automationId}, run: ${thread.id}) — ${status}\n${body}\n</automation_result>`,
+  })
 }
 
 // ---- what bots may do

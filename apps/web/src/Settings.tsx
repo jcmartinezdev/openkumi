@@ -60,6 +60,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'providers', id: 'provider-claude-code', sub: 'claude-code', title: 'Claude Code', also: 'anthropic claude plan program path sign in' },
   { page: 'providers', id: 'provider-openai-compatible', sub: 'openai-compatible', title: 'Other models', also: 'api key base url ollama openrouter' },
   { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot' },
+  { page: 'bots', id: 'bot-messages', title: 'Bots can message each other', also: 'messages between bots talk work together pass hand over' },
   { page: 'prompt', id: 'team', title: 'What each bot is for', also: 'description team hand over handoff delegate other bots' },
   { page: 'prompt', id: 'told', title: 'What a bot is told', also: 'master prompt system prompt principles instructions behaviour behavior all bots preview read' },
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
@@ -334,6 +335,7 @@ function Bots({ newBot }: { newBot: () => void }) {
   const bots = useStore((s) => s.bots)
   const providers = useStore((s) => s.providers)
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
+  const messages = useSetting('botMessages')
   return (
     <Page>
       <p className="set-intro">Each bot is a folder with its own instructions, memory, files and browser. Open one to change its rules, model and superpowers. What all of them are told is under <a href="#/settings/prompt">Master prompt</a>.</p>
@@ -343,7 +345,7 @@ function Bots({ newBot }: { newBot: () => void }) {
             <div className="set-row-main">
               <BotHead bot={bot} />
               <div className="set-row-text">
-                <h3>{bot.name}{bot.id === bots[0]?.id && <span className="pill" title="The first bot. It can make, change and delete automations for every bot.">Main assistant</span>}</h3>
+                <h3>{bot.name}{bot.id === bots[0]?.id && <span className="pill" title="The first bot. It alone creates bots when you ask it to, and it can make, change and delete automations for every bot.">Main assistant</span>}</h3>
                 {bot.description && <p>{bot.description}</p>}
                 <p>Runs on {providers.find((p) => p.id === bot.provider)?.name ?? bot.provider} · {count(bot.superpowers.length, 'superpower')}</p>
               </div>
@@ -352,6 +354,15 @@ function Bots({ newBot }: { newBot: () => void }) {
           </a>
         ))}
         {!bots.length && <Row title="No bots yet" description="Create one to get started." />}
+      </Section>
+      <Section title="Working together">
+        <Row
+          id="bot-messages"
+          title="Bots can message each other"
+          description="A bot can write into another bot’s conversation, to pass it work or ask it for something; you see the message in both. Off, each bot works alone."
+          reset={messages.reset}
+          control={<Switch label="Bots can message each other" checked={messages.value} onChange={messages.set} />}
+        />
       </Section>
     </Page>
   )

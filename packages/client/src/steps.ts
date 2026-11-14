@@ -40,6 +40,7 @@ export function describe(call: { name: string; arguments: string }): string {
     case 'update_automation': return a.paused === true ? 'Pause an automation' : a.paused === false ? 'Resume an automation' : 'Change an automation'
     case 'delete_automation': return 'Delete an automation'
     case 'create_bot': return `Create bot “${a.name ?? ''}”`
+    case 'message_bot': return `Write to ${title(a.bot_id)}`
     case 'list_bots': return 'List bots'
     case 'list_files': return `Look in ${a.path || 'its folder'}`
     case 'read_file': return String(a.path ?? '').startsWith('superpowers/') ? `Read how to use ${title(String(a.path).split('/')[1])}` : `Read ${a.path ?? 'a file'}`

@@ -2,7 +2,7 @@
 // every time: old tool results are trimmed, and once the whole passes the limit in Settings its
 // older part is replaced by a summary. The items themselves stay in the database, where the
 // owner can read them and the bot can look them up with search_history.
-import type { Item, ItemData } from '@openkumi/shared'
+import type { Item, ItemData, Said } from '@openkumi/shared'
 import { isPicture, withFiles } from './attachments.ts'
 import * as db from './db.ts'
 import type { Provider } from './providers/types.ts'
@@ -23,6 +23,16 @@ function parse(json: string): Record<string, unknown> {
   }
 }
 
+/**
+ * What was said to the bot, as its model reads it. A message from another bot says whose it is and
+ * whether it asked to be written back to; the conversation keeps only its words.
+ */
+export function heard(data: Said): string {
+  if (data.source !== 'bot') return data.text
+  const from = data.bot ? ` from="${data.bot.name.replace(/"/g, "'")}" bot_id="${data.bot.id}"` : ''
+  return `<bot_message${from} reply_wanted="${data.replyWanted ? 'yes' : 'no'}">\n${data.text}\n</bot_message>`
+}
+
 const asMessage = (summary: Summary): ItemData => ({
   type: 'message',
   role: 'user',
@@ -41,11 +51,12 @@ export function prepare(all: Item[]): ItemData[] {
   const recent = new Set([...outputs.keys()].slice(-12))
   const out: ItemData[] = summary ? [asMessage(summary)] : []
   for (const { data } of items) {
-    if (data.type === 'notice' || data.type === 'page' || data.type === 'function_call_output') continue
+    // Shown to the owner only: a notice, a page, and the record of a message sent to another bot (the call that sent it is there).
+    if (data.type === 'notice' || data.type === 'page' || data.type === 'sent' || data.type === 'function_call_output') continue
     // A page the bot showed a while ago is not sent again in full: it is in the conversation, and can be read there.
     if (data.type === 'function_call' && data.name === 'show_page' && !recent.has(data.call_id) && data.arguments.length > 3000) {
       out.push({ ...data, arguments: JSON.stringify({ title: parse(data.arguments).title, html: '[shown earlier; left out here]' }) })
-    } else out.push(data)
+    } else out.push(data.type === 'message' && data.role === 'user' && data.source === 'bot' ? { ...data, text: heard(data) } : data)
     if (data.type !== 'function_call') continue
     const result = outputs.get(data.call_id) as Extract<ItemData, { type: 'function_call_output' }> | undefined
     if (!result) out.push({ type: 'function_call_output', call_id: data.call_id, output: '[interrupted before it finished]' })
@@ -59,7 +70,7 @@ export function prepare(all: Item[]): ItemData[] {
 export function transcript(all: Item[]): string {
   const { summary, items } = live(all)
   const turns = items.flatMap(({ data }) =>
-    data.type !== 'message' ? [] : data.role === 'user' ? [`User: ${withFiles(data.text, data.attachments)}`] : [`You: ${data.text}`],
+    data.type !== 'message' ? [] : data.role === 'assistant' ? [`You: ${data.text}`] : data.source === 'bot' ? [heard(data)] : [`User: ${withFiles(data.text, data.attachments)}`],
   )
   if (!turns.length && !summary) return ''
   const said = turns.join('\n\n')
@@ -115,7 +126,11 @@ export const SUMMARISE =
 function digest(items: Item[]): string {
   return items.flatMap(({ data }) => {
     if (data.type === 'message' && data.role === 'assistant') return [`Bot: ${data.text.slice(0, 6000)}`]
-    if (data.type === 'message') return [`${data.source === 'user' ? 'User' : data.source === 'automation' ? 'Automation report' : 'Subagent report'}: ${withFiles(data.text.slice(0, 6000), data.attachments)}`]
+    if (data.type === 'message') {
+      const who = data.source === 'user' ? 'User' : data.source === 'automation' ? 'Automation report' : data.source === 'bot' ? `Message from ${data.bot?.name ?? 'another bot'}` : 'Subagent report'
+      return [`${who}: ${withFiles(data.text.slice(0, 6000), data.attachments)}`]
+    }
+    if (data.type === 'sent') return [`(the bot wrote to ${data.to.name}: ${data.text.slice(0, 2000)})`]
     if (data.type === 'function_call') return [`(the bot used ${data.name} ${data.arguments.slice(0, 160)})`]
     return []
   }).join('\n\n')
