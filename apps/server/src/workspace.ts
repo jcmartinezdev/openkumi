@@ -412,17 +412,21 @@ export function commit(botId: string, author: Author, message: string): Promise<
   })
 }
 
-export function history(botId: string): Promise<{ available: boolean; entries: HistoryEntry[]; problem?: string }> {
+/** How many changes are given at a time, newest first. */
+const PAGE = 50
+
+/** The recorded changes, a page at a time: `skip` leaves out that many of the newest. `more` says whether older ones are left. */
+export function history(botId: string, skip = 0): Promise<{ available: boolean; entries: HistoryEntry[]; more: boolean; problem?: string }> {
   return queued(botId, async () => {
-    if (!(await ready(botId))) return { available: false, entries: [] }
-    const out = await git(botId, ['log', '-n', '100', '--format=%x1e%H%x1f%at%x1f%an%x1f%s', '--name-only']).catch(() => '')
+    if (!(await ready(botId))) return { available: false, entries: [], more: false }
+    const out = await git(botId, ['log', `--skip=${Math.max(0, Math.floor(skip))}`, '-n', String(PAGE + 1), '--format=%x1e%H%x1f%at%x1f%an%x1f%s', '--name-only']).catch(() => '')
     const entries = out.split('\x1e').filter((r) => r.trim()).map((record): HistoryEntry => {
       const [head, ...files] = record.split('\n')
       const [id, time, name, message] = head.split('\x1f')
       const author = name === AUTHORS.bot ? 'bot' : name === AUTHORS.you ? 'you' : 'system'
       return { id, time: Number(time) * 1000, author, message, files: files.filter((f) => f.trim()) }
     })
-    return { available: true, entries, problem: problems.get(botId) }
+    return { available: true, entries: entries.slice(0, PAGE), more: entries.length > PAGE, problem: problems.get(botId) }
   })
 }
 

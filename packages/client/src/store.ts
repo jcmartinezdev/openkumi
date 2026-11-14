@@ -1,8 +1,8 @@
 // An app's copy of the environment it shows: one snapshot fetched over HTTP, then kept current by
 // the server's events. Shared by the desktop app's window and the phone app; each brings its own
 // connection (see connection.ts) and hands it over with `useTransport`.
-import { useSyncExternalStore } from 'react'
-import type { AppState, ClientEvent, Item, Partial, ServerEvent, Settings, Thread } from '@openkumi/shared'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import type { AppState, ClientEvent, FileEntry, HistoryEntry, Item, Partial, ServerEvent, Settings, Thread } from '@openkumi/shared'
 import type { Link } from '@openkumi/shared/desktop'
 import { reach } from './addresses'
 import type { Command, Report } from './connection'
@@ -663,4 +663,70 @@ export function useServerFile(path: string): { uri: string; headers: Record<stri
   const address = useStore((s) => s.address)
   if (!address || !link) return null
   return { uri: address + path, headers: { Authorization: `Bearer ${link.token}` } }
+}
+
+// ---- a bot's workspace, as its owner looks through it (see workspace.ts)
+
+/** Everything in a bot's workspace, fetched again whenever it changes. Null until it has come. */
+export function useFiles(botId: string): { entries: FileEntry[] | null; error: string } {
+  const version = useStore((s) => s.filesVersion[botId] ?? 0)
+  const connected = useStore((s) => s.connected)
+  const [fetched, setFetched] = useState<{ botId: string; entries: FileEntry[] } | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    if (!connected) return
+    let current = true
+    api<{ entries: FileEntry[] }>('GET', `/api/bots/${encodeURIComponent(botId)}/files`).then(
+      (r) => current && (setError(''), setFetched({ botId, entries: r.entries })),
+      (e: Error) => current && setError(e.message),
+    )
+    return () => {
+      current = false
+    }
+  }, [botId, version, connected])
+  return { entries: fetched?.botId === botId ? fetched.entries : null, error }
+}
+
+export interface Changes {
+  /** False when git is missing, so nothing is recorded. */
+  available: boolean
+  changes: HistoryEntry[]
+  more: boolean
+  /** Why changes are not being recorded right now, when they are not. */
+  problem?: string
+}
+
+/**
+ * The recorded changes to a bot's workspace, newest first: the newest page when the view opens and
+ * whenever the workspace changes, older ones with `showOlder`.
+ */
+export function useChanges(botId: string): { data: Changes | null; error: string; showOlder: () => void } {
+  const version = useStore((s) => s.filesVersion[botId] ?? 0)
+  const connected = useStore((s) => s.connected)
+  const [fetched, setFetched] = useState<(Changes & { botId: string }) | null>(null)
+  const [error, setError] = useState('')
+  /** Counts the requests, so that an answer to one made before the last is dropped. */
+  const asked = useRef(0)
+  const fetchPage = (skip: number) => {
+    const mine = ++asked.current
+    api<{ available: boolean; entries: HistoryEntry[]; more: boolean; problem?: string }>('GET', `/api/bots/${encodeURIComponent(botId)}/history${skip ? `?skip=${skip}` : ''}`).then(
+      (page) => {
+        if (mine !== asked.current) return
+        setError('')
+        setFetched((had) => ({
+          botId,
+          available: page.available,
+          changes: skip && had?.botId === botId ? [...had.changes, ...page.entries] : page.entries,
+          more: page.more,
+          problem: page.problem,
+        }))
+      },
+      (e: Error) => mine === asked.current && setError(e.message),
+    )
+  }
+  useEffect(() => {
+    if (connected) fetchPage(0)
+  }, [botId, version, connected])
+  const own = fetched?.botId === botId ? fetched : null
+  return { data: own, error, showOlder: () => own?.more && fetchPage(own.changes.length) }
 }

@@ -53,8 +53,8 @@ export function watch(key: string, canvas: HTMLCanvasElement, onSize: (size: Pag
 }
 
 // ---- routing: #/<botId> for a bot's conversation, #/<botId>/<threadId>[/<itemId>] for a subagent's
-// thread or an earlier conversation (and a message in it), #/automations[/<id> or /new] for the
-// automations, #/settings/<page>/… for the settings
+// thread or an earlier conversation (and a message in it), #/automations[/<id> or /new[/<botId>]]
+// for the automations, #/settings/<page>/… for the settings
 
 export interface Route {
   botId: string
@@ -63,20 +63,20 @@ export interface Route {
   itemId: number
   /** The path inside the settings (page, then whatever that page takes), or null when a chat is showing. */
   settings: string[] | null
-  /** The automations are showing: [] for all of them, or [an automation's id] or ['new']. Null otherwise. */
+  /** The automations are showing: [] for all of them, or [an automation's id], or ['new'] and maybe the bot it is for. Null otherwise. */
   automations: string[] | null
 }
 
 function parseHash(): Route {
   const parts = location.hash.replace(/^#\/?/, '').split('/').map((p) => decodeURIComponent(p))
   if (parts[0] === 'settings') return { botId: '', threadId: '', itemId: 0, settings: parts.slice(1).filter(Boolean), automations: null }
-  if (parts[0] === 'automations') return { botId: '', threadId: '', itemId: 0, settings: null, automations: parts.slice(1, 2).filter(Boolean) }
+  if (parts[0] === 'automations') return { botId: '', threadId: '', itemId: 0, settings: null, automations: parts.slice(1, parts[1] === 'new' ? 3 : 2).filter(Boolean) }
   return { botId: parts[0] ?? '', threadId: parts[1] ?? '', itemId: Number(parts[2]) || 0, settings: null, automations: null }
 }
 
-/** The automations, or one of them ('new' for one being made). */
-export function openAutomations(id = '') {
-  location.hash = `/automations${id ? `/${encodeURIComponent(id)}` : ''}`
+/** The automations, or one of them ('new' for one being made, for `botId` when given). */
+export function openAutomations(id = '', botId = '') {
+  location.hash = `/automations${id ? `/${encodeURIComponent(id)}` : ''}${id === 'new' && botId ? `/${encodeURIComponent(botId)}` : ''}`
 }
 
 export function navigate(botId: string, threadId = '', itemId = 0) {

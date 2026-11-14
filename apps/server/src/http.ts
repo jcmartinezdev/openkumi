@@ -291,7 +291,7 @@ route('POST', '/api/bots/:id/upload', async ([id], _, { url, req }) => {
 // and is thrown away if it is taken out of the message first.
 route('POST', '/api/bots/:id/attachments', async ([id], _, { url, req }) => stage(needBot(id).id, url.searchParams.get('name') ?? 'file', await readBody(req, 100_000_000)), true)
 route('DELETE', '/api/bots/:id/attachments/:file', ([id, file]) => unstage(needBot(id).id, file))
-route('GET', '/api/bots/:id/history', ([id]) => ws.history(needBot(id).id))
+route('GET', '/api/bots/:id/history', ([id], _, { url }) => ws.history(needBot(id).id, Number(url.searchParams.get('skip')) || 0))
 route('GET', '/api/bots/:id/history/:change', async ([id, change]) => ({ diff: await ws.diff(needBot(id).id, change) }))
 route('POST', '/api/bots/:id/history/:change/undo', ([id, change]) => ws.undo(needBot(id).id, change))
 

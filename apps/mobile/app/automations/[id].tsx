@@ -2,14 +2,17 @@
 // change it, saved with the button in the bar. "new" makes one, for `botId` when given. Unlike the
 // settings, an automation is saved when it is whole, as on the computer. One that watches something,
 // or starts when an app calls, shows that; it is set up on the computer or by a bot and kept as it is here.
-import { useState } from 'react'
+// The prompt is written on a screen of its own (prompt.tsx), into this form; leaving the form with
+// changes not saved asks first.
+import { useEffect, useState } from 'react'
 import { ActionSheetIOS, ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import * as Haptics from 'expo-haptics'
 import type { Schedule, Automation } from '@openkumi/shared'
 import { api, useStore } from '@openkumi/client/store'
 import { DAY_LETTERS, DAY_NAMES, STATUS_LABEL, WEEK, localZone, lookLabel, madeBy, moment, nextRun, runStatus, runTime, trouble, useRuns, watchEvery, watchLabel } from '@openkumi/client/automations'
+import { useHandoff } from '../../src/handoff'
 import { Avatar, Field, Note, Row, Section, Segments, SettingsPage, SwitchRow } from '../../src/SettingsUi'
 import { useAppearance, useTheme } from '../../src/theme'
 
@@ -83,6 +86,18 @@ export default function AutomationPage() {
   const [error, setError] = useState('')
   const change = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
   const bot = bots.find((b) => b.id === draft.botId)
+  const promptKey = `automation:${id}`
+  useHandoff(promptKey, draft.prompt, (prompt) => change({ prompt }))
+  /** Set once leaving is meant: after Discard, or once the automation is made or deleted. */
+  const [leaving, setLeaving] = useState(false)
+  const unsaved = id === 'new' ? !!(draft.title.trim() || draft.prompt.trim()) : !!automation && JSON.stringify(bodyOf(draft)) !== JSON.stringify(bodyOf(draftOf(automation, automation.botId)))
+  usePreventRemove(unsaved && !leaving, ({ repeat }) =>
+    Alert.alert(id === 'new' ? 'Discard this automation?' : 'Discard your changes?', id === 'new' ? 'It has not been made yet.' : 'What you changed is not saved.', [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => (setLeaving(true), repeat()) },
+    ]),
+  )
+  useEffect(() => void (leaving && !unsaved && router.back()), [leaving])
 
   // Deleted, here or elsewhere, while open.
   if (id !== 'new' && !automation) return null
@@ -116,7 +131,8 @@ export default function AutomationPage() {
       if (automation) await api('PATCH', `/api/automations/${automation.id}`, Object.fromEntries(changed.map((k) => [k, body[k]])))
       else {
         await api('POST', '/api/automations', body)
-        router.back()
+        setDraft(draftOf(undefined, draft.botId))
+        setLeaving(true)
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     })
@@ -124,7 +140,7 @@ export default function AutomationPage() {
     automation &&
     Alert.alert(`Delete “${automation.title}”?`, `Its earlier runs stay beneath ${bot?.name ?? 'the bot'}’s conversation.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => void run(async () => (await api('DELETE', `/api/automations/${automation.id}`), router.back())) },
+      { text: 'Delete', style: 'destructive', onPress: () => void run(async () => (await api('DELETE', `/api/automations/${automation.id}`), setDraft(draftOf(automation, automation.botId)), setLeaving(true))) },
     ])
   const pickBot = () =>
     ActionSheetIOS.showActionSheetWithOptions({ title: 'The bot that does the automation', options: [...bots.map((b) => `${b.emoji} ${b.name}`), 'Cancel'], cancelButtonIndex: bots.length }, (i) => i < bots.length && change({ botId: bots[i].id }))
@@ -169,13 +185,16 @@ export default function AutomationPage() {
         </Section>
       )}
 
+      {/* The prompt opens on a screen of its own, so it does not fill this one; the row says only how it stands. */}
       <Section title="Automation">
         <Row leading={bot && <Avatar bot={bot} size={28} />} label="Bot" value={bot?.name ?? 'Choose a bot'} opens onPress={pickBot} />
         <Field label="Name" value={draft.title} placeholder="Morning brief" onChange={(title) => change({ title })} autoCapitalize="sentences" />
-      </Section>
-
-      <Section title="Prompt" footer="What the bot does each time. A run sees nothing of the conversation, so say everything it needs, and what to tell you.">
-        <Field label="Prompt" multiline value={draft.prompt} placeholder="Read the main headlines on a few news sites and give me the five that matter most, with a line on each." onChange={(prompt) => change({ prompt })} />
+        <Row
+          label="Prompt"
+          value={!draft.prompt.trim() ? 'Required' : automation && draft.prompt.trim() !== automation.prompt ? 'Edited' : undefined}
+          opens
+          onPress={() => router.push({ pathname: '/automations/prompt', params: { key: promptKey, title: draft.title.trim() || automation?.title || '', bot: bot?.name ?? '' } })}
+        />
       </Section>
 
       <Section

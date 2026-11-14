@@ -386,7 +386,7 @@ test('replies are drawn with code in colour, diagrams, formulas and tables, and 
   await reply.getByRole('button', { name: 'Copy code' }).first().click()
   await until(async () => (await app.evaluate(({ clipboard }) => clipboard.readText())) === 'const answer: number = 42', 5000)
 
-  // A link to a page the bot saved opens it full size, in the same kind of frame; a link to any other of its files opens it in Files.
+  // A link to a page the bot saved opens it full size, in the same kind of frame; a link to any other of its files opens it in its workspace.
   await send('!tool write_file ' + JSON.stringify({ path: 'files/board.html', content: '<p id="saved">Saved page</p>' }))
   await send('See [the board](files/board.html) and [the notes](memory/notes.md).')
   const links = win.locator('.msg.assistant[data-item]').last()
@@ -395,7 +395,7 @@ test('replies are drawn with code in colour, diagrams, formulas and tables, and 
   assert.equal(await win.locator('.dialog.full .dialog-head h2').innerText(), 'board.html')
   await win.keyboard.press('Escape')
   await links.getByRole('link', { name: 'the notes' }).click()
-  await until(async () => /\/settings\/bots\/[^/]+\/files\/memory\/notes\.md$/.test(decodeURIComponent(await win.evaluate(() => location.hash))), 5000)
+  await until(async () => /\/settings\/bots\/[^/]+\/workspace\/memory\/notes\.md$/.test(decodeURIComponent(await win.evaluate(() => location.hash))), 5000)
   await win.evaluate(() => history.back())
   await win.locator('.composer textarea').waitFor()
 
@@ -447,11 +447,25 @@ test('files go up and come down, and another computer is paired and removed from
   win.on('dialog', (dialog) => dialog.accept())
   const bot = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots[0]
 
-  // A file is sent up to the bot's folder...
-  await win.evaluate((id) => (location.hash = `/settings/bots/${id}/files`), bot.id)
+  // The workspace opens on the bot's own instructions, drawn as Markdown, beside a tree that says what each part is for.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}/workspace`), bot.id)
+  await win.locator('.file-read .md h1').first().waitFor()
+  assert.equal(await win.locator('.file-row', { hasText: 'AGENTS.md' }).locator('.hint').innerText(), 'Its instructions')
+  // A file is sent up to the bot's folder, among its working files...
   await win.locator('.files-tab input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('kept on the other side') })
   await win.locator('.file-row', { hasText: 'notes.txt' }).click()
   assert.equal(fs.readFileSync(`${tmp}/local-home/bots/${bot.id}/workspace/files/notes.txt`, 'utf8'), 'kept on the other side')
+  await win.locator('.file-meta', { hasText: 'Working file' }).waitFor()
+  assert.match(await win.locator('.file-meta').innerText(), /Changes to working files are not recorded\.$/)
+  // ...and found again by its name.
+  await win.getByRole('textbox', { name: 'Find a file' }).fill('note')
+  assert.deepEqual(await win.locator('.file-tree .file-row .title').allInnerTexts(), ['notes.txt'])
+  await win.getByRole('textbox', { name: 'Find a file' }).fill('')
+  // What was recorded is under Changes, by day, each with what it changed.
+  await win.getByRole('button', { name: 'Changes', exact: true }).click()
+  await win.locator('.change-head', { hasText: 'Create workspace' }).click()
+  await win.locator('.change-body .diff', { hasText: 'AGENTS.md' }).waitFor()
+  await win.getByRole('button', { name: 'Files', exact: true }).click()
   // ...and saved back onto this computer. (The test answers the "save as" question by choosing the place beforehand.)
   await app.evaluate(({ session }, to) => session.defaultSession.once('will-download', (_event, item) => item.setSavePath(to)), `${tmp}/saved.txt`)
   await win.getByRole('button', { name: 'Download' }).click()

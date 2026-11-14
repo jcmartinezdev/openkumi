@@ -25,7 +25,7 @@ export function Automations({ path, openNav }: { path: string[]; openNav: () => 
         <div className="heading"><span className="title">{id === 'new' ? 'New automation' : (automation?.title ?? 'Automations')}</span></div>
         {!editing && <button onClick={() => openAutomations('new')}><Icon name="plus" size={14} /> New automation</button>}
       </header>
-      <div className="automations-body">{editing ? <Editor key={id} automation={automation} /> : <AutomationList />}</div>
+      <div className="automations-body">{editing ? <Editor key={path.join('/')} automation={automation} botId={id === 'new' ? path[1] : undefined} /> : <AutomationList />}</div>
     </div>
   )
 }
@@ -184,12 +184,13 @@ function bodyOf(d: Draft) {
   return { botId: d.botId, title: d.title.trim(), prompt: d.prompt.trim(), enabled: d.enabled, trigger }
 }
 
-function Editor({ automation }: { automation?: Automation }) {
+/** `botId` is the bot a new automation is for, when it was made from that bot's settings. */
+function Editor({ automation, botId }: { automation?: Automation; botId?: string }) {
   const bots = useStore((s) => s.bots)
   const zone = useStore((s) => s.about.timeZone)
   const hooks = useStore((s) => s.hooks)
   const superpowers = useStore((s) => s.superpowers)
-  const [draft, setDraft] = useState(() => draftOf(automation, bots[0]?.id ?? ''))
+  const [draft, setDraft] = useState(() => draftOf(automation, botId && bots.some((b) => b.id === botId) ? botId : (bots[0]?.id ?? '')))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const change = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))

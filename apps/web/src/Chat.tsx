@@ -524,7 +524,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
   const resume = () => api('POST', `/api/threads/${thread!.id}/resume`).then(() => navigate(bot.id), (e) => setError(e.message))
   const earlier = threads.some((t) => t.botId === bot.id && !t.parentId && t.archivedAt)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const openFile = (path: string) => openSettings('bots', bot.id, 'files', ...path.split('/'))
+  const openFile = (path: string) => openSettings('bots', bot.id, 'workspace', ...path.split('/'))
 
   // A reply's link to a page the bot saved opens that page; a link to any other of its files opens it in Files.
   const [saved, setSaved] = useState<{ title: string; html: string } | null>(null)

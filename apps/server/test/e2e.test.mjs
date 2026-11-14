@@ -759,8 +759,11 @@ test('the owner edits, uploads and downloads files', async () => {
   assert.deepEqual(await api('GET', `/api/bots/${bot.id}/file?path=${encodeURIComponent('memory/house rules.md')}`), {
     path: 'memory/house rules.md', content: '# House rules\nBe kind.\n', binary: false, size: 23,
   })
-  const { entries } = await api('GET', `/api/bots/${bot.id}/history`)
+  const { entries, more } = await api('GET', `/api/bots/${bot.id}/history`)
   assert.deepEqual({ author: entries[0].author, message: entries[0].message }, { author: 'you', message: 'Edit memory/house rules.md' })
+  assert.equal(more, false)
+  const older = await api('GET', `/api/bots/${bot.id}/history?skip=1`)
+  assert.equal(older.entries[0].id, entries[1].id, 'a later page starts where the one before stopped')
 
   const bytes = Buffer.from([0, 1, 2, 255])
   const upload = async () => (await (await fetch(`${BASE}/api/bots/${bot.id}/upload?name=photo.png`, { method: 'POST', body: bytes, headers: auth() })).json()).path
