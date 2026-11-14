@@ -93,37 +93,40 @@ function Steps({ steps, theme }: { steps: string[]; theme: Theme }) {
 const OpenRun = createContext<(id: string) => void>(() => {})
 
 /**
- * What a subagent or a run of an automation came to, in one quiet line under which its report
- * unfolds; the bot's reply after it is what the owner reads. One that failed, or a watch that was
- * paused, starts unfolded. A paused watch ran nothing, so it has nothing to open.
+ * What a subagent or a run of an automation came to. It arrives from outside the bot's turn, so it
+ * sits in a card like a message, not in a line like the bot's steps; its report unfolds in the card,
+ * and the bot's reply after it is what the owner reads. One that failed, or a watch that was paused,
+ * starts unfolded. A paused watch ran nothing, so it has nothing to open.
  */
-function ReportLine({ row, theme }: { row: Row & { kind: 'report' }; theme: Theme }) {
+function ReportCard({ row, theme, scale }: { row: Row & { kind: 'report' }; theme: Theme; scale: number }) {
   const open = useContext(OpenRun)
   const { kind, name, run, status, body } = row.report
   const trouble = status === 'failed' || status === 'paused'
   const [shown, setShown] = useState(trouble)
   const folds = !!body.trim()
-  // What became of it, when, and the fold, joined by spaces that do not break, so they wrap as one when the name is long.
+  // What became of it and the fold, joined by spaces that do not break, so they wrap as one when the name is long.
   const nb = (text: string) => text.replace(/ /g, '\u00a0')
   return (
-    <View style={styles.report}>
+    <View style={[styles.report, { borderColor: theme.border }]}>
       <View style={styles.reportHead}>
-        <Pressable accessibilityRole="button" accessibilityState={folds ? { expanded: shown } : undefined} disabled={!folds} style={styles.reportLine} onPress={() => setShown(!shown)}>
-          <View style={styles.reportGlyph}><Glyph name={kind === 'subagent' ? 'agents' : 'clock'} size={14} color={theme.muted} /></View>
-          <Text style={[styles.reportText, { color: theme.muted }]}>
-            {kind === 'subagent' ? 'Subagent ' : ''}“{name}” <Text style={trouble ? { color: theme.err } : undefined}>{nb(reportWord(status))}</Text>
-            {nb(` · ${moment(row.at).replace(/^today /, '')}`)}
+        <Pressable accessibilityRole="button" accessibilityState={folds ? { expanded: shown } : undefined} disabled={!folds} style={styles.reportFold} onPress={() => setShown(!shown)}>
+          <View style={styles.reportKind}>
+            <Glyph name={kind === 'subagent' ? 'agents' : 'clock'} size={12} color={theme.faint} />
+            <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{kind === 'subagent' ? 'Subagent' : 'Automation'} · {moment(row.at).replace(/^today /, '')}</Text>
+          </View>
+          <Text style={{ color: theme.text, fontSize: 15 * scale, lineHeight: 21 * scale }}>
+            “{name}” <Text style={{ color: trouble ? theme.err : theme.muted }}>{nb(reportWord(status))}</Text>
             {folds && <Text style={{ color: theme.faint }}>{nb(` ${shown ? '⌃' : '⌄'}`)}</Text>}
           </Text>
         </Pressable>
         {!!run && (
           <Pressable accessibilityRole="link" accessibilityLabel={kind === 'subagent' ? 'Open the subagent' : 'Open the run'} hitSlop={8} style={styles.reportOpen} onPress={() => open(run)}>
-            <Text style={[styles.reportText, { color: theme.muted }]}>Open</Text>
+            <Text style={{ color: theme.muted, fontSize: 13.5 }}>Open</Text>
             <Glyph name="chevron" size={13} color={theme.text} weight={2.2} />
           </Pressable>
         )}
       </View>
-      {shown && folds && <View style={[styles.inner, styles.reportBody, { borderLeftColor: theme.border }]}><Markdown text={body} /></View>}
+      {shown && folds && <View style={[styles.reportBody, { borderTopColor: theme.border }]}><Markdown text={body} /></View>}
     </View>
   )
 }
@@ -241,7 +244,7 @@ const Line = memo(function Line({ row, theme, scale }: { row: Row; theme: Theme;
   if (row.kind === 'bot') return <View style={styles.bot}><Markdown text={row.text} /><CopyReply text={row.text} theme={theme} /></View>
   if (row.kind === 'steps') return <Steps steps={row.steps} theme={theme} />
   if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
-  if (row.kind === 'report') return <ReportLine row={row} theme={theme} />
+  if (row.kind === 'report') return <ReportCard row={row} theme={theme} scale={scale} />
   return <Text style={[styles.notice, { color: row.error ? theme.err : theme.faint }]}>{row.text}</Text>
 })
 
@@ -262,6 +265,9 @@ export default function Chat() {
   const threads = useStore((s) => s.threads)
   const automation = useStore((s) => (thread?.automationId ? s.automations.find((a) => a.id === thread.automationId) : undefined))
   const scale = useTextScale()
+  // Lines take the theme and the text size as props, and the list draws them again only when its data or
+  // this changes: without the theme, a switch to light or dark left them in the old colours.
+  const look = useMemo(() => ({ theme, scale }), [theme, scale])
   const [text, setText] = useState('')
   const [error, setError] = useState('')
   const [sending, setSending] = useState(false)
@@ -437,7 +443,7 @@ export default function Chat() {
           data={shown}
           keyExtractor={(row) => row.key}
           renderItem={({ item }) => <Line row={item} theme={theme} scale={scale} />}
-          extraData={scale}
+          extraData={look}
           estimatedItemSize={64}
           // Lines differ too much (pages, tables, a word or two) to be drawn into one another's places.
           recycleItems={false}
@@ -552,13 +558,12 @@ const styles = StyleSheet.create({
   step: { fontSize: 13.5, paddingVertical: 3 },
   inner: { marginLeft: 4, paddingLeft: 10, borderLeftWidth: StyleSheet.hairlineWidth },
   notice: { fontSize: 13, lineHeight: 18, paddingVertical: 6 },
-  report: { paddingVertical: 6 },
-  reportHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
-  reportLine: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 7 },
-  reportGlyph: { marginTop: 2 },
-  reportText: { flexShrink: 1, fontSize: 13.5, lineHeight: 18 },
+  report: { marginTop: 12, marginBottom: 6, paddingHorizontal: 14, paddingTop: 9, paddingBottom: 11, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16 },
+  reportHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  reportFold: { flex: 1, gap: 3 },
+  reportKind: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   reportOpen: { flexDirection: 'row', alignItems: 'center', gap: 1 },
-  reportBody: { marginTop: 6 },
+  reportBody: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   working: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 6 },
   between: { maxWidth: '86%', marginVertical: 6, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, gap: 3 },

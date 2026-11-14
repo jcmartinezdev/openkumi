@@ -352,6 +352,20 @@ a.row { text-decoration: none; }
 .between-head .eyebrow { margin: 0; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .between-head .faint { white-space: nowrap; }
 .between-text { white-space: pre-wrap; }
+/* What a subagent or an automation's run reports: it arrives like a message, so it is set apart from the bot's steps. */
+.msg.report { padding: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
+.report-head { display: flex; align-items: center; gap: 6px; height: 24px; margin-bottom: 2px; color: var(--faint); }
+.report-head .eyebrow { margin: 0; color: inherit; }
+.report-head .pill { margin-left: auto; }
+.report-title { list-style: none; }
+summary.report-title { cursor: pointer; }
+.report-title::-webkit-details-marker { display: none; }
+.report-word { color: var(--muted); }
+.report-word.bad { color: var(--err); }
+.report-title > .ic { margin-left: 6px; vertical-align: -1px; opacity: 0.35; transition: transform 0.12s; }
+summary.report-title:hover > .ic, details[open] > summary.report-title > .ic { opacity: 0.7; }
+details[open] > summary.report-title > .ic { transform: rotate(90deg); }
+.report-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 /* What waits for the bot, under what it is doing now. */
 .waiting { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border: 1px dashed var(--border-strong); border-radius: 14px; }
 .waiting-head { display: flex; align-items: center; gap: 10px; min-height: 28px; }

@@ -93,22 +93,37 @@ function SubagentLink({ id }: { id: string }) {
 }
 
 /**
- * What a subagent, or a run of an automation, came to, as it arrives in the conversation above it; it
- * opens the subagent or the run. A watch that was paused has no run.
+ * What a subagent or a run of an automation came to. It arrives from outside the bot's turn, so it
+ * sits in a card like a message, not among the bot's steps; its report unfolds in the card. One
+ * that failed, or a watch that was paused, starts unfolded. A paused watch ran nothing, so it has
+ * nothing to open.
  */
-function Report({ text }: { text: string }) {
+function Report({ id, text }: { id: number; text: string }) {
+  const expand = usePrefs().expandSteps
   const report = parseReport(text)
-  if (!report) return <div className="notice">{text}</div>
+  if (!report) return <div data-item={id} className="notice">{text}</div>
   const { kind, name, run, status, body } = report
+  const trouble = status === 'failed' || status === 'paused'
+  const title = (
+    <>
+      “{name}” <span className={trouble ? 'report-word bad' : 'report-word'}>{kind === 'subagent' ? status : reportWord(status)}</span>
+    </>
+  )
   return (
-    <div className="activity">
-      <Step
-        icon={kind === 'subagent' ? 'agents' : 'clock'}
-        label={kind === 'subagent' ? `Subagent “${name}” ${status}` : `Automation “${name}” ${reportWord(status)}`}
-        trailing={run ? <SubagentLink id={run} /> : undefined}
-      >
-        <Markdown text={body} />
-      </Step>
+    <div data-item={id} className="msg report">
+      <div className="report-head">
+        <Icon name={kind === 'subagent' ? 'agents' : 'clock'} size={13} />
+        <span className="eyebrow">{kind === 'subagent' ? 'Subagent' : 'Automation'}</span>
+        {run && <SubagentLink id={run} />}
+      </div>
+      {body.trim() ? (
+        <details open={trouble || expand || undefined}>
+          <summary className="report-title">{title}<Icon name="chevron" size={12} /></summary>
+          <div className="report-body"><Markdown text={body} /></div>
+        </details>
+      ) : (
+        <div className="report-title">{title}</div>
+      )}
     </div>
   )
 }
@@ -278,7 +293,7 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
         )
       }
       else if (data.source === 'bot') blocks.push(<BotMessage key={id} id={id} from={data.bot?.name ?? 'another bot'} text={data.text} replyWanted={!!data.replyWanted} messageKey={data.key} />)
-      else if (data.source === 'subagent' || data.source === 'automation') blocks.push(<div key={id} data-item={id}><Report text={data.text} /></div>)
+      else if (data.source === 'subagent' || data.source === 'automation') blocks.push(<Report key={id} id={id} text={data.text} />)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
       else if (data.source === 'trigger') {
         const { prompt, change, heading } = runBrief(data.text)
