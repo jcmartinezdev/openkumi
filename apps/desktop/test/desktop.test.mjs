@@ -1169,3 +1169,58 @@ test('master prompt: each bot’s line set from one page, and all a bot is told 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
+
+test('dictation: what is said goes into the message where the cursor was, and only the words are sent', async (t) => {
+  // It is written down on the Mac itself, so it needs macOS 26 and the program built beside the app.
+  const program = path.resolve(import.meta.dirname, '../dist/dictation')
+  const check = process.platform === 'darwin' && fs.existsSync(program) ? await new Promise((resolve) => spawn(program, ['--check']).stdout.on('data', (d) => resolve(String(d)))) : ''
+  if (!check.includes('"available":true')) return t.skip('dictation needs a Mac with macOS 26 or later')
+  // A recording stands in for the microphone, heard all at once and then nothing until it is stopped.
+  const recording = `${tmp}/said.aiff`
+  await new Promise((resolve, reject) => spawn('say', ['-o', recording, 'Could you check my calendar for tomorrow?']).on('exit', (code) => (code ? reject(new Error('say failed')) : resolve())))
+  env.OPENKUMI_DICTATION_RECORDING = recording
+  t.after(() => delete env.OPENKUMI_DICTATION_RECORDING)
+
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Listener', provider: 'mock' })
+  await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
+  const message = win.locator('.composer textarea')
+  await message.waitFor()
+
+  // Spoken after what was typed, and between it and what follows the cursor.
+  await message.fill('Hi. Thanks!')
+  await message.evaluate((el) => el.setSelectionRange(3, 3))
+  await win.getByRole('button', { name: 'Dictate' }).click()
+  await win.locator('.listening .rec.on').waitFor()
+  await until(async () => (await message.inputValue()).includes('tomorrow'), 20_000)
+  // While it listens the words are the microphone's: typing does not mix with them.
+  assert.equal(await message.getAttribute('readonly'), '')
+  await win.getByRole('button', { name: 'Finish dictation' }).click()
+  await win.locator('.listening').waitFor({ state: 'detached' })
+  assert.equal(await message.inputValue(), 'Hi. Could you check my calendar for tomorrow? Thanks!')
+  // The cursor is left after the words that were spoken in.
+  assert.deepEqual(await message.evaluate((el) => [el.selectionStart, document.activeElement === el]), ['Hi. Could you check my calendar for tomorrow?'.length, true])
+
+  // Escape gives up, and the message is as it was.
+  await win.getByRole('button', { name: 'Dictate' }).click()
+  await until(async () => (await message.inputValue()).split('tomorrow').length > 2, 20_000)
+  await message.press('Escape')
+  await win.locator('.listening').waitFor({ state: 'detached' })
+  assert.equal(await message.inputValue(), 'Hi. Could you check my calendar for tomorrow? Thanks!')
+
+  // Sending while it listens puts the last words in first; the bot gets the text, as if it were typed.
+  await message.fill('')
+  await win.getByRole('button', { name: 'Dictate' }).click()
+  await until(async () => (await message.inputValue()).includes('calendar'), 20_000)
+  await message.press('Enter')
+  await win.locator('.msg.assistant', { hasText: 'Echo: Could you check my calendar for tomorrow?' }).waitFor()
+  assert.equal(await message.inputValue(), '')
+  const { threads } = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
+  const { items } = await ask(LOCAL_PORT, 'local-home', 'GET', `/api/threads/${threads.find((th) => th.botId === bot.id).id}`)
+  assert.deepEqual(items.filter((i) => i.data.role === 'user').map((i) => i.data), [{ type: 'message', role: 'user', source: 'user', text: 'Could you check my calendar for tomorrow?' }])
+
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${bot.id}`)
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})

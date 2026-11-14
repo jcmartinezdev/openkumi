@@ -44,6 +44,8 @@ export const WEB = part(path.join('web', 'dist'), 'web')
 /** The server's entry (apps/server). It is TypeScript, which the app's own Node runs as it is. */
 export const SERVER = part(path.join('server', 'src', 'index.ts'), path.join('server', 'src', 'index.ts'))
 export const PRELOAD = path.join(__dirname, 'preload.cjs')
+/** The program that takes dictation on a Mac (packages/dictation/macos), built beside the app's own. Installed, it is among the resources, outside the archive. */
+export const DICTATION = app.isPackaged ? path.join(process.resourcesPath, 'dictation') : path.join(__dirname, 'dictation')
 export const USER_DATA = app.getPath('userData')
 
 /** The address of a running Vite server, while developing: the window then gets the interface from it. */
@@ -52,5 +54,7 @@ export const DEV_URL = process.env.OPENKUMI_DEV_URL || ''
 export const HIDDEN = process.env.OPENKUMI_DESKTOP_HIDDEN === '1'
 /** Tests answer the app's "are you sure?" dialogs with yes. */
 export const ASSUME_YES = !!process.env.OPENKUMI_DESKTOP_YES
+/** Tests have dictation hear a recording instead of the microphone (the program reads it from its environment). */
+export const RECORDING = !!process.env.OPENKUMI_DICTATION_RECORDING
 /** Tests have the app say it catches sign-ins, which only an installed app really can. */
 export const CATCH_SIGN_INS = process.env.OPENKUMI_DESKTOP_CATCH_SIGN_INS === '1'

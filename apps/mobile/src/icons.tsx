@@ -11,6 +11,7 @@ import { useTheme } from './theme'
 // Circles are written as two arcs, which is all a path can say.
 const GLYPHS = {
   check: 'm5 12 5 5 9-10',
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM19 11a7 7 0 0 1-14 0M12 18v3',
   chevron: 'm9 6 6 6-6 6',
   down: 'm6 9 6 6 6-6',
   up: 'M12 19V5M5 12l7-7 7 7',

@@ -3,6 +3,7 @@
 //
 // What goes into it:
 //   the app's own programs (dist/), packed
+//   Resources/dictation  on a Mac, the program that takes dictation, which has to be outside the archive to run
 //   Resources/web      the interface, built (apps/web/dist)
 //   Resources/server   the server as it is in apps/server (sources, superpowers, master prompt), with the packages it needs to run
 import { execFileSync } from 'node:child_process'
@@ -42,10 +43,11 @@ await build({
     // Electron is installed at the top of the repository, where the packager does not look.
     electronVersion: JSON.parse(fs.readFileSync(path.join(modules, 'electron', 'package.json'), 'utf8')).version,
     directories: { output: release, buildResources: 'assets' },
-    files: ['dist/**', 'package.json'],
+    files: ['dist/**', '!dist/dictation', 'package.json'],
     extraResources: [
       { from: web, to: 'web' },
       { from: server, to: 'server' },
+      ...(fs.existsSync(path.join(here, 'dist', 'dictation')) ? [{ from: 'dist/dictation', to: 'dictation' }] : []),
     ],
     // Nothing here is compiled for a particular machine.
     npmRebuild: false,
@@ -56,7 +58,15 @@ await build({
       const resources = packager.platform.name === 'mac' ? path.join(appOutDir, `${packager.appInfo.productFilename}.app`, 'Contents', 'Resources') : path.join(appOutDir, 'resources')
       fs.cpSync(packages, path.join(resources, 'server', 'node_modules'), { recursive: true })
     },
-    mac: { target: ['dmg'], category: 'public.app-category.productivity', icon },
+    mac: {
+      target: ['dmg'],
+      category: 'public.app-category.productivity',
+      icon,
+      // Dictation listens with the microphone (src/dictation.ts). A signed app has to say it may.
+      extendInfo: { NSMicrophoneUsageDescription: 'OpenKumi listens while you dictate a message to a bot. What you say is written down on this Mac and never leaves it as sound.' },
+      entitlements: 'assets/entitlements.mac.plist',
+      entitlementsInherit: 'assets/entitlements.mac.plist',
+    },
     win: { target: ['nsis'], icon },
     linux: { target: ['AppImage'], icon, category: 'Utility' },
   },

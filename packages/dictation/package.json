@@ -1,0 +1,13 @@
+{
+  "name": "@openkumi/dictation",
+  "version": "0.1.0",
+  "description": "Dictation on Apple's systems, written down on the device: one engine for the iPhone app (an Expo module) and the desktop app (a small program it runs on a Mac).",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "Juan Cruz Martinez",
+  "main": "src/index.ts",
+  "devDependencies": {
+    "@openkumi/shared": "*"
+  }
+}
