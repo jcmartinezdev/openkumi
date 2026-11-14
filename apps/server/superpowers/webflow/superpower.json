@@ -1,0 +1,15 @@
+{
+  "name": "Webflow",
+  "categories": ["Creative", "Marketing"],
+  "tagline": "Work on your Webflow sites: pages, CMS items, SEO and form submissions.",
+  "summary": "Read and work on the user's Webflow sites: pages, CMS collections and items, assets, SEO settings and form submissions. Changes are left unpublished; a site or item is published, and anything deleted, only after the user approves.",
+  "can": [
+    "Read your sites, pages, CMS items and form submissions",
+    "Write CMS items, pages and SEO settings, left unpublished for you to check",
+    "Publish a site or items, or delete anything, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.webflow.com/mcp"
+  },
+  "site": "https://webflow.com/"
+}

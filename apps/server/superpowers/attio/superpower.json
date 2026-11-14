@@ -1,0 +1,15 @@
+{
+  "name": "Attio",
+  "categories": ["Work"],
+  "tagline": "Look up and keep your CRM: people, companies, deals, notes and tasks.",
+  "summary": "Search, read and write the user's Attio workspace: people, companies, deals and other records, lists, notes, tasks, comments, and the emails and calls Attio keeps. Existing records are changed or merged only after the user approves.",
+  "can": [
+    "Search your records, lists, notes, emails and call recordings",
+    "Add records, notes, tasks and comments, and put records on lists",
+    "Change or merge existing records, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.attio.com/mcp"
+  },
+  "site": "https://attio.com/"
+}

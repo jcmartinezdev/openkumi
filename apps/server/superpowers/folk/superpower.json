@@ -1,0 +1,15 @@
+{
+  "name": "folk",
+  "categories": ["Work"],
+  "tagline": "Keep your contacts and deals in folk: people, companies, notes and follow-ups.",
+  "summary": "Search, read and write the user's folk CRM: people, companies, deals, groups, notes, interactions and tasks. Existing contacts are changed, groups changed, contacts enriched and email campaigns sent only after the user approves.",
+  "can": [
+    "Search your people, companies, deals and notes",
+    "Add contacts, notes, tasks and interactions, and draft email campaigns",
+    "Change contacts, enrich them or send a campaign, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.folk.app/mcp"
+  },
+  "site": "https://www.folk.app/"
+}

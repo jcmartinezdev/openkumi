@@ -1,0 +1,15 @@
+{
+  "name": "Jotform",
+  "categories": ["Work", "Marketing"],
+  "tagline": "Build forms, and read and sum up what people sent in.",
+  "summary": "Read and work on the user's Jotform: find forms, read and sum up their submissions, and build new forms. Existing forms are edited, and forms assigned to someone, only after the user approves.",
+  "can": [
+    "Find your forms, and read and sum up their submissions",
+    "Build new forms",
+    "Edit an existing form or assign one to someone, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.jotform.com/"
+  },
+  "site": "https://www.jotform.com/"
+}

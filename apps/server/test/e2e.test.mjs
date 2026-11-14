@@ -783,7 +783,10 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
 
   // What ships, each with a page of its own saying what it does and what it gives a bot; then the one the tests bring.
   const all = await list()
-  const shipped = ['atlassian', 'granola', 'linear', 'notion', 'otter', 'readwise', 'todoist', 'typefully']
+  const shipped = [
+    'atlassian', 'attio', 'clickup', 'evernote', 'fathom', 'folk', 'granola', 'jotform', 'klaviyo', 'linear', 'miro', 'notion',
+    'otter', 'pandadoc', 'pocketsmith', 'posthog', 'readwise', 'sentry', 'tldv', 'todoist', 'typefully', 'webflow', 'wix',
+  ]
   const knowHow = ['competitors', 'exchange-rates', 'holidays', 'landing-pages', 'launch', 'seo', 'social-posts', 'watch-a-page', 'weather']
   assert.deepEqual(Object.keys(all), [...shipped, ...knowHow, 'field-guide'].sort(), 'by name, apps and know-how together')
   // Grouped by what they are for, in the catalog's order, the same one in as many groups as fit; the tests' own group comes last.

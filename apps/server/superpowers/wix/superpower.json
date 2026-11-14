@@ -1,0 +1,15 @@
+{
+  "name": "Wix",
+  "categories": ["Creative", "Marketing"],
+  "tagline": "Run your Wix site: its content, store, bookings and contacts.",
+  "summary": "Work on the user's Wix sites through Wix's own APIs: read and add to site content, CMS collections, store products, bookings, contacts and media. Changes to what is live, publishing, messages to contacts and deleting are done only after the user approves.",
+  "can": [
+    "Read your sites and their content, products, bookings and contacts",
+    "Add new content, products and images",
+    "Change what's live, publish, message your contacts or delete anything, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.wix.com/mcp"
+  },
+  "site": "https://www.wix.com/"
+}
