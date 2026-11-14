@@ -25,6 +25,7 @@
     "./browser": "./src/browser.ts",
     "./attachments": "./src/attachments.ts",
     "./workspace": "./src/workspace.ts",
+    "./superpowers": "./src/superpowers.ts",
     "./dictation": "./src/dictation.ts"
   },
   "scripts": {

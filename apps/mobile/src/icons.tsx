@@ -2,7 +2,7 @@
 // computer, @openkumi/client/marks) and the few line icons the phone needs, drawn as the computer's are.
 // Superpowers bring app icons of their own, as SVG, which Skia draws as they are.
 import { useMemo } from 'react'
-import { Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { Canvas, Group, ImageSVG, Path, Skia } from '@shopify/react-native-skia'
 import type { ProviderInfo, Superpower } from '@openkumi/shared'
 import { markOf } from '@openkumi/client/marks'
@@ -39,6 +39,10 @@ const GLYPHS = {
   table: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18M3 15h18M9 4v16',
   history: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2',
   undo: 'M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',
+  phone: 'M8 2.5h8a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-15a2 2 0 0 1 2-2zM10.5 18.5h3',
+  plug: 'M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4',
+  warn: 'M12 3.5 2.5 20h19zM12 10v4.5M12 17.5h.01',
+  retry: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',
 }
 
 export type GlyphName = keyof typeof GLYPHS
@@ -70,7 +74,8 @@ export function SuperpowerIcon({ power, size = 28 }: { power: Pick<Superpower, '
   const theme = useTheme()
   const svg = useMemo(() => (power.icon ? Skia.SVG.MakeFromString(power.icon) : null), [power.icon])
   return (
-    <View style={{ width: size, height: size, borderRadius: size * 0.24, overflow: 'hidden', backgroundColor: theme.side, alignItems: 'center', justifyContent: 'center' }}>
+    // A hairline edge, so a white app icon still reads as a tile on a white card.
+    <View style={{ width: size, height: size, borderRadius: size * 0.24, overflow: 'hidden', backgroundColor: theme.side, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border }}>
       {svg ? (
         <Canvas style={{ width: size, height: size }}><ImageSVG svg={svg} x={0} y={0} width={size} height={size} /></Canvas>
       ) : (

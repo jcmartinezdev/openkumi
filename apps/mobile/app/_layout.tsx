@@ -47,6 +47,9 @@ export default function Layout() {
         <Stack.Screen name="browser/[botId]" options={{ title: 'Browser' }} />
         {/* A sheet over the chat that stops halfway, and goes up the whole way when pulled or scrolled. */}
         <Stack.Screen name="model/[botId]" options={{ presentation: 'formSheet', headerShown: false, sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, contentStyle: { backgroundColor: theme.card } }} />
+        {/* Where a bot signs in to a superpower's app, and why one could not be reached: sheets over the superpower's page. */}
+        <Stack.Screen name="superpowers/[botId]/[id]/sign-in" options={{ presentation: 'formSheet', headerShown: false, sheetAllowedDetents: 'fitToContents', sheetGrabberVisible: true, sheetCornerRadius: 28, contentStyle: { backgroundColor: theme.group } }} />
+        <Stack.Screen name="superpowers/[botId]/[id]/problem" options={{ presentation: 'formSheet', headerShown: false, sheetAllowedDetents: [0.45, 1], sheetGrabberVisible: true, contentStyle: { backgroundColor: theme.card } }} />
         {/* A picture from a conversation, on black, whatever the app's appearance. */}
         <Stack.Screen name="picture" options={{ presentation: 'fullScreenModal', animation: 'fade', headerShown: false, statusBarStyle: 'light', contentStyle: { backgroundColor: '#000' } }} />
       </Stack>
