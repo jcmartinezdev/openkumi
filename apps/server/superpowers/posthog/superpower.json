@@ -1,0 +1,15 @@
+{
+  "name": "PostHog",
+  "categories": ["Work", "Marketing"],
+  "tagline": "Ask about your product: usage, funnels, errors, recordings and flags.",
+  "summary": "Query the user's PostHog projects: insights, trends, funnels, SQL, dashboards, errors, session recordings, feature flags, experiments and surveys. Flags, experiments and surveys are changed or launched, and anything deleted or sent, only after the user approves.",
+  "can": [
+    "Answer questions about your product with insights, funnels and SQL",
+    "Make insights and dashboards, and read errors, recordings and surveys",
+    "Change a feature flag, launch an experiment or survey, or delete anything, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.posthog.com/mcp?mode=cli"
+  },
+  "site": "https://posthog.com/"
+}

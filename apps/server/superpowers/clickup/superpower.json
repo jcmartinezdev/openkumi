@@ -1,0 +1,15 @@
+{
+  "name": "ClickUp",
+  "categories": ["Productivity", "Work"],
+  "tagline": "Find, file and update tasks, docs and comments in ClickUp.",
+  "summary": "Search, read and write in the user's ClickUp Workspace: tasks, lists, docs, comments, reminders and time tracked. Existing tasks are changed, moved or deleted only after the user approves.",
+  "can": [
+    "Search your Workspace and read tasks, lists, docs and comments",
+    "Create tasks, comments, docs and reminders, and track time",
+    "Change, move or delete an existing task, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.clickup.com/mcp"
+  },
+  "site": "https://clickup.com/"
+}

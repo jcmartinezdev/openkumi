@@ -1,0 +1,15 @@
+{
+  "name": "tl;dv",
+  "categories": ["Work", "Productivity"],
+  "tagline": "Ask about your recorded meetings: notes, transcripts and who was there.",
+  "summary": "Search the user's tl;dv meetings and read their notes, transcripts and details, to answer what was discussed, decided or promised. It only reads.",
+  "can": [
+    "Find your meetings by topic, person or date",
+    "Read a meeting's notes, transcript and who was in it",
+    "Only read: it cannot change or delete anything in tl;dv"
+  ],
+  "mcp": {
+    "url": "https://mcp.tldv.io/mcp"
+  },
+  "site": "https://tldv.io/"
+}

@@ -1,0 +1,15 @@
+{
+  "name": "PocketSmith",
+  "categories": ["Everyday"],
+  "tagline": "Ask about your money: spending, budgets, net worth and what's coming.",
+  "summary": "Read the user's PocketSmith: accounts, transactions, categories, budgets and forecasts, to answer where the money goes and what is coming. It only reads.",
+  "can": [
+    "Read your accounts, transactions, categories and budgets",
+    "Compare spending, find recurring costs and forecast your cash flow and net worth",
+    "Only read: it cannot change or delete anything in PocketSmith"
+  ],
+  "mcp": {
+    "url": "https://mcp-readonly.pocketsmith.com/mcp"
+  },
+  "site": "https://www.pocketsmith.com/"
+}

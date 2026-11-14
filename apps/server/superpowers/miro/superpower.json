@@ -1,0 +1,15 @@
+{
+  "name": "Miro",
+  "categories": ["Work", "Creative"],
+  "tagline": "Read your boards, and draw diagrams, notes and frames on them.",
+  "summary": "Read and work on the user's Miro boards: find boards and what is on them, and add diagrams, sticky notes, images and comments. Existing items are changed or removed, and boards shared, only after the user approves.",
+  "can": [
+    "Find your boards and read what is on them",
+    "Make new boards, and add diagrams, notes, images and comments",
+    "Change or remove what is already on a board, or share one, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.miro.com/"
+  },
+  "site": "https://miro.com/"
+}

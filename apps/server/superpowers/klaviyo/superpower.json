@@ -1,0 +1,15 @@
+{
+  "name": "Klaviyo",
+  "categories": ["Marketing"],
+  "tagline": "See how your email and SMS marketing is doing, and draft campaigns.",
+  "summary": "Read the user's Klaviyo reports, campaigns, flows, lists, segments and profiles, and draft campaigns and templates. Profiles, lists and segments are changed, and anything scheduled or sent, only after the user approves.",
+  "can": [
+    "Read how your campaigns and flows perform, and your lists, segments and profiles",
+    "Draft campaigns and email templates for you to check in Klaviyo",
+    "Change profiles, lists or segments, or send anything, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.klaviyo.com/mcp?core-tools-only=true"
+  },
+  "site": "https://www.klaviyo.com/"
+}

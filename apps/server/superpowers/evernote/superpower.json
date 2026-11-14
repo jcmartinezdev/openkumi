@@ -1,0 +1,15 @@
+{
+  "name": "Evernote",
+  "categories": ["Productivity", "Everyday"],
+  "tagline": "Find and write notes, notebooks and tasks in your Evernote.",
+  "summary": "Search, read and write the user's Evernote: notes, notebooks, tags, tasks and attachments. Existing notes and tasks are edited, moved or deleted only after the user approves.",
+  "can": [
+    "Search your notes by words or by meaning, and read them with their attachments",
+    "Write new notes and tasks, and add notebooks and tags",
+    "Edit, move or delete an existing note or task, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.evernote.com/mcp"
+  },
+  "site": "https://evernote.com/"
+}

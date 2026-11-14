@@ -1,0 +1,15 @@
+{
+  "name": "Sentry",
+  "categories": ["Work"],
+  "tagline": "Look into errors and slowdowns in your apps, and triage issues.",
+  "summary": "Search and read the user's Sentry: issues, errors, stack traces, traces, logs, replays and releases, and ask Seer for a root cause. Issues are resolved, assigned or commented on, and projects or alerts changed, only after the user approves.",
+  "can": [
+    "Search issues, errors, traces, logs and replays, and read stack traces",
+    "Find an issue's root cause, with Sentry's Seer on plans that have it",
+    "Resolve, assign or comment on an issue, or change alerts, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.sentry.dev/mcp"
+  },
+  "site": "https://sentry.io/"
+}

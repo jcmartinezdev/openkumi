@@ -1,0 +1,15 @@
+{
+  "name": "PandaDoc",
+  "categories": ["Work"],
+  "tagline": "Draft proposals, quotes and contracts, and follow them to signature.",
+  "summary": "Read and work on the user's PandaDoc documents and templates: find documents and their status, read who signed, and draft new ones from templates. Documents are sent for signature, or their status changed, only after the user approves.",
+  "can": [
+    "Find your documents and templates, and read their content, status and history",
+    "Draft new documents from your templates, and fill in their fields",
+    "Send a document for signature or change its status, only after you approve it"
+  ],
+  "mcp": {
+    "url": "https://mcp.pandadoc.com/v1/mcp"
+  },
+  "site": "https://www.pandadoc.com/"
+}

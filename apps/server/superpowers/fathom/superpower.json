@@ -1,0 +1,15 @@
+{
+  "name": "Fathom",
+  "categories": ["Work", "Productivity"],
+  "tagline": "Ask about your recorded meetings: what was said, decided and promised.",
+  "summary": "Search and read the user's Fathom meetings, with their summaries, action items and transcripts, to answer what was discussed, decided or promised. It only reads.",
+  "can": [
+    "Find your meetings by date, person or topic",
+    "Read a meeting's summary, action items and transcript",
+    "Only read: the bot changes nothing in Fathom"
+  ],
+  "mcp": {
+    "url": "https://api.fathom.ai/mcp"
+  },
+  "site": "https://fathom.video/"
+}

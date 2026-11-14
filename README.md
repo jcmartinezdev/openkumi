@@ -37,8 +37,11 @@ that stays logged in.
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone.
 - **Superpowers.** What a bot can do beyond chatting and browsing, switched on by you for one bot
-  at a time: working in Notion, Linear, Jira and Confluence, Todoist, Readwise or Typefully,
-  reading your meetings in Granola or Otter.ai, or know-how such as the weather, exchange rates,
+  at a time: working in Notion, Linear, Jira and Confluence, ClickUp, Todoist, Evernote, Miro,
+  Readwise or Typefully; keeping customers in Attio or folk, documents in PandaDoc and forms in
+  Jotform; running sites in Webflow or Wix, email marketing in Klaviyo, product analytics in
+  PostHog and error tracking in Sentry; reading your money in PocketSmith or your meetings in
+  Granola, Otter.ai, Fathom or tl;dv; or know-how such as the weather, exchange rates,
   public holidays, watching a page, SEO and AI search, social posts, launches, landing pages and
   competitors. They are grouped by what they are for (Productivity, Work, Creative, Marketing,
   Travel, Everyday), and each has a page that says what it does and lets you read the files it
