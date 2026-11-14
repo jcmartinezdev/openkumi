@@ -3,6 +3,7 @@
 // owner can take a waiting message back, have it read now, or let a bot that was stopped go on.
 import { useMemo } from 'react'
 import type { Queued, Said, Thread } from '@openkumi/shared'
+import { parseReport, reportWord } from './reports'
 import { api, useStore } from './store'
 
 /** The messages waiting in a thread, in the order the bot will read them: the ones to be read now first. */
@@ -29,9 +30,9 @@ export function fromWhom(message: Said): string {
  * wrapped in tags meant for the bot, so it is told in a line: "Subagent “Compare prices” completed".
  */
 export function waitingText(message: Said): string {
-  const report = message.text.match(/^<(?:subagent_notification|automation_result)>\n(Subagent|Automation) "(.*?)" \(.*?\) — (\w+)/)
-  if (report) return `${report[1]} “${report[2]}” ${report[3] === 'completed' && report[1] !== 'Subagent' ? 'ran' : report[3]}`
-  return message.text
+  const report = parseReport(message.text)
+  if (!report) return message.text
+  return report.kind === 'subagent' ? `Subagent “${report.name}” ${report.status}` : `Automation “${report.name}” ${reportWord(report.status)}`
 }
 
 /** Only what the owner or another bot wrote can be taken back: what the bot's own work reports is its to read. */
