@@ -11,5 +11,22 @@
   "mcp": {
     "url": "https://mcp.linear.app/mcp"
   },
+  "hooks": {
+    "setup": [
+      "In Linear, open Settings, then API, and under Webhooks choose New webhook. Only an admin of the workspace can.",
+      "Give it a name, and enter this address as its URL: {address}",
+      "Under Data change events tick Issues and Comments, and choose the team it is for, or all public teams.",
+      "Create it, open it, copy its signing secret, and give it to OpenKumi below."
+    ],
+    "signature": { "header": "Linear-Signature" },
+    "events": [
+      { "id": "issue.created", "name": "An issue is created", "when": { "type": "Issue", "action": "create" } },
+      { "id": "issue.updated", "name": "An issue is changed", "when": { "type": "Issue", "action": "update" } },
+      { "id": "issue.removed", "name": "An issue is removed", "when": { "type": "Issue", "action": "remove" } },
+      { "id": "comment.created", "name": "A comment is written", "when": { "type": "Comment", "action": "create" } }
+    ],
+    "pass": ["data.id", "data.identifier", "data.number", "data.issueId", "data.teamId", "data.stateId", "data.assigneeId", "data.priority", "data.projectId", "data.cycleId", "data.parentId", "data.userId", "actor.id", "actor.type", "createdAt"],
+    "changed": "updatedFrom"
+  },
   "site": "https://linear.app/"
 }

@@ -15,6 +15,19 @@ title that says what is wrong or wanted, what was observed, what was expected, a
 see it. Use the team's existing labels; look them up rather than guessing. Ask which team it
 belongs to if that is not obvious.
 
+## When Linear calls
+
+When the user has set up Linear's webhook for you, an automation can start the moment an issue is
+created, changed or removed, or a comment is written (`create_automation` with `hook`). Its run is
+told what happened by id only: the issue's `id` and `identifier`, a comment's `id` and `issueId`,
+who did it (`actor_id`), and for a change the names of the fields that changed (`changed`). Read
+the issue or the comment with your Linear tools before you say or do anything about it. A change
+names fields such as `stateId` or `assigneeId`; what they are now is in the issue.
+
+Linear calls about everything in the teams the webhook covers, so say in the automation's prompt
+which issues matter (assigned to the user, in one project, with one label) and to end with exactly
+"Nothing to report." for the rest.
+
 ## Rules
 
 - Never change an existing issue's status, assignee, priority or cycle without the user's approval.

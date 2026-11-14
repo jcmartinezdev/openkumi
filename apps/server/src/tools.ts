@@ -388,9 +388,19 @@ const runsAt = {
   every_minutes: { type: 'number', description: 'Run again and again, this many minutes apart (at least 5)' },
 }
 
-// Or when something changes: a watch, in place of a time.
+// Or when something changes (a watch), or when one of the bot's apps calls (a hook), in place of a time.
 const startsOn = {
   ...runsAt,
+  hook: {
+    type: 'object',
+    description:
+      'Instead of a time: run the moment one of your apps calls OpenKumi about something that happened there. Only for an app the user ' +
+      'has set a webhook up for; list_automations names those, and what each calls about.',
+    properties: {
+      app: str('The app, by its superpower id, e.g. "linear"'),
+      events: { type: 'array', items: { type: 'string' }, description: 'What to run on, e.g. ["issue.created"]. Omit to run on everything the app calls about.' },
+    },
+  },
   watch: {
     type: 'object',
     description:
@@ -425,10 +435,10 @@ const automationTools: Tool[] = [
   {
     name: 'create_automation',
     description:
-      'Make an automation: a prompt you will be given at a set time, again and again, or whenever something you watch ' +
-      'changes. Each run happens in the background, in a thread of its own that sees nothing of this conversation, so ' +
+      'Make an automation: a prompt you will be given at a set time, again and again, whenever something you watch ' +
+      'changes, or when one of your apps calls. Each run happens in the background, in a thread of its own that sees nothing of this conversation, so ' +
       'the prompt must be self-contained; what came of it is passed to your conversation with the user. Give exactly ' +
-      'one of at, in_minutes, time (with days if not every day), every_minutes or watch. Times are the user\'s local time.',
+      'one of at, in_minutes, time (with days if not every day), every_minutes, watch or hook. Times are the user\'s local time.',
     parameters: params(
       {
         title: str('A short name, e.g. "Morning news brief"'),
@@ -444,7 +454,7 @@ const automationTools: Tool[] = [
     name: 'update_automation',
     description:
       'Change an automation you made (the main assistant can change any): its name, its prompt or what starts it, ' +
-      'or pause or resume it. Giving one of at, in_minutes, time, every_minutes or watch replaces what starts it.',
+      'or pause or resume it. Giving one of at, in_minutes, time, every_minutes, watch or hook replaces what starts it.',
     parameters: params(
       {
         id: str('The automation id, from list_automations'),

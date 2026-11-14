@@ -1,5 +1,5 @@
-// Automations: a prompt a bot is given without being asked, at set times or when something it
-// watches changes (watch.ts). Each run happens in the background, in a thread of its own beneath the
+// Automations: a prompt a bot is given without being asked, at set times, when something it
+// watches changes (watch.ts), or when one of its apps calls (hooks.ts). Each run happens in the background, in a thread of its own beneath the
 // bot's conversation (as a subagent's would), and what came of it is passed to the conversation for
 // the bot to tell the user. The owner makes automations in the app; bots make them with their
 // tools, within the rules at the end of this file: a bot makes them only for itself and changes or
@@ -9,6 +9,7 @@ import type { Automation, Bot, Schedule, Thread, Trigger, Watch } from '@openkum
 import * as agent from './agent.ts'
 import { getBot, listBots } from './bots.ts'
 import * as db from './db.ts'
+import * as hooks from './hooks.ts'
 import * as watching from './watch.ts'
 
 /** The shortest time, in minutes, between two runs of an automation that repeats. */
@@ -72,8 +73,11 @@ export function describeSchedule(s: Schedule): string {
 }
 
 /** What starts an automation, in words. */
-export const describeTrigger = (t: Trigger) =>
-  t.kind === 'time' ? describeSchedule(t.schedule) : `when ${watching.describeWatch(t.watch)} changes, looked at every ${minutes(t.watch.every)}`
+export function describeTrigger(t: Trigger): string {
+  if (t.kind === 'time') return describeSchedule(t.schedule)
+  if (t.kind === 'hook') return `when ${t.hook.app} calls${t.hook.events.length ? ` about ${t.hook.events.join(', ')}` : ''}`
+  return `when ${watching.describeWatch(t.watch)} changes, looked at every ${minutes(t.watch.every)}`
+}
 
 /** A schedule from what was sent, checked. */
 export function cleanSchedule(input: any): Schedule {
@@ -101,7 +105,8 @@ export function cleanSchedule(input: any): Schedule {
 async function cleanTrigger(botId: string, input: any): Promise<Trigger> {
   if (input?.kind === 'time') return { kind: 'time', schedule: cleanSchedule(input.schedule) }
   if (input?.kind === 'watch') return { kind: 'watch', watch: await watching.cleanWatch(botId, input.watch) }
-  throw new Error('An automation starts at a "time" or on a "watch".')
+  if (input?.kind === 'hook') return { kind: 'hook', hook: hooks.cleanHook(botId, input.hook) }
+  throw new Error('An automation starts at a "time", on a "watch" or on a "hook".')
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
@@ -113,7 +118,9 @@ const looksAt = (t: Trigger) => (t.kind === 'watch' ? { ...t.watch, every: 0 } :
 /**
  * Checks an automation and works out when it runs next. A trigger that did not change keeps the
  * run (or the look) it had coming; a new one, or an automation that was paused, starts counting
- * from now. A watch that is resumed looks at once, to catch up with what changed while it was off.
+ * from now. A watch that is resumed looks at once, to catch up with what changed while it was off,
+ * and one that starts on a webhook's calls is given the calls that came meanwhile. Otherwise that
+ * one has no time coming: it waits for a call.
  */
 function checked(automation: Automation, before?: Automation): Automation {
   const title = String(automation.title ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
@@ -127,6 +134,7 @@ function checked(automation: Automation, before?: Automation): Automation {
   if (!automation.enabled) nextRunAt = null
   else if (before && !changed && before.enabled) nextRunAt = before.nextRunAt
   else if (trigger.kind === 'watch') nextRunAt = Date.now() + (changed ? trigger.watch.every * 60_000 : 0)
+  else if (trigger.kind === 'hook') nextRunAt = changed ? null : Date.now()
   else {
     nextRunAt = nextRun(trigger.schedule, Date.now())
     if (nextRunAt === null) throw new Error('That time has already passed.')
@@ -167,6 +175,8 @@ export async function createAutomation(input: Record<string, any>, by: string): 
   const { automation, reading } = await baseline(draft)
   const saved = db.saveAutomation(automation)
   if (reading) db.setSeen(saved.id, reading)
+  // One that starts on a webhook's calls is for the calls from now on.
+  if (saved.trigger.kind === 'hook') db.setCursor(saved.id, db.lastHookEvent())
   plan()
   return saved
 }
@@ -179,21 +189,25 @@ export async function updateAutomation(automation: Automation, patch: Record<str
   if (typeof patch.prompt === 'string') next.prompt = patch.prompt
   if (typeof patch.enabled === 'boolean') next.enabled = patch.enabled
   if (!getBot(next.botId)) throw new Error(`No bot with id ${next.botId}.`)
-  // Moved to another bot, a watched tool has to be one that bot has too.
-  if (patch.trigger !== undefined || next.botId !== automation.botId) next.trigger = await cleanTrigger(next.botId, patch.trigger ?? next.trigger)
+  // Moved to another bot, a watched tool has to be one that bot has too, and so has a webhook; one turned on again has to be there still.
+  const resumed = next.enabled && !automation.enabled
+  if (patch.trigger !== undefined || next.botId !== automation.botId || (resumed && next.trigger.kind === 'hook')) next.trigger = await cleanTrigger(next.botId, patch.trigger ?? next.trigger)
   const draft = checked(next, automation)
   // A watch on something else, or by another bot's account, starts from where things stand now.
   if (draft.trigger.kind !== automation.trigger.kind || !same(looksAt(draft.trigger), looksAt(automation.trigger)) || draft.botId !== automation.botId) {
     const { automation: looked, reading } = await baseline(draft)
     const saved = db.saveAutomation(looked)
     db.setSeen(saved.id, reading)
+    if (saved.trigger.kind === 'hook') db.setCursor(saved.id, db.lastHookEvent())
     plan()
     return saved
   }
   const saved = db.saveAutomation(draft)
+  // Other events of the same webhook: from now on, like a new one.
+  if (saved.trigger.kind === 'hook' && !same(saved.trigger, automation.trigger)) db.setCursor(saved.id, db.lastHookEvent())
   // Turned on again, a watch that was paused for failing is given its time again.
   const seen = db.getSeen(saved.id)
-  if (seen?.failingSince && saved.enabled && !automation.enabled) db.setSeen(saved.id, { ...seen, failingSince: undefined })
+  if (seen?.failingSince && resumed) db.setSeen(saved.id, { ...seen, failingSince: undefined })
   plan()
   return saved
 }
@@ -238,7 +252,50 @@ function start(automation: Automation, scheduled: boolean, told = ''): Automatio
 
 /** Runs an automation now, whether or not it is paused, without changing when it runs next. */
 export function runNow(automation: Automation): Automation {
-  return start(automation, false, automation.trigger.kind === 'watch' ? watching.note(automation.trigger.watch, null) : '')
+  const { trigger } = automation
+  return start(automation, false, trigger.kind === 'watch' ? watching.note(trigger.watch, null) : trigger.kind === 'hook' ? hooks.note(trigger.hook, null) : '')
+}
+
+// ---- starting on a webhook's calls
+
+/**
+ * A bot's webhook took a call about `event`. The automations that start on it and are waiting are
+ * made due at once; one that ran a moment ago already has its next time, and is given the call then.
+ */
+export function called(botId: string, power: string, event: string) {
+  let woken = false
+  for (const automation of db.listAutomations()) {
+    const { trigger } = automation
+    if (automation.botId !== botId || !automation.enabled || automation.nextRunAt !== null || trigger.kind !== 'hook' || trigger.hook.power !== power) continue
+    if (trigger.hook.events.length && !trigger.hook.events.includes(event)) continue
+    db.saveAutomation({ ...automation, nextRunAt: Date.now() })
+    woken = true
+  }
+  if (woken) plan()
+}
+
+/** A bot's webhook was removed: the automations that started on its calls are paused, since none will come. */
+export function unhooked(botId: string, power: string) {
+  for (const automation of db.listAutomations()) {
+    const { trigger } = automation
+    if (automation.botId === botId && automation.enabled && trigger.kind === 'hook' && trigger.hook.power === power) db.saveAutomation({ ...automation, enabled: false, nextRunAt: null })
+  }
+  plan()
+}
+
+/**
+ * Gives an automation the calls of its webhook that it has not had yet, in one run, and has it look
+ * again after the shortest time between two runs for what came meanwhile: so calls that come close
+ * together are answered together. With none left, it goes back to waiting.
+ */
+function fire(automation: Automation, hook: Extract<Trigger, { kind: 'hook' }>['hook']): Automation {
+  const now = Date.now()
+  const events = hooks.pending(automation.botId, hook, db.getCursor(automation.id))
+  if (!events.length) return db.saveAutomation({ ...automation, nextRunAt: null })
+  // While its last run is at work the calls wait, and the next run is given them together.
+  if (stillRunning(automation)) return db.saveAutomation({ ...automation, nextRunAt: now + 60_000 })
+  db.setCursor(automation.id, events.at(-1)!.id)
+  return start({ ...automation, nextRunAt: now + MIN_INTERVAL * 60_000 }, true, hooks.note(hook, events))
 }
 
 /** The watches being looked at right now, so that none is looked at twice at once. */
@@ -324,13 +381,15 @@ function tick() {
       if (trigger.kind === 'watch') {
         // Its next look is set first: this one takes a while, and must not be started again meanwhile.
         void check(db.saveAutomation({ ...automation, nextRunAt: now + trigger.watch.every * 60_000 })).catch((e) => console.error('A watch could not be looked at:', e))
+      } else if (trigger.kind === 'hook') {
+        fire(automation, trigger.hook)
       } else if (trigger.schedule.type === 'daily' && now - automation.nextRunAt! > GRACE) {
         // A run at a time of day that would start long after that time (the computer was asleep or
         // off) is no longer what was asked for: it is noted as missed, and the next one is awaited.
         db.saveAutomation({ ...automation, lastStatus: 'missed', lastRunAt: automation.nextRunAt, lastError: null, nextRunAt: nextRun(trigger.schedule, now) })
       } else start(automation, true)
     } catch (e: any) {
-      const next = trigger.kind === 'time' ? nextRun(trigger.schedule, now) : now + trigger.watch.every * 60_000
+      const next = trigger.kind === 'time' ? nextRun(trigger.schedule, now) : trigger.kind === 'watch' ? now + trigger.watch.every * 60_000 : null
       db.saveAutomation({ ...automation, lastStatus: 'failed', lastError: String(e?.message ?? e), nextRunAt: next })
     }
   }
@@ -432,6 +491,19 @@ function scheduleFrom(a: Record<string, any>): Schedule | null {
 /** What a bot asked for with its tool's arguments to start an automation, still to be checked, or null when it gave nothing. */
 function triggerFrom(a: Record<string, any>): Record<string, unknown> | null {
   const schedule = scheduleFrom(a)
+  if (given(a.hook)) {
+    if (schedule || given(a.watch)) throw new Error('An automation that starts when an app calls takes no time and no watch. Give hook, or watch, or one of at, in_minutes, time and every_minutes.')
+    let hook = a.hook
+    if (typeof hook === 'string') {
+      try {
+        hook = JSON.parse(hook)
+      } catch {
+        hook = null
+      }
+    }
+    if (!hook || typeof hook !== 'object' || !given(hook.app)) throw new Error('hook is an object like {"app": "linear", "events": ["issue.created"]}. list_automations names the apps that can call and what each calls about.')
+    return { kind: 'hook', hook: { power: hook.app, events: hook.events } }
+  }
   if (!given(a.watch)) return schedule && { kind: 'time', schedule }
   if (schedule) throw new Error('A watch takes no time of its own: it looks every watch.every_minutes minutes. Give a watch, or one of at, in_minutes, time and every_minutes.')
   let watch = a.watch
@@ -464,6 +536,7 @@ function view(automation: Automation, bot: Bot) {
     made_by: maker(automation, bot),
     runs: describeTrigger(trigger),
     ...(watch ? { watch: watched(watch) } : {}),
+    ...(trigger.kind === 'hook' ? { hook: { app: trigger.hook.power, ...(trigger.hook.events.length ? { events: trigger.hook.events } : {}) } } : {}),
     paused: !automation.enabled,
     ...(watch ? { next_look: automation.nextRunAt ? when(automation.nextRunAt) : null, last_look: automation.lastCheck ? seenAt(automation.lastCheck) : null } : { next_run: automation.nextRunAt ? when(automation.nextRunAt) : null }),
     last_run: automation.lastRunAt ? `${when(automation.lastRunAt)}, ${automation.lastStatus}${automation.lastError ? `: ${automation.lastError}` : ''}` : null,
@@ -483,14 +556,16 @@ const now = () => `${when(Date.now())} (${TIME_ZONE})`
 
 export function listAs(bot: Bot): string {
   const automations = visibleTo(bot)
-  return JSON.stringify({ now: now(), automations: automations.map((a) => view(a, bot)) }, null, 1)
+  const calling = hooks.availableTo(bot.id)
+  return JSON.stringify({ now: now(), automations: automations.map((a) => view(a, bot)), ...(calling.length ? { apps_that_call_you: calling } : {}) }, null, 1)
 }
 
 export async function createAs(bot: Bot, a: Record<string, any>): Promise<string> {
   const trigger = triggerFrom(a)
-  if (!trigger) throw new Error('Say what starts it: give one of at, in_minutes, time or every_minutes, or a watch.')
+  if (!trigger) throw new Error('Say what starts it: give one of at, in_minutes, time or every_minutes, or a watch, or a hook.')
   const automation = await createAutomation({ botId: target(bot, a.bot_id), title: a.title, prompt: a.prompt, trigger }, bot.id)
-  const made = automation.trigger.kind === 'watch' ? `Watching. ${automation.lastCheck?.detail ?? ''}` : 'Scheduled.'
+  const { trigger: starts } = automation
+  const made = starts.kind === 'watch' ? `Watching. ${automation.lastCheck?.detail ?? ''}` : starts.kind === 'hook' ? `Waiting for ${starts.hook.app} to call.` : 'Scheduled.'
   return `${made.trim()} It is now ${now()}.\n${JSON.stringify(view(automation, bot), null, 1)}`
 }
 

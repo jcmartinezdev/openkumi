@@ -18,6 +18,7 @@
     "./models": "./src/models.ts",
     "./marks": "./src/marks.ts",
     "./automations": "./src/automations.ts",
+    "./webhooks": "./src/webhooks.ts",
     "./queue": "./src/queue.ts",
     "./mascot": "./src/mascot.ts",
     "./browser": "./src/browser.ts",

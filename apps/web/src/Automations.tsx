@@ -1,8 +1,10 @@
 // The automations, in the conversation's place: every automation of every bot with its runs beneath
 // it, and a page to make or change one. Each run is a thread beneath the bot's conversation and
 // opens like any other. Unlike the settings, an automation is a form: it is saved when it is whole.
-// One starts at a time, or when something it watches changes. The form makes watches on web pages;
-// a watch on one of a bot's apps is set up by the bot, which knows its tools, and can be changed here.
+// One starts at a time, when something it watches changes, or when one of the bot's apps calls. The
+// form makes watches on web pages; a watch on one of a bot's apps is set up by the bot, which knows
+// its tools, and can be changed here. An app that calls is offered once its webhook is set up, on
+// the app's page under Superpowers.
 import { useState } from 'react'
 import type { Automation, Bot, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
 import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, lookLabel, madeBy, nextRun, runStatus, runTime, standing, triggerLabel, trouble, useRuns, watchLabel } from '@openkumi/client/automations'
@@ -112,8 +114,8 @@ interface Draft {
   title: string
   prompt: string
   enabled: boolean
-  /** How it goes by the clock, or what it watches: a web page, or one of the bot's apps (which only a bot sets up). */
-  kind: Schedule['type'] | 'page' | 'app'
+  /** How it goes by the clock, what it watches (a web page, or one of the bot's apps, which only a bot sets up), or the app whose calls start it. */
+  kind: Schedule['type'] | 'page' | 'app' | `hook:${string}`
   /** For "once": a date and time as a datetime-local field holds it, on this device's clock. */
   at: string
   time: string
@@ -128,6 +130,8 @@ interface Draft {
   look: number
   /** For a watch on an app: the tool and arguments the bot gave, which stay as they are. */
   app: Extract<Watch, { on: 'tool' }> | null
+  /** For an app that calls: what to run on. None means everything it calls about. */
+  events: string[]
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -148,7 +152,7 @@ function draftOf(automation: Automation | undefined, botId: string): Draft {
     title: automation?.title ?? '',
     prompt: automation?.prompt ?? '',
     enabled: automation?.enabled ?? true,
-    kind: watch ? (watch.on === 'tool' ? 'app' : 'page') : (s?.type ?? 'daily'),
+    kind: trigger?.kind === 'hook' ? `hook:${trigger.hook.power}` : watch ? (watch.on === 'tool' ? 'app' : 'page') : (s?.type ?? 'daily'),
     at: fieldTime(s?.type === 'once' ? s.at : nextHour.getTime()),
     time: s?.type === 'daily' ? s.time : '08:00',
     days: s?.type === 'daily' ? s.days : [],
@@ -158,14 +162,17 @@ function draftOf(automation: Automation | undefined, botId: string): Draft {
     track: watch?.track.join(', ') ?? '',
     look: watch?.every ?? 15,
     app: watch?.on === 'tool' ? watch : null,
+    events: trigger?.kind === 'hook' ? trigger.hook.events : [],
   }
 }
 
 /** What the server is sent for a draft. */
 function bodyOf(d: Draft) {
   const track = d.track.split(',').map((f) => f.trim()).filter(Boolean)
-  const trigger: Trigger =
-    d.kind === 'page' ? { kind: 'watch', watch: { on: 'page', url: d.url.trim(), track, every: d.look } }
+  // The server fills in the app's name, so it is not part of what is sent or compared.
+  const trigger: Trigger | { kind: 'hook'; hook: { power: string; events: string[] } } =
+    d.kind.startsWith('hook:') ? { kind: 'hook', hook: { power: d.kind.slice(5), events: d.events } }
+    : d.kind === 'page' ? { kind: 'watch', watch: { on: 'page', url: d.url.trim(), track, every: d.look } }
     : d.kind === 'app' && d.app ? { kind: 'watch', watch: { ...d.app, track, every: d.look } }
     : {
         kind: 'time',
@@ -180,6 +187,8 @@ function bodyOf(d: Draft) {
 function Editor({ automation }: { automation?: Automation }) {
   const bots = useStore((s) => s.bots)
   const zone = useStore((s) => s.about.timeZone)
+  const hooks = useStore((s) => s.hooks)
+  const superpowers = useStore((s) => s.superpowers)
   const [draft, setDraft] = useState(() => draftOf(automation, bots[0]?.id ?? ''))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -222,8 +231,16 @@ function Editor({ automation }: { automation?: Automation }) {
   const toggleDay = (day: number) => change({ days: draft.days.includes(day) ? draft.days.filter((d) => d !== day) : [...draft.days, day].sort((a, b) => a - b) })
   const { runs, more, showOlder, error: runsError } = useRuns(automation?.id)
   const looked = automation?.trigger.kind === 'watch' ? automation.lastCheck : null
+  // The apps that call this bot: the ones whose webhook is set up, and the one this automation starts on even if that is gone.
+  const calling = superpowers.filter((p) => p.hooks && (draft.kind === `hook:${p.id}` || hooks.some((h) => h.botId === draft.botId && h.power === p.id && h.secret)))
+  const caller = superpowers.find((p) => draft.kind === `hook:${p.id}`)
   // What a bot's app is watched for can only be chosen by the bot, so it is offered only where it is already so.
-  const starts = [['daily', 'At a time of day'], ['interval', 'Every so often'], ['once', 'Once'], ['page', 'When a web page changes'], ...(draft.app ? [['app', `When ${draft.app.app} changes`] as const] : [])] as const
+  const starts: (readonly [Draft['kind'], string])[] = [
+    ['daily', 'At a time of day'], ['interval', 'Every so often'], ['once', 'Once'], ['page', 'When a web page changes'],
+    ...(draft.app ? [['app', `When ${draft.app.app} changes`] as const] : []),
+    ...calling.map((p) => [`hook:${p.id}`, `When ${p.name} calls`] as const),
+  ]
+  const toggleEvent = (id: string) => change({ events: draft.events.includes(id) ? draft.events.filter((e) => e !== id) : (caller?.hooks?.events ?? []).map((e) => e.id).filter((e) => e === id || draft.events.includes(e)) })
 
   return (
     <Page>
@@ -262,7 +279,11 @@ function Editor({ automation }: { automation?: Automation }) {
       </Section>
 
       <Section title="When">
-        <Row title="Starts" control={<Pick label="Starts" value={draft.kind} options={starts} onChange={(kind) => change({ kind })} />} />
+        <Row
+          title="Starts"
+          description={calling.length || !bot ? undefined : `An app such as Linear can also start it the moment something happens there, once its webhook is set up for ${bot.name}: on the app’s page, under Superpowers.`}
+          control={<Pick label="Starts" value={draft.kind} options={starts} onChange={(kind) => change({ kind, events: [] })} />}
+        />
         {draft.kind === 'once' && <Row title="Date and time" control={<input type="datetime-local" className="set-input" aria-label="Date and time" value={draft.at} onChange={(e) => change({ at: e.target.value })} />} />}
         {draft.kind === 'daily' && (
           <>
@@ -308,6 +329,17 @@ function Editor({ automation }: { automation?: Automation }) {
             title="Watches"
             description={`${watchLabel(draft.app)}${Object.keys(draft.app.arguments).length ? `, with ${JSON.stringify(draft.app.arguments)}` : ''}. OpenKumi makes this call itself and starts a run only when what comes back changed. To watch something else in ${draft.app.app}, ask ${bot?.name ?? 'the bot'}.`}
           />
+        )}
+        {caller?.hooks && (
+          <>
+            <Row
+              title="Runs on"
+              description={`${draft.events.length ? 'Only what is switched on.' : `Everything ${caller.name} calls about.`} A run is told what happened by id alone, and reads the rest in ${caller.name} itself. Calls that come within five minutes of a run are answered together, in the next.`}
+            />
+            {caller.hooks.events.map((event) => (
+              <Row key={event.id} title={event.name} control={<Switch label={event.name} checked={draft.events.includes(event.id)} onChange={() => toggleEvent(event.id)} />} />
+            ))}
+          </>
         )}
         {watching && (
           <>

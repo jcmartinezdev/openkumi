@@ -1024,6 +1024,12 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 @media (max-width: 560px) { .power-head-action { justify-items: start; max-width: none; } .power-standing { text-align: left; } }
 /* What a superpower gives a bot to read: its files, then the one open, read-only. */
 .skill { display: grid; gap: 10px; margin-top: 12px; }
+/* A webhook's steps: what to enter in the app, its address to copy, and where its secret goes. */
+.hook-steps { margin-top: 10px; font-size: 13px; color: var(--muted); }
+.hook-steps ol { margin: 0 0 12px; padding-left: 20px; display: grid; gap: 8px; }
+.hook-steps li button { height: 24px; padding: 0 8px; font-size: 12px; vertical-align: middle; }
+.hook-address { overflow-wrap: anywhere; color: var(--text); }
+.hook-secret { display: flex; gap: 8px; flex-wrap: wrap; }
 .skill-files { display: flex; flex-wrap: wrap; gap: 4px; }
 .skill-files .file-row { width: auto; max-width: 100%; padding: 0 10px; border: 1px solid var(--border); }
 .skill-view { min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); overflow: hidden; }

@@ -1,6 +1,6 @@
 // Superpowers: what a bot can do beyond its own tools, such as working in the user's Notion or
 // researching a question properly. Every one ships with OpenKumi, as a folder in superpowers/<id>:
-//   superpower.json   its name, what it is for and what a bot can do with it, and its service
+//   superpower.json   its name, what it is for and what a bot can do with it, its service, and how its app calls (a webhook)
 //   icon.svg          its app icon, on a square, with nothing outside a viewBox (the apps round its corners)
 //   README.md         its page in the app
 //   instructions.md   how the bot goes about it, read when a task calls for it
@@ -13,6 +13,7 @@ import path from 'node:path'
 import type { Superpower } from '@openkumi/shared'
 import { announce } from './bots.ts'
 import { HOME, ROOT, botDir, emit, privateDir, readSecrets, writeSecret } from './config.ts'
+import { remove as removeHook } from './hooks.ts'
 import * as mcp from './mcp.ts'
 
 /** Where a superpower's tools come from: a service on the web, or a program run on this computer. */
@@ -27,6 +28,23 @@ export interface Service {
   reads?: string[]
 }
 
+/**
+ * How an app's webhook is set up, and how its calls are checked and read (hooks.ts). Each app does
+ * these its own way, so each superpower says how in its superpower.json, under "hooks".
+ */
+export interface HookRecipe {
+  /** What the owner does in the app, a step each; "{address}" stands for the address OpenKumi gives. */
+  setup: string[]
+  /** The header the app puts its signature in: an HMAC-SHA256 of the call's body made with the secret, written as `encoding` (hex unless said) after `prefix`. */
+  signature: { header: string; encoding?: 'hex' | 'base64'; prefix?: string }
+  /** What the app calls about. A call is about the first of these whose `when` values it has, by where they are in it ("data.id"). */
+  events: { id: string; name: string; when: Record<string, string> }[]
+  /** The values of a call that are passed on to a run, by where they are in it. Only ids, numbers and the like get through, never what someone wrote. */
+  pass: string[]
+  /** Where a call about a change holds what changed: the names of those fields are passed on. */
+  changed?: string
+}
+
 interface Manifest {
   name: string
   /** The groups it belongs to in the catalog, such as "Productivity" or "Travel". */
@@ -36,6 +54,7 @@ interface Manifest {
   summary: string
   can: string[]
   mcp?: ({ url: string; scopes?: string[] } | { command: string; args?: string[] }) & { reads?: string[] }
+  hooks?: HookRecipe
   site?: string
 }
 
@@ -120,6 +139,16 @@ export function serviceOf(id: string): Service | null {
   return 'url' in m.mcp ? { name: m.name, url: m.mcp.url, scopes: m.mcp.scopes, reads } : { name: m.name, command: m.mcp.command, args: m.mcp.args, reads }
 }
 
+/** How a superpower's app calls OpenKumi, when it can and its superpower says how. */
+export function hookRecipe(id: string): HookRecipe | null {
+  const hooks = manifest(id)?.hooks
+  const whole = hooks && typeof hooks.signature?.header === 'string' && Array.isArray(hooks.events) && Array.isArray(hooks.pass) && Array.isArray(hooks.setup)
+  return whole ? hooks : null
+}
+
+/** A superpower's name, or its id when it is gone. */
+export const superpowerName = (id: string) => manifest(id)?.name ?? id
+
 /** A superpower that works in an app on the web is active only once the bot is signed in to it. */
 export const needsSignIn = (id: string) => !!serviceOf(id)?.url
 
@@ -154,6 +183,7 @@ export function listSuperpowers(): Superpower[] {
       // One without a page of its own still has its tagline.
     }
     const service = serviceOf(id)
+    const hooks = hookRecipe(id)
     return {
       id,
       name: m.name,
@@ -168,6 +198,7 @@ export function listSuperpowers(): Superpower[] {
       service: service ? (service.url ? new URL(service.url).host : 'a program on this computer') : null,
       site: m.site ?? '',
       onFor: botsWith(id),
+      hooks: hooks && { events: hooks.events.map(({ id, name }) => ({ id, name })), setup: hooks.setup.map(String) },
     }
   }).sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 }
@@ -182,7 +213,11 @@ export async function setSuperpower(botId: string, id: string, on: boolean) {
   if (on === now.includes(id)) return
   record(botId, on ? [...now, id] : now.filter((other) => other !== id))
   if (on) mcp.wake(botId, id)
-  else await mcp.forget(botId, id)
+  else {
+    await mcp.forget(botId, id)
+    // Without the app's tools a bot cannot read what a call is about, so its webhook goes too.
+    removeHook(botId, id)
+  }
 }
 
 /** A bot has signed in to a superpower's app, which makes the superpower active for it. */

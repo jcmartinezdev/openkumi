@@ -95,6 +95,29 @@ export interface Superpower {
   site: string
   /** Ids of the bots it is switched on for. */
   onFor: string[]
+  /** Its app can call OpenKumi when something happens there (a webhook): what it can call about, and how the owner sets that up in the app. */
+  hooks: { events: { id: string; name: string }[]; setup: string[] } | null
+}
+
+/**
+ * A webhook: the way one bot's app (a superpower) calls OpenKumi the moment something happens
+ * there. The owner sets it up once, in the app, with the address OpenKumi gives and the secret the
+ * app signs its calls with; automations of that bot can then start on its calls.
+ */
+export interface Hook {
+  /** Also the end of its address, which nobody can guess. */
+  id: string
+  botId: string
+  /** The superpower whose app calls. */
+  power: string
+  /** The secret has been given: until then every call is refused. It is never sent to an app. */
+  secret: boolean
+  createdAt: number
+  /** When the app last called, and how often it has. */
+  lastCallAt: number | null
+  calls: number
+  /** When a call was last refused because it was not signed with the secret. */
+  refusedAt: number | null
 }
 
 /** How a bot's connection to a superpower's service stands. */
@@ -267,8 +290,15 @@ export type Watch = { every: number; track: string[] } & (
   | { on: 'page'; url: string }
 )
 
-/** What starts an automation: the clock, or a change in something it watches. */
-export type Trigger = { kind: 'time'; schedule: Schedule } | { kind: 'watch'; watch: Watch }
+/**
+ * What starts an automation: the clock, a change in something it watches, or a call from one of
+ * the bot's apps (its webhook) about one of `events`, or about anything when none is named. `app`
+ * is the superpower's name, for display.
+ */
+export type Trigger =
+  | { kind: 'time'; schedule: Schedule }
+  | { kind: 'watch'; watch: Watch }
+  | { kind: 'hook'; hook: { power: string; app: string; events: string[] } }
 
 /** How a watch's latest look went. 'baseline' is a look that only noted where things stand. */
 export interface WatchCheck {
@@ -295,7 +325,7 @@ export interface Automation {
   enabled: boolean
   /** Who made it: 'user' for the owner, or the id of the bot that made it. */
   createdBy: string
-  /** When it runs next, or for a watch when it looks next. Null when it is paused, or will not run again. */
+  /** When it runs next, or for a watch when it looks next. Null when it is paused, will not run again, or waits for its app to call. */
   nextRunAt: number | null
   lastRunAt: number | null
   /** How the last run went. 'missed' when the computer was off or asleep at the time it was due. */
@@ -348,6 +378,8 @@ export interface Settings {
   maxDepth: number
   /** Bots may send each other messages (message_bot), and a new bot may be given a first one. */
   botMessages: boolean
+  /** Where the internet reaches this computer's webhook port, such as "https://my-mac.example.ts.net". Empty until the owner gives it. */
+  hookAddress: string
   /** How much of a bot's AGENTS.md is loaded into each conversation, in characters. */
   instructionsLimit: number
   /**
@@ -369,6 +401,8 @@ export interface About {
   lanForced: boolean
   /** The time zone automations keep to, such as "Europe/Berlin". */
   timeZone: string
+  /** The port, on this computer only, that takes the calls of webhooks: what a tunnel from the internet points at. */
+  hooksPort: number
 }
 
 export interface ProviderInfo {
@@ -439,6 +473,8 @@ export type ServerEvent =
   | { type: 'thread.delete'; id: string; seq: number }
   | { type: 'automation.upsert'; automation: Automation }
   | { type: 'automation.delete'; id: string }
+  | { type: 'hook.upsert'; hook: Hook }
+  | { type: 'hook.delete'; id: string }
   | { type: 'item.add'; item: Item }
   /** A message began to wait for a bot, or one that waits changed. */
   | { type: 'queue.upsert'; message: Queued }
@@ -494,6 +530,8 @@ export interface AppState {
    */
   removed?: string[]
   automations: Automation[]
+  /** The webhooks that are set up, for every bot. */
+  hooks: Hook[]
   /** Every message that waits for a bot, oldest first. */
   queue: Queued[]
   providers: ProviderInfo[]
