@@ -13,6 +13,7 @@ import { PageFrame, PageViewer } from './PageFrame'
 import { usePrefs } from './prefs'
 import { StatusDot } from './Sidebar'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
+import { parseReport, reportWord } from '@openkumi/client/reports'
 import { describe, parse, site } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openAutomations, openSettings, openThread, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
@@ -91,27 +92,21 @@ function SubagentLink({ id }: { id: string }) {
   )
 }
 
-function SubagentReport({ text }: { text: string }) {
-  const m = text.match(/Subagent "(.*?)" \(id: (\S+)\) — (\w+)\n([\s\S]*?)\n?<\/subagent_notification>/)
-  if (!m) return <div className="notice">{text}</div>
-  const [, name, id, status, body] = m
+/**
+ * What a subagent, or a run of an automation, came to, as it arrives in the conversation above it; it
+ * opens the subagent or the run. A watch that was paused has no run.
+ */
+function Report({ text }: { text: string }) {
+  const report = parseReport(text)
+  if (!report) return <div className="notice">{text}</div>
+  const { kind, name, run, status, body } = report
   return (
     <div className="activity">
-      <Step icon="agents" label={`Subagent “${name}” ${status}`} trailing={<SubagentLink id={id} />}>
-        <Markdown text={body} />
-      </Step>
-    </div>
-  )
-}
-
-/** What a run of an automation came to, as it arrives in the bot's conversation; it opens the run. A watch that was paused has no run. */
-function AutomationReport({ text }: { text: string }) {
-  const m = text.match(/Automation "(.*?)" \(automation: ([^\s,)]+)(?:, run: (\S+))?\) — (\w+)\n([\s\S]*?)\n?<\/automation_result>/)
-  if (!m) return <div className="notice">{text}</div>
-  const [, name, , run, status, body] = m
-  return (
-    <div className="activity">
-      <Step icon="clock" label={`Automation “${name}” ${status === 'completed' ? 'ran' : status === 'paused' ? 'was paused' : status}`} trailing={run ? <SubagentLink id={run} /> : undefined}>
+      <Step
+        icon={kind === 'subagent' ? 'agents' : 'clock'}
+        label={kind === 'subagent' ? `Subagent “${name}” ${status}` : `Automation “${name}” ${reportWord(status)}`}
+        trailing={run ? <SubagentLink id={run} /> : undefined}
+      >
         <Markdown text={body} />
       </Step>
     </div>
@@ -283,8 +278,7 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
         )
       }
       else if (data.source === 'bot') blocks.push(<BotMessage key={id} id={id} from={data.bot?.name ?? 'another bot'} text={data.text} replyWanted={!!data.replyWanted} messageKey={data.key} />)
-      else if (data.source === 'subagent') blocks.push(<div key={id} data-item={id}><SubagentReport text={data.text} /></div>)
-      else if (data.source === 'automation') blocks.push(<div key={id} data-item={id}><AutomationReport text={data.text} /></div>)
+      else if (data.source === 'subagent' || data.source === 'automation') blocks.push(<div key={id} data-item={id}><Report text={data.text} /></div>)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
       else if (data.source === 'trigger') {
         const { prompt, change, heading } = runBrief(data.text)

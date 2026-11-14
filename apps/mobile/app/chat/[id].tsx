@@ -7,9 +7,10 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Attachment, Bot, BotRef, Item, Thread } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
-import { runBrief } from '@openkumi/client/automations'
+import { moment, runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
+import { type Report, parseReport, reportWord } from '@openkumi/client/reports'
 import { describe } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
@@ -30,6 +31,8 @@ type Row =
   /** What the bot did between two messages, folded into one line. */
   | { key: string; kind: 'steps'; steps: string[] }
   | { key: string; kind: 'page'; title: string; html: string; height: number }
+  /** What a subagent or a run of an automation came to, and when it said so. */
+  | { key: string; kind: 'report'; report: Report; at: number }
   /** A message between bots: one that came from another bot (`from`), or one this bot sent (`to`). */
   | { key: string; kind: 'between'; from?: string; to?: BotRef; text: string; replyWanted: boolean; messageKey?: string }
 
@@ -52,7 +55,9 @@ function rows(items: Item[]): Row[] {
   for (const item of items) {
     const d = item.data
     const key = String(item.id)
-    if (d.type === 'message' && d.role === 'user' && d.source === 'bot') out.push({ key, kind: 'between', from: d.bot?.name ?? 'another bot', text: d.text, replyWanted: !!d.replyWanted, messageKey: d.key })
+    const report = d.type === 'message' && d.role === 'user' && (d.source === 'subagent' || d.source === 'automation') ? parseReport(d.text) : null
+    if (report) out.push({ key, kind: 'report', report, at: item.createdAt })
+    else if (d.type === 'message' && d.role === 'user' && d.source === 'bot') out.push({ key, kind: 'between', from: d.bot?.name ?? 'another bot', text: d.text, replyWanted: !!d.replyWanted, messageKey: d.key })
     else if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId } : { key, kind: 'notice', text: `${FROM[d.source as keyof typeof FROM]}: ${d.source === 'trigger' ? brief(d.text) : d.text}` })
     else if (d.type === 'sent') out.push({ key, kind: 'between', to: d.to, text: d.text, replyWanted: d.replyWanted, messageKey: d.key })
     // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
@@ -81,6 +86,45 @@ function Steps({ steps, theme }: { steps: string[]; theme: Theme }) {
       </Text>
       {open && steps.map((text, i) => <Text key={i} style={[styles.step, styles.inner, { color: theme.muted, borderLeftColor: theme.border }]} numberOfLines={2}>{text}</Text>)}
     </Pressable>
+  )
+}
+
+/** Opens a subagent's or a run's thread from its report. */
+const OpenRun = createContext<(id: string) => void>(() => {})
+
+/**
+ * What a subagent or a run of an automation came to, in one quiet line under which its report
+ * unfolds; the bot's reply after it is what the owner reads. One that failed, or a watch that was
+ * paused, starts unfolded. A paused watch ran nothing, so it has nothing to open.
+ */
+function ReportLine({ row, theme }: { row: Row & { kind: 'report' }; theme: Theme }) {
+  const open = useContext(OpenRun)
+  const { kind, name, run, status, body } = row.report
+  const trouble = status === 'failed' || status === 'paused'
+  const [shown, setShown] = useState(trouble)
+  const folds = !!body.trim()
+  // What became of it, when, and the fold, joined by spaces that do not break, so they wrap as one when the name is long.
+  const nb = (text: string) => text.replace(/ /g, '\u00a0')
+  return (
+    <View style={styles.report}>
+      <View style={styles.reportHead}>
+        <Pressable accessibilityRole="button" accessibilityState={folds ? { expanded: shown } : undefined} disabled={!folds} style={styles.reportLine} onPress={() => setShown(!shown)}>
+          <View style={styles.reportGlyph}><Glyph name={kind === 'subagent' ? 'agents' : 'clock'} size={14} color={theme.muted} /></View>
+          <Text style={[styles.reportText, { color: theme.muted }]}>
+            {kind === 'subagent' ? 'Subagent ' : ''}“{name}” <Text style={trouble ? { color: theme.err } : undefined}>{nb(reportWord(status))}</Text>
+            {nb(` · ${moment(row.at).replace(/^today /, '')}`)}
+            {folds && <Text style={{ color: theme.faint }}>{nb(` ${shown ? '⌃' : '⌄'}`)}</Text>}
+          </Text>
+        </Pressable>
+        {!!run && (
+          <Pressable accessibilityRole="link" accessibilityLabel={kind === 'subagent' ? 'Open the subagent' : 'Open the run'} hitSlop={8} style={styles.reportOpen} onPress={() => open(run)}>
+            <Text style={[styles.reportText, { color: theme.muted }]}>Open</Text>
+            <Glyph name="chevron" size={13} color={theme.text} weight={2.2} />
+          </Pressable>
+        )}
+      </View>
+      {shown && folds && <View style={[styles.inner, styles.reportBody, { borderLeftColor: theme.border }]}><Markdown text={body} /></View>}
+    </View>
   )
 }
 
@@ -197,6 +241,7 @@ const Line = memo(function Line({ row, theme, scale }: { row: Row; theme: Theme;
   if (row.kind === 'bot') return <View style={styles.bot}><Markdown text={row.text} /><CopyReply text={row.text} theme={theme} /></View>
   if (row.kind === 'steps') return <Steps steps={row.steps} theme={theme} />
   if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
+  if (row.kind === 'report') return <ReportLine row={row} theme={theme} />
   return <Text style={[styles.notice, { color: row.error ? theme.err : theme.faint }]}>{row.text}</Text>
 })
 
@@ -280,7 +325,10 @@ export default function Chat() {
     [threads],
   )
   const running = thread?.status === 'running'
-  const subagents = thread ? recentSubagents(threads, thread) : []
+  // A run whose report is in the conversation is opened from there, so it leaves the strip.
+  const reported = useMemo(() => new Set(shown.flatMap((row) => (row.kind === 'report' && row.report.run ? [row.report.run] : []))), [shown])
+  const subagents = thread ? recentSubagents(threads, thread).filter((t) => t.kind !== 'automation' || !reported.has(t.id)) : []
+  const openRun = useMemo(() => (runId: string) => router.push({ pathname: '/chat/[id]', params: { id: runId } }), [router])
 
   // A reply's link to one of the bot's files: a page opens as one, Markdown and other text are shown as they are.
   const [file, setFile] = useState<{ path: string; content: string } | null>(null)
@@ -342,6 +390,7 @@ export default function Chat() {
           {subagents.map((t) => (
             <Pressable key={t.id} accessibilityRole="button" style={[styles.chip, { borderColor: theme.border }]} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: t.id } })}>
               {t.status === 'running' && <ActivityIndicator size="small" color={theme.run} />}
+              {t.kind === 'automation' && <Glyph name="clock" size={14} color={theme.muted} />}
               <Text style={{ color: theme.text, fontSize: 13 }} numberOfLines={1}>{t.title}</Text>
             </Pressable>
           ))}
@@ -382,6 +431,7 @@ export default function Chat() {
         <FileLinks.Provider value={openFile}>
         <ShowText.Provider value={showText}>
         <OpenOtherEnd.Provider value={otherEnd}>
+        <OpenRun.Provider value={openRun}>
         <LegendList
           ref={list}
           data={shown}
@@ -411,6 +461,7 @@ export default function Chat() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}
           keyboardDismissMode="interactive"
         />
+        </OpenRun.Provider>
         </OpenOtherEnd.Provider>
         </ShowText.Provider>
         </FileLinks.Provider>
@@ -501,6 +552,13 @@ const styles = StyleSheet.create({
   step: { fontSize: 13.5, paddingVertical: 3 },
   inner: { marginLeft: 4, paddingLeft: 10, borderLeftWidth: StyleSheet.hairlineWidth },
   notice: { fontSize: 13, lineHeight: 18, paddingVertical: 6 },
+  report: { paddingVertical: 6 },
+  reportHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  reportLine: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 7 },
+  reportGlyph: { marginTop: 2 },
+  reportText: { flexShrink: 1, fontSize: 13.5, lineHeight: 18 },
+  reportOpen: { flexDirection: 'row', alignItems: 'center', gap: 1 },
+  reportBody: { marginTop: 6 },
   working: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 6 },
   between: { maxWidth: '86%', marginVertical: 6, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, gap: 3 },
