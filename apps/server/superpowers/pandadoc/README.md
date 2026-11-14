@@ -4,7 +4,7 @@ Lets a bot work on your PandaDoc documents, through PandaDoc's own service. Ask 
 - "Draft a quote for Acme from the Standard template, for 20 seats."
 - "Has the Lisbon lease been signed, and by whom?"
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and choose a workspace on
+Activating it signs the bot in: you choose a workspace on
 PandaDoc's own page. It reaches accounts in PandaDoc's US region; an account in the EU region
 cannot sign in here.
 

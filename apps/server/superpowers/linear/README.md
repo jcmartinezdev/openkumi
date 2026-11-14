@@ -4,7 +4,7 @@ Lets a bot work in your Linear workspace, through Linear's own service. Ask it t
 - "File a bug for the login timeout, with what we found, in the Mobile team."
 - "Summarise what moved in the Billing project this week."
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and approve it on
+Activating it signs the bot in: you approve it on
 Linear's own page. The bot sees what your Linear account sees.
 
 Linear can also call OpenKumi the moment an issue or a comment is created or changed, so that an

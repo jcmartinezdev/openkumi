@@ -5,7 +5,7 @@ Lets a bot work in your Jira and Confluence, through Atlassian's own service. As
 - "Find the onboarding checklist in Confluence and tell me what changed this month."
 - "Write this decision up as a page in the Platform space."
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and approve it on
+Activating it signs the bot in: you approve it on
 Atlassian's own page. The bot sees what your Atlassian account sees, on Atlassian Cloud sites.
 If your organisation limits which apps may connect, an admin may have to allow it.
 

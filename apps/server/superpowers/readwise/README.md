@@ -5,7 +5,7 @@ Ask it things like:
 - "Save this article to Reader for later."
 - "What's in today's Daily Review?"
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and approve it on
+Activating it signs the bot in: you approve it on
 Readwise's own page. The bot sees what your Readwise account sees.
 
 The bot searches and reads freely, and can save documents and add highlights, notes and tags.

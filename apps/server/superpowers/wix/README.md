@@ -4,7 +4,7 @@ Lets a bot work on your Wix sites, through Wix's own service. Ask it things like
 - "Add these five blog posts to the site as drafts."
 - "Who's booked for a session next Tuesday?"
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and approve it on Wix's own
+Activating it signs the bot in: you approve it on Wix's own
 page. The bot sees every site in the Wix account you sign in with. It is free on Wix's side;
 some things it can do need a paid Wix plan.
 

@@ -5,7 +5,7 @@ like:
 - "Find every meeting where the Acme renewal came up this month."
 - "Pull Sara's exact words about the deadline from the kickoff."
 
-There is nothing to set up. Activate it for a bot, press **Sign in**, and grant access on tl;dv's
+Activating it signs the bot in: you grant access on tl;dv's
 own page. It needs tl;dv Pro or higher, and a meeting is reachable only when its organiser is on
 Pro or higher too. The bot sees the meetings you were in, and others only when you ask for them.
 
