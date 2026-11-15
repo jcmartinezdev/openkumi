@@ -1,11 +1,11 @@
 # Makes a release: the desktop app for Mac, Windows and Linux, the server as it is installed on
-# its own, and what both read to update themselves. See "Releasing" in the README.
+# its own, and what both read to update themselves. See docs/development.md, "Releasing".
 #
 #   - Pushing a tag like v0.2.0 builds everything and publishes the release.
 #   - A pull request that changes how things are packaged builds everything too, as a rehearsal,
 #     and publishes nothing. The files are kept with the run for a few days.
 #
-# The Mac app is signed and notarized when these secrets are set (README, "Releasing"):
+# The Mac app is signed and notarized when these secrets are set (docs/development.md, "Releasing"):
 #   MAC_CERTIFICATE_P12_BASE64, MAC_CERTIFICATE_PASSWORD   the Developer ID Application certificate
 #   APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER   an App Store Connect key, for notarizing
 # Without them it is still built, but macOS will not open it on another computer, so the release
@@ -185,9 +185,11 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: desktop-${{ matrix.name }}
+          # Not the uninstaller, which the Windows installer carries inside it and leaves beside itself here.
           path: |
             release/OpenKumi-*
             release/latest*.yml
+            !release/*.__uninstaller.exe
           if-no-files-found: error
           retention-days: 7
 

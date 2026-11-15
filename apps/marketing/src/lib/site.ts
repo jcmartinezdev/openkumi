@@ -15,6 +15,40 @@ export const RELEASES_URL = `${GITHUB_URL}/releases/latest`
 export const DOWNLOAD_URL = `${RELEASES_URL}/download/OpenKumi-mac-arm64.dmg`
 /** What installs the server on a Mac or Linux computer that runs the bots with no app in front of it (public/install.sh). */
 export const INSTALL_COMMAND = 'curl -fsSL https://openkumi.ai/install.sh | sh'
+
+/** The address of one of the newest release's files. */
+const file = (name: string) => `${RELEASES_URL}/download/${name}`
+
+/**
+ * The desktop app for each system, as the release names its installers. The first of each is the
+ * one most people with that system need, and is what the page's main button gives them.
+ */
+export const DOWNLOADS = [
+  {
+    id: 'mac',
+    name: 'Mac',
+    needs: 'macOS 12 or later',
+    files: [
+      { label: 'Apple silicon', href: file('OpenKumi-mac-arm64.dmg') },
+      { label: 'Intel', href: file('OpenKumi-mac-x64.dmg') },
+    ],
+  },
+  {
+    id: 'windows',
+    name: 'Windows',
+    needs: 'Windows 10 or later',
+    files: [{ label: '64-bit', href: file('OpenKumi-win-x64.exe') }],
+  },
+  {
+    id: 'linux',
+    name: 'Linux',
+    needs: 'An AppImage, which runs as it is',
+    files: [
+      { label: 'x64', href: file('OpenKumi-linux-x86_64.AppImage') },
+      { label: 'ARM', href: file('OpenKumi-linux-arm64.AppImage') },
+    ],
+  },
+] as const
 export const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`
 
 export const NAV = [
