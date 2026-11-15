@@ -74,7 +74,7 @@ export function showing(): string | null {
  * What an OpenKumi server on this computer says about itself, or null when there is none at the
  * address. With a `challenge`, it answers with that value signed with its access code.
  */
-export async function hello(url: string, timeoutMs = 6000, challenge = ''): Promise<{ app: string; version: string; home?: string; proof?: string } | null> {
+export async function hello(url: string, timeoutMs = 6000, challenge = ''): Promise<{ app: string; version: string; protocol?: number; home?: string; proof?: string } | null> {
   try {
     const res = await fetch(`${url}/api/hello${challenge ? `?challenge=${challenge}` : ''}`, { signal: AbortSignal.timeout(timeoutMs) })
     const said = res.ok ? await res.json() : null
@@ -93,8 +93,32 @@ export async function statuses(): Promise<Record<string, EnvironmentReport>> {
     config.environments.map(async (environment): Promise<EnvironmentReport> => {
       if (!environment.enabled) return { status: 'off', addresses: {} }
       const answers = await Promise.all(ordered(environment.addresses).map((url) => probe(url, environment.token, environment.serverId)))
-      return { status: verdict(answers), addresses: Object.fromEntries(answers.map((answer) => [answer.url, answer.answer])) }
+      const status = verdict(answers)
+      const said = answers.find((answer) => answer.proven)
+      return { status, addresses: Object.fromEntries(answers.map((answer) => [answer.url, answer.answer])), version: said?.version, canUpdate: status === 'outdated' && !!said }
     }),
   )
   return Object.fromEntries(config.environments.map((environment, i) => [environment.id, found[i]]))
+}
+
+/**
+ * Asks a remote environment that runs an older OpenKumi to fetch the newest and start it. Each
+ * address is asked who it is first, and the key only goes to one that showed it is the environment.
+ * Gives back what it said it will do, for the person to read.
+ */
+export async function askToUpdate(environment: Environment): Promise<string> {
+  const answers = await Promise.all(ordered(environment.addresses).map((url) => probe(url, environment.token, environment.serverId)))
+  const there = answers.find((answer) => answer.proven)
+  if (!there) throw new Error(`${environment.name} cannot be reached right now, or is too old to be updated from here. Update OpenKumi on that computer.`)
+  const res = await fetch(`${there.url}/api/update`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${environment.token}`, 'Content-Type': 'application/json' },
+    body: '{}',
+    signal: AbortSignal.timeout(120_000),
+  }).catch(() => null)
+  const said = await res?.json().catch(() => null)
+  if (!res?.ok) throw new Error(res?.status === 404 ? `${environment.name} runs a version from before OpenKumi could update itself. Update it on that computer.` : (said?.error ?? `${environment.name} did not answer.`))
+  if (said.state === 'failed') throw new Error(said.error)
+  if (said.state !== 'ready') return `${environment.name} already runs the newest OpenKumi (${said.latest ?? there.version}). This app may need the update: see Settings › About.`
+  return said.working ? `${environment.name} has OpenKumi ${said.latest} in place and starts it once its bots are done.` : `${environment.name} is starting OpenKumi ${said.latest}. It connects by itself in a moment.`
 }

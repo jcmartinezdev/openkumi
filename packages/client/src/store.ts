@@ -23,6 +23,8 @@ export interface State extends AppState {
   refused: boolean
   /** The environment runs an OpenKumi too old to show who it is, so it is not sent the key. */
   outdated: boolean
+  /** The server is too new for this app to work with: the app has to be updated. */
+  newer: boolean
   /** The address the connection uses, once one has shown it is the environment's server. */
   address: string | null
 }
@@ -44,7 +46,8 @@ const EMPTY: State = {
   seq: 0,
   settings: {} as Settings,
   defaults: {} as Settings,
-  about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '', hooksPort: 0 },
+  about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '', hooksPort: 0, protocol: 0 },
+  update: { how: 'source', latest: null, state: 'idle', error: '', checkedAt: 0, working: 0 },
   items: {},
   older: {},
   partial: {},
@@ -54,6 +57,7 @@ const EMPTY: State = {
   failures: 0,
   refused: false,
   outdated: false,
+  newer: false,
   address: null,
 }
 let state = EMPTY
@@ -226,6 +230,8 @@ function handle(ev: ServerEvent) {
       return set({ providers: ev.providers })
     case 'settings':
       return set({ settings: ev.settings })
+    case 'update':
+      return set({ update: ev.update })
     case 'superpowers':
       return set({ superpowers: ev.superpowers, superpowerCategories: ev.categories })
     case 'superpower.status': {
@@ -370,8 +376,9 @@ async function find() {
     }
     const refused = answers.some((probe) => probe.answer === 'refused')
     const outdated = !refused && answers.some((probe) => probe.answer === 'outdated')
-    set({ refused, outdated, failures: state.failures + 1 })
-    again = setTimeout(find, refused || outdated ? 5000 : 2000)
+    const newer = !refused && !outdated && answers.some((probe) => probe.answer === 'newer')
+    set({ refused, outdated, newer, failures: state.failures + 1 })
+    again = setTimeout(find, refused || outdated || newer ? 5000 : 2000)
   } finally {
     finding = false
   }
@@ -392,7 +399,8 @@ async function keep() {
     if (asked !== epoch || at !== was) return
     if (found && found.url !== was) return connectTo(found.url)
     const here = answers.find((probe) => probe.url === was)?.answer
-    if (here === 'other' || here === 'refused') tell({ type: 'reconnect' })
+    // Something else answers there now, or the server was replaced by a version this app cannot work with.
+    if (here === 'other' || here === 'refused' || here === 'outdated' || here === 'newer') tell({ type: 'reconnect' })
   } finally {
     finding = false
   }
@@ -456,7 +464,7 @@ async function opened() {
   waiting = null
   batching = true
   const { removed, ...fresh } = snapshot
-  const live = { connected: true, loaded: true, failures: 0, refused: false, outdated: false }
+  const live = { connected: true, loaded: true, failures: 0, refused: false, outdated: false, newer: false }
   if (removed) {
     // Only what changed: laid over the threads held. What is held of each chat stays, and the
     // chats catch up on what was said meanwhile as views show them (see openThread).

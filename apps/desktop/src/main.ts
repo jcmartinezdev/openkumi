@@ -10,10 +10,11 @@ import os from 'node:os'
 import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresses'
 import { pair, parseAddress } from '@openkumi/client/pair'
 import { canDictate, cancelDictation, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
-import { config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
+import { askToUpdate, config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
 import { ASSUME_YES, CATCH_SIGN_INS, HIDDEN, PRELOAD } from './paths.ts'
 import { APP_URL, keepPage, serveInterface } from './protocol.ts'
+import { checkForUpdate, installUpdate, onUpdateChange, startUpdates, updateState } from './updates.ts'
 
 let win: BrowserWindow | null = null
 
@@ -52,6 +53,7 @@ function connection(): Link | null {
 function state(): DesktopState {
   return {
     version: app.getVersion(),
+    update: updateState(),
     platform: process.platform,
     fullScreen: !!win?.isFullScreen(),
     local: { enabled: config.local.enabled, state: config.local.enabled ? local.state : 'off', error: local.error, startedHere: !!local.child },
@@ -69,6 +71,7 @@ function announce() {
 }
 
 onLocalChange(announce)
+onUpdateChange(announce)
 
 /** Saves a change to the environments and tells the window. */
 function changed() {
@@ -180,6 +183,27 @@ async function remove(id: string) {
   changed()
 }
 
+/** Asks a remote environment that runs an older OpenKumi to update itself. */
+async function updateEnvironment(id: string) {
+  const environment = find(id)
+  if (!environment) throw new Error('That environment is not here any more.')
+  return askToUpdate(environment)
+}
+
+/** The server this app started is stopped (see the end of this file). */
+let stopped = false
+
+/**
+ * Puts the downloaded version of the app in place and opens it. The server this app runs is
+ * stopped first, cleanly, so the bots' work is saved; the window asked the person before this.
+ */
+async function restartForUpdate() {
+  if (updateState().state !== 'ready') return
+  if (local.child) await stopLocal()
+  stopped = true
+  installUpdate()
+}
+
 // ---- what the window may ask for (see preload.ts)
 // Only the app's own page is answered: it is the one page that is given access codes.
 
@@ -203,6 +227,9 @@ answer('desktop:remove', (id) => remove(String(id)))
 answer('desktop:add-address', (id, address) => addAddress(String(id), address))
 answer('desktop:remove-address', (id, url) => removeAddress(String(id), String(url)))
 answer('desktop:learn', (id, learned) => learn(String(id), learned))
+answer('desktop:update-environment', (id) => updateEnvironment(String(id)))
+answer('desktop:check-for-update', () => checkForUpdate())
+answer('desktop:install-update', () => restartForUpdate())
 answer('desktop:can-dictate', () => canDictate())
 answer('desktop:dictate-stop', () => stopDictation())
 answer('desktop:dictate-cancel', () => cancelDictation())
@@ -272,8 +299,10 @@ const goTo = (page: string) => void win?.webContents.executeJavaScript(`location
 function buildMenu() {
   const mac = process.platform === 'darwin'
   const settings: MenuItemConstructorOptions = { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => goTo('general') }
+  // What it finds is shown on the About page, so that is where this goes.
+  const updates: MenuItemConstructorOptions[] = updateState().state === 'unsupported' ? [] : [{ label: updateState().state === 'ready' ? 'Restart to Update…' : 'Check for Updates…', click: () => (goTo('about'), void checkForUpdate()) }]
   const appMenu: MenuItemConstructorOptions[] = mac
-    ? [{ label: app.name, submenu: [{ role: 'about' }, { type: 'separator' }, settings, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }]
+    ? [{ label: app.name, submenu: [{ role: 'about' }, ...updates, { type: 'separator' }, settings, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }]
     : []
   const environments: MenuItemConstructorOptions[] = turnedOn().map((id) => ({ label: nameOf(id), type: 'radio', checked: id === config.current, click: () => open(id) }))
   Menu.setApplicationMenu(
@@ -281,7 +310,7 @@ function buildMenu() {
       ...appMenu,
       {
         label: 'Environment',
-        submenu: [...environments, ...(environments.length ? [{ type: 'separator' } as const] : []), { label: 'Manage Environments…', click: () => goTo('environments') }, ...(mac ? [] : [{ type: 'separator' } as const, settings])],
+        submenu: [...environments, ...(environments.length ? [{ type: 'separator' } as const] : []), { label: 'Manage Environments…', click: () => goTo('environments') }, ...(mac ? [] : [{ type: 'separator' } as const, settings, ...updates])],
       },
       { role: 'editMenu' },
       { role: 'viewMenu' },
@@ -317,6 +346,7 @@ else {
     // It starts alongside the window, not after it; the window is told when it is ready.
     if (config.local.enabled) void startLocal().catch(() => {})
     createWindow()
+    startUpdates()
     app.on('activate', () => {
       if (!win) createWindow()
     })
@@ -325,7 +355,6 @@ else {
     if (process.platform !== 'darwin') app.quit()
   })
   // The server this app started ends with it; bots that are still working are stopped cleanly.
-  let stopped = false
   app.on('before-quit', (event) => {
     if (stopped || !local.child) return
     event.preventDefault()

@@ -4,7 +4,7 @@ import Layout from '../layouts/Layout.astro'
 import Mascot from '../components/Mascot.astro'
 import ProviderMark from '../components/ProviderMark.astro'
 import Shot from '../components/Shot.astro'
-import { DOWNLOAD_URL, GITHUB_URL } from '../lib/site'
+import { DOWNLOAD_URL, GITHUB_URL, INSTALL_COMMAND, RELEASES_URL } from '../lib/site'
 
 // The superpowers that ship with the app, read from the server's own folder of them, by name as the app lists them.
 const powers = Object.entries(import.meta.glob<{ name: string; tagline: string }>('../../../server/superpowers/*/superpower.json', { eager: true, import: 'default' }))
@@ -59,6 +59,10 @@ const faq = [
     q: 'Can I use it from my phone or another computer?',
     a: 'Yes. Bots can run on a computer of yours that stays on, and your laptop or iPhone pairs with it using a one-time code. At home they connect directly; away from home, over Tailscale.',
   },
+  {
+    q: 'How does it stay up to date?',
+    a: 'By itself. The desktop app downloads a new version in the background and asks you to restart when it is ready. OpenKumi installed on a computer of its own fetches the new version and starts it once no bot is working. You can switch that off and update when you choose.',
+  },
 ]
 ---
 
@@ -79,7 +83,7 @@ const faq = [
         </a>
         <a class="button secondary" href={GITHUB_URL}>View on GitHub</a>
       </div>
-      <p class="fine">Free and MIT-licensed. No API key, no account.</p>
+      <p class="fine">Free and MIT-licensed. No API key, no account. Also for <a href={RELEASES_URL}>Intel Macs, Windows and Linux</a>.</p>
     </div>
     <div class="container stage">
       <div class="lineup" aria-hidden="true">
@@ -313,6 +317,8 @@ const faq = [
         <span class="eyebrow">Wherever you are</span>
         <h2>On this Mac, a computer at home, or your phone</h2>
         <p>Bots run on this Mac, or on another computer of yours that stays on. Pair a laptop or an iPhone with a one-time code that both sides check and that never crosses the network. At home they connect directly; away from home, over Tailscale.</p>
+        <p>A computer with no screen needs no app: one line in its terminal installs OpenKumi there, keeps it running and keeps it up to date.</p>
+        <pre class="install"><code>{INSTALL_COMMAND}</code></pre>
         <p>The iPhone app lets you chat with your bots, watch and steer their browsers, and look after their settings and automations.</p>
       </div>
       <div class="devices" aria-hidden="true">
@@ -434,6 +440,26 @@ const faq = [
   .fine {
     font-size: 14px;
     color: var(--faint);
+  }
+  .fine a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .fine a:hover {
+    color: var(--text);
+  }
+  /* The line that installs OpenKumi on a computer with no screen: one line, scrolled sideways on a narrow one. */
+  .install {
+    margin: 0;
+    padding: 12px 16px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-sunk);
+    color: var(--text);
+    font-size: 14px;
+    white-space: pre;
   }
   .stage {
     position: relative;

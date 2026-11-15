@@ -884,6 +884,10 @@ button.day { width: 30px; height: 30px; padding: 0; border-radius: 50%; font-siz
 button.day.on, button.day.on:hover:not(:disabled) { background: var(--primary); color: var(--on-primary); border-color: transparent; }
 .automation-actions { display: flex; align-items: center; gap: 8px; margin-top: -14px; padding: 0 4px; }
 .row.automations-link { margin-bottom: 0; }
+/* A new version of the app is downloaded: one row above Settings, which restarts into it. */
+.row.update-ready { margin-bottom: 0; color: var(--text); }
+.update-dot { width: 8px; height: 8px; margin: 0 4px; border-radius: 50%; background: var(--ok); flex: none; }
+.set-version { margin-left: 8px; font-size: 12px; font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums; }
 
 /* ---- narrow screens */
 

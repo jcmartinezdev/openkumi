@@ -55,6 +55,8 @@ let closing = false
 const waiters = new Map<string, Set<() => void>>()
 
 export const isRunning = (threadId: string) => running.has(threadId)
+/** How many conversations, subagents and runs are at work: what stopping the server now would cut off. */
+export const working = () => running.size
 export const partialOf = (threadId: string): Partial => running.get(threadId)?.partial ?? { text: '', reasoning: '' }
 
 export function depthOf(thread: Thread): number {

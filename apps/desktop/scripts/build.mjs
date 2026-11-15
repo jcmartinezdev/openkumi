@@ -25,12 +25,20 @@ if (process.platform === 'darwin') {
   const built = fs.existsSync(out) ? fs.statSync(out).mtimeMs : 0
   if (sources.some((source) => fs.statSync(source).mtimeMs > built)) {
     try {
-      // It runs on any Mac the app does, and says for itself whether that Mac can take dictation (macOS 26 or later).
-      const target = `${process.arch === 'x64' ? 'x86_64' : 'arm64'}-apple-macos12`
-      execFileSync('xcrun', ['swiftc', '-O', '-swift-version', '5', '-parse-as-library', '-target', target, ...sources, '-o', out], { stdio: 'inherit' })
+      // It runs on any Mac the app does, with either kind of processor, and says for itself
+      // whether that Mac can take dictation (macOS 26 or later).
+      const parts = ['arm64', 'x86_64'].map((arch) => {
+        const part = `${out}.${arch}`
+        execFileSync('xcrun', ['swiftc', '-O', '-swift-version', '5', '-parse-as-library', '-target', `${arch}-apple-macos12`, ...sources, '-o', part], { stdio: 'inherit' })
+        return part
+      })
+      execFileSync('xcrun', ['lipo', '-create', ...parts, '-output', out], { stdio: 'inherit' })
+      parts.forEach((part) => fs.rmSync(part))
       console.log('  dist/dictation')
-    } catch {
-      // The app works without it; there is just no microphone button.
+    } catch (e) {
+      // A release must not go out without it for want of a compiler on the computer that made it.
+      if (process.env.OPENKUMI_REQUIRE_DICTATION) throw e
+      // Otherwise the app works without it; there is just no microphone button.
       console.warn('Dictation was not built: it needs Xcode or its command line tools (xcode-select --install).')
     }
   }

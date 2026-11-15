@@ -9,6 +9,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { type UtilityProcess, utilityProcess } from 'electron'
 import type { LocalEnvironment } from '@openkumi/shared/desktop'
+import { compatible } from '@openkumi/shared/protocol'
 import { hello } from './environments.ts'
 import { SERVER, USER_DATA } from './paths.ts'
 
@@ -65,6 +66,9 @@ function searchPath() {
   return [...have, ...usual.filter((dir) => !have.includes(dir))].join(path.delimiter)
 }
 
+/** OpenKumi is running on this computer in a version this app cannot work with. */
+class Unfit extends Error {}
+
 /**
  * Takes the server at this port as the local environment. Its access code is in its data folder,
  * which the server names to callers on this computer, and which only this computer's user can read.
@@ -84,6 +88,11 @@ async function adopt(port: number, turn: number) {
   const expected = crypto.createHmac('sha256', token).update(challenge).digest()
   const given = Buffer.from(said?.proof ?? '', 'hex')
   if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) throw new Error(`Something on this computer answers at port ${port} as OpenKumi, but could not show that it is. It was not given the access code.`)
+  // It is OpenKumi, and this user's. Whether this app can work with it is another matter: one
+  // started outside the app (as a background service, say) is updated on its own.
+  const fits = compatible(said?.protocol)
+  if (fits === 'outdated') throw new Unfit(`OpenKumi ${said?.version} is already running on this computer, and is too old for this app. Update it with “openkumi update” in a terminal, or stop it and this app runs its own.`)
+  if (fits === 'newer') throw new Unfit(`OpenKumi ${said?.version} is already running on this computer, and is newer than this app can work with. Update the app: see Settings › About.`)
   // Turned off, or off and on again, while this was being found out.
   if (turn === turns) set({ state: 'running', error: '', port, token })
 }
@@ -97,7 +106,10 @@ async function start(turn: number) {
   if (await hello(address(preferred), 1500)) {
     try {
       return await adopt(preferred, turn)
-    } catch {
+    } catch (e) {
+      // This user's own OpenKumi, in a version this app cannot work with. A second one beside it
+      // would share its data folder, so the person is told instead.
+      if (e instanceof Unfit) throw e
       // Not one this app can use (another user's, or not OpenKumi at all): it runs its own beside it.
     }
   }

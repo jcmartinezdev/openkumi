@@ -77,10 +77,12 @@ export function useServerStatus(): { text: string; word: string; ok: boolean } {
   const loaded = useStore((s) => s.loaded)
   const refused = useStore((s) => s.refused)
   const outdated = useStore((s) => s.outdated)
+  const newer = useStore((s) => s.newer)
   const failures = useStore((s) => s.failures)
   const version = useStore((s) => s.about.version)
   if (refused) return { text: 'No longer lets this phone in', word: 'Refused', ok: false }
   if (outdated) return { text: 'Runs an older OpenKumi', word: 'Needs update', ok: false }
+  if (newer) return { text: 'Runs a newer OpenKumi than this app', word: 'Update the app', ok: false }
   if (connected) return { text: version ? `Connected · OpenKumi ${version}` : 'Connected', word: 'Connected', ok: true }
   if (failures >= 2) return { text: 'Cannot be reached. Still trying…', word: 'Unreachable', ok: false }
   const word = loaded ? 'Reconnecting…' : 'Connecting…'

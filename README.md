@@ -68,12 +68,45 @@ that stays logged in.
   Choose its creature, colour, hat, extra and clothes, or leave it and the new bot dresses itself
   from its name and what it is for. Its look is a line in `bot.md` (`look: cat sky cap orange`).
 
-## Run it
+## Install it
 
-Requires Node.js 22.18+ and Google Chrome, plus something for the bots to run on: the Codex CLI
+OpenKumi needs Google Chrome, plus something for the bots to run on: the Codex CLI
 (`codex login`), Claude Code (`claude`) or Grok Build (`grok login`), signed in; or Ollama or LM
 Studio running; or an OpenAI-compatible API. With git
 installed, each bot's changes to its own files are kept as a history you can undo.
+
+**The desktop app.** Download it from [openkumi.ai](https://openkumi.ai), or pick an installer
+from the [newest release](https://github.com/jcmartinezdev/openkumi/releases/latest): a `.dmg` for
+a Mac (Apple silicon or Intel), an installer for Windows, an AppImage for Linux. It carries its
+own server, so nothing else has to be installed. The first time, the app asks where your bots
+should run. Check under **Settings → Providers** that something shows as connected, then start
+chatting.
+
+**The server alone**, on a Mac or a Linux computer that runs your bots with no app in front of it
+(a Mac mini in a cupboard, a machine in a rack):
+
+```sh
+curl -fsSL https://openkumi.ai/install.sh | sh
+```
+
+That downloads the newest release for that kind of computer, checks it against the checksums
+published with it, and unpacks it under `~/.openkumi/runtime`. It comes with the Node it runs on,
+so the computer needs neither Node nor npm. It puts an `openkumi` command in `~/.local/bin` and
+keeps the server running in the background, also after a restart (a launchd agent on a Mac, a
+systemd unit of your user on Linux; `--no-service` leaves that out). It runs as you, not as the
+system, because the bots use your sign-ins to Claude Code, Codex and Chrome. Then:
+
+```sh
+openkumi status              # whether it runs, which version, what the bots can run on
+openkumi lan on              # let your other computers and your phone reach it
+openkumi pair                # a code to enter in the app on another computer or phone
+openkumi update              # fetch the newest version now (it also does this by itself)
+openkumi logs                # what the background service printed
+openkumi service remove      # stop running in the background
+openkumi uninstall           # remove OpenKumi; your bots and their data stay in ~/.openkumi
+```
+
+**From the source**, with Node.js 22.18+:
 
 ```sh
 npm install
@@ -81,8 +114,26 @@ npm start          # builds the app and opens it
 npm run dist       # builds an installer into release/ (a .dmg on macOS)
 ```
 
-The first time, the app asks where your bots should run. Check under **Settings → Providers** that
-something shows as connected, then start chatting.
+### Updates
+
+Both parts keep themselves up to date from the project's releases, and neither needs the other to
+be the same version.
+
+- **The desktop app** looks for a newer version when it starts and every few hours, downloads it
+  in the background, and shows **Restart to update** in the sidebar and under **Settings → About**
+  when it is ready. It never restarts by itself: quitting stops the bots that run on this computer,
+  so when any are working it asks first. Left alone, the new version takes over the next time you
+  quit. The server inside the app is part of it and comes with it.
+- **A server installed on its own** looks every few hours. It downloads the new version, checks
+  it against the release's checksums, tries it once, and then starts it as soon as no bot is
+  working. **Settings → About** in an app connected to it shows where it stands, has **Update** to
+  do it now, and a switch to stop it updating by itself (it then only updates when you ask, there
+  or with `openkumi update`).
+- **What has to match** is not the version but one number that says how apps and servers talk
+  (`packages/shared/src/protocol.ts`), raised only when a change would break one for the other.
+  When they differ, the app says which of the two has to be updated instead of half working: for a
+  server that is behind, **Update it** beside the environment asks that server to update itself.
+  The key this computer was given still only goes to an address that has shown it is that server.
 
 ### Environments: where bots run
 
@@ -138,7 +189,9 @@ anywhere else an address needs `https`. The server itself only answers this comp
 network and Tailscale, and treats a request a proxy on this computer passes on as coming from
 elsewhere.
 
-A computer can also run the server with no app at all, for other computers to pair with:
+A computer can also run the server with no app at all, for other computers to pair with: see
+[Install it](#install-it) for the installed one (`openkumi lan on`, then `openkumi pair`). From the
+source it is:
 
 ```sh
 npm run server     # the server
@@ -170,9 +223,7 @@ There is no web version: the server has no pages, and opening its address in a b
 note saying so. The only way in is the app.
 
 The app keeps its environments, with the key each one gave it, in a file only you can read
-(`desktop.json` in the app's data folder, e.g. `~/Library/Application Support/OpenKumi`). Builds
-are signed with whatever certificate the build machine has and are not notarized, so an installer
-you hand to someone else will be flagged by macOS until that is set up.
+(`desktop.json` in the app's data folder, e.g. `~/Library/Application Support/OpenKumi`).
 
 ### Settings
 
@@ -189,6 +240,7 @@ Everything is set from the Settings page, which saves each change as you make it
 | Browser | which browser program the bots drive, and which bots have one running |
 | Environments | the local environment (on or off) and remote ones; letting other computers connect to the one being shown, its link and access code |
 | Advanced | limits (steps per turn, subagents), troubleshooting, the data folder |
+| About | the version of the app and of the environment it shows, and their updates |
 
 App-wide settings are stored in `~/.openkumi/settings.json` (only values that differ from the
 defaults). Preferences marked "this device" stay in the app on that computer.
@@ -205,6 +257,47 @@ npm run site        # the website (apps/marketing), at http://localhost:4321
 The tests use a scripted offline model, a real headless Chrome for the bots, and the real app
 with its window kept off the screen. Everything they touch is temporary. To test a packaged app
 instead of the source: `OPENKUMI_DESKTOP_APP="release/mac-arm64/OpenKumi.app/Contents/MacOS/OpenKumi" npm test -w @openkumi/desktop`.
+
+### Releasing
+
+A release is made by GitHub Actions (`.github/workflows/release.yml`) when a version tag is pushed:
+
+```sh
+npm run bump 0.2.0       # gives every part the new version
+git commit -am "Release 0.2.0" && git tag v0.2.0 && git push --follow-tags
+```
+
+It runs the tests, then builds, on computers of each kind:
+
+- the desktop app: `OpenKumi-mac-arm64.dmg` and `-x64.dmg` (each with the `.zip` an installed app
+  updates from), `OpenKumi-win-x64.exe`, and the Linux AppImages, with the `latest*.yml` files the
+  app reads to find them;
+- the server: `openkumi-server-<system>-<processor>.tar.gz` for macOS and Linux, on Apple silicon,
+  Intel and ARM (`npm run dist:server` makes them here), each installed and started once on a
+  computer of its kind before anything is published, and `openkumi-server.json`, which a running
+  server reads to find its next version;
+- `SHA256SUMS` for every file, and `install.sh`.
+
+Files are named for what they run on and not for their version, so
+`…/releases/latest/download/<file>` is always the newest: that is what the website's button, the
+installer and both updaters use. A pull request that changes the packaging runs the same builds as
+a rehearsal and publishes nothing.
+
+The Mac app has to be signed with a **Developer ID Application** certificate and notarized by
+Apple, or macOS will neither open it on another computer nor let it update itself. The workflow
+does both when these repository secrets are set, and otherwise leaves the release as a draft:
+
+| Secret | What it is |
+| --- | --- |
+| `MAC_CERTIFICATE_P12_BASE64` | the certificate with its private key, exported as `.p12`, in base64 |
+| `MAC_CERTIFICATE_PASSWORD` | the password of that `.p12` |
+| `APPLE_API_KEY_P8` | an App Store Connect team key (the contents of its `.p8` file), for notarizing |
+| `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | that key's ID, and the issuer ID shown above the list of keys |
+
+The Windows installer is not signed, so Windows warns before running it the first time.
+
+Once people have installed a release, what they keep in `~/.openkumi` has to keep working with
+every release after it.
 
 ## How it works
 
@@ -296,6 +389,9 @@ screens only read and write these files, so you can also edit them by hand.
   settings.json              app-wide settings that differ from the defaults
   auth.json                  API keys and the access code (owner-readable only)
   clients.json               the computers paired with this one (owner-readable only)
+  runtime/                   only for a server installed on its own: the program, not your data
+    versions/<version>/      that version's server, with the Node it runs on
+    current                  a link to the version that is started
 ```
 
 The split is deliberate. **What a bot can do is yours:** its model, rules and superpowers
@@ -645,6 +741,8 @@ and from its own format.
 | `OPENKUMI_MOCK` | unset | set to `1` to enable the scripted offline provider used by tests |
 | `OPENKUMI_CLAUDE_BIN`, `OPENKUMI_CODEX_BIN`, `OPENKUMI_GROK_BIN` | from Settings, else found on `PATH` | where the `claude`, `codex` and `grok` programs are; overrides Settings |
 | `OPENKUMI_DEBUG` | from Settings | set to `1` to log everything an engine prints |
+| `OPENKUMI_RELEASES_URL` | this project's releases on GitHub | where a server installed on its own, and its installer, look for versions |
+| `OPENKUMI_DESKTOP_UPDATES_URL` | this project's releases on GitHub | another place for the desktop app to look for versions of itself |
 
 ## Security notes
 

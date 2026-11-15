@@ -27,6 +27,7 @@ export default function Home() {
   const connected = useStore((s) => s.connected)
   const refused = useStore((s) => s.refused)
   const outdated = useStore((s) => s.outdated)
+  const newer = useStore((s) => s.newer)
   const failures = useStore((s) => s.failures)
   const automations = useStore((s) => s.automations)
 
@@ -55,10 +56,12 @@ export default function Home() {
     const lead = refused
       ? `${name} no longer lets this phone in. Unpair it, then pair again with a new code.`
       : outdated
-        ? `${name} runs an older OpenKumi, which cannot show that it is the computer this phone was paired with, so it is not sent the phone’s key. Update OpenKumi there.`
-        : failures >= 2
-          ? `${name} cannot be reached. Check that this phone is on the same network, or that Tailscale is on, on both. Still trying…`
-          : 'Connecting…'
+        ? `${name} runs an older OpenKumi than this app can work with. Update it there (“openkumi update”, or by updating the desktop app that runs it); the phone connects by itself once it is.`
+        : newer
+          ? `${name} runs a newer OpenKumi than this app can work with. Update the app on this phone.`
+          : failures >= 2
+            ? `${name} cannot be reached. Check that this phone is on the same network, or that Tailscale is on, on both. Still trying…`
+            : 'Connecting…'
     return (
       <View style={styles.center}>
         {header}

@@ -16,6 +16,7 @@ import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
 import { api, closeSettings, navigate, openSettings, saveSettings, useStore } from './store'
 import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
+import { UpdatesSection } from './Updates'
 import { BotHead } from './Mascot'
 
 type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'prompt' | 'browser' | 'environments' | 'advanced' | 'about'
@@ -81,6 +82,8 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'advanced', id: 'data-folder', title: 'Data folder', also: 'files location' },
   { page: 'advanced', id: 'delete-chats', title: 'Delete all conversations', also: 'chats history' },
   { page: 'about', id: 'version', title: 'Version' },
+  { page: 'about', id: 'app-update', title: 'Updates', also: 'update check new version restart upgrade download app server' },
+  { page: 'about', id: 'server-auto-update', title: 'Update by itself', also: 'automatic auto update server upgrade' },
 ]
 
 /** The settings each page's "Restore defaults" puts back. */
@@ -414,8 +417,8 @@ function BrowserPage() {
 // ---- Environments: where bots run. The local environment and the remote ones, and how the
 // environment being shown lets the app on other computers in.
 
-const REMOTE_STATUS: Record<EnvironmentStatus, string> = { connected: 'Connected', unreachable: 'Not reachable', refused: 'No longer lets this computer in', outdated: 'Needs a newer OpenKumi', off: 'Turned off' }
-const ANSWERS: Record<Answer, string> = { ok: 'Answers', refused: 'No longer lets this computer in', other: 'Something else answers', outdated: 'Needs a newer OpenKumi', unreachable: 'Not reachable from here', blocked: 'Needs https' }
+const REMOTE_STATUS: Record<EnvironmentStatus, string> = { connected: 'Connected', unreachable: 'Not reachable', refused: 'No longer lets this computer in', outdated: 'Runs an older OpenKumi, which has to be updated first', newer: 'Runs a newer OpenKumi than this app, which has to be updated first', off: 'Turned off' }
+const ANSWERS: Record<Answer, string> = { ok: 'Answers', refused: 'No longer lets this computer in', other: 'Something else answers', outdated: 'Runs an older OpenKumi', newer: 'Runs a newer OpenKumi than this app', unreachable: 'Not reachable from here', blocked: 'Needs https' }
 /** An address as it is shown: without the http:// that most of them start with. */
 const shown = (url: string) => url.replace(/^http:\/\//, '')
 const LOCAL_STATE: Record<LocalEnvironment['state'], string> = {
@@ -446,13 +449,17 @@ export function EnvironmentList() {
   const [opened, setOpened] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  /** What an environment said when it was asked to update itself. */
+  const [told, setTold] = useState('')
+  /** Counts the times the environments were asked again by hand. */
+  const [asked, setAsked] = useState(0)
   // Whether each remote environment answers: asked when the page opens and when the list changes.
   const listed = JSON.stringify(app.environments)
   useEffect(() => {
     let current = true
     desktop.statuses().then((found) => current && setStatuses(found)).catch(() => {})
     return () => void (current = false)
-  }, [listed])
+  }, [listed, asked])
 
   /** Asks the app to change something. True when it worked. */
   const change = async (fn: () => Promise<void>) => {
@@ -474,6 +481,7 @@ export function EnvironmentList() {
   return (
     <>
       {error && <div className="notice error">{error}</div>}
+      {told && !error && <div className="notice">{told}</div>}
       <Section title="This app">
         <Row
           id="local-environment"
@@ -512,6 +520,7 @@ export function EnvironmentList() {
               description={
                 <>
                   {!environment.enabled ? REMOTE_STATUS.off : report ? REMOTE_STATUS[report.status] : 'Checking…'}
+                  {environment.enabled && report?.version && report.status !== 'connected' && <> ({report.version})</>}
                   {environment.enabled && via && <> · via {KIND_NAMES[kindOf(via)]} · <span className="mono">{shown(via)}</span></>}
                 </>
               }
@@ -520,6 +529,22 @@ export function EnvironmentList() {
                   <button className="ghost" aria-expanded={opened === environment.id} onClick={() => setOpened(opened === environment.id ? null : environment.id)}>
                     {count === 1 ? '1 address' : `${count} addresses`}
                   </button>
+                  {environment.enabled && report?.canUpdate && desktop.updateEnvironment && (
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        change(async () => {
+                          setTold('')
+                          setTold(await desktop.updateEnvironment!(environment.id))
+                          // It needs a moment to start again; then the list is asked afresh.
+                          setTimeout(() => setAsked((n) => n + 1), 8000)
+                        })
+                      }
+                    >
+                      Update it
+                    </button>
+                  )}
+                  {environment.enabled && report?.status === 'newer' && app.update && app.update.state !== 'unsupported' && <button onClick={() => openSettings('about')}>Update this app</button>}
                   {environment.enabled && app.current !== environment.id && <button onClick={() => change(() => desktop.open(environment.id))}>Open</button>}
                   <Switch label={`Use ${environment.name}`} checked={environment.enabled} disabled={busy} onChange={(enabled) => change(() => desktop.update(environment.id, { enabled }))} />
                   <details className="set-menu">
@@ -823,6 +848,7 @@ function AboutPage() {
         {fact('Data folder', <code>{home}</code>)}
         {fact('License', 'MIT')}
       </Section>
+      <UpdatesSection />
     </Page>
   )
 }
