@@ -190,7 +190,9 @@ jobs:
           API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          if [ -n "$CERTIFICATE" ] && [ -n "$API_KEY" ] && [ -n "$API_KEY_ID" ] && [ -n "$API_ISSUER" ]; then
+          # Only a release is signed. (Step 1 has made sure the secrets are there.) A rehearsal is
+          # signed by nobody in particular: the certificate is not for a pull request's code.
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
             printf '%s' "$API_KEY" > "$RUNNER_TEMP/notary.p8"
             {
               echo "CSC_LINK=$CERTIFICATE"
@@ -201,7 +203,6 @@ jobs:
             } >> "$GITHUB_ENV"
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::The signing secrets are not set: the Mac app is built unsigned, and macOS will not open it on another computer."
             echo "OPENKUMI_UNSIGNED=1" >> "$GITHUB_ENV"
             echo "signed=false" >> "$GITHUB_OUTPUT"
           fi
