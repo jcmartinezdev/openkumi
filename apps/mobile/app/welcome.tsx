@@ -3,13 +3,15 @@
 // (pair.tsx); others will join it in the list. The desktop app has the same welcome
 // (apps/web/src/Welcome.tsx); keep the two alike.
 import { useEffect, useRef, useState } from 'react'
-import { AccessibilityInfo, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { AccessibilityInfo, Animated, Easing, Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { type Href, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { Canvas, Circle, RadialGradient, vec } from '@shopify/react-native-skia'
 import type { Look } from '@openkumi/shared'
+import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import { BODY_COLORS, describeLook, surprise } from '@openkumi/client/mascot'
+import { AlphaBadge } from '../src/Alpha'
 import { Glyph, type GlyphName } from '../src/icons'
 import { Mascot } from '../src/Mascot'
 import { useAppearance, useTheme } from '../src/theme'
@@ -180,7 +182,10 @@ export default function Welcome() {
         <Text style={[styles.hint, { color: theme.faint }]}>Tap one for a new outfit</Text>
 
         <View style={styles.words}>
-          <Text style={[styles.eyebrow, { color: theme.muted }]}>Welcome to OpenKumi</Text>
+          <View style={styles.eyebrowRow}>
+            <Text style={[styles.eyebrow, { color: theme.muted }]}>Welcome to OpenKumi</Text>
+            <AlphaBadge />
+          </View>
           <Text accessibilityRole="header" style={[styles.title, { color: theme.text }]}>{'Your own crew\nof AI bots'}</Text>
           <Text style={[styles.lead, { color: theme.muted }]}>
             They live on your computer and get things done for you, each with its own memory and its own browser. On this phone you chat with them and watch them work, at home or away.
@@ -209,6 +214,10 @@ export default function Welcome() {
             <Glyph name="chevron" size={18} color={theme.faint} weight={2} />
           </Pressable>
         ))}
+        <Text style={[styles.alpha, { color: theme.muted }]}>
+          {ALPHA_NOTE}{' '}
+          <Text accessibilityRole="link" style={{ color: theme.text, textDecorationLine: 'underline' }} onPress={() => void Linking.openURL(ISSUES_URL)}>Report a problem</Text>
+        </Text>
       </View>
     </ScrollView>
   )
@@ -223,6 +232,7 @@ const styles = StyleSheet.create({
   shadow: { borderRadius: 999 },
   hint: { textAlign: 'center', fontSize: 13, marginTop: 6 },
   words: { gap: 8, marginTop: 28 },
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   eyebrow: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
   title: { fontSize: 32, lineHeight: 38, fontWeight: '800', letterSpacing: -0.5, textAlign: 'center' },
   lead: { fontSize: 16, lineHeight: 23, textAlign: 'center', marginTop: 4 },
@@ -232,4 +242,5 @@ const styles = StyleSheet.create({
   icon: { width: 46, height: 46, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
   startTitle: { fontSize: 17, fontWeight: '600' },
   startDetail: { fontSize: 14, lineHeight: 19 },
+  alpha: { fontSize: 13, lineHeight: 18, textAlign: 'center', paddingHorizontal: 8, marginTop: 8 },
 })

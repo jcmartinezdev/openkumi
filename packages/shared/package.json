@@ -9,6 +9,7 @@
     ".": "./src/types.ts",
     "./desktop": "./src/desktop.ts",
     "./protocol": "./src/protocol.ts",
-    "./dictation": "./src/dictation.ts"
+    "./dictation": "./src/dictation.ts",
+    "./alpha": "./src/alpha.ts"
   }
 }

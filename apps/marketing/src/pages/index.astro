@@ -4,7 +4,7 @@ import Layout from '../layouts/Layout.astro'
 import Mascot from '../components/Mascot.astro'
 import ProviderMark from '../components/ProviderMark.astro'
 import Shot from '../components/Shot.astro'
-import { DOWNLOADS, DOWNLOAD_URL, GITHUB_URL, INSTALL_COMMAND, RELEASES_URL } from '../lib/site'
+import { DOWNLOADS, DOWNLOAD_URL, GITHUB_URL, INSTALL_COMMAND, ISSUES_URL, RELEASES_URL } from '../lib/site'
 
 // The superpowers that ship with the app, read from the server's own folder of them, by name as the app lists them.
 const powers = Object.entries(import.meta.glob<{ name: string; tagline: string }>('../../../server/superpowers/*/superpower.json', { eager: true, import: 'default' }))
@@ -35,6 +35,10 @@ const providers = [
 ]
 
 const faq = [
+  {
+    q: 'Is OpenKumi ready?',
+    a: 'Not yet: OpenKumi is an alpha. It is early, it changes from one version to the next, and some things will not work yet. When something goes wrong, tell us in an issue on GitHub.',
+  },
   {
     q: 'Is OpenKumi free?',
     a: 'Yes. OpenKumi is open source under the MIT License. Your bots run on a subscription you already have (Claude, ChatGPT or Grok), on free local models, or on any OpenAI-compatible API you choose.',
@@ -71,7 +75,7 @@ const faq = [
   <section class="hero">
     <div class="glow" aria-hidden="true"></div>
     <div class="container hero-inner">
-      <span class="pill"><span class="dot"></span>Open source · Runs on your computer</span>
+      <span class="pill"><span class="alpha">Alpha</span>Open source · Runs on your computer</span>
       <h1>Your own crew<br />of AI bots.</h1>
       <p class="lede">
         OpenKumi is a desktop app for AI bots that live on your computer. Each one has its own memory, its own browser that stays signed in, and only the powers you give it. They run on the Claude, ChatGPT or Grok plan you already have.
@@ -349,6 +353,10 @@ const faq = [
         <h2>Get OpenKumi</h2>
         <p>Free and open source. The app brings everything it needs, and keeps itself up to date.</p>
       </div>
+      <p class="alpha-note">
+        <span class="alpha">Alpha</span>
+        <span>OpenKumi is early: it changes from one version to the next, and some things will not work yet. When something goes wrong, <a href={ISSUES_URL}>tell us on GitHub</a>.</span>
+      </p>
       <ul class="systems">
         {
           DOWNLOADS.map((system) => (
@@ -476,6 +484,26 @@ const faq = [
     font-size: 14px;
     font-weight: 500;
     color: var(--muted);
+  }
+  /* The alpha badge sits inside the pill, as far in from its edge as from the top. */
+  .hero .pill {
+    padding-left: 6px;
+  }
+  @media (max-width: 420px) {
+    .hero .pill {
+      gap: 6px;
+      font-size: 13px;
+    }
+  }
+  /* Too narrow for one line: the badge goes above the words, in a box with rounder corners. */
+  @media (max-width: 340px) {
+    .hero .pill {
+      flex-wrap: wrap;
+      justify-content: center;
+      row-gap: 6px;
+      padding: 8px 12px;
+      border-radius: 18px;
+    }
   }
   .dot,
   .live-dot {
@@ -1267,6 +1295,28 @@ const faq = [
   }
 
   /* ---- download */
+  .alpha-note {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    max-width: 720px;
+    margin: -24px auto 32px;
+    padding: 14px 18px;
+    border: 1px solid color-mix(in srgb, var(--orange) 35%, var(--border));
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--orange-soft) 45%, var(--bg-raised));
+    color: var(--muted);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .alpha-note .alpha {
+    flex: none;
+    transform: translateY(-1px);
+  }
+  .alpha-note a {
+    color: var(--text);
+    text-underline-offset: 3px;
+  }
   .systems {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

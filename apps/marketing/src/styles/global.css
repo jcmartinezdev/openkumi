@@ -15,6 +15,8 @@
   --orange: #f07a2c;
   --orange-soft: #ffe8d6;
   --green: #22a55b;
+  /* The alpha badge's word: the headphones' orange, dark enough to read on its soft tint. */
+  --alpha: #a8461a;
   --button: #17171c;
   --button-text: #ffffff;
   --frame: #17171c;
@@ -41,6 +43,7 @@
     --orange: #ff9a57;
     --orange-soft: #33200f;
     --green: #4ade80;
+    --alpha: #ff9a57;
     --button: #f3f2f6;
     --button-text: #111114;
     --frame: #34333b;
@@ -186,4 +189,19 @@ code {
 .section-head p {
   font-size: 19px;
   color: var(--muted);
+}
+
+/* OpenKumi is an alpha: said beside its name, in the first line of the page and before the download. */
+.alpha {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--orange-soft);
+  color: var(--alpha);
+  font: 700 11px/1 var(--body);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }

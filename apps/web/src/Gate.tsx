@@ -48,7 +48,7 @@ export function Gate() {
       <div className="set-scroll">
         <div className="set-column">
           <div className="gate-head">
-            <h1>OpenKumi</h1>
+            <h1>OpenKumi <span className="alpha-badge">Alpha</span></h1>
             <p role="status">{waiting && <span className="spinner" />}{lead}</p>
           </div>
           {/* The settings cannot be opened from here, and updating this app is what there is to do. */}
