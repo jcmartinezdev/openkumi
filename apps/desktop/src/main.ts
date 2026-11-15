@@ -193,14 +193,18 @@ async function updateEnvironment(id: string) {
 /** The server this app started is stopped (see the end of this file). */
 let stopped = false
 
-/** How many bots are at work in the server this app runs: what quitting the app would cut off. */
-async function workingHere(): Promise<number> {
-  if (!local.child || local.state !== 'running') return 0
+/**
+ * How many bots are at work in the server this app runs: what quitting the app would cut off.
+ * Null when the server did not say, which is not the same as none.
+ */
+async function workingHere(): Promise<number | null> {
+  if (!local.child) return 0
   try {
     const res = await fetch(`http://127.0.0.1:${local.port}/api/update`, { headers: { Authorization: `Bearer ${local.token}` }, signal: AbortSignal.timeout(3000) })
-    return Number((await res.json()).working) || 0
+    const working = res.ok ? (await res.json()).working : null
+    return typeof working === 'number' ? working : null
   } catch {
-    return 0
+    return null
   }
 }
 
@@ -212,7 +216,8 @@ async function workingHere(): Promise<number> {
 async function restartForUpdate() {
   if (updateState().state !== 'ready') return
   const working = await workingHere()
-  if (working && !(await confirmed(`${working === 1 ? '1 bot is' : `${working} bots are`} working on this computer.`, 'Restarting stops them. What they have done so far is kept.', 'Restart'))) return
+  const asked = working === null ? 'Bots may be working on this computer.' : working ? `${working === 1 ? '1 bot is' : `${working} bots are`} working on this computer.` : ''
+  if (asked && !(await confirmed(asked, 'Restarting stops them. What they have done so far is kept.', 'Restart'))) return
   if (local.child) await stopLocal()
   // A look for updates that ran meanwhile may have found a still newer version, which is being
   // fetched now: there is nothing to install yet, so the server is started again and the app stays.

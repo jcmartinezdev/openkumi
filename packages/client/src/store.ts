@@ -47,7 +47,7 @@ const EMPTY: State = {
   settings: {} as Settings,
   defaults: {} as Settings,
   about: { version: '', node: '', platform: '', port: 0, lanForced: false, timeZone: '', hooksPort: 0, protocol: 0 },
-  update: { how: 'source', latest: null, state: 'idle', error: '', checkedAt: 0, working: 0 },
+  update: { how: 'source', latest: null, staged: null, state: 'idle', error: '', checkedAt: 0, working: 0 },
   items: {},
   older: {},
   partial: {},

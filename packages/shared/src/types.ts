@@ -408,6 +408,12 @@ export interface ServerUpdate {
   /** The newest version there is, once it has been looked up. The same as the server's own when it is up to date. */
   latest: string | null
   /**
+   * The version that is in place and is started next, when that is newer than the one running.
+   * Not always `latest`: a newer one still may have come out since, and not have been fetched.
+   * Missing from older servers.
+   */
+  staged?: string | null
+  /**
    * - `idle`: nothing is going on;
    * - `checking`: looking up the newest version;
    * - `downloading`: fetching it;

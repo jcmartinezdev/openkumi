@@ -124,5 +124,6 @@ export async function askToUpdate(environment: Environment): Promise<string> {
     if (said.latest && there.version && said.latest !== there.version) return `${environment.name} found OpenKumi ${said.latest} but has not put it in place yet. Try again in a moment.`
     return `${environment.name} already runs the newest OpenKumi (${said.latest ?? there.version}). This app may need the update: see Settings › About.`
   }
-  return said.working ? `${environment.name} has OpenKumi ${said.latest} in place and starts it once its bots are done.` : `${environment.name} is starting OpenKumi ${said.latest}. It connects by itself in a moment.`
+  const staged = said.staged ?? said.latest
+  return said.working ? `${environment.name} has OpenKumi ${staged} in place and starts it once its bots are done.` : `${environment.name} is starting OpenKumi ${staged}. It connects by itself in a moment.`
 }

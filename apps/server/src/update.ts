@@ -47,7 +47,7 @@ let restart: (() => void) | null = null
 /** Asked to update without waiting for the bots. */
 let hurried = false
 
-export const updateInfo = (): ServerUpdate => ({ how, ...state, working: working() })
+export const updateInfo = (): ServerUpdate => ({ how, ...state, staged: staged(), working: working() })
 
 function set(patch: Partial<typeof state>) {
   state = { ...state, ...patch }
@@ -158,10 +158,10 @@ function tidy() {
 
 let busy: Promise<ServerUpdate> | null = null
 
-/** A newer version is in place and only waits to be started: `current` points at it. */
-const staged = () => {
+/** The newer version that is in place and only waits to be started (`current` points at it), or null. */
+function staged(): string | null {
   const next = currentVersion()
-  return !!next && newer(next, VERSION)
+  return next && newer(next, VERSION) ? next : null
 }
 
 /**
@@ -182,8 +182,9 @@ export function update(install: boolean): Promise<ServerUpdate> {
       set({ state: 'ready' })
     } catch (e) {
       // A look that failed takes nothing away from a version that is already in place: it still
-      // starts once the bots are done.
-      set(staged() ? { state: 'ready', error: '' } : { state: 'failed', error: (e as Error).message })
+      // starts once the bots are done. What went wrong is kept, since it may be a still newer
+      // version that could not be fetched.
+      set({ state: staged() ? 'ready' : 'failed', error: (e as Error).message })
     }
   })()
     .then(() => updateInfo())
@@ -194,7 +195,7 @@ export function update(install: boolean): Promise<ServerUpdate> {
 /** Starts the new version, once it is in place and nothing would be cut off by that (or it was asked not to wait). */
 function settle() {
   if (state.state !== 'ready' || !restart || (working() > 0 && !hurried)) return
-  console.log(`  Starting OpenKumi ${state.latest} in place of ${VERSION}.`)
+  console.log(`  Starting OpenKumi ${staged() ?? state.latest} in place of ${VERSION}.`)
   restart()
   restart = null
 }

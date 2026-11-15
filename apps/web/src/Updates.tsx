@@ -114,7 +114,7 @@ export function UpdatesSection() {
       : update.state === 'downloading'
         ? `Downloading OpenKumi ${update.latest}…`
         : update.state === 'ready'
-          ? `OpenKumi ${update.latest} is in place${update.working ? `, and starts once ${bots(update.working)} done working` : ' and is starting'}.`
+          ? `OpenKumi ${update.staged ?? update.latest} is in place${update.working ? `, and starts once ${bots(update.working)} done working` : ' and is starting'}.`
           : update.state === 'failed'
             ? update.error
             : out

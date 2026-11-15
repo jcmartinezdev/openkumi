@@ -83,7 +83,10 @@ test('an installed server fetches a new version, checks it, and starts it once n
   const sha256 = crypto.createHash('sha256').update(archive).digest('hex')
   /** What the release says its archive's checksum is; a test changes it to stand for a download that is not what was published. */
   let said = sha256
+  /** The releases cannot be reached. */
+  let down = false
   const releases = http.createServer((req, res) => {
+    if (down) return res.writeHead(503).end()
     if (req.url === '/latest/download/openkumi-server.json') return res.end(JSON.stringify({ version: '9.9.9', archives: { [TARGET]: { file, sha256: said } } }))
     if (req.url === `/download/v9.9.9/${file}`) return res.end(archive)
     res.writeHead(404).end()
@@ -102,7 +105,7 @@ test('an installed server fetches a new version, checks it, and starts it once n
     said = 'f'.repeat(64)
     // Asked not to wait for the bots, too: that wish ends with this request, which fails, and is not handed on to the next.
     let update = await server.api('POST', '/api/update', { now: true })
-    assert.deepEqual([update.how, update.state, update.latest], ['installed', 'failed', '9.9.9'])
+    assert.deepEqual([update.how, update.state, update.latest, update.staged], ['installed', 'failed', '9.9.9', null])
     assert.match(update.error, /not the file that was published/)
     assert.ok(!fs.existsSync(path.join(runtime, 'current')) && !fs.existsSync(path.join(runtime, 'versions', '9.9.9')))
 
@@ -111,10 +114,16 @@ test('an installed server fetches a new version, checks it, and starts it once n
     const { id } = await server.api('POST', '/api/bots', { name: 'Busy', provider: 'mock' })
     await server.api('POST', `/api/bots/${id}/messages`, { text: '!slow' })
     update = await server.api('POST', '/api/update', {})
-    assert.deepEqual([update.state, update.latest, update.working], ['ready', '9.9.9', 1])
+    assert.deepEqual([update.state, update.latest, update.staged, update.working], ['ready', '9.9.9', '9.9.9', 1])
     assert.equal(current(), path.join('versions', '9.9.9'), '“current”, which is what is started next, points at the new version')
     await new Promise((r) => setTimeout(r, 1200))
     assert.equal((await server.api('GET', '/api/update')).state, 'ready', 'it is still running while the bot works')
+    // A look that fails meanwhile takes nothing away from the version that is in place: it still starts.
+    down = true
+    update = await server.api('POST', '/api/update', {})
+    assert.deepEqual([update.state, update.staged], ['ready', '9.9.9'])
+    assert.match(update.error, /could not be looked up/)
+    down = false
     // It ends with the code that asks whatever runs it to start it again: that start is the new version.
     assert.equal(await Promise.race([server.exited, new Promise((r) => setTimeout(() => r('still running'), 15_000))]), 75)
 

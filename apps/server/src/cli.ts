@@ -79,7 +79,7 @@ if (command === 'start' || command === 'serve') {
       console.log(`  Bots run on: ${connected.map((p) => p.name).join(', ') || 'nothing yet. Install and sign in to Claude Code, Codex or Grok, or start Ollama or LM Studio.'}`)
       if (!chromeFound()) console.log('  Browser:   Google Chrome was not found. The bots need it to browse.')
       const { update: u } = state
-      if (u.state === 'ready') console.log(`  Update:    ${u.latest} is in place and starts once no bot is working${u.working ? ` (${bots(u.working)} now)` : ''}.`)
+      if (u.state === 'ready') console.log(`  Update:    ${u.staged ?? u.latest} is in place and starts once no bot is working${u.working ? ` (${bots(u.working)} now)` : ''}.`)
       else if (u.latest && newer(u.latest, state.about.version)) console.log(`  Update:    ${u.latest} is out. ${u.how === 'installed' ? 'Get it with “openkumi update”.' : WHY_NOT[u.how]}`)
       else if (u.state === 'failed') console.log(`  Update:    ${u.error}`)
     }
@@ -117,14 +117,14 @@ if (command === 'start' || command === 'serve') {
       }
       if (info.state === 'failed') stop(info.error)
       if (info.state !== 'ready') console.log(`\n  OpenKumi ${VERSION} is the newest version.\n`)
-      else if (info.working && !flag('--now')) console.log(`\n  OpenKumi ${info.latest} is in place. ${bots(info.working)} working: it starts once they are done.\n  To start it now and stop them: openkumi update --now\n`)
-      else console.log(`\n  OpenKumi ${info.latest} is starting in place of ${VERSION}.\n`)
+      else if (info.working && !flag('--now')) console.log(`\n  OpenKumi ${info.staged ?? info.latest} is in place. ${bots(info.working)} working: it starts once they are done.\n  To start it now and stop them: openkumi update --now\n`)
+      else console.log(`\n  OpenKumi ${info.staged ?? info.latest} is starting in place of ${VERSION}.\n`)
     } else {
       if (!RUNTIME) stop(WHY_NOT.source)
       console.log('\n  Looking for a newer version…')
       const info = await update(true)
       if (info.state === 'failed') stop(info.error)
-      console.log(info.state === 'ready' ? `  OpenKumi ${info.latest} is in place. It is what “openkumi start” starts from now on.\n` : `  OpenKumi ${VERSION} is the newest version.\n`)
+      console.log(info.state === 'ready' ? `  OpenKumi ${info.staged ?? info.latest} is in place. It is what “openkumi start” starts from now on.\n` : `  OpenKumi ${VERSION} is the newest version.\n`)
     }
   } else if (command === 'service') {
     const [what] = rest
