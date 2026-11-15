@@ -29,3 +29,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+        env:
+          # The Mac the checks run on has no speech models, so nothing it "hears" is written down.
+          OPENKUMI_TEST_NO_DICTATION: '1'

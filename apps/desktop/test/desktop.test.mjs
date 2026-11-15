@@ -2,6 +2,7 @@
 // touches is temporary: its own data, and the data of the servers it runs or talks to.
 //   OPENKUMI_DESKTOP_APP   the program inside a packaged app, to test that instead of the source
 //   OPENKUMI_TEST_SHOW=1   show the window while the tests run
+//   OPENKUMI_TEST_NO_DICTATION=1   leave out dictation, on a Mac whose system could take it but has no speech models
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -70,6 +71,8 @@ async function until(check, timeoutMs = 40_000) {
 let electron
 let app
 const launch = async () => {
+  // A test that failed left its app open, and a second one would not start beside it: the tests after it would fail for that alone.
+  await app?.close().catch(() => {})
   app = await _electron.launch({ executablePath: electron, args: packaged ? [] : ['.'], env })
   return app.firstWindow()
 }
@@ -1309,6 +1312,8 @@ test('dictation: what is said goes into the message where the cursor was, and on
   const program = path.resolve(import.meta.dirname, '../dist/dictation')
   const check = process.platform === 'darwin' && fs.existsSync(program) ? await new Promise((resolve) => spawn(program, ['--check']).stdout.on('data', (d) => resolve(String(d)))) : ''
   if (!check.includes('"available":true')) return t.skip('dictation needs a Mac with macOS 26 or later')
+  // A Mac that is only rented for the checks has the system but not its speech models, nor anyone to allow listening.
+  if (process.env.OPENKUMI_TEST_NO_DICTATION) return t.skip('this Mac cannot take dictation')
   // A recording stands in for the microphone, heard all at once and then nothing until it is stopped.
   const recording = `${tmp}/said.aiff`
   await new Promise((resolve, reject) => spawn('say', ['-o', recording, 'Could you check my calendar for tomorrow?']).on('exit', (code) => (code ? reject(new Error('say failed')) : resolve())))
