@@ -297,6 +297,27 @@ jobs:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
           packager: npm
+      # The same App Store Connect key that notarizes the Mac app. A build is sent to TestFlight
+      # with it, and Expo can renew the app's provisioning profile with it when that runs out.
+      - name: The Apple key, for a build that has to go to TestFlight
+        if: steps.token.outputs.present == 'true'
+        working-directory: apps/mobile
+        env:
+          API_KEY: ${{ secrets.APPLE_API_KEY_P8 }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          printf '%s' "$API_KEY" > "$RUNNER_TEMP/app-store-connect.p8"
+          jq --arg path "$RUNNER_TEMP/app-store-connect.p8" --arg id "$API_KEY_ID" --arg issuer "$API_ISSUER" \
+            '.submit.production.ios += { ascApiKeyPath: $path, ascApiKeyId: $id, ascApiKeyIssuerId: $issuer }' eas.json > "$RUNNER_TEMP/eas.json"
+          mv "$RUNNER_TEMP/eas.json" eas.json
+          {
+            echo "EXPO_ASC_API_KEY_PATH=$RUNNER_TEMP/app-store-connect.p8"
+            echo "EXPO_ASC_KEY_ID=$API_KEY_ID"
+            echo "EXPO_ASC_ISSUER_ID=$API_ISSUER"
+            echo "EXPO_APPLE_TEAM_ID=48U5Q483NS"
+            echo "EXPO_APPLE_TEAM_TYPE=COMPANY_OR_ORGANIZATION"
+          } >> "$GITHUB_ENV"
       - name: Send it over the air, or start a build
         if: steps.token.outputs.present == 'true'
         working-directory: apps/mobile

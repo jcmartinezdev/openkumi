@@ -81,23 +81,24 @@ The dictation package (`packages/dictation`) is left out of `npm run bump` on pu
 native code, its version is part of the fingerprint, and raising it with every release would
 send every release through TestFlight.
 
-## Setting it up, once
+## What it runs on
 
-The project on Expo exists: [`@gotolcs/openkumi`](https://expo.dev/accounts/gotolcs/projects/openkumi).
-What is left needs someone who can sign in to Expo and to Apple:
+Everything is set up; this is where it is, for when something has to be renewed or looked at.
 
-1. **A token for GitHub.** On expo.dev, under the account's **Access tokens**, make one (a robot
-   user's, for an organisation) and save it as the repository secret `EXPO_TOKEN`. Without it a
-   release leaves the iPhone app out.
-2. **The app at Apple.** Register the identifier `ai.openkumi.mobile` (developer.apple.com →
-   Identifiers) and add the app in App Store Connect (**Apps → +**). Put the number App Store
-   Connect gives it (**App Information → Apple ID**) into `apps/mobile/eas.json`:
-   `"submit": { "production": { "ios": { "ascAppId": "…" } } }`.
-3. **Apple's keys, kept by EAS.** In `apps/mobile`, run `npx eas-cli credentials` and let it make
-   the distribution certificate and profile, and take an App Store Connect key for sending builds
-   to TestFlight. The key has to be a team key with the App Manager role or above.
-4. **The first build.** The next release makes it, since no build exists yet (or make it by
-   hand, as above). It arrives in TestFlight, where your own team can install it at once; testers
-   outside the team, and the App Store, wait for Apple's review.
+- **Expo:** the project [`@gotolcs/openkumi`](https://expo.dev/accounts/gotolcs/projects/openkumi)
+  holds the updates, the builds, and the signing credentials for building (an Apple Distribution
+  certificate and an App Store provisioning profile, which Expo made with the Apple key).
+  `npx eas-cli credentials -p ios` shows and renews them.
+- **Apple:** the identifier `ai.openkumi.mobile` and the app "OpenKumi" in App Store Connect. Its
+  number is in `apps/mobile/eas.json` (`ascAppId`); builds sent to TestFlight land there.
+- **GitHub secrets:** `EXPO_TOKEN` (an access token from expo.dev, without which a release leaves
+  the iPhone app out), and the App Store Connect key the Mac app is notarized with
+  (`APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`), which also sends builds to
+  TestFlight.
 
-From then on, a release of OpenKumi releases the app with it.
+The first build is made by the first release, since no build exists before it. It arrives in
+TestFlight, where your own team can install it at once; testers outside the team, and the App
+Store, wait for Apple's review.
+
+To try that the app still builds on Expo's computers without releasing anything:
+`npx eas-cli build --platform ios --profile simulator` makes one for the simulator only.
