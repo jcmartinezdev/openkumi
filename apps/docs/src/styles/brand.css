@@ -1,0 +1,67 @@
+/* The documentation in the website's colours and type (apps/marketing/src/styles/global.css):
+   near-black and warm paper, the mascot's sky blue for links, its orange for small labels. */
+:root {
+  --sl-font: 'Inter Variable';
+  --display: 'Bricolage Grotesque Variable', 'Inter Variable', system-ui, sans-serif;
+  --orange: #ff9a57;
+
+  --sl-color-white: #f3f2f6;
+  --sl-color-gray-1: #e6e5eb;
+  --sl-color-gray-2: #c6c4ce;
+  --sl-color-gray-3: #a7a5b0;
+  --sl-color-gray-4: #5f5d68;
+  --sl-color-gray-5: #34333b;
+  --sl-color-gray-6: #18181d;
+  --sl-color-black: #0f0f12;
+
+  --sl-color-accent-low: #15283b;
+  --sl-color-accent: #2f9cf4;
+  --sl-color-accent-high: #8fcfff;
+
+  --sl-color-bg-nav: var(--sl-color-black);
+  --sl-color-bg-sidebar: var(--sl-color-black);
+  --sl-color-hairline: #26252c;
+  --sl-color-hairline-light: #26252c;
+}
+:root[data-theme='light'] {
+  --orange: #c2560f;
+
+  --sl-color-white: #17171c;
+  --sl-color-gray-1: #24232a;
+  --sl-color-gray-2: #3a3942;
+  --sl-color-gray-3: #5d5b66;
+  --sl-color-gray-4: #8d8a95;
+  --sl-color-gray-5: #d6d1c5;
+  --sl-color-gray-6: #f2efe8;
+  --sl-color-gray-7: #f6f3ed;
+  --sl-color-black: #faf8f4;
+
+  --sl-color-accent-low: #dceeff;
+  --sl-color-accent: #0b6bc0;
+  --sl-color-accent-high: #0d3f6e;
+
+  --sl-color-hairline: #e6e2d9;
+  --sl-color-hairline-light: #e6e2d9;
+}
+
+h1,
+h2,
+h3,
+h4,
+.site-title {
+  font-family: var(--display);
+  letter-spacing: -0.02em;
+}
+.site-title {
+  color: var(--sl-color-white);
+  font-weight: 700;
+}
+
+/* The names of the sidebar's groups, as the website writes its small labels. */
+.sidebar-content .group-label .large {
+  font-size: var(--sl-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--orange);
+}

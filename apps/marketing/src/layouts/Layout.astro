@@ -3,7 +3,7 @@ import '@fontsource-variable/inter'
 import '@fontsource-variable/bricolage-grotesque'
 import '../styles/global.css'
 import Mascot from '../components/Mascot.astro'
-import { DESCRIPTION, GITHUB_URL, LICENSE_URL, NAV, SITE_NAME, TAGLINE } from '../lib/site'
+import { DESCRIPTION, DOCS_URL, GITHUB_URL, LICENSE_URL, NAV, SITE_NAME, TAGLINE } from '../lib/site'
 
 interface Props {
   title?: string
@@ -74,6 +74,7 @@ const socialCard = new URL('/social-card.png', Astro.site)
         </a>
         <p>Free and open source under the <a href={LICENSE_URL}>MIT License</a>. © 2026 Juan Cruz Martinez.</p>
         <nav aria-label="Footer">
+          <a href={DOCS_URL}>Docs</a>
           <a href={GITHUB_URL}>GitHub</a>
           <a href="/#faq">FAQ</a>
         </nav>

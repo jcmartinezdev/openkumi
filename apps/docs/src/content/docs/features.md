@@ -1,6 +1,9 @@
-# What OpenKumi does
+---
+title: What OpenKumi does
+description: "Everything an OpenKumi bot is and can do, from its own browser and memory to superpowers and automations."
+---
 
-Everything a bot is and can do, at more length than the [front page](../README.md).
+Everything a bot is and can do, at more length than the [front page](https://openkumi.ai).
 
 Open-source, local-first AI bots, as a desktop app. Bots run on your own computer, or on another
 computer of yours that the app connects to. Each bot is a folder with its own instructions,

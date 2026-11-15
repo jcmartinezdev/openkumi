@@ -5,6 +5,8 @@ export const DESCRIPTION =
   'OpenKumi is a free, open-source desktop app for AI bots that live on your computer, each with its own memory, its own signed-in browser and only the powers you give it. Runs on the Claude, ChatGPT or Grok plan you already have.'
 
 export const GITHUB_URL = 'https://github.com/jcmartinezdev/openkumi'
+/** The documentation, a site of its own (apps/docs). */
+export const DOCS_URL = 'https://docs.openkumi.ai'
 /** The newest release: every installer, for people who want another than the one the button gives. */
 export const RELEASES_URL = `${GITHUB_URL}/releases/latest`
 /**
@@ -53,4 +55,5 @@ export const NAV = [
   { href: '/#superpowers', label: 'Superpowers' },
   { href: '/#privacy', label: 'Privacy' },
   { href: '/#faq', label: 'FAQ' },
+  { href: DOCS_URL, label: 'Docs' },
 ]

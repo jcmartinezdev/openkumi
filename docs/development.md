@@ -14,6 +14,7 @@ npm run dev         # the app, with the interface reloading as you edit apps/web
 npm test            # the server's end-to-end tests, then the desktop app's
 npm run typecheck
 npm run site        # the website (apps/marketing), at http://localhost:4321
+npm run docs        # the documentation (apps/docs), at http://localhost:4322
 ```
 
 The tests are run with Node.js 26 (`node --test test/` needs it). They use a scripted offline model, a real headless Chrome for the bots, and the real app
@@ -89,3 +90,59 @@ The iPhone app is released by the same tag, once the release is published: over 
 only its JavaScript changed, through TestFlight when its native side did. It needs the
 `EXPO_TOKEN` secret; without it everything else is still released. See
 [Releasing the iPhone app](mobile-releases.md).
+
+## Where the code is
+
+```
+apps/
+  server/            the server: runs the bots. Node, straight from TypeScript, no build step
+    src/
+      agent.ts         the agent loop, the system prompt and subagent orchestration
+      tools.ts         tools the model can call (bots, files, subagents, browser, web)
+      bots.ts          bots as folders: bot.md and what sits beside it
+      workspace.ts     a bot's own files: path confinement, file operations, git history
+      superpowers.ts   the superpowers that ship, which bot has which, and what a bot is told of them
+      mcp.ts           the services superpowers bring: each bot's connection and sign-in
+      browser.ts       one persistent Chrome profile per bot, a window per thread; live view via CDP screencast
+      providers/       what bots run on: the Codex and Claude Code engines (codex.ts,
+                       claude-code.ts, grok.ts), local models, OpenAI-compatible APIs, a mock for tests
+      tool-endpoint.ts serves a bot's tools to an engine over MCP for the length of one turn
+      settings.ts      app-wide settings, kept in settings.json
+      http.ts          the API and the stream of events. No pages
+      history.ts       what a model is shown of a long conversation: trimming, and the summary of its older part
+      db.ts            SQLite (conversations and messages)
+    superpowers/       the superpowers that ship with OpenKumi
+  web/               the interface (React, Vite). Built into the desktop app; nothing serves it
+    src/
+      store.ts               the window's copy of the environment it shows
+      connection.worker.ts   the connection to the environment, on a thread of its own
+  desktop/           the desktop app (Electron)
+    src/
+      main.ts          the window, the menu, and what the window may ask for
+      local.ts         the local environment: the server, in a process of its own
+      environments.ts  the list of environments and their access codes
+      protocol.ts      hands the interface to the window under the app's own address
+      preload.ts       the bridge between the window and the app
+      dictation.ts     runs the Mac's dictation program and passes what it hears to the window
+  mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser,
+                     settings and automations
+  marketing/         the website at openkumi.ai (Astro, built to static pages), and the script that
+                     draws every app's icon from the mascot (`npm run icons -w @openkumi/marketing`)
+  docs/              the documentation at docs.openkumi.ai (Astro with Starlight, built to static
+                     pages); its pages are the Markdown files in `src/content/docs`
+packages/
+  shared/            the types every app agrees on
+  client/            what every app needs to talk to a server: the connection, the state
+                     kept from it, pairing. Used by the desktop window and the phone app
+  dictation/         dictation on the device (Swift, Apple's speech models): one engine, run by the
+                     desktop app as a small program on a Mac and built into the phone app as an Expo module
+```
+
+## Adding a model provider
+
+
+Implement the `Provider` interface in `apps/server/src/providers/types.ts` and register it in
+`apps/server/src/providers/index.ts`. A provider has `info` and `models`, and either `stream` (answer one
+model request; OpenKumi runs the tools) or `turn` (run a whole turn, as the engines do). The agent
+loop only deals in the neutral item types from `packages/shared/src/types.ts`; each provider converts those to
+and from its own format.

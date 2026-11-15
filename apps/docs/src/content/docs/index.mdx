@@ -1,0 +1,38 @@
+---
+title: OpenKumi documentation
+description: "How to install OpenKumi, what its bots can do, and how it works."
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components'
+
+OpenKumi is a free, open-source desktop app for AI bots that live on your computer. Each bot has
+its own memory, its own signed-in browser and only the powers you give it, and it runs on the
+Claude, ChatGPT or Grok plan you already have.
+
+## Start here
+
+<CardGrid>
+  <LinkCard title="Installing and updating" description="The desktop app, the server on its own, and how both update." href="/install/" />
+  <LinkCard title="What OpenKumi does" description="Everything a bot is and can do." href="/features/" />
+</CardGrid>
+
+## Using OpenKumi
+
+<CardGrid>
+  <LinkCard title="Where bots run, and reaching them" description="Environments, pairing another computer, and the iPhone app." href="/environments/" />
+  <LinkCard title="Automations" description="Bots that work at set times, when something changes, or when an app calls." href="/automations/" />
+  <LinkCard title="Superpowers" description="What a bot can do beyond chatting and browsing, and how it signs in." href="/superpowers/" />
+  <LinkCard title="Settings and configuration" description="What each settings page holds, and the environment variables." href="/settings/" />
+</CardGrid>
+
+## How it works
+
+<CardGrid>
+  <LinkCard title="Where everything lives" description="The folder that holds your bots, and what in it is yours." href="/how-it-works/where-everything-lives/" />
+  <LinkCard title="What every bot is told" description="The master prompt and the rest of what a bot is given." href="/how-it-works/what-a-bot-is-told/" />
+  <LinkCard title="Tools available to a bot" description="Every tool a bot can call." href="/how-it-works/tools/" />
+  <LinkCard title="Security notes" description="What is trusted, what is not, and why." href="/security/" />
+</CardGrid>
+
+OpenKumi is open source under the MIT License. The code, and the place to report a problem, is
+[on GitHub](https://github.com/jcmartinezdev/openkumi).

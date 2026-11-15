@@ -57,7 +57,7 @@ buy, and nothing passes through a server of ours, because there is none.
 - **Yours.** A bot is a folder of plain files on your disk that you can read, edit and back up.
   OpenKumi is MIT-licensed.
 
-All of it, at more length: [What OpenKumi does](docs/features.md).
+All of it, at more length: [What OpenKumi does](https://docs.openkumi.ai/features/).
 
 <table>
   <tr>
@@ -149,7 +149,7 @@ openkumi pair       # a code to enter in the app: Settings → Environments → 
 ```
 
 `openkumi help` lists the rest (`update`, `logs`, `service`, `uninstall`). More in
-[Installing and updating](docs/install.md).
+[Installing and updating](https://docs.openkumi.ai/install/).
 
 ### From the source
 
@@ -187,18 +187,23 @@ Bots can run on one computer of yours while you talk to them from another, or fr
 At home they connect directly. Away from home they connect over [Tailscale](https://tailscale.com)
 when it is on for both. The iPhone app is in this repository (`apps/mobile`) and is built from
 the source for now; it is not in the App Store yet. More in
-[Where bots run, and reaching them](docs/environments.md).
+[Where bots run, and reaching them](https://docs.openkumi.ai/environments/).
 
 ## Documentation
 
+The documentation is a site of its own, [docs.openkumi.ai](https://docs.openkumi.ai), made from the
+Markdown files in `apps/docs/src/content/docs`.
+
 | | |
 | --- | --- |
-| [What OpenKumi does](docs/features.md) | every feature, at more length |
-| [Installing and updating](docs/install.md) | the app, the server on its own, and how both update |
-| [Where bots run, and reaching them](docs/environments.md) | environments, pairing, several addresses, the iPhone app |
-| [Settings and configuration](docs/settings.md) | what each settings page holds, and the environment variables |
-| [How it works](docs/how-it-works.md) | where everything lives, what a bot is told, automations, superpowers, tools, engines |
-| [Security notes](docs/security.md) | what is trusted, what is not, and why |
+| [What OpenKumi does](https://docs.openkumi.ai/features/) | every feature, at more length |
+| [Installing and updating](https://docs.openkumi.ai/install/) | the app, the server on its own, and how both update |
+| [Where bots run, and reaching them](https://docs.openkumi.ai/environments/) | environments, pairing, several addresses, the iPhone app |
+| [Settings and configuration](https://docs.openkumi.ai/settings/) | what each settings page holds, and the environment variables |
+| [Automations](https://docs.openkumi.ai/automations/) | bots that work at set times, when something changes, or when an app calls |
+| [Superpowers](https://docs.openkumi.ai/superpowers/) | what a bot can do beyond its own tools, and how it signs in |
+| [How it works](https://docs.openkumi.ai/how-it-works/where-everything-lives/) | where everything lives, what a bot is told, the conversation, tools, engines |
+| [Security notes](https://docs.openkumi.ai/security/) | what is trusted, what is not, and why |
 | [Working on OpenKumi](docs/development.md) | running it from the source, the tests, and making a release |
 | [Releasing the iPhone app](docs/mobile-releases.md) | how a release reaches the phones: over the air, or through TestFlight |
 
