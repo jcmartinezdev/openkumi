@@ -263,8 +263,8 @@ button.welcome-start:hover:not(:disabled) { background: linear-gradient(var(--ho
 .welcome-start strong { display: block; font-size: 15px; font-weight: 600; color: var(--text); }
 .welcome-start strong + span { display: block; font-size: 13px; line-height: 1.45; font-weight: 400; color: var(--muted); }
 .welcome-pairing { animation: rise 0.2s; }
-.welcome-alpha { margin-top: -16px; text-align: center; font-size: 12.5px; line-height: 1.5; color: var(--faint); text-wrap: pretty; }
-.welcome-alpha a { color: var(--muted); }
+.welcome-alpha { margin-top: -16px; text-align: center; font-size: 12.5px; line-height: 1.5; color: var(--muted); text-wrap: pretty; }
+.welcome-alpha a { color: var(--text); }
 .welcome-back { align-self: flex-start; margin: -12px 0 -18px 4px; }
 .toast {
   position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 30;

@@ -214,9 +214,9 @@ export default function Welcome() {
             <Glyph name="chevron" size={18} color={theme.faint} weight={2} />
           </Pressable>
         ))}
-        <Text style={[styles.alpha, { color: theme.faint }]}>
+        <Text style={[styles.alpha, { color: theme.muted }]}>
           {ALPHA_NOTE}{' '}
-          <Text accessibilityRole="link" style={{ color: theme.muted, textDecorationLine: 'underline' }} onPress={() => void Linking.openURL(ISSUES_URL)}>Report a problem</Text>
+          <Text accessibilityRole="link" style={{ color: theme.text, textDecorationLine: 'underline' }} onPress={() => void Linking.openURL(ISSUES_URL)}>Report a problem</Text>
         </Text>
       </View>
     </ScrollView>
