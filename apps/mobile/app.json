@@ -2,8 +2,17 @@
   "expo": {
     "name": "OpenKumi",
     "slug": "openkumi",
+    "owner": "goto-lcs-ug",
     "scheme": "openkumi",
-    "version": "0.1.0",
+    "version": "0.0.1",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/bae421da-a415-4c22-b526-0b274963cf3c",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -43,6 +52,11 @@
         }
       ],
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bae421da-a415-4c22-b526-0b274963cf3c"
+      }
+    }
   }
 }

@@ -4,6 +4,7 @@ import { Icon } from './Icon'
 import { desktop, useDesktop } from './desktop'
 import { mainThread, openSettings, recentSubagents, rootOf, useStore } from './store'
 import { BotHead } from './Mascot'
+import { UpdatePill } from './Updates'
 
 export function StatusDot({ thread }: { thread: Thread }) {
   if (thread.status === 'running') return <span className="spinner" aria-label="Working" />
@@ -109,6 +110,7 @@ export function Sidebar({ bot, thread, automationsOpen, openModal, open, close }
         <span className="grow">Automations</span>
         <span className="meta">{runsGoing ? <span className="spinner" aria-label="An automation is running" /> : automationCount > 0 && <span className="time">{automationCount}</span>}</span>
       </a>
+      <UpdatePill />
       <button className="row settings" onClick={() => (close(), openSettings(connected ? 'general' : 'providers'))}>
         <Icon name="sliders" />
         <span className="grow">Settings</span>

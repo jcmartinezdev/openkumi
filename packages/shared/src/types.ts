@@ -389,6 +389,43 @@ export interface Settings {
   historyLimit: number
   /** Write everything Claude Code, Codex and Grok print to the server log. */
   debugEngines: boolean
+  /**
+   * A server installed on its own fetches a new version by itself and starts it once no bot is
+   * working. Off, it only updates when asked. One inside the desktop app updates with the app.
+   */
+  autoUpdate: boolean
+}
+
+/** How a server stands with its own updates (apps/server/src/update.ts). */
+export interface ServerUpdate {
+  /**
+   * How this server gets a new version:
+   * - `installed`: it was installed on its own (openkumi.ai/install.sh) and can update itself;
+   * - `app`: it runs inside the desktop app and is updated with it;
+   * - `source`: it runs from the repository, where a new version is fetched with git.
+   */
+  how: 'installed' | 'app' | 'source'
+  /** The newest version there is, once it has been looked up. The same as the server's own when it is up to date. */
+  latest: string | null
+  /**
+   * The version that is in place and is started next, when that is newer than the one running.
+   * Not always `latest`: a newer one still may have come out since, and not have been fetched.
+   * Missing from older servers.
+   */
+  staged?: string | null
+  /**
+   * - `idle`: nothing is going on;
+   * - `checking`: looking up the newest version;
+   * - `downloading`: fetching it;
+   * - `ready`: the new version is in place, and the server starts it as soon as no bot is working;
+   * - `failed`: see `error`.
+   */
+  state: 'idle' | 'checking' | 'downloading' | 'ready' | 'failed'
+  error: string
+  /** When the newest version was last looked up, in milliseconds, or 0. */
+  checkedAt: number
+  /** How many conversations, subagents and runs are at work right now: what a restart would cut off. */
+  working: number
 }
 
 /** Facts about this installation, for the About and Access pages. */
@@ -403,6 +440,8 @@ export interface About {
   timeZone: string
   /** The port, on this computer only, that takes the calls of webhooks: what a tunnel from the internet points at. */
   hooksPort: number
+  /** The number the apps compare with their own (packages/shared/src/protocol.ts). */
+  protocol: number
 }
 
 export interface ProviderInfo {
@@ -483,6 +522,7 @@ export type ServerEvent =
   | { type: 'stream.delta'; threadId: string; kind: 'text' | 'reasoning'; delta: string }
   | { type: 'providers'; providers: ProviderInfo[] }
   | { type: 'settings'; settings: Settings }
+  | { type: 'update'; update: ServerUpdate }
   | { type: 'superpowers'; superpowers: Superpower[]; categories: string[] }
   | { type: 'superpower.status'; botId: string; id: string; status: SuperpowerStatus | null }
   | { type: 'files.changed'; botId: string }
@@ -547,5 +587,6 @@ export interface AppState {
   /** What every setting is when nothing has been changed, for "reset to default". */
   defaults: Settings
   about: About
+  update: ServerUpdate
 }
 

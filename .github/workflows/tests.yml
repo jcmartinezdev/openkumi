@@ -1,0 +1,35 @@
+# Checks every change: the types, then the tests of the server, of what the apps share, and of
+# the desktop app (which is driven for real, with its window kept off the screen).
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run the tests
+    # A Mac, as the tests drive the desktop app, and dictation is only built there.
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+        env:
+          # The Mac the checks run on has no speech models, so nothing it "hears" is written down.
+          OPENKUMI_TEST_NO_DICTATION: '1'

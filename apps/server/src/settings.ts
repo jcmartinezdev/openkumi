@@ -24,6 +24,7 @@ export const DEFAULTS: Settings = {
   instructionsLimit: 12_000,
   historyLimit: 60_000,
   debugEngines: false,
+  autoUpdate: true,
 }
 
 const FILE = path.join(HOME, 'settings.json')
@@ -55,6 +56,7 @@ const ACCEPT: { [K in keyof Settings]: (v: unknown) => Settings[K] | undefined }
   instructionsLimit: whole(2000, 60_000),
   historyLimit: whole(2000, 1_000_000),
   debugEngines: bool,
+  autoUpdate: bool,
 }
 
 function clean(input: Record<string, unknown>): Partial<Settings> {

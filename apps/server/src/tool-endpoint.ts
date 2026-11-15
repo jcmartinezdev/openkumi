@@ -5,7 +5,7 @@
 import crypto from 'node:crypto'
 import type http from 'node:http'
 import type { Bot, Thread } from '@openkumi/shared'
-import { PORT } from './config.ts'
+import { PORT, VERSION } from './config.ts'
 import * as db from './db.ts'
 import { type Tool, runTool } from './tools.ts'
 
@@ -56,7 +56,7 @@ async function answer(turn: Open, method: string, params: any): Promise<unknown>
       // Agreeing to whatever version the client speaks keeps older and newer programs working.
       protocolVersion: params?.protocolVersion ?? '2025-06-18',
       capabilities: { tools: {} },
-      serverInfo: { name: 'openkumi', version: '0.1.0' },
+      serverInfo: { name: 'openkumi', version: VERSION },
     }
   }
   if (method === 'ping') return {}

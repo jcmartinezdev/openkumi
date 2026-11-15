@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/client",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "What every OpenKumi app needs to talk to a server: the connection, the state kept from it, and pairing.",
   "private": true,
   "type": "module",
@@ -30,7 +30,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/"
+    "test": "node --test --test-timeout=180000 test/"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.0",

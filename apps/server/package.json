@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/server",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "The OpenKumi server: runs the bots, their browsers and their files. It has no interface of its own.",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "pair": "node src/pair.ts",
     "dev": "node --watch-path=src src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/"
+    "test": "node --test --test-timeout=180000 test/"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.4.0",

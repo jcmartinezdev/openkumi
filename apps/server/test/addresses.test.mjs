@@ -6,6 +6,7 @@ import http from 'node:http'
 import { test } from 'node:test'
 import { nearby, onTailscale } from '../src/network.ts'
 import { checkNew, deviceTag, kindOf, ordered, probe, reach, refusal, verdict, withFound } from '../../../packages/client/src/addresses.ts'
+import { PROTOCOL } from '../../../packages/shared/src/protocol.ts'
 
 test('the server answers this computer, the local network and Tailscale, and nothing on the internet', () => {
   for (const ip of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.4', '172.16.5.5', '172.31.255.1', '192.168.1.20', '::ffff:192.168.1.20', '169.254.10.1', '100.101.102.103', 'fd7a:115c:a1e0::1', 'fe80::1'])
@@ -44,19 +45,33 @@ test('a device asks who is at an address without sending its key, and only its s
   const hash = crypto.createHash('sha256').update(key).digest('hex')
   const heard = []
   /** One port per way of answering: the server, something that only says it is, an old server, and so on. */
+  /** What this device's server says, in the version of how apps and servers talk that it is given. */
+  const mine = (protocol) => (q) => ({
+    app: 'openkumi',
+    version: '1.2.3',
+    protocol,
+    id: 's_mine',
+    device: q.get('device') === deviceTag(key) ? { known: true, proof: crypto.createHmac('sha256', hash).update(`server:s_mine:${q.get('challenge')}`).digest('hex') } : { known: false },
+  })
   const answer = {
-    server: (q) => ({ app: 'openkumi', id: 's_mine', device: q.get('device') === deviceTag(key) ? { known: true, proof: crypto.createHmac('sha256', hash).update(`server:s_mine:${q.get('challenge')}`).digest('hex') } : { known: false } }),
+    server: mine(PROTOCOL),
+    // The server, in a version this app cannot work with until one of the two is updated.
+    behind: mine(PROTOCOL - 1),
+    ahead: mine(PROTOCOL + 1),
     pretender: () => ({ app: 'openkumi', id: 's_mine', device: { known: true, proof: 'ab'.repeat(32) } }),
     another: () => ({ app: 'openkumi', id: 's_theirs', device: { known: false } }),
     removed: () => ({ app: 'openkumi', id: 's_mine', device: { known: false } }),
     older: () => ({ app: 'openkumi', version: '0.0.1', authorized: false }),
     stranger: () => ({ hello: 'world' }),
+    // Something that does not answer itself, but sends the question on to the real server.
+    sender: () => null,
   }
   const servers = {}
   for (const [name, says] of Object.entries(answer)) {
     const server = http.createServer((req, res) => {
       heard.push(`${req.url} ${JSON.stringify(req.headers)}`)
       const q = new URL(req.url, 'http://x').searchParams
+      if (name === 'sender') return void res.writeHead(302, { Location: `${servers.server.url}${req.url}` }).end()
       // The server answers a beat late, so a faster one later in the list does not win.
       setTimeout(() => res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(says(q))), name === 'server' ? 150 : 0)
     })
@@ -72,7 +87,17 @@ test('a device asks who is at an address without sending its key, and only its s
     assert.equal(await said('another', 's_mine'), 'other', 'another OpenKumi server')
     assert.equal(await said('removed', 's_mine'), 'refused')
     assert.equal(await said('older'), 'outdated')
+    assert.equal((await probe(at('older'), key)).proven, undefined, 'one too old to show who it is cannot be asked anything with the key')
+    // The server, shown to be it, but not one this app can work with: it can be asked to update itself, with the key.
+    assert.deepEqual(await probe(at('behind'), key, 's_mine'), { url: at('behind'), answer: 'outdated', serverId: 's_mine', proven: true, version: '1.2.3' })
+    assert.deepEqual(await probe(at('ahead'), key, 's_mine'), { url: at('ahead'), answer: 'newer', serverId: 's_mine', proven: true, version: '1.2.3' })
+    assert.equal(verdict([await probe(at('ahead'), key)]), 'newer')
+    assert.equal((await reach([at('behind'), at('ahead')], key, 's_mine')).found, null, 'neither is connected to')
     assert.equal(await said('stranger'), 'unreachable')
+    // An address that sends the question on to the real server comes back with that server's proof.
+    // It is not taken for the server, so the key never goes to it.
+    assert.notEqual(await said('sender', 's_mine'), 'ok', 'an answer that was passed on from elsewhere does not count')
+    assert.equal((await reach([at('sender')], key, 's_mine')).found, null)
     assert.equal(await said('server', 's_someone_else'), 'other')
     assert.equal((await probe('http://127.0.0.1:1', key)).answer, 'unreachable')
     assert.equal((await probe('http://203.0.113.9:4317', key)).answer, 'blocked', 'never asked at all')
@@ -89,6 +114,8 @@ test('a device asks who is at an address without sending its key, and only its s
     assert.deepEqual(await checkNew('http://127.0.0.1:1', key, { name: 'Mac mini', serverId: 's_mine' }), { checked: false, serverId: undefined })
     await assert.rejects(checkNew(at('another'), key, { name: 'Mac mini', serverId: 's_mine' }), /Something else answers at .*, not Mac mini\. Its key was not sent there\./)
     await assert.rejects(checkNew(at('removed'), key, { name: 'Mac mini', serverId: 's_mine' }), /no longer lets this device in/)
+    await assert.rejects(checkNew(at('behind'), key, { name: 'Mac mini', serverId: 's_mine' }), /is older than this app/)
+    await assert.rejects(checkNew(at('ahead'), key, { name: 'Mac mini', serverId: 's_mine' }), /is newer than this app\. Update the app/)
     await assert.rejects(checkNew('http://bots.example.com:4317', key, { name: 'Mac mini' }), /Use an https address/)
 
     // Through all of it, the key itself never left this device, nor its hash.

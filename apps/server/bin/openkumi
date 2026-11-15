@@ -1,0 +1,30 @@
+#!/bin/sh
+# The openkumi command of a server installed on its own (openkumi.ai/install.sh). It sits in a
+# version's folder, beside the Node that version runs with:
+#   <runtime>/versions/<version>/bin/openkumi    this file
+#   <runtime>/versions/<version>/node
+#   <runtime>/versions/<version>/server/
+#   <runtime>/current                            a link to the version that is started
+# It is always run through "current", so after an update it is the new version's.
+set -e
+here=$(cd "$(dirname "$0")/.." && pwd -P)
+OPENKUMI_RUNTIME=${OPENKUMI_RUNTIME:-$(dirname "$(dirname "$here")")}
+export OPENKUMI_RUNTIME
+
+case "${1:-}" in
+  serve)
+    # What the background service runs: the server itself and nothing around it, so that it is
+    # the one told to stop. When it stops to update, the service starts it again.
+    exec "$here/node" "$here/server/src/index.ts"
+    ;;
+  start)
+    # In a terminal: the server, started again here when it stops to update (it ends with 75 then).
+    while :; do
+      current="$OPENKUMI_RUNTIME/current"
+      code=0
+      "$current/node" "$current/server/src/index.ts" || code=$?
+      [ "$code" = 75 ] || exit "$code"
+    done
+    ;;
+esac
+exec "$here/node" "$here/server/src/cli.ts" "$@"

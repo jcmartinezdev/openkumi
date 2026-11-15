@@ -7,6 +7,7 @@
 // answering at a saved address is told nothing it could use.
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { compatible } from '@openkumi/shared/protocol'
 
 /** An address of a paired server, as a device keeps it. */
 export interface SavedAddress {
@@ -100,15 +101,24 @@ export function useRandom(fn: () => Uint8Array) {
 
 /**
  * What answered at an address: the server (`ok`), the server, no longer letting this device in
- * (`refused`), something else (`other`), an OpenKumi too old to show who it is (`outdated`),
- * nothing (`unreachable`), or nothing was asked because the key may not go there (`blocked`).
+ * (`refused`), something else (`other`), an OpenKumi this app cannot work with until it is updated
+ * (`outdated`), or one so much newer that this app has to be (`newer`), nothing (`unreachable`),
+ * or nothing was asked because the key may not go there (`blocked`).
  */
-export type Answer = 'ok' | 'refused' | 'other' | 'outdated' | 'unreachable' | 'blocked'
+export type Answer = 'ok' | 'refused' | 'other' | 'outdated' | 'newer' | 'unreachable' | 'blocked'
 export interface Probe {
   url: string
   answer: Answer
   /** The id the server there gave, when it was asked. */
   serverId?: string
+  /**
+   * It showed that it is this device's server, so the key may go there. Always so for `ok`. For
+   * `outdated` and `newer` it says the server can at least be asked to update itself; one too old
+   * to show who it is cannot.
+   */
+  proven?: boolean
+  /** The version of OpenKumi there, when it said. */
+  version?: string
 }
 
 /** Whether what answered at /api/hello is an OpenKumi server. One from before OpenKumi was renamed calls itself Open Bot. */
@@ -127,7 +137,11 @@ export async function probe(url: string, key: string, serverId?: string): Promis
   const stop = new AbortController()
   const late = setTimeout(() => stop.abort(), PATIENCE[kindOf(url)])
   try {
-    const res = await fetch(`${url}/api/hello?challenge=${challenge}&device=${deviceTag(key)}`, { signal: stop.signal })
+    // Whatever is at this address has to answer for itself. Were it allowed to send the question
+    // on to the real server, it would come back with that server's proof, and be sent the key.
+    const res = await fetch(`${url}/api/hello?challenge=${challenge}&device=${deviceTag(key)}`, { signal: stop.signal, redirect: 'error' })
+    // Where being sent on cannot be refused (the phone follows it whatever is asked), the answer says where it came from.
+    if (res.redirected || (res.url && new URL(res.url).origin !== new URL(url).origin)) return { url, answer: 'other' }
     const said = await res.json()
     if (!isServer(said)) return { url, answer: 'unreachable' }
     if (typeof said.id !== 'string' || !said.device) return { url, answer: 'outdated' }
@@ -135,7 +149,8 @@ export async function probe(url: string, key: string, serverId?: string): Promis
     if (!said.device.known) return { url, answer: 'refused', serverId: said.id }
     // Says it knows this device, but cannot sign with the key's hash: it is not the server.
     if (!same(String(said.device.proof ?? ''), signed(key, said.id, challenge))) return { url, answer: 'other' }
-    return { url, answer: 'ok', serverId: said.id }
+    // It is the server. Whether this app can work with it is another matter (see @openkumi/shared/protocol).
+    return { url, answer: compatible(said.protocol), serverId: said.id, proven: true, version: typeof said.version === 'string' ? said.version : undefined }
   } catch {
     return { url, answer: 'unreachable' }
   } finally {
@@ -158,9 +173,9 @@ export async function reach(urls: string[], key: string, serverId?: string): Pro
 }
 
 /** How a server stands, from what its addresses said. */
-export function verdict(answers: Probe[]): 'connected' | 'refused' | 'outdated' | 'unreachable' {
+export function verdict(answers: Probe[]): 'connected' | 'refused' | 'outdated' | 'newer' | 'unreachable' {
   const said = (answer: Answer) => answers.some((probe) => probe.answer === answer)
-  return said('ok') ? 'connected' : said('refused') ? 'refused' : said('outdated') ? 'outdated' : 'unreachable'
+  return said('ok') ? 'connected' : said('refused') ? 'refused' : said('outdated') ? 'outdated' : said('newer') ? 'newer' : 'unreachable'
 }
 
 /**
@@ -176,5 +191,6 @@ export async function checkNew(url: string, key: string, server: { name: string;
   if (answer === 'other') throw new Error(`Something else answers at ${host}, not ${server.name}. Its key was not sent there.`)
   if (answer === 'refused') throw new Error(server.serverId ? `${server.name} answers at ${host}, but no longer lets this device in. Pair them again.` : `The OpenKumi at ${host} does not know this device, so it may be a different one. Its key was not sent there.`)
   if (answer === 'outdated') throw new Error(`The OpenKumi at ${host} is older than this app. Update it there, then add the address.`)
+  if (answer === 'newer') throw new Error(`The OpenKumi at ${host} is newer than this app. Update the app, then add the address.`)
   return { checked: answer === 'ok', serverId }
 }

@@ -40,8 +40,29 @@ export interface Link {
   serverId?: string
 }
 
+/** How the app stands with its own updates (apps/desktop/src/updates.ts). */
+export interface AppUpdate {
+  /**
+   * - `none`: nothing newer is known;
+   * - `checking`: looking for a newer version;
+   * - `downloading`: fetching it, `progress` percent done;
+   * - `ready`: it is downloaded, and takes this version's place when the app next quits or is restarted for it;
+   * - `failed`: see `error`;
+   * - `unsupported`: this copy cannot update itself (it runs from the repository, or was installed as a package the system updates).
+   */
+  state: 'none' | 'checking' | 'downloading' | 'ready' | 'failed' | 'unsupported'
+  /** The newer version, once one is found. */
+  version: string | null
+  progress: number
+  error: string
+  /** When it last looked, in milliseconds, or 0. */
+  checkedAt: number
+}
+
 export interface DesktopState {
   version: string
+  /** Missing from older apps. */
+  update?: AppUpdate
   platform: string
   fullScreen: boolean
   local: LocalEnvironment
@@ -57,12 +78,16 @@ export interface DesktopState {
   catchesSignIns?: boolean
 }
 
-export type EnvironmentStatus = 'connected' | 'unreachable' | 'refused' | 'outdated' | 'off'
+export type EnvironmentStatus = 'connected' | 'unreachable' | 'refused' | 'outdated' | 'newer' | 'off'
 
 /** How a remote environment stands, and what each of its addresses said (see `Answer` in packages/client/src/addresses.ts). */
 export interface EnvironmentReport {
   status: EnvironmentStatus
-  addresses: Record<string, 'ok' | 'refused' | 'other' | 'outdated' | 'unreachable' | 'blocked'>
+  addresses: Record<string, 'ok' | 'refused' | 'other' | 'outdated' | 'newer' | 'unreachable' | 'blocked'>
+  /** The version of OpenKumi there, when it said. */
+  version?: string
+  /** It runs an older OpenKumi but showed it is the paired computer, so it can be asked to update itself (`updateEnvironment`). */
+  canUpdate?: boolean
 }
 
 /** What the window can ask of the app (see apps/desktop/src/preload.ts). */
@@ -93,6 +118,16 @@ export interface DesktopBridge {
   removeAddress(id: string, url: string): Promise<void>
   /** Keeps what the window learned about the environment it shows: its server's id and the addresses the server reports. */
   learn(id: string, learned: { serverId?: string; addresses?: string[] }): Promise<void>
+  /**
+   * Asks a remote environment that runs an older OpenKumi to update itself. Its key only goes to
+   * an address that has shown it is that environment. Resolves with what it said it will do.
+   * Missing from older apps.
+   */
+  updateEnvironment?(id: string): Promise<string>
+  /** Looks for a newer version of this app now. Missing from older apps. */
+  checkForUpdate?(): Promise<void>
+  /** Quits, puts the downloaded version in place and opens it. The local environment is stopped first. Missing from older apps. */
+  installUpdate?(): Promise<void>
   /**
    * Gives the address of a page to show in a frame (a page a bot showed, wrapped for drawing).
    * The address is a site of its own, so the page cannot reach the window.

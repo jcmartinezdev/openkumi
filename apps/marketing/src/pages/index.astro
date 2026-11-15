@@ -4,7 +4,7 @@ import Layout from '../layouts/Layout.astro'
 import Mascot from '../components/Mascot.astro'
 import ProviderMark from '../components/ProviderMark.astro'
 import Shot from '../components/Shot.astro'
-import { DOWNLOAD_URL, GITHUB_URL } from '../lib/site'
+import { DOWNLOADS, DOWNLOAD_URL, GITHUB_URL, INSTALL_COMMAND, RELEASES_URL } from '../lib/site'
 
 // The superpowers that ship with the app, read from the server's own folder of them, by name as the app lists them.
 const powers = Object.entries(import.meta.glob<{ name: string; tagline: string }>('../../../server/superpowers/*/superpower.json', { eager: true, import: 'default' }))
@@ -59,6 +59,10 @@ const faq = [
     q: 'Can I use it from my phone or another computer?',
     a: 'Yes. Bots can run on a computer of yours that stays on, and your laptop or iPhone pairs with it using a one-time code. At home they connect directly; away from home, over Tailscale.',
   },
+  {
+    q: 'How does it stay up to date?',
+    a: 'By itself. The desktop app downloads a new version in the background and asks you to restart when it is ready. OpenKumi installed on a computer of its own fetches the new version and starts it once no bot is working. You can switch that off and update when you choose.',
+  },
 ]
 ---
 
@@ -73,13 +77,13 @@ const faq = [
         OpenKumi is a desktop app for AI bots that live on your computer. Each one has its own memory, its own browser that stays signed in, and only the powers you give it. They run on the Claude, ChatGPT or Grok plan you already have.
       </p>
       <div class="ctas">
-        <a class="button primary" href={DOWNLOAD_URL}>
+        <a class="button primary" href={DOWNLOAD_URL} data-download>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9-1.2-1.8-3.1-2-3.7-2-1.6-.2-3.1.9-3.9.9s-2-.9-3.4-.9c-1.7 0-3.3 1-4.2 2.6-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8 2.3-1.3 3.1-2.5c1-1.4 1.4-2.8 1.4-2.9 0 0-2.8-1-2.8-4.1zM13.9 5c.7-.9 1.2-2 1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.2.1 2.4-.6 3.1-1.5z"></path></svg>
-          Download for Mac
+          <span data-download-label>Download for Mac</span>
         </a>
         <a class="button secondary" href={GITHUB_URL}>View on GitHub</a>
       </div>
-      <p class="fine">Free and MIT-licensed. No API key, no account.</p>
+      <p class="fine">Free and MIT-licensed. No API key, no account. Also for <a href="#download">Windows and Linux</a>.</p>
     </div>
     <div class="container stage">
       <div class="lineup" aria-hidden="true">
@@ -313,6 +317,7 @@ const faq = [
         <span class="eyebrow">Wherever you are</span>
         <h2>On this Mac, a computer at home, or your phone</h2>
         <p>Bots run on this Mac, or on another computer of yours that stays on. Pair a laptop or an iPhone with a one-time code that both sides check and that never crosses the network. At home they connect directly; away from home, over Tailscale.</p>
+        <p>A computer with no screen needs no app: <a href="#download">one line in its terminal</a> installs OpenKumi there, keeps it running and keeps it up to date.</p>
         <p>The iPhone app lets you chat with your bots, watch and steer their browsers, and look after their settings and automations.</p>
       </div>
       <div class="devices" aria-hidden="true">
@@ -333,6 +338,45 @@ const faq = [
           <div class="bubble bot">Two things: the landlord wants a time for the repair, and your flight moved to 9:40. I drafted a reply to the landlord.</div>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- ---- download -->
+  <section id="download" class="section download">
+    <div class="container">
+      <div class="section-head">
+        <span class="eyebrow">Download</span>
+        <h2>Get OpenKumi</h2>
+        <p>Free and open source. The app brings everything it needs, and keeps itself up to date.</p>
+      </div>
+      <ul class="systems">
+        {
+          DOWNLOADS.map((system) => (
+            <li class="system" data-system={system.id}>
+              <h3>{system.name}</h3>
+              <p>{system.needs}</p>
+              <div class="files">
+                {system.files.map((item, i) => (
+                  <a class={`button ${i === 0 ? 'primary' : 'secondary'}`} href={item.href}>
+                    {system.files.length > 1 ? item.label : `Download for ${system.name}`}
+                  </a>
+                ))}
+              </div>
+            </li>
+          ))
+        }
+      </ul>
+      <div class="server">
+        <div>
+          <h3>A computer with no screen</h3>
+          <p>A Mac mini in a cupboard or a Linux machine needs no app. This line in its terminal installs OpenKumi there, keeps it running and keeps it up to date. Your other computers and your phone then pair with it.</p>
+        </div>
+        <div class="command">
+          <pre class="install"><code>{INSTALL_COMMAND}</code></pre>
+          <button type="button" class="button secondary" data-copy={INSTALL_COMMAND}>Copy</button>
+        </div>
+      </div>
+      <p class="fine center">Every file, with its checksum, is in the <a href={RELEASES_URL}>newest release on GitHub</a>.</p>
     </div>
   </section>
 
@@ -363,12 +407,39 @@ const faq = [
       <h2>Meet your crew.</h2>
       <p>Free, open source, and running on your own computer in a few minutes.</p>
       <div class="ctas">
-        <a class="button primary" href={DOWNLOAD_URL}>Download for Mac</a>
+        <a class="button primary" href={DOWNLOAD_URL} data-download><span data-download-label>Download for Mac</span></a>
         <a class="button secondary" href={GITHUB_URL}>View on GitHub</a>
       </div>
     </div>
   </section>
 </Layout>
+
+<script is:inline define:vars={{ downloads: DOWNLOADS }}>
+  // The main buttons give a Mac's installer, which is what most visitors need. On Windows or
+  // Linux they give that system's instead, and its card in the list is marked as the visitor's.
+  const agent = navigator.userAgent
+  const phone = /Android|iPhone|iPad|iPod/.test(agent)
+  const mine = phone ? null : /Windows/.test(agent) ? 'windows' : /Linux|X11|CrOS/.test(agent) ? 'linux' : 'mac'
+  const system = downloads.find((item) => item.id === mine)
+  if (system && mine !== 'mac') {
+    for (const button of document.querySelectorAll('[data-download]')) {
+      button.href = system.files[0].href
+      button.querySelector('[data-download-label]').textContent = `Download for ${system.name}`
+      button.querySelector('svg')?.remove()
+    }
+  }
+  if (system) document.querySelector(`[data-system="${mine}"]`)?.classList.add('yours')
+
+  for (const button of document.querySelectorAll('[data-copy]')) {
+    button.addEventListener('click', async () => {
+      const copied = await navigator.clipboard.writeText(button.dataset.copy).then(() => true, () => false)
+      // Where the page may not write to the clipboard, the line is selected, ready to be copied by hand.
+      if (!copied) getSelection()?.selectAllChildren(button.parentElement.querySelector('code'))
+      button.textContent = copied ? 'Copied' : 'Selected'
+      setTimeout(() => (button.textContent = 'Copy'), 1600)
+    })
+  }
+</script>
 
 <style>
   /* ---- hero */
@@ -434,6 +505,26 @@ const faq = [
   .fine {
     font-size: 14px;
     color: var(--faint);
+  }
+  .fine a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .fine a:hover {
+    color: var(--text);
+  }
+  /* The line that installs OpenKumi on a computer with no screen: one line, scrolled sideways on a narrow one. */
+  .install {
+    margin: 0;
+    padding: 12px 16px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-sunk);
+    color: var(--text);
+    font-size: 14px;
+    white-space: pre;
   }
   .stage {
     position: relative;
@@ -1173,6 +1264,91 @@ const faq = [
   details p {
     padding: 0 24px 22px;
     color: var(--muted);
+  }
+
+  /* ---- download */
+  .systems {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .system,
+  .server {
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
+  }
+  .system {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+  }
+  /* The visitor's own system, when the page can tell. */
+  .system.yours {
+    border-color: var(--sky);
+    box-shadow: 0 0 0 3px var(--sky-soft);
+  }
+  .system h3,
+  .server h3 {
+    font-size: 22px;
+  }
+  .system p,
+  .server p {
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
+  .server {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    gap: 32px;
+    margin-top: 16px;
+  }
+  .server div:first-child {
+    display: grid;
+    gap: 8px;
+  }
+  .command {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .command .install {
+    flex: 1;
+    min-width: 0;
+  }
+  .fine.center {
+    margin-top: 28px;
+    text-align: center;
+  }
+  @media (max-width: 860px) {
+    .systems,
+    .server {
+      grid-template-columns: 1fr;
+    }
+    .server {
+      gap: 20px;
+    }
+    /* On a narrow screen the line is shown whole, over as many rows as it takes, with its button beneath. */
+    .command {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .command .install {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
   }
 
   /* ---- end */

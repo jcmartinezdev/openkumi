@@ -1,0 +1,26 @@
+{
+  "cli": {
+    "version": ">= 18.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "production": {
+      "channel": "production",
+      "environment": "production",
+      "autoIncrement": true
+    },
+    "simulator": {
+      "environment": "production",
+      "ios": {
+        "simulator": true
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6835214398"
+      }
+    }
+  }
+}

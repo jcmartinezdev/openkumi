@@ -2,6 +2,7 @@
 // touches is temporary: its own data, and the data of the servers it runs or talks to.
 //   OPENKUMI_DESKTOP_APP   the program inside a packaged app, to test that instead of the source
 //   OPENKUMI_TEST_SHOW=1   show the window while the tests run
+//   OPENKUMI_TEST_NO_DICTATION=1   leave out dictation, on a Mac whose system could take it but has no speech models
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -46,8 +47,20 @@ delete env.OPENKUMI_DEV_URL
 
 const up = (port) => fetch(`http://127.0.0.1:${port}/api/hello`).then((r) => r.ok, () => false)
 const tokenOf = (home) => JSON.parse(fs.readFileSync(`${tmp}/${home}/auth.json`, 'utf8')).accessToken
-const ask = async (port, home, method, url, body) =>
-  (await fetch(`http://127.0.0.1:${port}${url}`, { method, headers: { Authorization: `Bearer ${tokenOf(home)}`, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })).json()
+/**
+ * Asks a server, with its own access code. A server that is just moving to another address (the
+ * network setting was switched) drops what is connected to it: the question is then asked again.
+ */
+const ask = async (port, home, method, url, body) => {
+  for (let tries = 0; ; tries++) {
+    try {
+      return await (await fetch(`http://127.0.0.1:${port}${url}`, { method, headers: { Authorization: `Bearer ${tokenOf(home)}`, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })).json()
+    } catch (e) {
+      if (tries >= 10 || !['ECONNRESET', 'ECONNREFUSED', 'UND_ERR_SOCKET'].includes(e?.cause?.code)) throw e
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  }
+}
 
 /** Pairs "this computer" with a server by hand, the way the app does, and returns the key it is given. */
 async function pairWith(port, home, name = 'Test computer') {
@@ -70,6 +83,8 @@ async function until(check, timeoutMs = 40_000) {
 let electron
 let app
 const launch = async () => {
+  // A test that failed left its app open, and a second one would not start beside it: the tests after it would fail for that alone.
+  await app?.close().catch(() => {})
   app = await _electron.launch({ executablePath: electron, args: packaged ? [] : ['.'], env })
   return app.firstWindow()
 }
@@ -729,7 +744,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     const cards = () => win.locator('.power-card h3').allInnerTexts()
     assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday'])
     const group = (name) => win.locator('.set-section', { has: win.locator('h2', { hasText: name }) }).locator('.power-card h3').allInnerTexts()
-    assert.deepEqual(await group('Work'), ['Atlassian', 'Competitors', 'Granola', 'Linear', 'Notion', 'Otter.ai'])
+    assert.deepEqual(await group('Work'), ['Atlassian', 'Attio', 'ClickUp', 'Competitors', 'Fathom', 'folk', 'Granola', 'Jotform', 'Linear', 'Miro', 'Notion', 'Otter.ai', 'PandaDoc', 'PostHog', 'Sentry', 'tl;dv'])
     assert.deepEqual(await group('Travel'), ['Exchange rates', 'Holidays', 'Weather'])
     assert.equal((await cards()).filter((name) => name === 'Notion').length, 2, 'in Productivity and in Work')
     const nav = await win.locator('.set-nav').innerText()
@@ -890,7 +905,7 @@ test('a bot has one conversation: starting fresh sets it aside, and earlier ones
   await win.getByRole('button', { name: 'Back to the conversation' }).click()
   await until(async () => (await here()) === `#/${solo.id}`, 10_000)
   // Its report arrives in the conversation when it is done.
-  await win.locator('.activity', { hasText: 'Subagent “Scout” completed' }).waitFor({ timeout: 20_000 })
+  await win.locator('.msg.report', { hasText: '“Scout” completed' }).waitFor({ timeout: 20_000 })
 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
@@ -1015,7 +1030,7 @@ test('automations: made on their page, run, and each run opened from beneath its
 
   // What came of it reached Helper's conversation, where it opens the run.
   await win.locator('.sidebar .row.bot', { hasText: 'Helper' }).click()
-  const report = win.locator('.activity', { hasText: 'Automation “Morning brief” ran' })
+  const report = win.locator('.msg.report', { hasText: '“Morning brief” ran' })
   await report.waitFor({ timeout: 20_000 })
   await shot('automation-report')
   await report.getByRole('button', { name: 'Open' }).click()
@@ -1309,6 +1324,8 @@ test('dictation: what is said goes into the message where the cursor was, and on
   const program = path.resolve(import.meta.dirname, '../dist/dictation')
   const check = process.platform === 'darwin' && fs.existsSync(program) ? await new Promise((resolve) => spawn(program, ['--check']).stdout.on('data', (d) => resolve(String(d)))) : ''
   if (!check.includes('"available":true')) return t.skip('dictation needs a Mac with macOS 26 or later')
+  // A Mac that is only rented for the checks has the system but not its speech models, nor anyone to allow listening.
+  if (process.env.OPENKUMI_TEST_NO_DICTATION) return t.skip('this Mac cannot take dictation')
   // A recording stands in for the microphone, heard all at once and then nothing until it is stopped.
   const recording = `${tmp}/said.aiff`
   await new Promise((resolve, reject) => spawn('say', ['-o', recording, 'Could you check my calendar for tomorrow?']).on('exit', (code) => (code ? reject(new Error('say failed')) : resolve())))
@@ -1357,4 +1374,105 @@ test('dictation: what is said goes into the message where the cursor was, and on
   await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${bot.id}`)
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('updates: the app finds a newer version of itself, and an environment this app cannot work with says which of the two to update', async () => {
+  const configure = (config) => (fs.mkdirSync(`${tmp}/app`, { recursive: true }), fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify(config)))
+  const { PROTOCOL } = await import('../../../packages/shared/src/protocol.ts')
+
+  // ---- the app itself
+  // Run from the repository it does not update itself, and says so where its version is.
+  configure({ local: { enabled: true }, environments: [], current: 'local' })
+  let win = await launch()
+  await showsBot(win, 'Assistant')
+  await win.evaluate(() => (location.hash = '/settings/about'))
+  if (packaged) {
+    // An installed app can, and offers to look. (OPENKUMI_DESKTOP_APP tests that one instead of the source.)
+    await win.locator('#app-update button', { hasText: /Check for updates|Restart to update/ }).waitFor()
+  } else {
+    await win.locator('#app-update', { hasText: 'does not update itself' }).waitFor()
+    assert.equal(await win.locator('#app-update button').count(), 0)
+  }
+  // The server this app runs is part of it, so it has no line of its own.
+  assert.equal(await win.locator('#server-update').count(), 0)
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+
+  // Told where versions are published, it looks there: a stand-in for the project's releases, with a newer one.
+  const installer = crypto.randomBytes(2048)
+  const file = process.platform === 'darwin' ? 'OpenKumi-mac-arm64.zip' : process.platform === 'win32' ? 'OpenKumi-win-x64.exe' : 'OpenKumi-linux-x64.AppImage'
+  const sha512 = crypto.createHash('sha512').update(installer).digest('base64')
+  const asked = []
+  const releases = http.createServer((req, res) => {
+    asked.push(req.url)
+    if (/^\/latest[\w-]*\.yml/.test(req.url)) return res.end(`version: 9.9.9\nfiles:\n  - url: ${file}\n    sha512: ${sha512}\n    size: ${installer.length}\npath: ${file}\nsha512: ${sha512}\nreleaseDate: '2026-11-15T00:00:00.000Z'\n`)
+    if (req.url.startsWith(`/${file}`)) return res.end(installer)
+    res.writeHead(404).end()
+  })
+  await new Promise((resolve) => releases.listen(REMOTE_PORT + 2, '127.0.0.1', resolve))
+  env.OPENKUMI_DESKTOP_UPDATES_URL = `http://127.0.0.1:${REMOTE_PORT + 2}`
+  try {
+    win = await launch()
+    await showsBot(win, 'Assistant')
+    await win.evaluate(() => {
+      window.updates = []
+      window.openkumiDesktop.onState((state) => window.updates.push(state.update))
+      location.hash = '/settings/about'
+    })
+    await win.locator('#app-update button', { hasText: 'Check for updates' }).click()
+    // It finds the version and starts fetching it by itself. (Putting it in place is the system's
+    // part, which it only does for an installed, signed app: not for this one.)
+    await until(() => win.evaluate(() => window.updates.some((update) => update.version === '9.9.9')))
+    assert.ok(asked.some((url) => /^\/latest[\w-]*\.yml/.test(url)))
+    assert.equal(await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.flatMap((item) => item.submenu?.items ?? []).some((item) => /Check for Updates…|Restart to Update…/.test(item.label))), true)
+    await app.close()
+    await until(async () => !(await up(LOCAL_PORT)), 15_000)
+  } finally {
+    delete env.OPENKUMI_DESKTOP_UPDATES_URL
+    releases.close()
+    releases.closeAllConnections()
+  }
+
+  // ---- another computer, in a version this app cannot work with
+  // It shows it is the computer this one was paired with, so it can be asked, with the key, to update itself.
+  const key = 'the-key-this-computer-was-given'
+  const hash = crypto.createHash('sha256').update(key).digest('hex')
+  const tag = crypto.createHash('sha256').update(`device:${hash}`).digest('hex')
+  let protocol = PROTOCOL - 1
+  const heard = []
+  const far = http.createServer((req, res) => {
+    const url = new URL(req.url, 'http://x')
+    heard.push(`${req.method} ${url.pathname} ${req.headers.authorization ?? ''}`)
+    res.setHeader('Content-Type', 'application/json')
+    // The window asks too, and it is a page: it only reads an answer that says it may.
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    if (url.pathname === '/api/hello') {
+      const known = url.searchParams.get('device') === tag
+      const proof = crypto.createHmac('sha256', hash).update(`server:s_far:${url.searchParams.get('challenge')}`).digest('hex')
+      return res.end(JSON.stringify({ app: 'openkumi', version: '0.0.9', protocol, id: 's_far', device: known ? { known, proof } : { known } }))
+    }
+    if (req.method === 'POST' && url.pathname === '/api/update' && req.headers.authorization === `Bearer ${key}`) return res.end(JSON.stringify({ how: 'installed', latest: '9.9.9', state: 'ready', error: '', checkedAt: Date.now(), working: 0 }))
+    res.writeHead(404).end('{}')
+  })
+  await new Promise((resolve) => far.listen(REMOTE_PORT, '127.0.0.1', resolve))
+  try {
+    configure({ local: { enabled: false }, environments: [{ id: 'remote-far', name: 'Far Mac', addresses: [{ url: `http://127.0.0.1:${REMOTE_PORT}` }], token: key, enabled: true, serverId: 's_far' }], current: 'remote-far' })
+    win = await launch()
+    await win.locator('.gate-head p', { hasText: 'Far Mac runs an older OpenKumi than this app can work with.' }).waitFor({ timeout: 20_000 })
+    const row = win.locator('.gate .set-row', { hasText: 'Far Mac' })
+    await row.locator('p', { hasText: 'Runs an older OpenKumi, which has to be updated first (0.0.9)' }).waitFor()
+    // Until now it was only asked who it is: nothing was sent the key.
+    assert.ok(!heard.some((line) => line.includes(key)))
+    await row.getByRole('button', { name: 'Update it' }).click()
+    await win.locator('.notice', { hasText: 'Far Mac is starting OpenKumi 9.9.9. It connects by itself in a moment.' }).waitFor()
+    assert.ok(heard.includes(`POST /api/update Bearer ${key}`))
+
+    // One that is ahead of this app cannot be helped from here: it is the app that has to be updated.
+    protocol = PROTOCOL + 1
+    await win.locator('.gate-head p', { hasText: 'Far Mac runs a newer OpenKumi than this app can work with. Update this app' }).waitFor({ timeout: 20_000 })
+    await app.close()
+  } finally {
+    far.close()
+    far.closeAllConnections()
+  }
 })

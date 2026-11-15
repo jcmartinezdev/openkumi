@@ -1,0 +1,22 @@
+# What does not change the native app, and so must not change the fingerprint that decides
+# whether an update over the air fits a build (see docs/mobile-releases.md).
+
+# Made by Expo and EAS
+.expo/
+.eas/
+
+# Build outputs
+ios/
+android/
+dist/
+
+# Docs
+*.md
+
+# Local settings
+.env
+.env.local
+.env*.local
+
+# TypeScript
+*.tsbuildinfo

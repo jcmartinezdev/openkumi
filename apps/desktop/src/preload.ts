@@ -45,6 +45,9 @@ const bridge: DesktopBridge | null = initial && {
   addAddress: (id, address) => ipcRenderer.invoke('desktop:add-address', id, address),
   removeAddress: (id, url) => ipcRenderer.invoke('desktop:remove-address', id, url),
   learn: (id, learned) => ipcRenderer.invoke('desktop:learn', id, learned),
+  updateEnvironment: (id) => ipcRenderer.invoke('desktop:update-environment', id),
+  checkForUpdate: () => ipcRenderer.invoke('desktop:check-for-update'),
+  installUpdate: () => ipcRenderer.invoke('desktop:install-update'),
   showPage: (html) => ipcRenderer.invoke('desktop:page', html),
   dictation: {
     available: () => ipcRenderer.invoke('desktop:can-dictate'),

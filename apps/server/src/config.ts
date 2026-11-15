@@ -10,6 +10,8 @@ const BEFORE = path.join(os.homedir(), '.openbot')
 export const HOME = process.env.OPENKUMI_HOME ?? home()
 export const PORT = Number(process.env.OPENKUMI_PORT ?? 4317)
 export const ROOT = path.resolve(import.meta.dirname, '..')
+/** The version of OpenKumi this is, as its package says. */
+export const VERSION: string = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
 /** Started with --lan: serve other devices on the local network whatever the setting says. */
 export const LAN = process.argv.includes('--lan') || process.env.OPENKUMI_LAN === '1'
 

@@ -1,6 +1,6 @@
 {
   "name": "openkumi",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Open-source, local-first AI bots with subagents and a persistent browser per bot.",
   "private": true,
   "type": "module",
@@ -19,10 +19,13 @@
     "start": "npm run build && npm run start -w @openkumi/desktop",
     "server": "npm run start -w @openkumi/server",
     "pair": "npm run pair --silent -w @openkumi/server",
+    "openkumi": "node apps/server/src/cli.ts",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test -w @openkumi/server && npm run test -w @openkumi/client && npm run test -w @openkumi/desktop",
     "dist": "npm run build && npm run dist -w @openkumi/desktop",
     "dist:dir": "npm run build && npm run dist -w @openkumi/desktop -- --dir",
+    "dist:server": "node apps/server/scripts/archive.mjs",
+    "bump": "node scripts/bump.mjs",
     "mobile": "npm run ios -w @openkumi/mobile",
     "site": "npm run dev -w @openkumi/marketing",
     "site:build": "npm run build -w @openkumi/marketing"

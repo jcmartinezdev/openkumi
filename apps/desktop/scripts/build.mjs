@@ -29,8 +29,10 @@ if (process.platform === 'darwin') {
       const target = `${process.arch === 'x64' ? 'x86_64' : 'arm64'}-apple-macos12`
       execFileSync('xcrun', ['swiftc', '-O', '-swift-version', '5', '-parse-as-library', '-target', target, ...sources, '-o', out], { stdio: 'inherit' })
       console.log('  dist/dictation')
-    } catch {
-      // The app works without it; there is just no microphone button.
+    } catch (e) {
+      // A release must not go out without it for want of a compiler on the computer that made it.
+      if (process.env.OPENKUMI_REQUIRE_DICTATION) throw e
+      // Otherwise the app works without it; there is just no microphone button.
       console.warn('Dictation was not built: it needs Xcode or its command line tools (xcode-select --install).')
     }
   }

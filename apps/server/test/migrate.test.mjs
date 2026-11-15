@@ -211,6 +211,7 @@ test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi
     assert.ok(fs.existsSync(path.join(after, 'openkumi.db')) && !fs.existsSync(path.join(after, 'openbot.db')), 'the database is renamed with it')
     assert.equal(JSON.parse(fs.readFileSync(path.join(after, 'auth.json'), 'utf8')).accessToken, 'keep-me', 'paired devices keep working')
   } finally {
-    fs.rmSync(user, { recursive: true, force: true })
+    // The programs the server asked about themselves (Claude Code, Codex, Grok) may still be writing into this home folder.
+    fs.rmSync(user, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
   }
 })

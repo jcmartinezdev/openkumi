@@ -41,6 +41,8 @@ export function App() {
   const loaded = useStore((s) => s.loaded)
   const connected = useStore((s) => s.connected)
   const refused = useStore((s) => s.refused)
+  // The server and this app cannot work together until one of them is updated (see @openkumi/shared/protocol).
+  const unfit = useStore((s) => s.outdated || s.newer)
   const failures = useStore((s) => s.failures)
   const app = useDesktop()
   // OpenKumi on this computer stopped answering, or has a new access code: the app looks again by
@@ -117,8 +119,9 @@ export function App() {
   }, [browsers, loaded])
 
   // Nothing to show: no environment is chosen, the one chosen has not answered, or it has stopped
-  // accepting the access code, in which case nothing on screen would work any more.
-  if (!loaded || refused) return <Gate />
+  // accepting the access code or is a version this app cannot work with, in which case nothing on
+  // screen would work any more.
+  if (!loaded || refused || unfit) return <Gate />
 
   const showPane = !!pane
   const setPane = (botId: string, next: PaneState | undefined) => setPanes((all) => ({ ...all, [botId]: next }))

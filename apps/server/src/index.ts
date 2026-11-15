@@ -11,6 +11,7 @@ import { startServer } from './http.ts'
 import { refreshProviders } from './providers/index.ts'
 import { moveToSuperpowers } from './superpowers.ts'
 import { startAutomations } from './automations.ts'
+import { RESTART, startUpdates } from './update.ts'
 import { commit, scaffold } from './workspace.ts'
 
 // Bots used to live in the database; write them out as folders once.
@@ -53,7 +54,8 @@ agent.resumeQueues()
 void refreshProviders()
 
 let closing = false
-async function shutdown() {
+/** Stops cleanly. `code` is what the process ends with: RESTART asks whatever runs it to start it again. */
+async function shutdown(code = 0) {
   if (closing) return
   closing = true
   server.close()
@@ -62,10 +64,13 @@ async function shutdown() {
   await agent.stopAll()
   await Promise.all([stopAllBrowsers(), closeAll()])
   db.closeDb()
-  process.exit(0)
+  process.exit(code)
 }
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+process.on('SIGINT', () => shutdown())
+process.on('SIGTERM', () => shutdown())
+
+// A server installed on its own keeps itself up to date (update.ts).
+startUpdates({ working: agent.working, restart: () => void shutdown(RESTART) })
 
 // A failed tool or a browser that went away must not take the whole server down.
 process.on('unhandledRejection', (e) => console.error('Unhandled rejection:', e))

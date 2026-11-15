@@ -23,9 +23,10 @@ import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower
 import * as automations from './automations.ts'
 import * as hooks from './hooks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
+import { PROTOCOL } from './protocol.ts'
+import { VERSION, updateInfo, updateNow } from './update.ts'
 import * as ws from './workspace.ts'
 
-const VERSION: string = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
 const SYSTEMS: Record<string, string> = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' }
 
 /** Whether other devices on the network are served: the setting, or the --lan flag. */
@@ -168,12 +169,20 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     home: HOME_LABEL,
     settings: settings(),
     defaults: DEFAULTS,
-    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT },
+    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT, protocol: PROTOCOL },
+    update: updateInfo(),
   }
 })
 
 // ---- settings for the whole app
 route('PATCH', '/api/settings', (_, body) => updateSettings(body))
+
+// ---- this server's own updates (update.ts)
+// These two, and /api/hello, are what an app asks of a server it cannot otherwise work with, so
+// they stay as they are whatever else changes.
+route('GET', '/api/update', () => updateInfo())
+// Fetches the newest version and starts it: at once with `now`, else when no bot is working.
+route('POST', '/api/update', (_, body) => updateNow(body.now === true).catch((e) => fail(409, e.message)))
 // How other computers get in: whether they can reach this one, where, and which ones are paired.
 route('GET', '/api/access', async () => ({ on: lanOn(), port: PORT, addresses: homeAddresses(), tailscale: await tailscaleAddresses(), computers: listComputers() }))
 // Where the other devices can reach this server, for them to keep: the local network first, then
@@ -499,7 +508,7 @@ function createServer() {
       const tag = url.searchParams.get('device')
       const signed = challenge && tag && /^[0-9a-f]{16,128}$/.test(challenge) && /^[0-9a-f]{64}$/.test(tag) ? proveTo(tag, challenge, serverId()) : undefined
       const device = signed === undefined ? {} : { device: signed ? { known: true, proof: signed } : { known: false } }
-      return void json(200, { app: 'openkumi', version: VERSION, id: serverId(), authorized: isAllowed(req, url), ...(local ? { home: HOME } : {}), ...proof, ...device })
+      return void json(200, { app: 'openkumi', version: VERSION, protocol: PROTOCOL, id: serverId(), authorized: isAllowed(req, url), ...(local ? { home: HOME } : {}), ...proof, ...device })
     }
     try {
       // Pairing: a computer that has no key yet shows that it was given the code (see clients.ts).
