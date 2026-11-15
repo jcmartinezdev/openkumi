@@ -15,8 +15,6 @@ import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { Readable } from 'node:stream'
-import { pipeline } from 'node:stream/promises'
 import type { ServerUpdate } from '@openkumi/shared'
 import { VERSION, emit, onEvent } from './config.ts'
 import { settings } from './settings.ts'
@@ -89,24 +87,16 @@ async function fetchVersion({ version, archives }: Manifest) {
   const downloads = path.join(RUNTIME, 'downloads')
   fs.mkdirSync(downloads, { recursive: true })
   const file = path.join(downloads, archive.file)
-  const res = await fetch(`${RELEASES}/download/v${version}/${archive.file}`).catch(() => null)
-  if (!res?.ok || !res.body) throw new Error(`OpenKumi ${version} could not be downloaded.`)
-  const hash = crypto.createHash('sha256')
-  await pipeline(
-    Readable.fromWeb(res.body as import('node:stream/web').ReadableStream),
-    async function* (chunks) {
-      for await (const chunk of chunks) {
-        hash.update(chunk)
-        yield chunk
-      }
-    },
-    fs.createWriteStream(file),
-  )
+  // Read whole, then written: some tens of megabytes held for a moment. Passing it on piece by
+  // piece as it arrives makes Node 24 fall over, taking the server with it, when the other end
+  // closes the connection while a piece is still waiting to be taken.
+  const bytes = await fetch(`${RELEASES}/download/v${version}/${archive.file}`)
+    .then(async (res) => (res.ok ? Buffer.from(await res.arrayBuffer()) : null))
+    .catch(() => null)
+  if (!bytes) throw new Error(`OpenKumi ${version} could not be downloaded.`)
   // The checksum comes from the release's own list, so a download that was cut short or changed on the way is not unpacked.
-  if (hash.digest('hex') !== archive.sha256) {
-    fs.rmSync(file, { force: true })
-    throw new Error(`The download of OpenKumi ${version} is not the file that was published. Nothing was changed.`)
-  }
+  if (crypto.createHash('sha256').update(bytes).digest('hex') !== archive.sha256) throw new Error(`The download of OpenKumi ${version} is not the file that was published. Nothing was changed.`)
+  fs.writeFileSync(file, bytes)
   const unpacked = path.join(RUNTIME, 'versions', `.${version}.unpacking`)
   fs.rmSync(unpacked, { recursive: true, force: true })
   fs.mkdirSync(unpacked, { recursive: true })

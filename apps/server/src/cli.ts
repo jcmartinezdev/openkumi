@@ -108,7 +108,8 @@ if (command === 'start' || command === 'serve') {
       console.log(info.latest && newer(info.latest, VERSION) ? `\n  OpenKumi ${info.latest} is out. This is ${VERSION}. Get it with “openkumi update”.\n` : `\n  OpenKumi ${VERSION} is the newest version.\n`)
     } else if (running) {
       // The server that runs does it itself, so that it is the one that decides when to start again.
-      let info = (await ask<ServerUpdate>('POST', '/api/update', { now: flag('--now') }))!
+      // No answer means it went away in the middle: it may have started the new version already.
+      let info = (await ask<ServerUpdate>('POST', '/api/update', { now: flag('--now') })) ?? stop('The server stopped answering while it was updating. See where it stands with “openkumi status”.')
       while (info.state === 'checking' || info.state === 'downloading') {
         await sleep(1000)
         info = (await ask<ServerUpdate>('GET', '/api/update')) ?? { ...info, state: 'ready', working: 0 }
