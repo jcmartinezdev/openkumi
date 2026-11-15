@@ -47,9 +47,10 @@ await http('PATCH', '/api/settings', { maxSteps: 300 })
 const conv = (await http('POST', `/api/bots/${bot.id}/messages`, { text: 'one' })).id
 await until(() => now.threads.some((t) => t.id === conv))
 // A thread is listed as idle for a moment before its turn starts, so "idle" alone could be either end of it: the reply has to be in.
-for (;;) {
+for (const end = Date.now() + 20_000; ; ) {
   const { thread, items } = await http('GET', `/api/threads/${conv}`)
   if (thread.status === 'idle' && items.length >= 2) break
+  if (Date.now() > end) throw new Error('the first reply did not arrive')
   await new Promise((r) => setTimeout(r, 30))
 }
 await idle(conv)

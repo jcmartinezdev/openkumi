@@ -544,7 +544,7 @@ export function EnvironmentList() {
                       Update it
                     </button>
                   )}
-                  {environment.enabled && report?.status === 'newer' && app.update && app.update.state !== 'unsupported' && <button onClick={() => openSettings('about')}>Update this app</button>}
+                  {environment.enabled && report?.status === 'newer' && app.update && app.update.state !== 'unsupported' && <button onClick={() => (void desktop.checkForUpdate?.(), openSettings('about'))}>Update this app</button>}
                   {environment.enabled && app.current !== environment.id && <button onClick={() => change(() => desktop.open(environment.id))}>Open</button>}
                   <Switch label={`Use ${environment.name}`} checked={environment.enabled} disabled={busy} onChange={(enabled) => change(() => desktop.update(environment.id, { enabled }))} />
                   <details className="set-menu">

@@ -93,13 +93,15 @@ test('an installed server fetches a new version, checks it, and starts it once n
   const runtime = path.join(tmp, 'runtime')
   const installed = { OPENKUMI_RUNTIME: runtime, OPENKUMI_RELEASES_URL: `http://127.0.0.1:${RELEASES}` }
   const current = () => fs.readlinkSync(path.join(runtime, 'current'))
+  let server
   try {
     // ---- a download that is not the file that was published is thrown away, and nothing changes
     fs.mkdirSync(path.join(runtime, 'versions', 'left-over'), { recursive: true })
-    let server = await start('installed', installed)
+    server = await start('installed', installed)
     assert.ok(!fs.existsSync(path.join(runtime, 'versions', 'left-over')), 'versions that are neither running nor next are tidied away at the start')
     said = 'f'.repeat(64)
-    let update = await server.api('POST', '/api/update', {})
+    // Asked not to wait for the bots, too: that wish ends with this request, which fails, and is not handed on to the next.
+    let update = await server.api('POST', '/api/update', { now: true })
     assert.deepEqual([update.how, update.state, update.latest], ['installed', 'failed', '9.9.9'])
     assert.match(update.error, /not the file that was published/)
     assert.ok(!fs.existsSync(path.join(runtime, 'current')) && !fs.existsSync(path.join(runtime, 'versions', '9.9.9')))
@@ -128,6 +130,8 @@ test('an installed server fetches a new version, checks it, and starts it once n
     assert.ok(Date.now() - began < 3500, 'it did not wait for the reply, which takes four seconds')
     assert.equal(current(), path.join('versions', '9.9.9'))
   } finally {
+    // The server too, when something failed before it stopped by itself.
+    await server?.stop()
     releases.close()
     releases.closeAllConnections()
   }

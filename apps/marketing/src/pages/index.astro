@@ -432,8 +432,10 @@ const faq = [
 
   for (const button of document.querySelectorAll('[data-copy]')) {
     button.addEventListener('click', async () => {
-      await navigator.clipboard.writeText(button.dataset.copy).catch(() => {})
-      button.textContent = 'Copied'
+      const copied = await navigator.clipboard.writeText(button.dataset.copy).then(() => true, () => false)
+      // Where the page may not write to the clipboard, the line is selected, ready to be copied by hand.
+      if (!copied) getSelection()?.selectAllChildren(button.parentElement.querySelector('code'))
+      button.textContent = copied ? 'Copied' : 'Selected'
       setTimeout(() => (button.textContent = 'Copy'), 1600)
     })
   }

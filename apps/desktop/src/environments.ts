@@ -119,6 +119,10 @@ export async function askToUpdate(environment: Environment): Promise<string> {
   const said = await res?.json().catch(() => null)
   if (!res?.ok) throw new Error(res?.status === 404 ? `${environment.name} runs a version from before OpenKumi could update itself. Update it on that computer.` : (said?.error ?? `${environment.name} did not answer.`))
   if (said.state === 'failed') throw new Error(said.error)
-  if (said.state !== 'ready') return `${environment.name} already runs the newest OpenKumi (${said.latest ?? there.version}). This app may need the update: see Settings › About.`
+  if (said.state !== 'ready') {
+    // It knows of a newer version than the one it runs and has not put it in place: that is not "up to date".
+    if (said.latest && there.version && said.latest !== there.version) return `${environment.name} found OpenKumi ${said.latest} but has not put it in place yet. Try again in a moment.`
+    return `${environment.name} already runs the newest OpenKumi (${said.latest ?? there.version}). This app may need the update: see Settings › About.`
+  }
   return said.working ? `${environment.name} has OpenKumi ${said.latest} in place and starts it once its bots are done.` : `${environment.name} is starting OpenKumi ${said.latest}. It connects by itself in a moment.`
 }

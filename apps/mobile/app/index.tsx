@@ -50,8 +50,9 @@ export default function Home() {
     </Pressable>
   )
 
-  if (!loaded) {
-    // Nothing to show yet: the server has not answered, or no longer lets this phone in.
+  if (!loaded || outdated || newer) {
+    // Nothing to show: the server has not answered, no longer lets this phone in, or runs a
+    // version this app cannot work with, whatever the phone still holds from before.
     const name = server?.name ?? 'The server'
     const lead = refused
       ? `${name} no longer lets this phone in. Unpair it, then pair again with a new code.`

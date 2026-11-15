@@ -2,7 +2,9 @@
 // all, then while OpenKumi starts on this computer, and when the environment cannot be reached.
 import { useDesktop } from './desktop'
 import { EnvironmentList } from './Settings'
+import { Section } from './settingsUi'
 import { useStore } from './store'
+import { AppUpdateRow } from './Updates'
 import { Welcome } from './Welcome'
 
 export function Gate() {
@@ -49,6 +51,8 @@ export function Gate() {
             <h1>OpenKumi</h1>
             <p role="status">{waiting && <span className="spinner" />}{lead}</p>
           </div>
+          {/* The settings cannot be opened from here, and updating this app is what there is to do. */}
+          {newer && app.current !== 'local' && <Section title="Updates"><AppUpdateRow /></Section>}
           {!waiting && <EnvironmentList />}
         </div>
       </div>

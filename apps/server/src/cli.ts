@@ -86,8 +86,9 @@ if (command === 'start' || command === 'serve') {
     console.log()
   } else if (command === 'pair') {
     const said = (await ask<{ code: string }>('POST', '/api/pairing')) ?? notRunning()
-    const state = (await ask<AppState>('GET', '/api/state'))!
-    const open = state.settings.lan || state.about.lanForced
+    // Only for the hint below; a server that went away meanwhile still gave its code.
+    const state = await ask<AppState>('GET', '/api/state')
+    const open = !state || state.settings.lan || state.about.lanForced
     const addresses = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `${i!.address}:${PORT}`)
     console.log(`\n  Pairing code:  ${said.code}`)
     console.log(`  Address:       ${addresses.join('  or  ') || '(this computer is not on a network)'}`)
@@ -152,7 +153,12 @@ if (command === 'start' || command === 'serve') {
     console.log(`\n  (${service.LOG})`)
   } else if (command === 'uninstall') {
     if (!RUNTIME) stop('This OpenKumi runs from the repository: there is nothing installed to remove.')
-    service.removeService()
+    // Not while it runs: a service that could not be stopped keeps its program.
+    try {
+      service.removeService()
+    } catch (e) {
+      stop((e as Error).message)
+    }
     // The command people type, put beside their other programs by the installer.
     const shim = path.join(process.env.OPENKUMI_BIN || path.join(os.homedir(), '.local', 'bin'), 'openkumi')
     try {

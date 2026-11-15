@@ -77,7 +77,11 @@ jobs:
               fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ -n "$after" ] && [ "$after" != "$before" ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; else echo "changed=false" >> "$GITHUB_OUTPUT"; fi
+          # Three answers, not two: a fingerprint that could not be computed says nothing either way.
+          if [ -z "$after" ]; then echo "changed=unknown" >> "$GITHUB_OUTPUT"
+          elif [ "$after" != "$before" ]; then echo "changed=true" >> "$GITHUB_OUTPUT"
+          else echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
       # A pull request from a fork has no leave to change labels; its summary still says it.
       - name: Label it
         if: github.event.pull_request.head.repo.full_name == github.repository
@@ -86,6 +90,10 @@ jobs:
           CHANGED: ${{ steps.compare.outputs.changed }}
           NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          # Unknown: the label is left as it is.
+          if [ "$CHANGED" = unknown ]; then
+            exit 0
+          fi
           if [ "$CHANGED" = true ]; then
             gh label create "$LABEL" --repo "$GITHUB_REPOSITORY" --color FBCA04 --description "Changes the native iPhone app: its release reaches the phones through TestFlight, not over the air" --force
             gh pr edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "$LABEL"

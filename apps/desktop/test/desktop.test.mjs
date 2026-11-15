@@ -1374,8 +1374,13 @@ test('updates: the app finds a newer version of itself, and an environment this 
   let win = await launch()
   await showsBot(win, 'Assistant')
   await win.evaluate(() => (location.hash = '/settings/about'))
-  await win.locator('#app-update', { hasText: 'does not update itself' }).waitFor()
-  assert.equal(await win.locator('#app-update button').count(), 0)
+  if (packaged) {
+    // An installed app can, and offers to look. (OPENKUMI_DESKTOP_APP tests that one instead of the source.)
+    await win.locator('#app-update button', { hasText: /Check for updates|Restart to update/ }).waitFor()
+  } else {
+    await win.locator('#app-update', { hasText: 'does not update itself' }).waitFor()
+    assert.equal(await win.locator('#app-update button').count(), 0)
+  }
   // The server this app runs is part of it, so it has no line of its own.
   assert.equal(await win.locator('#server-update').count(), 0)
   await app.close()

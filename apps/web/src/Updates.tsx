@@ -24,17 +24,11 @@ const newer = (a: string, b: string) => {
 
 /**
  * Restarts the app into the version it has downloaded. Quitting stops the server this app runs,
- * and with it the bots at work on this computer, so the person is asked first when there are any.
+ * and with it the bots at work on this computer. The app behind the window asks first when there
+ * are any (apps/desktop/src/main.ts): it knows about them whichever environment the window shows.
  */
 export function useRestartForUpdate(): () => void {
-  const app = useDesktop()
-  const working = useStore((s) => s.threads.filter((t) => t.status === 'running').length)
-  return () => {
-    // Bots in another environment, or in a server started outside the app, carry on.
-    const cutOff = app.current === 'local' && app.local.startedHere ? working : 0
-    if (cutOff && !confirm(`${bots(cutOff)} working on this computer. Restarting stops them; what they have done so far is kept. Restart now?`)) return
-    void desktop.installUpdate?.().catch((e) => alert(reason(e)))
-  }
+  return () => void desktop.installUpdate?.().catch((e) => alert(reason(e)))
 }
 
 /** A word in the sidebar once a new version of the app is ready, so it is not only found in the settings. */
@@ -66,16 +60,36 @@ const HOW: Record<ServerUpdate['how'], string> = {
   installed: 'It was installed on its own, and keeps itself up to date.',
 }
 
+/** How this app stands with its own updates, and the button for what there is to do about it. */
+export function AppUpdateRow() {
+  const app = useDesktop()
+  const restart = useRestartForUpdate()
+  const mine = app.update
+  if (!mine) return null
+  return (
+    <Row
+      id="app-update"
+      title={<>This app<span className="set-version">{app.version}</span></>}
+      description={APP_STATE[mine.state](mine)}
+      control={
+        mine.state === 'ready' ? (
+          <button className="primary" onClick={restart}>Restart to update</button>
+        ) : mine.state !== 'unsupported' ? (
+          <button disabled={mine.state === 'checking' || mine.state === 'downloading'} onClick={() => void desktop.checkForUpdate?.()}>Check for updates</button>
+        ) : undefined
+      }
+    />
+  )
+}
+
 /** The About page's part on updates: this app, then the server of the environment it shows. */
 export function UpdatesSection() {
   const app = useDesktop()
   const about = useStore((s) => s.about)
   const update = useStore((s) => s.update)
   const auto = useSetting('autoUpdate')
-  const restart = useRestartForUpdate()
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState('')
-  const mine = app.update
   const here = app.current === 'local'
   const name = here ? 'This computer' : (app.environments.find((e) => e.id === app.current)?.name ?? 'The environment')
 
@@ -111,20 +125,7 @@ export function UpdatesSection() {
 
   return (
     <Section title="Updates">
-      {mine && (
-        <Row
-          id="app-update"
-          title={<>This app<span className="set-version">{app.version}</span></>}
-          description={APP_STATE[mine.state](mine)}
-          control={
-            mine.state === 'ready' ? (
-              <button className="primary" onClick={restart}>Restart to update</button>
-            ) : mine.state !== 'unsupported' ? (
-              <button disabled={mine.state === 'checking' || mine.state === 'downloading'} onClick={() => void desktop.checkForUpdate?.()}>Check for updates</button>
-            ) : undefined
-          }
-        />
-      )}
+      <AppUpdateRow />
       {/* The server on this computer, run by this app, has nothing of its own to say: it is the app's. */}
       {!(here && app.local.startedHere) && !!about.version && (
         <>

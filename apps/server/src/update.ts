@@ -158,6 +158,12 @@ function tidy() {
 
 let busy: Promise<ServerUpdate> | null = null
 
+/** A newer version is in place and only waits to be started: `current` points at it. */
+const staged = () => {
+  const next = currentVersion()
+  return !!next && newer(next, VERSION)
+}
+
 /**
  * Looks up the newest version and, with `install`, puts it in place when it is newer than this
  * one. Nothing is started again here: see `settle`. Two calls at once share one piece of work.
@@ -169,13 +175,15 @@ export function update(install: boolean): Promise<ServerUpdate> {
       const release = await latestRelease()
       set({ latest: release.version, checkedAt: Date.now() })
       const wanted = newer(release.version, VERSION)
-      if (!wanted || !install || how !== 'installed') return set({ state: wanted && currentVersion() === release.version ? 'ready' : 'idle' })
+      if (!wanted || !install || how !== 'installed') return set({ state: staged() ? 'ready' : 'idle' })
       set({ state: 'downloading' })
       await fetchVersion(release)
       pointAt(release.version)
       set({ state: 'ready' })
     } catch (e) {
-      set({ state: 'failed', error: (e as Error).message })
+      // A look that failed takes nothing away from a version that is already in place: it still
+      // starts once the bots are done.
+      set(staged() ? { state: 'ready', error: '' } : { state: 'failed', error: (e as Error).message })
     }
   })()
     .then(() => updateInfo())
@@ -194,8 +202,13 @@ function settle() {
 /** What POST /api/update does: fetch the newest version now, and start it at once (`now`) or when the bots are done. */
 export async function updateNow(now: boolean): Promise<ServerUpdate> {
   if (how !== 'installed') throw new Error(WHY_NOT[how])
-  hurried ||= now
+  // A look that is under way may be one that only looks: this one is made after it, so that
+  // being asked to install always installs.
+  while (busy) await busy.catch(() => {})
   const info = await update(true)
+  // "Do not wait for the bots" holds for the version this request put in place, and for no other:
+  // one that failed, or found nothing, leaves nothing behind for a later request to inherit.
+  hurried = info.state === 'ready' && (hurried || now)
   // The answer goes out first; the server it came from is gone a moment later.
   setTimeout(settle, 300)
   return info

@@ -193,13 +193,33 @@ async function updateEnvironment(id: string) {
 /** The server this app started is stopped (see the end of this file). */
 let stopped = false
 
+/** How many bots are at work in the server this app runs: what quitting the app would cut off. */
+async function workingHere(): Promise<number> {
+  if (!local.child || local.state !== 'running') return 0
+  try {
+    const res = await fetch(`http://127.0.0.1:${local.port}/api/update`, { headers: { Authorization: `Bearer ${local.token}` }, signal: AbortSignal.timeout(3000) })
+    return Number((await res.json()).working) || 0
+  } catch {
+    return 0
+  }
+}
+
 /**
- * Puts the downloaded version of the app in place and opens it. The server this app runs is
- * stopped first, cleanly, so the bots' work is saved; the window asked the person before this.
+ * Puts the downloaded version of the app in place and opens it. Quitting stops the server this
+ * app runs, and the bots at work in it, whichever environment the window happens to show: so the
+ * person is asked first when there are any, and the server is stopped cleanly, so their work is saved.
  */
 async function restartForUpdate() {
   if (updateState().state !== 'ready') return
+  const working = await workingHere()
+  if (working && !(await confirmed(`${working === 1 ? '1 bot is' : `${working} bots are`} working on this computer.`, 'Restarting stops them. What they have done so far is kept.', 'Restart'))) return
   if (local.child) await stopLocal()
+  // A look for updates that ran meanwhile may have found a still newer version, which is being
+  // fetched now: there is nothing to install yet, so the server is started again and the app stays.
+  if (updateState().state !== 'ready') {
+    if (config.local.enabled) void startLocal().catch(() => {})
+    return
+  }
   stopped = true
   installUpdate()
 }

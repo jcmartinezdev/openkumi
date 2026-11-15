@@ -7,7 +7,7 @@
 // alive for days, though, so it is asked again when the app comes back after a while, and an
 // update that has been waiting is started then: coming back after a long time is as good as a
 // start, with nothing half typed to lose.
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { AppState } from 'react-native'
 import * as Updates from 'expo-updates'
 
@@ -18,12 +18,17 @@ const START_AFTER = 30 * 60_000
 
 async function fetchNewest() {
   const found = await Updates.checkForUpdateAsync()
-  if (found.isAvailable) await Updates.fetchUpdateAsync()
+  // An update taken back is fetched like one sent out: the app then goes back to what it came with.
+  if (found.isAvailable || found.isRollBackToEmbedded) await Updates.fetchUpdateAsync()
 }
 
 /** Keeps the app looking for updates for as long as it is open. Called once, by the layout. */
 export function useUpdateChecks() {
   const { isUpdatePending } = Updates.useUpdates()
+  // Kept apart from the listener, which is set up once: an update that finishes downloading
+  // while the app is in the background must not make it forget when it went there.
+  const pending = useRef(isUpdatePending)
+  pending.current = isUpdatePending
   useEffect(() => {
     if (!Updates.isEnabled) return
     let left = 0
@@ -32,12 +37,12 @@ export function useUpdateChecks() {
       if (state !== 'active' || !left) return
       const away = Date.now() - left
       left = 0
-      if (isUpdatePending && away >= START_AFTER) void Updates.reloadAsync().catch(() => {})
+      if (pending.current && away >= START_AFTER) void Updates.reloadAsync().catch(() => {})
       // Offline, or nothing published for this build: there is nothing to say about either.
       else if (away >= ASK_AGAIN_AFTER) void fetchNewest().catch(() => {})
     })
     return () => watching.remove()
-  }, [isUpdatePending])
+  }, [])
 }
 
 /** How the app stands with its updates, for the About page. Null in a build that takes none. */

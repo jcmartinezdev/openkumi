@@ -142,17 +142,27 @@ export function installService(): string[] {
   return notes
 }
 
-/** Stops the service and takes it away. The server's data is left alone. */
-export function removeService(): boolean {
-  if (mac) {
-    if (!fs.existsSync(PLIST)) return false
-    works('launchctl', ['bootout', `${domain()}/${LABEL}`])
-    fs.rmSync(PLIST, { force: true })
-    return true
+/** Whether the service still runs, asked a few times: it is given a moment to stop. */
+function stillRunning() {
+  for (let tries = 0; tries < 12; tries++) {
+    if (!serviceStatus().running) return false
+    execFileSync('sleep', ['0.5'])
   }
-  if (!fs.existsSync(UNIT)) return false
-  works('systemctl', ['--user', 'disable', '--now', 'openkumi.service'])
-  fs.rmSync(UNIT, { force: true })
-  works('systemctl', ['--user', 'daemon-reload'])
+  return true
+}
+
+/**
+ * Stops the service and takes it away. The server's data is left alone. One that could not be
+ * stopped is left set up, and this throws: taking its files away would leave a server running
+ * that nothing looks after.
+ */
+export function removeService(): boolean {
+  const file = mac ? PLIST : UNIT
+  if (!fs.existsSync(file)) return false
+  if (mac) works('launchctl', ['bootout', `${domain()}/${LABEL}`])
+  else works('systemctl', ['--user', 'disable', '--now', 'openkumi.service'])
+  if (stillRunning()) throw new Error(`The background service could not be stopped, so nothing was removed. Stop it by hand (${mac ? `launchctl bootout ${domain()}/${LABEL}` : 'systemctl --user stop openkumi.service'}) and run this again.`)
+  fs.rmSync(file, { force: true })
+  if (!mac) works('systemctl', ['--user', 'daemon-reload'])
   return true
 }

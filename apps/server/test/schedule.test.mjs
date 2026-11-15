@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 
 // A range of its own: the test files run at the same time, and two that pick the same port cannot both start their server.
-const PORT = 5100 + Math.floor(Math.random() * 90)
+const PORT = 5500 + Math.floor(Math.random() * 90)
 const fixture = (name) => path.resolve('test/fixtures', name)
 
 async function withServer(home, fn) {

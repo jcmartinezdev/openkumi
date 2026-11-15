@@ -9,7 +9,8 @@ import path from 'node:path'
 import { after, before, test } from 'node:test'
 import { build } from 'esbuild'
 
-const PORT = 5100 + Math.floor(Math.random() * 90)
+// Clear of 5173, where the interface is served while it is being worked on.
+const PORT = 5600 + Math.floor(Math.random() * 90)
 const SERVER = path.resolve(import.meta.dirname, '../../../apps/server')
 const out = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-client-test-'))
 const home = path.join(out, 'home')

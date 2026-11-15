@@ -18,7 +18,7 @@ Environments**:
 
 1. On the computer that runs the bots: **Settings → Environments → Let other computers connect**,
    then **Pair a computer**. It shows its address and a code like `ABCD-EFGH-JKMN`. (With no app
-   there, `npm run pair` prints the same.)
+   there, `openkumi pair` prints the same; from a clone of the repository it is `npm run pair`.)
 2. On the other computer: **Settings → Environments → Add environment**, and enter the address
    and the code.
 
