@@ -1,7 +1,8 @@
 // Makes the installable app (release/). Pass --dir to stop at the unpacked app, which is quicker.
 // Build first (npm run build at the top does both the interface and the app's own programs).
-// It is made for the processor of this computer; --arch=arm64,x64 makes it for those instead
-// (nothing in it is compiled here but the dictation program, which is built for both on a Mac).
+// It is made for the processor of this computer; --arch=x64,arm64 makes it for those instead
+// (nothing in it is compiled here but the dictation program on a Mac, which is released for
+// Apple silicon only).
 //
 // Beside each installer comes what an installed app reads to update itself (latest*.yml, and on
 // a Mac a .zip of the app): the release workflow uploads all of it to the release, which is where

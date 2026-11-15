@@ -1,4 +1,4 @@
-# Makes a release: the desktop app for Mac, Windows and Linux, the server as it is installed on
+# Makes a release: the desktop app for Mac (Apple silicon), Windows and Linux, the server as it is installed on
 # its own, and what both read to update themselves. See docs/development.md, "Releasing".
 #
 #   - Pushing a tag like v0.2.0 builds everything and publishes the release.
@@ -129,7 +129,7 @@ jobs:
         include:
           - os: macos-latest
             name: mac
-            archs: arm64,x64
+            archs: arm64
           - os: windows-latest
             name: windows
             archs: x64
@@ -178,10 +178,8 @@ jobs:
       - name: Check the Mac app is signed and notarized
         if: runner.os == 'macOS' && steps.signing.outputs.signed == 'true'
         run: |
-          for app in release/mac-arm64/OpenKumi.app release/mac/OpenKumi.app; do
-            codesign --verify --deep --strict "$app"
-            spctl --assess --type execute --verbose "$app"
-          done
+          codesign --verify --deep --strict release/mac-arm64/OpenKumi.app
+          spctl --assess --type execute --verbose release/mac-arm64/OpenKumi.app
       - uses: actions/upload-artifact@v5
         with:
           name: desktop-${{ matrix.name }}

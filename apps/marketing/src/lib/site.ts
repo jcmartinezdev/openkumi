@@ -8,8 +8,8 @@ export const GITHUB_URL = 'https://github.com/jcmartinezdev/openkumi'
 /** The newest release: every installer, for people who want another than the one the button gives. */
 export const RELEASES_URL = `${GITHUB_URL}/releases/latest`
 /**
- * The newest installer for a Mac with Apple silicon, which is what nearly every Mac sold since
- * 2020 has. Installers are named for what they run on and not for their version
+ * The newest installer for a Mac, which has to be one with Apple silicon: OpenKumi is not made for
+ * Intel Macs. Installers are named for what they run on and not for their version
  * (apps/desktop/scripts/dist.mjs), so this address always gives the newest.
  */
 export const DOWNLOAD_URL = `${RELEASES_URL}/download/OpenKumi-mac-arm64.dmg`
@@ -27,11 +27,8 @@ export const DOWNLOADS = [
   {
     id: 'mac',
     name: 'Mac',
-    needs: 'macOS 12 or later',
-    files: [
-      { label: 'Apple silicon', href: file('OpenKumi-mac-arm64.dmg') },
-      { label: 'Intel', href: file('OpenKumi-mac-x64.dmg') },
-    ],
+    needs: 'Apple silicon, macOS 12 or later',
+    files: [{ label: 'Apple silicon', href: file('OpenKumi-mac-arm64.dmg') }],
   },
   {
     id: 'windows',

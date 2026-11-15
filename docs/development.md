@@ -31,12 +31,12 @@ git commit -am "Release 0.2.0" && git tag v0.2.0 && git push --follow-tags
 
 It runs the tests, then builds, on computers of each kind:
 
-- the desktop app: `OpenKumi-mac-arm64.dmg` and `-x64.dmg` (each with the `.zip` an installed app
+- the desktop app: `OpenKumi-mac-arm64.dmg` (with the `.zip` an installed app
   updates from), `OpenKumi-win-x64.exe`, `OpenKumi-linux-x86_64.AppImage` and
   `OpenKumi-linux-arm64.AppImage`, with the `latest*.yml` files the
   app reads to find them;
-- the server: `openkumi-server-<system>-<processor>.tar.gz` for macOS and Linux, on Apple silicon,
-  Intel and ARM (`npm run dist:server` makes them here), each installed and started once on a
+- the server: `openkumi-server-<system>-<processor>.tar.gz` for macOS on Apple silicon and
+  for Linux on x64 and ARM (`npm run dist:server` makes them here), each installed and started once on a
   computer of its kind before anything is published, and `openkumi-server.json`, which a running
   server reads to find its next version;
 - `SHA256SUMS` for every file, and `install.sh`.

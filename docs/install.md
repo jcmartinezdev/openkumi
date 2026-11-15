@@ -7,7 +7,7 @@ installed, each bot's changes to its own files are kept as a history you can und
 
 **The desktop app.** Download it from [openkumi.ai](https://openkumi.ai), or pick an installer
 from the [newest release](https://github.com/jcmartinezdev/openkumi/releases/latest): a `.dmg` for
-a Mac (Apple silicon or Intel), an installer for Windows, an AppImage for Linux. It carries its
+a Mac with Apple silicon, an installer for Windows, an AppImage for Linux. It carries its
 own server, so nothing else has to be installed. The first time, the app asks where your bots
 should run. Check under **Settings → Providers** that something shows as connected, then start
 chatting.

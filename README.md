@@ -104,12 +104,12 @@ server, and keeps itself up to date.
 | Your computer | Download |
 | --- | --- |
 | Mac with Apple silicon (2020 and later) | [OpenKumi-mac-arm64.dmg](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-mac-arm64.dmg) |
-| Mac with an Intel processor | [OpenKumi-mac-x64.dmg](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-mac-x64.dmg) |
 | Windows 10 or later | [OpenKumi-win-x64.exe](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-win-x64.exe) |
 | Linux, x64 | [OpenKumi-linux-x86_64.AppImage](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-linux-x86_64.AppImage) |
 | Linux, ARM | [OpenKumi-linux-arm64.AppImage](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-linux-arm64.AppImage) |
 
-- **Mac:** open the `.dmg` and drag OpenKumi to Applications.
+- **Mac:** open the `.dmg` and drag OpenKumi to Applications. Macs with an Intel processor are
+  not supported.
 - **Windows:** run the installer. It is not signed yet, so Windows asks before running it: choose
   **More info**, then **Run anyway**.
 - **Linux:** make the file runnable (`chmod +x OpenKumi-linux-*.AppImage`) and open it.

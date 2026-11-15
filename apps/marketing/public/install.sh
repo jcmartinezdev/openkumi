@@ -47,6 +47,9 @@ case "$(uname -m)" in
 esac
 # A terminal running under Rosetta says it is an Intel Mac.
 if [ "$os" = darwin ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = 1 ]; then arch=arm64; fi
+if [ "$os" = darwin ] && [ "$arch" = x64 ]; then
+  stop "OpenKumi runs on Macs with Apple silicon. This Mac has an Intel processor."
+fi
 # The Node that comes with it needs the usual C library.
 if [ "$os" = linux ] && (ldd --version 2>&1 || true) | grep -qi musl; then
   stop "This Linux uses musl (Alpine), which the server's Node does not run on. Use a glibc system such as Debian or Ubuntu."

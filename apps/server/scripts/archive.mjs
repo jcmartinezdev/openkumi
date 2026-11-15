@@ -18,7 +18,7 @@ import { ROOT, stagePackages, stageServer } from './stage.mjs'
 /** The Node the server is shipped with: the line the desktop app's own Node is on, where the server is tested. */
 const NODE = '24.22.3'
 /** What is published, by Node's name for each: its `process.platform`-`process.arch` to Node's download. */
-const TARGETS = { 'darwin-arm64': 'darwin-arm64', 'darwin-x64': 'darwin-x64', 'linux-x64': 'linux-x64', 'linux-arm64': 'linux-arm64' }
+const TARGETS = { 'darwin-arm64': 'darwin-arm64', 'linux-x64': 'linux-x64', 'linux-arm64': 'linux-arm64' }
 
 const wanted = process.argv.slice(2)
 for (const target of wanted) if (!TARGETS[target]) throw new Error(`There is no server archive for "${target}". The kinds are: ${Object.keys(TARGETS).join(', ')}.`)
