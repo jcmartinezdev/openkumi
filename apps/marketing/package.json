@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/marketing",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "openkumi.ai, the OpenKumi website.",
   "private": true,
   "type": "module",
