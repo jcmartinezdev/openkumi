@@ -47,8 +47,20 @@ delete env.OPENKUMI_DEV_URL
 
 const up = (port) => fetch(`http://127.0.0.1:${port}/api/hello`).then((r) => r.ok, () => false)
 const tokenOf = (home) => JSON.parse(fs.readFileSync(`${tmp}/${home}/auth.json`, 'utf8')).accessToken
-const ask = async (port, home, method, url, body) =>
-  (await fetch(`http://127.0.0.1:${port}${url}`, { method, headers: { Authorization: `Bearer ${tokenOf(home)}`, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })).json()
+/**
+ * Asks a server, with its own access code. A server that is just moving to another address (the
+ * network setting was switched) drops what is connected to it: the question is then asked again.
+ */
+const ask = async (port, home, method, url, body) => {
+  for (let tries = 0; ; tries++) {
+    try {
+      return await (await fetch(`http://127.0.0.1:${port}${url}`, { method, headers: { Authorization: `Bearer ${tokenOf(home)}`, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })).json()
+    } catch (e) {
+      if (tries >= 10 || !['ECONNRESET', 'ECONNREFUSED', 'UND_ERR_SOCKET'].includes(e?.cause?.code)) throw e
+      await new Promise((r) => setTimeout(r, 200))
+    }
+  }
+}
 
 /** Pairs "this computer" with a server by hand, the way the app does, and returns the key it is given. */
 async function pairWith(port, home, name = 'Test computer') {
