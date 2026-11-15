@@ -105,15 +105,18 @@ if (command === 'start' || command === 'serve') {
     const running = await ask<ServerUpdate>('GET', '/api/update')
     if (flag('--check')) {
       const info = await update(false)
-      if (info.state === 'failed') stop(info.error)
+      // Also with an earlier version in place: a look that failed has nothing to say about what is newest.
+      if (info.state === 'failed' || info.error) stop(info.error)
       console.log(info.latest && newer(info.latest, VERSION) ? `\n  OpenKumi ${info.latest} is out. This is ${VERSION}. Get it with “openkumi update”.\n` : `\n  OpenKumi ${VERSION} is the newest version.\n`)
     } else if (running) {
       // The server that runs does it itself, so that it is the one that decides when to start again.
-      // No answer means it went away in the middle: it may have started the new version already.
-      let info = (await ask<ServerUpdate>('POST', '/api/update', { now: flag('--now') })) ?? stop('The server stopped answering while it was updating. See where it stands with “openkumi status”.')
+      // No answer means it went away in the middle. It may have started the new version already,
+      // or it may not have got that far: which of the two is not known here, so neither is claimed.
+      const gone = () => stop('The server stopped answering while it was updating. See where it stands with “openkumi status”.')
+      let info = (await ask<ServerUpdate>('POST', '/api/update', { now: flag('--now') })) ?? gone()
       while (info.state === 'checking' || info.state === 'downloading') {
         await sleep(1000)
-        info = (await ask<ServerUpdate>('GET', '/api/update')) ?? { ...info, state: 'ready', working: 0 }
+        info = (await ask<ServerUpdate>('GET', '/api/update')) ?? gone()
       }
       if (info.state === 'failed') stop(info.error)
       // An earlier version is in place, but the one asked for now could not be fetched: that is not a success.
