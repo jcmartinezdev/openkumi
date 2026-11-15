@@ -6,14 +6,14 @@
 # put into the same one. See docs/mobile-releases.md.
 #
 # The check never fails. The label and the summary are what it is for.
-name: Mobile fingerprint
+name: 'iPhone app: native change check'
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
 
 concurrency:
-  group: mobile-fingerprint-${{ github.event.pull_request.number }}
+  group: iphone-native-change-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -25,7 +25,8 @@ env:
   LABEL: 📱 Native change
 
 jobs:
-  fingerprint:
+  check:
+    name: Does this change the native iPhone app?
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -36,7 +37,7 @@ jobs:
       - id: touched
         name: Does it touch anything the app is built from?
         run: |
-          paths="$(git diff --name-only HEAD^1 HEAD -- apps/mobile/ packages/client/ packages/shared/ packages/dictation/ package.json package-lock.json .github/workflows/mobile-fingerprint.yml)"
+          paths="$(git diff --name-only HEAD^1 HEAD -- apps/mobile/ packages/client/ packages/shared/ packages/dictation/ package.json package-lock.json .github/workflows/iphone-native-change.yml)"
           if [ -n "$paths" ]; then echo "relevant=true" >> "$GITHUB_OUTPUT"; else echo "relevant=false" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/setup-node@v5
         if: steps.touched.outputs.relevant == 'true'

@@ -1,12 +1,17 @@
-# Makes a release of OpenKumi: the desktop app for Mac (Apple silicon), Windows and Linux, the
-# server as it is installed on its own, what both read to update themselves, and the iPhone app.
-# See docs/development.md, "Releasing".
+# Releases OpenKumi. One tag releases everything, in this order:
 #
-# A release is started by hand: Actions > Release > Run workflow, with the version to release.
-# That one run gives every part the version, tests it, builds everything, publishes the release
-# and then releases the iPhone app from the same code. Nothing is released any other way.
+#   git tag v0.0.2 && git push origin v0.0.2
+#     1. Check the version and run the tests
+#     2. Server: build the archives, then install and start one on each kind of computer
+#        Desktop app: build for Mac, Windows and Linux
+#     3. Publish the release: desktop app and server      (the GitHub release people download from)
+#     4. Release the iPhone app                           (over the air, or a build for TestFlight)
 #
-# A pull request that changes how things are packaged runs the same builds as a rehearsal, and
+# Each step is a job below with that name, and a later one only runs when the ones before it
+# passed. Nothing else releases anything: not a merge, not a pull request. How to make the tag is
+# in docs/development.md, "Releasing".
+#
+# A pull request that changes how things are packaged runs steps 1 and 2 as a rehearsal, and
 # publishes nothing. The files are kept with the run for a few days.
 #
 # What it needs, as repository secrets (docs/development.md, "Releasing"):
@@ -15,15 +20,12 @@
 #   EXPO_TOKEN                                             for the iPhone app (docs/mobile-releases.md)
 # A release is refused without the first five: a Mac app that is not signed cannot be opened on
 # another computer. Without the last, everything but the iPhone app is released.
-name: Release
+name: 'Release: desktop app, server and iPhone app'
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: The version to release, like 0.0.2
-        required: true
-        type: string
+  push:
+    # Any tag that starts with "v". Step 1 refuses one that is not the version the code says.
+    tags: ['v*']
   pull_request:
     paths:
       - .github/workflows/release.yml
@@ -33,82 +35,57 @@ on:
       - apps/marketing/public/install.sh
       - package-lock.json
 
-# One release at a time. A rehearsal is given up when its pull request moves on.
+# One run for each tag. A rehearsal is given up when its pull request moves on.
 concurrency:
-  group: release-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
+  group: release-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
-  # ---- gives every part the version, and tests what is about to be released
-  prepare:
+  # ---- 1. what is released is what the tests passed on, and the tag is the version the code says
+  check:
+    name: 1. Check the version and run the tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
-      # The commit that is released. Empty for a rehearsal, which builds the pull request itself.
-      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 26
           cache: npm
-      - name: Set the version
-        if: github.event_name == 'workflow_dispatch'
+      - id: version
+        name: The tag and every part say the same version
         env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ inputs.version }}
           SIGNING: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 != '' && secrets.APPLE_API_KEY_P8 != '' && secrets.APPLE_API_KEY_ID != '' && secrets.APPLE_API_ISSUER != '' }}
         run: |
           stop() { echo "::error::$1"; exit 1; }
-          [ "$GITHUB_REF" = refs/heads/main ] || stop "Releases are made from main. Choose main where it says “Use workflow from”."
-          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || stop "“$VERSION” is not a version. Give three numbers, like 0.0.2."
-          [ "$SIGNING" = true ] || stop "A release needs the Mac app signed: set the signing secrets first (docs/development.md, “Releasing”)."
-          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then stop "OpenKumi $VERSION is already released. Give the next version."; fi
-          node scripts/bump.mjs "$VERSION"
-      - id: version
-        name: Every part says the same version
-        run: |
           version=$(node -p "require('./apps/server/package.json').version")
           desktop=$(node -p "require('./apps/desktop/package.json').version")
           phone=$(node -p "require('./apps/mobile/app.json').expo.version")
           if [ "$version" != "$desktop" ] || [ "$version" != "$phone" ]; then
-            echo "::error::The server says $version, the desktop app $desktop and the iPhone app $phone. Run: npm run bump <version>"
-            exit 1
+            stop "The server says $version, the desktop app $desktop and the iPhone app $phone. Run: npm run bump <version>"
+          fi
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            [ "$GITHUB_REF_NAME" = "v$version" ] || stop "The tag is $GITHUB_REF_NAME but the code says $version. Delete the tag, run “npm run bump <version>”, commit, and tag that commit."
+            [ "$SIGNING" = true ] || stop "A release needs the Mac app signed: set the signing secrets first (docs/development.md, “Releasing”)."
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test -w @openkumi/server -w @openkumi/client
-      # Only once the tests have passed on it. Nothing to commit when main already says this version.
-      - id: commit
-        name: Commit the version to main
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          VERSION: ${{ inputs.version }}
-        run: |
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -qam "Release $VERSION"
-            git push origin HEAD:main
-          fi
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  # ---- the server as it is installed on its own: one archive for each kind of computer
-  server:
-    needs: prepare
+  # ---- 2. the server as it is installed on its own: one archive for each kind of computer
+  server-archives:
+    name: '2. Server: build the archives'
+    needs: check
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 26
@@ -125,17 +102,23 @@ jobs:
   # Installs it the way people do, from a stand-in for the release, and starts it: an archive that
   # does not run on the computers it is for is found here, not by the people who install it.
   server-try:
-    needs: [prepare, server]
+    name: '2. Server: install and start on ${{ matrix.label }}'
+    needs: server-archives
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        include:
+          - os: ubuntu-latest
+            label: Linux x64
+          - os: ubuntu-24.04-arm
+            label: Linux ARM
+          - os: macos-latest
+            label: Mac
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ needs.prepare.outputs.sha }}
           sparse-checkout: |
             apps/marketing/public/install.sh
             apps/server/package.json
@@ -167,28 +150,30 @@ jobs:
           "$OPENKUMI_BIN/openkumi" status
           "$OPENKUMI_BIN/openkumi" update --check
 
-  # ---- the desktop app
-  desktop:
-    needs: prepare
+  # ---- 2. the desktop app
+  desktop-app:
+    name: '2. Desktop app: build for ${{ matrix.label }}'
+    needs: check
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
+            label: Mac
             name: mac
             archs: arm64
           - os: windows-latest
+            label: Windows
             name: windows
             archs: x64
           - os: ubuntu-latest
+            label: Linux
             name: linux
             archs: x64,arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 26
@@ -240,10 +225,11 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # ---- the release itself
-  release:
-    if: github.event_name == 'workflow_dispatch'
-    needs: [prepare, server, server-try, desktop]
+  # ---- 3. the release people download from: every desktop installer and server archive
+  publish-desktop-and-server:
+    name: '3. Publish the release: desktop app and server'
+    if: github.ref_type == 'tag'
+    needs: [check, server-archives, server-try, desktop-app]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -251,7 +237,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ needs.prepare.outputs.sha }}
           sparse-checkout: apps/marketing/public/install.sh
           sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v5
@@ -261,8 +246,7 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.prepare.outputs.version }}
-          SHA: ${{ needs.prepare.outputs.sha }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           set -eu
           cp apps/marketing/public/install.sh files/
@@ -273,17 +257,17 @@ jobs:
           sha256sum -- * > ../SHA256SUMS
           mv ../SHA256SUMS .
           ls -la
-          # This also puts the tag v<version> on the commit that was built.
-          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" --title "OpenKumi $VERSION" --generate-notes -- *
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --verify-tag --title "OpenKumi $VERSION" --generate-notes -- *
 
-  # ---- the iPhone app, from the same code, once the release is out (docs/mobile-releases.md)
+  # ---- 4. the iPhone app, from the same code, once the release is out (docs/mobile-releases.md)
   # It is either sent to the phones over the air, in minutes, or, when the release changes the
   # native app, built and sent to TestFlight. Which of the two is decided by the app's
   # fingerprint, a hash of everything native about it: an update over the air only reaches builds
   # with the same fingerprint, so it never lands on an app it does not fit.
-  phone:
-    if: github.event_name == 'workflow_dispatch'
-    needs: [prepare, release]
+  release-iphone-app:
+    name: 4. Release the iPhone app
+    if: github.ref_type == 'tag'
+    needs: [check, publish-desktop-and-server]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -300,8 +284,6 @@ jobs:
           fi
       - uses: actions/checkout@v5
         if: steps.token.outputs.present == 'true'
-        with:
-          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-node@v5
         if: steps.token.outputs.present == 'true'
         with:
@@ -319,7 +301,7 @@ jobs:
         if: steps.token.outputs.present == 'true'
         working-directory: apps/mobile
         env:
-          VERSION: ${{ needs.prepare.outputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           set -u
           npx expo-updates fingerprint:generate --platform ios > "$RUNNER_TEMP/fingerprint.json"

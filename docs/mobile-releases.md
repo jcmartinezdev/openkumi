@@ -20,9 +20,9 @@ on an app it does not fit.
 ## What happens at a release
 
 The app is released with everything else, not on its own: it has to work with the servers people
-can actually install, and a release is when those change. The last step of a release
-(**Actions → Release → Run workflow**, see [Working on OpenKumi](development.md#releasing)) is the
-app, from the code the release was made from:
+can actually install, and a release is when those change. The last job a release tag starts
+("Release the iPhone app" in `.github/workflows/release.yml`, see
+[Working on OpenKumi](development.md#releasing)) is the app, from the code that was tagged:
 
 | The fingerprint | What happens |
 | --- | --- |
@@ -46,7 +46,7 @@ npx eas-cli build --platform ios --profile production --auto-submit             
 
 ## Before a change is merged
 
-`.github/workflows/mobile-fingerprint.yml` runs on every pull request and compares the fingerprint
+`.github/workflows/iphone-native-change.yml` runs on every pull request and compares the fingerprint
 with and without the change. Its summary says which packages or settings moved it, and a pull
 request that changes it gets the label **📱 Native change**.
 

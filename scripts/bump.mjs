@@ -3,8 +3,10 @@
 //   npm run bump 0.2.0
 //
 // The server, the desktop app and the iPhone app say this version, and the release is named
-// after it. A release does this by itself (Actions > Release > Run workflow, see
-// docs/development.md), so it is rarely run by hand.
+// after it. Then commit, tag and push: the tag is what starts the release
+// (.github/workflows/release.yml, docs/development.md):
+//
+//   git commit -am "Release 0.2.0" && git tag v0.2.0 && git push origin main v0.2.0
 //
 // The iPhone app gets it too (apps/mobile/app.json): it is released with the rest (docs/mobile-releases.md).
 import { execFileSync } from 'node:child_process'
@@ -35,4 +37,5 @@ fs.writeFileSync(app, fs.readFileSync(app, 'utf8').replace(/("version":\s*")[^"]
 // The lock file names each of them too.
 execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' })
 
-console.log(`\n  Everything is at ${version}.\n`)
+console.log(`\n  Everything is at ${version}. To release it:\n`)
+console.log(`    git commit -am "Release ${version}" && git tag v${version} && git push origin main v${version}\n`)
