@@ -182,7 +182,8 @@ const socialCard = new URL('/social-card.png', Astro.site)
   .github:hover {
     border-color: var(--faint);
   }
-  @media (max-width: 760px) {
+  /* Below this the name, its alpha badge, five links and two buttons no longer fit on one line. */
+  @media (max-width: 940px) {
     .bar nav {
       display: none;
     }
