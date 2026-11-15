@@ -57,6 +57,7 @@ jobs:
           fingerprint > "$RUNNER_TEMP/before.json"
           after="$(jq -r '.hash // empty' "$RUNNER_TEMP/after.json" 2> /dev/null || true)"
           before="$(jq -r '.hash // empty' "$RUNNER_TEMP/before.json" 2> /dev/null || true)"
+          echo "Fingerprint before: ${before:-none}, after: ${after:-none}"
           {
             echo "## The iPhone app's native fingerprint"
             echo
