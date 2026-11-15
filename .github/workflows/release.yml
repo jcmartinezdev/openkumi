@@ -1,7 +1,8 @@
 # Makes a release: the desktop app for Mac (Apple silicon), Windows and Linux, the server as it is installed on
 # its own, and what both read to update themselves. See docs/development.md, "Releasing".
 #
-#   - Pushing a tag like v0.2.0 builds everything and publishes the release.
+#   - Pushing a tag like v0.2.0 builds everything and publishes the release. Then the iPhone app
+#     is released from the same code (mobile-release.yml).
 #   - A pull request that changes how things are packaged builds everything too, as a rehearsal,
 #     and publishes nothing. The files are kept with the run for a few days.
 #
@@ -49,6 +50,8 @@ jobs:
           version=$(node -p "require('./apps/server/package.json').version")
           desktop=$(node -p "require('./apps/desktop/package.json').version")
           [ "$version" = "$desktop" ] || { echo "::error::The server says $version and the desktop app $desktop. Run: npm run bump <version>"; exit 1; }
+          phone=$(node -p "require('./apps/mobile/app.json').expo.version")
+          [ "$version" = "$phone" ] || { echo "::error::The server says $version and the iPhone app $phone. Run: npm run bump <version>"; exit 1; }
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
             echo "::error::The tag is $GITHUB_REF_NAME but the code says $version. Run: npm run bump <version>, commit, and tag that."
             exit 1
@@ -199,6 +202,8 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -209,6 +214,7 @@ jobs:
           path: files
           merge-multiple: true
       - name: Publish
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.verify.outputs.version }}
@@ -226,7 +232,17 @@ jobs:
           ls -la
           if [ "$MAC_SIGNED" = true ]; then
             gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --verify-tag --title "OpenKumi $VERSION" --generate-notes -- *
+            echo "published=true" >> "$GITHUB_OUTPUT"
           else
             gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --verify-tag --title "OpenKumi $VERSION" --generate-notes --draft \
               --notes "The Mac app in this release is not signed: the signing secrets were not set when it was built. It is a draft until someone decides." -- *
+            echo "published=false" >> "$GITHUB_OUTPUT"
           fi
+
+  # ---- the iPhone app, from the same code, once the release is out
+  # Not for a release left as a draft: the app would then be ahead of the servers people can get.
+  phone:
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    uses: ./.github/workflows/mobile-release.yml
+    secrets: inherit

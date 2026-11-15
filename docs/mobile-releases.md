@@ -17,20 +17,30 @@ hash of everything native about it (its native packages and their versions, the 
 made with, and an update over the air is only offered to builds with the same one. It cannot land
 on an app it does not fit.
 
-## What happens when a change is merged
+## What happens at a release
 
-`.github/workflows/mobile-release.yml` runs for every change merged into `main` that touches the
-app or what it is built from:
+The app is released with everything else, not on its own: it has to work with the servers people
+can actually install, and a release is when those change. Once a release is published
+(`.github/workflows/release.yml`, see [Working on OpenKumi](development.md#releasing)),
+`.github/workflows/mobile-release.yml` runs for the code the release was made from:
 
 | The fingerprint | What happens |
 | --- | --- |
 | has a finished build | the JavaScript is published to the `production` channel, and the phones with that build fetch it |
-| has a build still being made | nothing; updates carry on with the next change merged after it is done |
+| has a build still being made | nothing more; that build carries the release when it is done |
 | has a build that failed | the run fails, saying so; start the build again by hand |
 | has no build | a build is started and sent to TestFlight |
 
-Run by hand (**Actions → Mobile release → Run workflow**) it does one or the other whatever the
-fingerprint says: `update` to send the JavaScript out again, `build` to make a build.
+So a release that only changes the app's JavaScript is on the phones minutes after the desktop
+app and the server are out. One that changes the native app goes through TestFlight, and to the
+people who have it from the App Store once Apple has reviewed it. In the meantime their app keeps
+working with the new server, unless the release changed how the two talk
+(`packages/shared/src/protocol.ts`): then the app says it needs the update.
+
+A release left as a draft (the Mac app was not signed) does not release the app. Run by hand
+(**Actions → Mobile release → Run workflow**, choosing the release's tag) the workflow does one
+or the other whatever the fingerprint says: `update` to send the JavaScript out, `build` to make
+a build.
 
 ## Before a change is merged
 
@@ -38,9 +48,9 @@ fingerprint says: `update` to send the JavaScript out again, `build` to make a b
 with and without the change. Its summary says which packages or settings moved it, and a pull
 request that changes it gets the label **📱 Native change**.
 
-That label matters because of what comes after: once a native change is merged, nothing merged
-after it reaches the phones until the new build is out. So hold pull requests with the label, and
-merge them together when a new build is due.
+The label says what the change costs: the release it is part of cannot reach the phones over the
+air, and goes through TestFlight and Apple's review. Several such changes are best put into the
+same release.
 
 ## In the app
 
@@ -60,12 +70,14 @@ The code is in `apps/mobile/src/appUpdates.ts`; the settings are `runtimeVersion
 
 ## Versions
 
-The app and a server do not have to be the same version (see [Installing and
-updating](install.md#updates)): the app says so when one of them is too old for the other. With
-updates over the air, a change that needs both can reach the phones the same day as the server.
+The app has the version of the release it came with: `npm run bump` sets it in
+`apps/mobile/app.json` with the rest, and the release workflow refuses a tag where they differ.
+The version is not part of the fingerprint, so a new one alone does not ask for a build; the
+build number beside it is counted up by EAS for every build.
 
-The version in `app.json` is the one the App Store shows. Raise it when a build is a new release
-for the store; the build number beside it is counted up by EAS for every build.
+The dictation package (`packages/dictation`) is left out of `npm run bump` on purpose. It is
+native code, its version is part of the fingerprint, and raising it with every release would
+send every release through TestFlight.
 
 ## Setting it up, once
 
@@ -86,4 +98,4 @@ What is left needs someone who can sign in to Expo and to Apple:
    TestFlight, where your own team can install it at once; testers outside the team, and the App
    Store, wait for Apple's review.
 
-From then on, merging is releasing.
+From then on, a release of OpenKumi releases the app with it.

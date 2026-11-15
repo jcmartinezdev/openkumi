@@ -1,9 +1,9 @@
 # Says, before it is merged, whether a pull request changes the native side of the iPhone app.
 #
-# One that does not is sent to the phones over the air the moment it is merged. One that does
-# needs a new build through TestFlight first, and until that build exists nothing merged after it
-# reaches the phones either. So such pull requests get the label "📱 Native change": hold them, and
-# merge them together when a new build is due. See docs/mobile-releases.md.
+# One that does not reaches the phones over the air, minutes after the release it is part of.
+# One that does sends that release through TestFlight and Apple's review instead. So such pull
+# requests get the label "📱 Native change", for whoever plans the release to see: several are best
+# put into the same one. See docs/mobile-releases.md.
 #
 # The check never fails. The label and the summary are what it is for.
 name: Mobile fingerprint
@@ -64,9 +64,9 @@ jobs:
             if [ -z "$after" ]; then
               echo ":x: The fingerprint could not be computed for this change."
             elif [ "$after" = "$before" ]; then
-              echo ":white_check_mark: Unchanged (\`$after\`). Merged, this is sent to the phones over the air."
+              echo ":white_check_mark: Unchanged (\`$after\`). The release this is part of can reach the phones over the air."
             else
-              echo "📱 Changed: \`${before:-none}\` → \`$after\`. Merged, this needs a new build through TestFlight before anything reaches the phones again."
+              echo "📱 Changed: \`${before:-none}\` → \`$after\`. The release this is part of needs a new build, through TestFlight, to reach the phones."
               if [ -n "$before" ]; then
                 echo
                 echo "What changed:"
@@ -86,7 +86,7 @@ jobs:
           NUMBER: ${{ github.event.pull_request.number }}
         run: |
           if [ "$CHANGED" = true ]; then
-            gh label create "$LABEL" --repo "$GITHUB_REPOSITORY" --color FBCA04 --description "Changes the native iPhone app: needs a new build before updates over the air carry on" --force
+            gh label create "$LABEL" --repo "$GITHUB_REPOSITORY" --color FBCA04 --description "Changes the native iPhone app: its release reaches the phones through TestFlight, not over the air" --force
             gh pr edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "$LABEL"
           else
             gh pr edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL" 2> /dev/null || true

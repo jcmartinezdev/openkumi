@@ -25,7 +25,7 @@ instead of the source: `OPENKUMI_DESKTOP_APP="release/mac-arm64/OpenKumi.app/Con
 A release is made by GitHub Actions (`.github/workflows/release.yml`) when a version tag is pushed:
 
 ```sh
-npm run bump 0.2.0       # gives every part the new version
+npm run bump 0.2.0       # gives every part the new version, the iPhone app included
 git commit -am "Release 0.2.0" && git tag v0.2.0 && git push --follow-tags
 ```
 
@@ -62,4 +62,6 @@ The Windows installer is not signed, so Windows warns before running it the firs
 Once people have installed a release, what they keep in `~/.openkumi` has to keep working with
 every release after it.
 
-The iPhone app is released apart, mostly over the air: see [Releasing the iPhone app](mobile-releases.md).
+The iPhone app is released by the same tag, once the release is published: over the air when
+only its JavaScript changed, through TestFlight when its native side did. See
+[Releasing the iPhone app](mobile-releases.md).

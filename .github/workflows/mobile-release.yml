@@ -1,29 +1,24 @@
-# Keeps the iPhone app up to date without waiting for Apple (docs/mobile-releases.md).
+# Releases the iPhone app without waiting for Apple where it can (docs/mobile-releases.md).
 #
-# Every change merged into main is either sent to the phones over the air, in minutes, or, when
-# it changes the native app, built and sent to TestFlight. Which of the two is decided by the
-# app's fingerprint: a hash of everything native about it. An update over the air only reaches
-# builds with the same fingerprint, so it never lands on an app it does not fit.
+# The app is released with everything else: the release workflow runs this once a release is
+# published (release.yml), for the code the release was made from. That code is either sent to
+# the phones over the air, in minutes, or, when it changes the native app, built and sent to
+# TestFlight. Which of the two is decided by the app's fingerprint: a hash of everything native
+# about it. An update over the air only reaches builds with the same fingerprint, so it never
+# lands on an app it does not fit.
 #
 #   - The fingerprint has a finished build: the new JavaScript is published to those phones.
-#   - It has none: a build is started and sent to TestFlight. Updates carry on once it is done.
+#   - It has none: a build is started and sent to TestFlight.
 #
-# Run by hand (Actions > Mobile release > Run workflow) it publishes an update or starts a build
-# whatever the fingerprint says: to try a failed build again, or to send an update out again.
+# Run by hand (Actions > Mobile release > Run workflow, choosing the release's tag) it publishes
+# an update or starts a build whatever the fingerprint says: to try a failed build again, to send
+# an update out again, or to release the app for a release that was published by hand.
 #
 # It needs the EXPO_TOKEN secret, and does nothing without it.
 name: Mobile release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - apps/mobile/**
-      - packages/client/**
-      - packages/shared/**
-      - packages/dictation/**
-      - package-lock.json
-      - .github/workflows/mobile-release.yml
+  workflow_call:
   workflow_dispatch:
     inputs:
       mode:
@@ -37,7 +32,7 @@ on:
         required: false
         type: string
 
-# One at a time and never cut short, so updates go out in the order the changes were merged.
+# One at a time and never cut short, so updates go out in the order the releases were made.
 concurrency:
   group: mobile-release
   cancel-in-progress: false
@@ -103,7 +98,8 @@ jobs:
           MESSAGE: ${{ inputs.message }}
         run: |
           set -u
-          message="${MESSAGE:-$(git log -1 --pretty=%s | head -c 120) ($(git rev-parse --short=9 HEAD))}"
+          version="$(node -p "require('./app.json').expo.version")"
+          message="${MESSAGE:-OpenKumi $version ($(git rev-parse --short=9 HEAD))}"
           update() {
             if eas update --channel production --environment production --platform ios --message "$message" --non-interactive; then
               echo ":white_check_mark: Sent over the air to the apps with fingerprint \`$HASH\`." >> "$GITHUB_STEP_SUMMARY"
@@ -114,7 +110,7 @@ jobs:
           }
           build() {
             if eas build --platform ios --profile production --auto-submit --non-interactive --no-wait; then
-              echo ":building_construction: $1 A build was started and goes to TestFlight when it is done. Updates over the air carry on after that." >> "$GITHUB_STEP_SUMMARY"
+              echo ":building_construction: $1 A build was started and goes to TestFlight when it is done." >> "$GITHUB_STEP_SUMMARY"
             else
               echo ":x: $1 The build could not be started. See docs/mobile-releases.md for what it needs." >> "$GITHUB_STEP_SUMMARY"
               return 1
@@ -124,7 +120,7 @@ jobs:
           if [ "$MODE" = update ]; then update; exit; fi
           if [ "$MODE" = build ]; then build "Asked for by hand."; exit; fi
 
-          # A change was merged. What happens depends on whether an app with this fingerprint exists.
+          # A release was made. What happens depends on whether an app with this fingerprint exists.
           builds="$(eas build:list --platform ios --build-profile production --fingerprint-hash "$HASH" --limit 20 --json --non-interactive)"
           count() { jq "[.[] | select($1)] | length" <<<"$builds"; }
           finished="$(count '.status == "FINISHED"')"
@@ -133,7 +129,7 @@ jobs:
           if [ "$finished" -gt 0 ]; then
             update
           elif [ "$active" -gt 0 ]; then
-            echo ":hourglass: The build for fingerprint \`$HASH\` is still being made. Updates carry on with the next change merged after it is done." >> "$GITHUB_STEP_SUMMARY"
+            echo ":hourglass: The build for fingerprint \`$HASH\` is still being made, and carries this release when it is done." >> "$GITHUB_STEP_SUMMARY"
           elif [ "$errored" -gt 0 ]; then
             echo ":x: The build for fingerprint \`$HASH\` failed. Start it again by hand: Run workflow, mode build." >> "$GITHUB_STEP_SUMMARY"
             exit 1
