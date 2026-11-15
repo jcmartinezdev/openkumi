@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
       - id: version
         run: |
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
       - run: npm ci
       - run: node apps/server/scripts/archive.mjs
@@ -142,7 +142,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
       - run: npm ci
       - name: Signing for macOS
