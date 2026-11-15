@@ -14,7 +14,7 @@
     "dev": "node scripts/dev.mjs",
     "dist": "node scripts/dist.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/"
+    "test": "node --test --test-timeout=180000 test/"
   },
   "devDependencies": {
     "@openkumi/client": "*",
