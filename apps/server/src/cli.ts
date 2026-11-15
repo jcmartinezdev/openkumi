@@ -116,6 +116,8 @@ if (command === 'start' || command === 'serve') {
         info = (await ask<ServerUpdate>('GET', '/api/update')) ?? { ...info, state: 'ready', working: 0 }
       }
       if (info.state === 'failed') stop(info.error)
+      // An earlier version is in place, but the one asked for now could not be fetched: that is not a success.
+      if (info.error) stop(`${info.error}\n  OpenKumi ${info.staged} from before is still in place, and starts once no bot is working.`)
       if (info.state !== 'ready') console.log(`\n  OpenKumi ${VERSION} is the newest version.\n`)
       else if (info.working && !flag('--now')) console.log(`\n  OpenKumi ${info.staged ?? info.latest} is in place. ${bots(info.working)} working: it starts once they are done.\n  To start it now and stop them: openkumi update --now\n`)
       else console.log(`\n  OpenKumi ${info.staged ?? info.latest} is starting in place of ${VERSION}.\n`)
@@ -124,6 +126,7 @@ if (command === 'start' || command === 'serve') {
       console.log('\n  Looking for a newer version…')
       const info = await update(true)
       if (info.state === 'failed') stop(info.error)
+      if (info.error) stop(`${info.error}\n  OpenKumi ${info.staged} from before is still in place: it is what “openkumi start” starts.`)
       console.log(info.state === 'ready' ? `  OpenKumi ${info.staged ?? info.latest} is in place. It is what “openkumi start” starts from now on.\n` : `  OpenKumi ${VERSION} is the newest version.\n`)
     }
   } else if (command === 'service') {

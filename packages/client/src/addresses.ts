@@ -137,7 +137,11 @@ export async function probe(url: string, key: string, serverId?: string): Promis
   const stop = new AbortController()
   const late = setTimeout(() => stop.abort(), PATIENCE[kindOf(url)])
   try {
-    const res = await fetch(`${url}/api/hello?challenge=${challenge}&device=${deviceTag(key)}`, { signal: stop.signal })
+    // Whatever is at this address has to answer for itself. Were it allowed to send the question
+    // on to the real server, it would come back with that server's proof, and be sent the key.
+    const res = await fetch(`${url}/api/hello?challenge=${challenge}&device=${deviceTag(key)}`, { signal: stop.signal, redirect: 'error' })
+    // Where being sent on cannot be refused (the phone follows it whatever is asked), the answer says where it came from.
+    if (res.redirected || (res.url && new URL(res.url).origin !== new URL(url).origin)) return { url, answer: 'other' }
     const said = await res.json()
     if (!isServer(said)) return { url, answer: 'unreachable' }
     if (typeof said.id !== 'string' || !said.device) return { url, answer: 'outdated' }

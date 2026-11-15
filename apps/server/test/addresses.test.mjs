@@ -63,12 +63,15 @@ test('a device asks who is at an address without sending its key, and only its s
     removed: () => ({ app: 'openkumi', id: 's_mine', device: { known: false } }),
     older: () => ({ app: 'openkumi', version: '0.0.1', authorized: false }),
     stranger: () => ({ hello: 'world' }),
+    // Something that does not answer itself, but sends the question on to the real server.
+    sender: () => null,
   }
   const servers = {}
   for (const [name, says] of Object.entries(answer)) {
     const server = http.createServer((req, res) => {
       heard.push(`${req.url} ${JSON.stringify(req.headers)}`)
       const q = new URL(req.url, 'http://x').searchParams
+      if (name === 'sender') return void res.writeHead(302, { Location: `${servers.server.url}${req.url}` }).end()
       // The server answers a beat late, so a faster one later in the list does not win.
       setTimeout(() => res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(says(q))), name === 'server' ? 150 : 0)
     })
@@ -91,6 +94,10 @@ test('a device asks who is at an address without sending its key, and only its s
     assert.equal(verdict([await probe(at('ahead'), key)]), 'newer')
     assert.equal((await reach([at('behind'), at('ahead')], key, 's_mine')).found, null, 'neither is connected to')
     assert.equal(await said('stranger'), 'unreachable')
+    // An address that sends the question on to the real server comes back with that server's proof.
+    // It is not taken for the server, so the key never goes to it.
+    assert.notEqual(await said('sender', 's_mine'), 'ok', 'an answer that was passed on from elsewhere does not count')
+    assert.equal((await reach([at('sender')], key, 's_mine')).found, null)
     assert.equal(await said('server', 's_someone_else'), 'other')
     assert.equal((await probe('http://127.0.0.1:1', key)).answer, 'unreachable')
     assert.equal((await probe('http://203.0.113.9:4317', key)).answer, 'blocked', 'never asked at all')
