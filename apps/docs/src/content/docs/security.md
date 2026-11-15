@@ -1,10 +1,13 @@
-# Security notes
+---
+title: Security notes
+description: "What OpenKumi trusts, what it does not, and why."
+---
 
 - Every request to the server has to carry a key. Nothing is trusted for where it comes from and
   there are no cookies, so a web page open in a browser has no way in, and only the app's own pages
   may read the server's answers. On the computer the server runs on, the key is its access code
   (in `auth.json`), which the app there reads from the data folder and which is refused from
-  anywhere else. Every other computer is paired (see above) and holds a key of its own, kept by
+  anywhere else. Every other computer is paired (see [Pairing with another computer](/environments/#pairing-with-another-computer)) and holds a key of its own, kept by
   the server only as a hash in `clients.json`.
 - By default the server listens on `127.0.0.1` only; with network access on it listens on the
   local network too. Traffic there is plain HTTP: pairing does not give its code away to someone
@@ -13,8 +16,8 @@
   use. There are no user accounts: anyone with access to your OS user account can use it.
 - The app's window only ever loads the app's own page, and that page runs scripts only from the
   app's own files. Links, and the sign-in pages of a superpower's app, open in your browser. Pages that
-  bots show run in frames that are sites of their own and cannot reach the app (see *Replies and
-  pages*).
+  bots show run in frames that are sites of their own and cannot reach the app (see [Replies and
+  pages](/how-it-works/replies-and-pages/)).
 - A bot's browser holds real logins. Web pages can contain text written to manipulate an AI
   ("prompt injection"). Bots are instructed to treat page content as data and to confirm before
   purchases, sending messages or deleting things, but that is a mitigation, not a guarantee. Give a

@@ -1,4 +1,7 @@
-# Installing and updating
+---
+title: Installing and updating
+description: "How to install the OpenKumi desktop app or the server on its own, and how both keep themselves up to date."
+---
 
 OpenKumi needs Google Chrome, plus something for the bots to run on: the Codex CLI
 (`codex login`), Claude Code (`claude`) or Grok Build (`grok login`), signed in; or Ollama or LM

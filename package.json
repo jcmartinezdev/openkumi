@@ -28,7 +28,9 @@
     "bump": "node scripts/bump.mjs",
     "mobile": "npm run ios -w @openkumi/mobile",
     "site": "npm run dev -w @openkumi/marketing",
-    "site:build": "npm run build -w @openkumi/marketing"
+    "site:build": "npm run build -w @openkumi/marketing",
+    "docs": "npm run dev -w @openkumi/docs",
+    "docs:build": "npm run build -w @openkumi/docs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

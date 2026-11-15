@@ -1,5 +1,6 @@
 // Draws OpenKumi's icons from its mascot (src/lib/brand.ts): the desktop app's, the phone app's,
-// and the website's, with its social card. Chrome draws them, so they look as the mascot does in the app.
+// and the website's and the documentation's, with their social card. Chrome draws them, so they
+// look as the mascot does in the app.
 //   npm run icons -w @openkumi/marketing
 import fs from 'node:fs'
 import path from 'node:path'
@@ -83,5 +84,11 @@ await page.setContent(`<style>
 await page.evaluate(() => document.fonts.ready)
 fs.writeFileSync(path.join(site, 'social-card.png'), await sharp(await page.screenshot()).png({ compressionLevel: 9 }).toBuffer())
 console.log('marketing/public/social-card.png 1200×630')
+
+// The documentation (apps/docs) shows the same icons, and the mascot beside its name.
+const docs = out('docs')
+for (const name of ['apple-touch-icon.png', 'favicon.png', 'favicon.svg', 'social-card.png']) fs.copyFileSync(path.join(site, name), path.join(docs, 'public', name))
+fs.writeFileSync(path.join(docs, 'src', 'assets', 'kumi.svg'), kumiSvg('logo') + '\n')
+console.log('docs/public (the website\'s icons), docs/src/assets/kumi.svg')
 
 await browser.close()

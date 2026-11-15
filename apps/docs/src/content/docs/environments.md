@@ -1,4 +1,7 @@
-# Where bots run, and reaching them
+---
+title: Where bots run, and reaching them
+description: "Environments, pairing another computer or an iPhone, and reaching your bots from anywhere."
+---
 
 Bots run in an environment: a computer running the OpenKumi server. This is how the app finds one, how another computer or a phone is let in, and how that stays safe.
 
@@ -57,7 +60,7 @@ network and Tailscale, and treats a request a proxy on this computer passes on a
 elsewhere.
 
 A computer can also run the server with no app at all, for other computers to pair with: see
-[Installing and updating](install.md) for the installed one (`openkumi lan on`, then `openkumi pair`). From the
+[Installing and updating](/install/) for the installed one (`openkumi lan on`, then `openkumi pair`). From the
 source it is:
 
 ```sh

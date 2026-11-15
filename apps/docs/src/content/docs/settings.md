@@ -1,4 +1,7 @@
-# Settings and configuration
+---
+title: Settings and configuration
+description: "What each settings page holds, and the environment variables the server reads."
+---
 
 ## Settings
 
