@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar'
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router'
 // Read first, so the app is light or dark as this phone was set to from the start.
 import '../src/prefs'
+import { useUpdateChecks } from '../src/appUpdates'
 import { restore, useSession } from '../src/session'
 import { useAppearance, useTheme } from '../src/theme'
 
@@ -19,6 +20,7 @@ export default function Layout() {
   const welcoming = ['welcome', 'pair', 'scan'].includes(useSegments()[0])
 
   useEffect(() => void restore(), [])
+  useUpdateChecks()
   // Once paired the welcome is left, and once unpaired it is back. Either way the app starts over,
   // with nothing left behind to go back to.
   useEffect(() => {

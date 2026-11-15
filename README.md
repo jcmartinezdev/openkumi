@@ -200,6 +200,7 @@ the source for now; it is not in the App Store yet. More in
 | [How it works](docs/how-it-works.md) | where everything lives, what a bot is told, automations, superpowers, tools, engines |
 | [Security notes](docs/security.md) | what is trusted, what is not, and why |
 | [Working on OpenKumi](docs/development.md) | running it from the source, the tests, and making a release |
+| [Releasing the iPhone app](docs/mobile-releases.md) | updates over the air, builds through TestFlight, and what decides between them |
 
 ## Contributing
 

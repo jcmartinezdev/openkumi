@@ -2,8 +2,17 @@
   "expo": {
     "name": "OpenKumi",
     "slug": "openkumi",
+    "owner": "gotolcs",
     "scheme": "openkumi",
-    "version": "0.1.0",
+    "version": "0.0.1",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0b3f46de-bebb-4b2b-9037-e83bb4cd70cc",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -43,6 +52,11 @@
         }
       ],
       "expo-sqlite"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0b3f46de-bebb-4b2b-9037-e83bb4cd70cc"
+      }
+    }
   }
 }

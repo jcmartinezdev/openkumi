@@ -61,3 +61,5 @@ The Windows installer is not signed, so Windows warns before running it the firs
 
 Once people have installed a release, what they keep in `~/.openkumi` has to keep working with
 every release after it.
+
+The iPhone app is released apart, mostly over the air: see [Releasing the iPhone app](mobile-releases.md).

@@ -1,0 +1,92 @@
+# Says, before it is merged, whether a pull request changes the native side of the iPhone app.
+#
+# One that does not is sent to the phones over the air the moment it is merged. One that does
+# needs a new build through TestFlight first, and until that build exists nothing merged after it
+# reaches the phones either. So such pull requests get the label "📱 Native change": hold them, and
+# merge them together when a new build is due. See docs/mobile-releases.md.
+#
+# The check never fails. The label and the summary are what it is for.
+name: Mobile fingerprint
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: mobile-fingerprint-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  LABEL: 📱 Native change
+
+jobs:
+  fingerprint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # The pull request as it would be merged, and what it would be merged into.
+          fetch-depth: 2
+      - id: touched
+        name: Does it touch anything the app is built from?
+        run: |
+          paths="$(git diff --name-only HEAD^1 HEAD -- apps/mobile/ packages/client/ packages/shared/ packages/dictation/ package.json package-lock.json .github/workflows/mobile-fingerprint.yml)"
+          if [ -n "$paths" ]; then echo "relevant=true" >> "$GITHUB_OUTPUT"; else echo "relevant=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-node@v5
+        if: steps.touched.outputs.relevant == 'true'
+        with:
+          node-version: 26
+          cache: npm
+      - id: compare
+        name: Compare the fingerprint with and without the change
+        if: steps.touched.outputs.relevant == 'true'
+        run: |
+          # The fingerprint of whatever is checked out. Nothing, where the app could not have one yet.
+          fingerprint() {
+            npm ci --ignore-scripts --no-audit --no-fund > /dev/null 2>&1 || return 0
+            (cd apps/mobile && npx --no-install expo-updates fingerprint:generate --platform ios 2> /dev/null) || true
+          }
+          fingerprint > "$RUNNER_TEMP/after.json"
+          git checkout --quiet HEAD^1
+          fingerprint > "$RUNNER_TEMP/before.json"
+          after="$(jq -r '.hash // empty' "$RUNNER_TEMP/after.json" 2> /dev/null || true)"
+          before="$(jq -r '.hash // empty' "$RUNNER_TEMP/before.json" 2> /dev/null || true)"
+          {
+            echo "## The iPhone app's native fingerprint"
+            echo
+            if [ -z "$after" ]; then
+              echo ":x: The fingerprint could not be computed for this change."
+            elif [ "$after" = "$before" ]; then
+              echo ":white_check_mark: Unchanged (\`$after\`). Merged, this is sent to the phones over the air."
+            else
+              echo "📱 Changed: \`${before:-none}\` → \`$after\`. Merged, this needs a new build through TestFlight before anything reaches the phones again."
+              if [ -n "$before" ]; then
+                echo
+                echo "What changed:"
+                jq -r -n --slurpfile a "$RUNNER_TEMP/after.json" --slurpfile b "$RUNNER_TEMP/before.json" '
+                  ($b[0].sources | map({ (.filePath // .id): .hash }) | add // {}) as $was
+                  | $a[0].sources[] | select($was[(.filePath // .id)] != .hash) | "- \(.type): `\(.filePath // .id)`"'
+              fi
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$after" ] && [ "$after" != "$before" ]; then echo "changed=true" >> "$GITHUB_OUTPUT"; else echo "changed=false" >> "$GITHUB_OUTPUT"; fi
+      # A pull request from a fork has no leave to change labels; its summary still says it.
+      - name: Label it
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANGED: ${{ steps.compare.outputs.changed }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$CHANGED" = true ]; then
+            gh label create "$LABEL" --repo "$GITHUB_REPOSITORY" --color FBCA04 --description "Changes the native iPhone app: needs a new build before updates over the air carry on" --force
+            gh pr edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "$LABEL"
+          else
+            gh pr edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL" 2> /dev/null || true
+          fi

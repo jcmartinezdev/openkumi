@@ -1,16 +1,29 @@
 // Which OpenKumi this is, on the phone and on the server it is paired with.
 import Constants from 'expo-constants'
 import { useStore } from '@openkumi/client/store'
+import { useAppUpdate } from '../../src/appUpdates'
 import { useSession } from '../../src/session'
 import { Row, Section, SettingsPage } from '../../src/SettingsUi'
 
 export default function About() {
   const { server } = useSession()
   const about = useStore((s) => s.about)
+  const update = useAppUpdate()
   return (
     <SettingsPage title="About">
-      <Section title="This phone">
+      <Section title="This phone" footer={update ? 'Most updates arrive by themselves and are used the next time the app starts. Bigger ones come through the App Store.' : undefined}>
         <Row label="OpenKumi for iPhone" value={Constants.expoConfig?.version ?? ''} />
+        {update?.state === 'ready' ? (
+          <Row label="Restart to update" detail="An update is downloaded." tone="action" onPress={update.restart} />
+        ) : update ? (
+          <Row
+            label={update.state === 'downloading' ? 'Downloading an update…' : update.state === 'checking' ? 'Looking for an update…' : 'Check for updates'}
+            detail={update.published ? `Last update ${update.published.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : undefined}
+            tone="action"
+            disabled={update.state !== 'current'}
+            onPress={update.check}
+          />
+        ) : null}
       </Section>
 
       {!!about.version && (
