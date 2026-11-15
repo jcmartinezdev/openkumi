@@ -88,7 +88,8 @@ await build({
       ...(process.env.OPENKUMI_UNSIGNED ? { identity: '-' } : {}),
     },
     win: { target: [{ target: 'nsis', arch: archs }], icon },
-    linux: { target: [{ target: 'AppImage', arch: archs }], icon, category: 'Utility' },
+    // The program inside is named by hand: the name made from the package's (@openkumi/desktop) is not one a file may have.
+    linux: { target: [{ target: 'AppImage', arch: archs }], icon, category: 'Utility', executableName: 'openkumi' },
   },
   publish: 'never',
 })
