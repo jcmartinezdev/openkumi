@@ -18,10 +18,10 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ServerUpdate } from '@openkumi/shared'
-import { ROOT, emit, onEvent } from './config.ts'
+import { VERSION, emit, onEvent } from './config.ts'
 import { settings } from './settings.ts'
 
-export const VERSION: string = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
+export { VERSION }
 
 /** The folder of versions this server was started from, when it was installed on its own (set by bin/openkumi). */
 export const RUNTIME = process.env.OPENKUMI_RUNTIME || ''

@@ -8,6 +8,7 @@ import path from 'node:path'
 import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
 import type { Shown } from '../attachments.ts'
 import { type Exit, type Pipe, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
+import { VERSION } from '../config.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
@@ -155,7 +156,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   const settings = { cwd: req.cwd, approvalPolicy: 'never', sandbox: 'read-only', ...(req.model && req.model !== 'default' ? { model: req.model } : {}) }
   const began = (async () => {
     await started
-    await ask('initialize', { clientInfo: { name: 'openkumi', title: 'OpenKumi', version: '0.1.0' }, capabilities: { experimentalApi: false, requestAttestation: false } })
+    await ask('initialize', { clientInfo: { name: 'openkumi', title: 'OpenKumi', version: VERSION }, capabilities: { experimentalApi: false, requestAttestation: false } })
     write({ method: 'initialized', params: {} })
     const opened = req.session ? await ask('thread/resume', { threadId: req.session, excludeTurns: true, ...settings }) : await ask('thread/start', settings)
     thread = String(opened?.thread?.id ?? '')

@@ -22,7 +22,7 @@ import {
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/client/stdio'
 import type { SuperpowerStatus } from '@openkumi/shared'
 import { SIGN_IN_RETURN, browserFor } from './browser.ts'
-import { emit, privateDir, workspaceDir } from './config.ts'
+import { VERSION, emit, privateDir, workspaceDir } from './config.ts'
 import { type Service, enabledSuperpowers, serviceOf, signedIn } from './superpowers.ts'
 import type { Tool } from './tools.ts'
 
@@ -293,7 +293,7 @@ async function open(botId: string, id: string): Promise<Live> {
 
   const make = () =>
     new Client(
-      { name: 'openkumi', version: '0.1.0' },
+      { name: 'openkumi', version: VERSION },
       {
         listChanged: {
           tools: {
