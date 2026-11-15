@@ -1,11 +1,10 @@
-// Gives every part of OpenKumi the same new version, ready to be released:
+// Gives every part of OpenKumi the same new version:
 //
 //   npm run bump 0.2.0
 //
-// The server and the desktop app say this version, and the release is named after it. Then commit,
-// tag and push, which is what makes the release (.github/workflows/release.yml):
-//
-//   git commit -am "Release 0.2.0" && git tag v0.2.0 && git push --follow-tags
+// The server, the desktop app and the iPhone app say this version, and the release is named
+// after it. A release does this by itself (Actions > Release > Run workflow, see
+// docs/development.md), so it is rarely run by hand.
 //
 // The iPhone app gets it too (apps/mobile/app.json): it is released with the rest (docs/mobile-releases.md).
 import { execFileSync } from 'node:child_process'
@@ -36,5 +35,4 @@ fs.writeFileSync(app, fs.readFileSync(app, 'utf8').replace(/("version":\s*")[^"]
 // The lock file names each of them too.
 execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' })
 
-console.log(`\n  Everything is at ${version}. To release it:\n`)
-console.log(`    git commit -am "Release ${version}" && git tag v${version} && git push --follow-tags\n`)
+console.log(`\n  Everything is at ${version}.\n`)

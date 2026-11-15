@@ -1,21 +1,29 @@
-# Makes a release: the desktop app for Mac (Apple silicon), Windows and Linux, the server as it is installed on
-# its own, and what both read to update themselves. See docs/development.md, "Releasing".
+# Makes a release of OpenKumi: the desktop app for Mac (Apple silicon), Windows and Linux, the
+# server as it is installed on its own, what both read to update themselves, and the iPhone app.
+# See docs/development.md, "Releasing".
 #
-#   - Pushing a tag like v0.2.0 builds everything and publishes the release. Then the iPhone app
-#     is released from the same code (mobile-release.yml).
-#   - A pull request that changes how things are packaged builds everything too, as a rehearsal,
-#     and publishes nothing. The files are kept with the run for a few days.
+# A release is started by hand: Actions > Release > Run workflow, with the version to release.
+# That one run gives every part the version, tests it, builds everything, publishes the release
+# and then releases the iPhone app from the same code. Nothing is released any other way.
 #
-# The Mac app is signed and notarized when these secrets are set (docs/development.md, "Releasing"):
+# A pull request that changes how things are packaged runs the same builds as a rehearsal, and
+# publishes nothing. The files are kept with the run for a few days.
+#
+# What it needs, as repository secrets (docs/development.md, "Releasing"):
 #   MAC_CERTIFICATE_P12_BASE64, MAC_CERTIFICATE_PASSWORD   the Developer ID Application certificate
 #   APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER   an App Store Connect key, for notarizing
-# Without them it is still built, but macOS will not open it on another computer, so the release
-# is left as a draft for someone to look at.
+#   EXPO_TOKEN                                             for the iPhone app (docs/mobile-releases.md)
+# A release is refused without the first five: a Mac app that is not signed cannot be opened on
+# another computer. Without the last, everything but the iPhone app is released.
 name: Release
 
 on:
-  push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to release, like 0.0.2
+        required: true
+        type: string
   pull_request:
     paths:
       - .github/workflows/release.yml
@@ -25,48 +33,82 @@ on:
       - apps/marketing/public/install.sh
       - package-lock.json
 
+# One release at a time. A rehearsal is given up when its pull request moves on.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'pull_request' && github.ref || 'release' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
-  # ---- what is released is what the tests passed on, and the tag says the version the code says
-  verify:
+  # ---- gives every part the version, and tests what is about to be released
+  prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: write
     outputs:
       version: ${{ steps.version.outputs.version }}
+      # The commit that is released. Empty for a rehearsal, which builds the pull request itself.
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 26
           cache: npm
+      - name: Set the version
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          SIGNING: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 != '' && secrets.APPLE_API_KEY_P8 != '' && secrets.APPLE_API_KEY_ID != '' && secrets.APPLE_API_ISSUER != '' }}
+        run: |
+          stop() { echo "::error::$1"; exit 1; }
+          [ "$GITHUB_REF" = refs/heads/main ] || stop "Releases are made from main. Choose main where it says “Use workflow from”."
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || stop "“$VERSION” is not a version. Give three numbers, like 0.0.2."
+          [ "$SIGNING" = true ] || stop "A release needs the Mac app signed: set the signing secrets first (docs/development.md, “Releasing”)."
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then stop "OpenKumi $VERSION is already released. Give the next version."; fi
+          node scripts/bump.mjs "$VERSION"
       - id: version
+        name: Every part says the same version
         run: |
           version=$(node -p "require('./apps/server/package.json').version")
           desktop=$(node -p "require('./apps/desktop/package.json').version")
-          [ "$version" = "$desktop" ] || { echo "::error::The server says $version and the desktop app $desktop. Run: npm run bump <version>"; exit 1; }
           phone=$(node -p "require('./apps/mobile/app.json').expo.version")
-          [ "$version" = "$phone" ] || { echo "::error::The server says $version and the iPhone app $phone. Run: npm run bump <version>"; exit 1; }
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "::error::The tag is $GITHUB_REF_NAME but the code says $version. Run: npm run bump <version>, commit, and tag that."
+          if [ "$version" != "$desktop" ] || [ "$version" != "$phone" ]; then
+            echo "::error::The server says $version, the desktop app $desktop and the iPhone app $phone. Run: npm run bump <version>"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test -w @openkumi/server -w @openkumi/client
+      # Only once the tests have passed on it. Nothing to commit when main already says this version.
+      - id: commit
+        name: Commit the version to main
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -qam "Release $VERSION"
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   # ---- the server as it is installed on its own: one archive for each kind of computer
   server:
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 26
@@ -83,7 +125,7 @@ jobs:
   # Installs it the way people do, from a stand-in for the release, and starts it: an archive that
   # does not run on the computers it is for is found here, not by the people who install it.
   server-try:
-    needs: server
+    needs: [prepare, server]
     strategy:
       fail-fast: false
       matrix:
@@ -93,6 +135,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ needs.prepare.outputs.sha }}
           sparse-checkout: |
             apps/marketing/public/install.sh
             apps/server/package.json
@@ -126,6 +169,7 @@ jobs:
 
   # ---- the desktop app
   desktop:
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -143,6 +187,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 26
@@ -196,17 +242,16 @@ jobs:
 
   # ---- the release itself
   release:
-    if: github.ref_type == 'tag'
-    needs: [verify, server, server-try, desktop]
+    if: github.event_name == 'workflow_dispatch'
+    needs: [prepare, server, server-try, desktop]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: write
-    outputs:
-      published: ${{ steps.publish.outputs.published }}
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ needs.prepare.outputs.sha }}
           sparse-checkout: apps/marketing/public/install.sh
           sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v5
@@ -214,12 +259,10 @@ jobs:
           path: files
           merge-multiple: true
       - name: Publish
-        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.verify.outputs.version }}
-          # The same question the Mac build asked. Had signing been set up and failed, there would be no build to release.
-          MAC_SIGNED: ${{ secrets.MAC_CERTIFICATE_P12_BASE64 != '' && secrets.APPLE_API_KEY_P8 != '' && secrets.APPLE_API_KEY_ID != '' && secrets.APPLE_API_ISSUER != '' }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          SHA: ${{ needs.prepare.outputs.sha }}
         run: |
           set -eu
           cp apps/marketing/public/install.sh files/
@@ -230,19 +273,75 @@ jobs:
           sha256sum -- * > ../SHA256SUMS
           mv ../SHA256SUMS .
           ls -la
-          if [ "$MAC_SIGNED" = true ]; then
-            gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --verify-tag --title "OpenKumi $VERSION" --generate-notes -- *
-            echo "published=true" >> "$GITHUB_OUTPUT"
+          # This also puts the tag v<version> on the commit that was built.
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$SHA" --title "OpenKumi $VERSION" --generate-notes -- *
+
+  # ---- the iPhone app, from the same code, once the release is out (docs/mobile-releases.md)
+  # It is either sent to the phones over the air, in minutes, or, when the release changes the
+  # native app, built and sent to TestFlight. Which of the two is decided by the app's
+  # fingerprint, a hash of everything native about it: an update over the air only reaches builds
+  # with the same fingerprint, so it never lands on an app it does not fit.
+  phone:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [prepare, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - id: token
+        name: Is there a token for Expo?
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
           else
-            gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --verify-tag --title "OpenKumi $VERSION" --generate-notes --draft \
-              --notes "The Mac app in this release is not signed: the signing secrets were not set when it was built. It is a draft until someone decides." -- *
-            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo ":warning: The EXPO_TOKEN secret is not set, so the iPhone app was not released. See docs/mobile-releases.md." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/checkout@v5
+        if: steps.token.outputs.present == 'true'
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+      - uses: actions/setup-node@v5
+        if: steps.token.outputs.present == 'true'
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+        if: steps.token.outputs.present == 'true'
+      - uses: expo/expo-github-action@v8
+        if: steps.token.outputs.present == 'true'
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
+      - name: Send it over the air, or start a build
+        if: steps.token.outputs.present == 'true'
+        working-directory: apps/mobile
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -u
+          npx expo-updates fingerprint:generate --platform ios > "$RUNNER_TEMP/fingerprint.json"
+          hash="$(jq -er '.hash | select(type == "string" and length > 0)' "$RUNNER_TEMP/fingerprint.json")"
+          # A fingerprint that left the native packages out would not change when they do, and an
+          # update would then reach apps that lack what it needs. Nothing is published from one.
+          packages="$(jq '[.sources[] | select(.type == "package" or .type == "dir")] | length' "$RUNNER_TEMP/fingerprint.json")"
+          if [ "$packages" -lt 10 ]; then
+            echo ":x: The fingerprint covers only $packages native packages. Nothing was published." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
 
-  # ---- the iPhone app, from the same code, once the release is out
-  # Not for a release left as a draft: the app would then be ahead of the servers people can get.
-  phone:
-    needs: release
-    if: needs.release.outputs.published == 'true'
-    uses: ./.github/workflows/mobile-release.yml
-    secrets: inherit
+          # What happens depends on whether an app with this fingerprint has been built.
+          builds="$(eas build:list --platform ios --build-profile production --fingerprint-hash "$hash" --limit 20 --json --non-interactive)"
+          count() { jq "[.[] | select($1)] | length" <<<"$builds"; }
+          if [ "$(count '.status == "FINISHED"')" -gt 0 ]; then
+            eas update --channel production --environment production --platform ios --message "OpenKumi $VERSION" --non-interactive
+            echo ":white_check_mark: OpenKumi $VERSION was sent to the phones over the air (fingerprint \`$hash\`)." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$(count '.status == "NEW" or .status == "IN_QUEUE" or .status == "IN_PROGRESS"')" -gt 0 ]; then
+            echo ":hourglass: A build for fingerprint \`$hash\` is still being made. Release the iPhone app by hand once it is done (docs/mobile-releases.md)." >> "$GITHUB_STEP_SUMMARY"
+          else
+            # None, or one that failed: this release changes the native app, or is the first.
+            eas build --platform ios --profile production --auto-submit --non-interactive --no-wait
+            echo ":building_construction: This release changes the native app (fingerprint \`$hash\` has no build), so a build was started. It goes to TestFlight when it is done." >> "$GITHUB_STEP_SUMMARY"
+          fi

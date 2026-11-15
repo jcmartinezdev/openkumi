@@ -20,16 +20,15 @@ on an app it does not fit.
 ## What happens at a release
 
 The app is released with everything else, not on its own: it has to work with the servers people
-can actually install, and a release is when those change. Once a release is published
-(`.github/workflows/release.yml`, see [Working on OpenKumi](development.md#releasing)),
-`.github/workflows/mobile-release.yml` runs for the code the release was made from:
+can actually install, and a release is when those change. The last step of a release
+(**Actions → Release → Run workflow**, see [Working on OpenKumi](development.md#releasing)) is the
+app, from the code the release was made from:
 
 | The fingerprint | What happens |
 | --- | --- |
 | has a finished build | the JavaScript is published to the `production` channel, and the phones with that build fetch it |
-| has a build still being made | nothing more; that build carries the release when it is done |
-| has a build that failed | the run fails, saying so; start the build again by hand |
-| has no build | a build is started and sent to TestFlight |
+| has a build still being made | nothing; send the update by hand once the build is done (below) |
+| has no build, or one that failed | a build is started and sent to TestFlight |
 
 So a release that only changes the app's JavaScript is on the phones minutes after the desktop
 app and the server are out. One that changes the native app goes through TestFlight, and to the
@@ -37,10 +36,13 @@ people who have it from the App Store once Apple has reviewed it. In the meantim
 working with the new server, unless the release changed how the two talk
 (`packages/shared/src/protocol.ts`): then the app says it needs the update.
 
-A release left as a draft (the Mac app was not signed) does not release the app. Run by hand
-(**Actions → Mobile release → Run workflow**, choosing the release's tag) the workflow does one
-or the other whatever the fingerprint says: `update` to send the JavaScript out, `build` to make
-a build.
+By hand, from `apps/mobile` on a computer signed in to Expo (`npx eas-cli login`), with the
+released code checked out:
+
+```sh
+npx eas-cli update --channel production --environment production --platform ios   # send the JavaScript over the air
+npx eas-cli build --platform ios --profile production --auto-submit                # make a build and send it to TestFlight
+```
 
 ## Before a change is merged
 
@@ -71,7 +73,7 @@ The code is in `apps/mobile/src/appUpdates.ts`; the settings are `runtimeVersion
 ## Versions
 
 The app has the version of the release it came with: `npm run bump` sets it in
-`apps/mobile/app.json` with the rest, and the release workflow refuses a tag where they differ.
+`apps/mobile/app.json` with the rest, and a release is refused when they differ.
 The version is not part of the fingerprint, so a new one alone does not ask for a build; the
 build number beside it is counted up by EAS for every build.
 
@@ -85,8 +87,8 @@ The project on Expo exists: [`@gotolcs/openkumi`](https://expo.dev/accounts/goto
 What is left needs someone who can sign in to Expo and to Apple:
 
 1. **A token for GitHub.** On expo.dev, under the account's **Access tokens**, make one (a robot
-   user's, for an organisation) and save it as the repository secret `EXPO_TOKEN`. Without it the
-   workflow does nothing.
+   user's, for an organisation) and save it as the repository secret `EXPO_TOKEN`. Without it a
+   release leaves the iPhone app out.
 2. **The app at Apple.** Register the identifier `ai.openkumi.mobile` (developer.apple.com →
    Identifiers) and add the app in App Store Connect (**Apps → +**). Put the number App Store
    Connect gives it (**App Information → Apple ID**) into `apps/mobile/eas.json`:
@@ -94,8 +96,8 @@ What is left needs someone who can sign in to Expo and to Apple:
 3. **Apple's keys, kept by EAS.** In `apps/mobile`, run `npx eas-cli credentials` and let it make
    the distribution certificate and profile, and take an App Store Connect key for sending builds
    to TestFlight. The key has to be a team key with the App Manager role or above.
-4. **The first build.** Actions → Mobile release → Run workflow → `build`. It arrives in
-   TestFlight, where your own team can install it at once; testers outside the team, and the App
-   Store, wait for Apple's review.
+4. **The first build.** The next release makes it, since no build exists yet (or make it by
+   hand, as above). It arrives in TestFlight, where your own team can install it at once; testers
+   outside the team, and the App Store, wait for Apple's review.
 
 From then on, a release of OpenKumi releases the app with it.
