@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import type { Bot, PairedComputer, ProviderInfo, Settings } from '@openkumi/shared'
 import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, RemoteEnvironment } from '@openkumi/shared/desktop'
+import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import qrcode from 'qrcode-generator'
 import { type Answer, KIND_NAMES, kindOf, ordered } from '@openkumi/client/addresses'
 import { windowCount } from '@openkumi/client/browser'
@@ -82,6 +83,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'advanced', id: 'data-folder', title: 'Data folder', also: 'files location' },
   { page: 'advanced', id: 'delete-chats', title: 'Delete all conversations', also: 'chats history' },
   { page: 'about', id: 'version', title: 'Version' },
+  { page: 'about', id: 'alpha', title: 'Alpha', also: 'early preview beta report problem bug issue feedback github' },
   { page: 'about', id: 'app-update', title: 'Updates', also: 'update check new version restart upgrade download app server' },
   { page: 'about', id: 'server-auto-update', title: 'Update by itself', also: 'automatic auto update server upgrade' },
 ]
@@ -842,7 +844,13 @@ function AboutPage() {
   return (
     <Page>
       <Section title="OpenKumi">
-        {fact('Version', about.version, 'version')}
+        {fact('Version', <>{about.version} <span className="alpha-badge">Alpha</span></>, 'version')}
+        <Row
+          id="alpha"
+          title="Alpha"
+          description={ALPHA_NOTE}
+          control={<a className="button" href={ISSUES_URL} target="_blank" rel="noreferrer">Report a problem</a>}
+        />
         {fact('Runs with', `Node.js ${about.node.replace(/^v/, '')} on ${about.platform}`)}
         {fact('Port', <>{about.port} <span className="faint">(set with OPENKUMI_PORT when starting OpenKumi)</span></>)}
         {fact('Data folder', <code>{home}</code>)}

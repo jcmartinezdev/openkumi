@@ -1,5 +1,7 @@
 // Which OpenKumi this is, on the phone and on the server it is paired with.
+import { Linking } from 'react-native'
 import Constants from 'expo-constants'
+import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import { useStore } from '@openkumi/client/store'
 import { useAppUpdate } from '../../src/appUpdates'
 import { useSession } from '../../src/session'
@@ -11,6 +13,10 @@ export default function About() {
   const update = useAppUpdate()
   return (
     <SettingsPage title="About">
+      <Section title="Alpha" footer={ALPHA_NOTE}>
+        <Row label="Report a problem" tone="action" accessibilityHint="Opens OpenKumi’s issues on GitHub" onPress={() => void Linking.openURL(ISSUES_URL)} />
+      </Section>
+
       <Section title="This phone" footer={update ? 'Most updates arrive by themselves and are used the next time the app starts. Bigger ones come through the App Store.' : undefined}>
         <Row label="OpenKumi for iPhone" value={Constants.expoConfig?.version ?? ''} />
         {update?.state === 'ready' ? (

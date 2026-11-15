@@ -263,6 +263,8 @@ button.welcome-start:hover:not(:disabled) { background: linear-gradient(var(--ho
 .welcome-start strong { display: block; font-size: 15px; font-weight: 600; color: var(--text); }
 .welcome-start strong + span { display: block; font-size: 13px; line-height: 1.45; font-weight: 400; color: var(--muted); }
 .welcome-pairing { animation: rise 0.2s; }
+.welcome-alpha { margin-top: -16px; text-align: center; font-size: 12.5px; line-height: 1.5; color: var(--faint); text-wrap: pretty; }
+.welcome-alpha a { color: var(--muted); }
 .welcome-back { align-self: flex-start; margin: -12px 0 -18px 4px; }
 .toast {
   position: fixed; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 30;
@@ -280,6 +282,16 @@ button.welcome-start:hover:not(:disabled) { background: linear-gradient(var(--ho
 .sidebar { width: 264px; flex: none; display: flex; flex-direction: column; background: var(--side); border-right: 1px solid var(--border); }
 .side-head { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 10px 0 16px; flex: none; }
 .wordmark { font-weight: 600; letter-spacing: -0.02em; font-size: 15px; }
+/* OpenKumi is an alpha: said beside its name wherever the name stands as a title. */
+.alpha-badge, button.alpha-badge {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border: none; border-radius: 99px; flex: none;
+  vertical-align: middle; font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; line-height: 1; text-transform: uppercase;
+  /* Darker (or, when dark, lighter) than --run itself, to be read at this size. */
+  color: color-mix(in srgb, var(--run) 60%, var(--text)); background: color-mix(in srgb, var(--run) 14%, transparent);
+}
+button.alpha-badge:hover:not(:disabled) { background: color-mix(in srgb, var(--run) 22%, transparent); }
+.side-head .alpha-badge { margin-left: 8px; }
+.gate-head h1 .alpha-badge { margin-left: 4px; }
 .side-scroll { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
 .group { margin-bottom: 2px; }
 

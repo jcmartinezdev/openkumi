@@ -1,4 +1,5 @@
 import type { Bot, Thread } from '@openkumi/shared'
+import { ALPHA_NOTE } from '@openkumi/shared/alpha'
 import type { Modal } from './App'
 import { Icon } from './Icon'
 import { desktop, useDesktop } from './desktop'
@@ -50,6 +51,8 @@ export function Sidebar({ bot, thread, automationsOpen, openModal, open, close }
     <nav className={`sidebar ${open ? 'open' : ''}`}>
       <div className="side-head">
         <span className="wordmark">OpenKumi</span>
+        {/* OpenKumi is an alpha; Settings › About says what that means. */}
+        <button className="alpha-badge" title={ALPHA_NOTE} onClick={() => (close(), openSettings('about'))}>Alpha</button>
         {/* With more than one environment turned on: which one is showing. */}
         {environments.length > 1 && (
           <select className="picker environment" aria-label="Environment" value={app.current ?? ''} onChange={(e) => void desktop.open(e.target.value).catch(() => {})}>

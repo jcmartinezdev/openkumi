@@ -49,6 +49,8 @@ export const DOWNLOADS = [
   },
 ] as const
 export const LICENSE_URL = `${GITHUB_URL}/blob/main/LICENSE`
+/** Where to say what went wrong, which matters while OpenKumi is an alpha. */
+export const ISSUES_URL = `${GITHUB_URL}/issues`
 
 export const NAV = [
   { href: '/#features', label: 'Features' },

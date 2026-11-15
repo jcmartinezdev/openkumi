@@ -3,6 +3,7 @@
 // The iPhone has the same welcome (apps/mobile/app/welcome.tsx); keep the two alike.
 import { type CSSProperties, type ComponentProps, type RefObject, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Look } from '@openkumi/shared'
+import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import { BODY_COLORS, describeLook, surprise } from '@openkumi/client/mascot'
 import { desktop, reason } from './desktop'
 import { Icon } from './Icon'
@@ -277,7 +278,7 @@ export function Welcome() {
             {/* Otherwise nothing would say why they stand so still. */}
             <p className="welcome-hint">{still ? 'This computer is set to reduce motion, so they keep still. Click one for a new outfit.' : 'Click one for a new outfit'}</p>
             <div className="welcome-words">
-              <p className="welcome-eyebrow">Welcome to OpenKumi</p>
+              <p className="welcome-eyebrow">Welcome to OpenKumi <span className="alpha-badge">Alpha</span></p>
               <h1>Your own crew<br />of AI bots</h1>
               <p className="welcome-lead">
                 They get things done for you, each with its own memory and its own browser. Run them on this computer, or on another one of yours and work with them from here.
@@ -305,6 +306,7 @@ export function Welcome() {
               </button>
             ))}
           </section>
+          <p className="welcome-alpha">{ALPHA_NOTE} <a href={ISSUES_URL} target="_blank" rel="noreferrer">Report a problem</a></p>
         </div>
       </div>
     </div>

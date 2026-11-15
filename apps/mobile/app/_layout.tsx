@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar'
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router'
 // Read first, so the app is light or dark as this phone was set to from the start.
 import '../src/prefs'
+import { AppTitle } from '../src/Alpha'
 import { useUpdateChecks } from '../src/appUpdates'
 import { restore, useSession } from '../src/session'
 import { useAppearance, useTheme } from '../src/theme'
@@ -41,7 +42,8 @@ export default function Layout() {
           return { headerStyle: { backgroundColor: background }, headerTintColor: theme.text, headerShadowVisible: false, contentStyle: { backgroundColor: background }, headerBackButtonDisplayMode: 'minimal', statusBarStyle }
         }}
       >
-        <Stack.Screen name="index" options={{ title: 'OpenKumi' }} />
+        {/* The title is still the name, for the menu of the back button; what shows is the name and that it is an alpha. */}
+        <Stack.Screen name="index" options={{ title: 'OpenKumi', headerTitle: () => <AppTitle /> }} />
         <Stack.Screen name="welcome" options={{ headerShown: false, gestureEnabled: false, animation: 'fade' }} />
         <Stack.Screen name="pair" />
         <Stack.Screen name="scan" options={{ title: 'Scan the code', presentation: 'modal' }} />
