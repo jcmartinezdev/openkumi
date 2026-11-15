@@ -85,14 +85,15 @@ send every release through TestFlight.
 
 Everything is set up; this is where it is, for when something has to be renewed or looked at.
 
-- **Expo:** the project [`@gotolcs/openkumi`](https://expo.dev/accounts/gotolcs/projects/openkumi)
+- **Expo:** the project [`@goto-lcs-ug/openkumi`](https://expo.dev/accounts/goto-lcs-ug/projects/openkumi)
   holds the updates, the builds, and the signing credentials for building (an Apple Distribution
   certificate and an App Store provisioning profile, which Expo made with the Apple key).
   `npx eas-cli credentials -p ios` shows and renews them.
 - **Apple:** the identifier `ai.openkumi.mobile` and the app "OpenKumi" in App Store Connect. Its
   number is in `apps/mobile/eas.json` (`ascAppId`); builds sent to TestFlight land there.
-- **GitHub secrets:** `EXPO_TOKEN` (an access token from expo.dev, without which a release leaves
-  the iPhone app out), and the App Store Connect key the Mac app is notarized with
+- **GitHub secrets:** `EXPO_TOKEN` (an access token of the Expo user `jarvisaimini`, limited to
+  the organisation `goto-lcs-ug` with the Release Manager role; without it a release leaves the
+  iPhone app out), and the App Store Connect key the Mac app is notarized with
   (`APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`), which also sends builds to
   TestFlight.
 
