@@ -41,6 +41,8 @@ const file = (session) => path.join(os.tmpdir(), `openkumi-fake-codex-${session}
 /** The conversation that is open, the turn that is running in it, and what the turn was told since it began. */
 let thread = null
 let opened = {}
+/** The instructions the conversation was opened with. */
+let instructions = ''
 let active = null
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -75,9 +77,9 @@ async function run(turn, input) {
     })
     reply = `Tool result: ${(await res.json()).result.content[0].text.slice(0, 600)}`
   } else if (prompt === '!system') {
-    reply = config.developer_instructions
+    reply = instructions
   } else if (prompt === '!args') {
-    reply = JSON.stringify({ config: { ...config, developer_instructions: undefined, 'mcp_servers.openkumi.url': undefined }, disabled: args.filter((_, i) => args[i - 1] === '--disable'), flags: args.filter((a) => a.startsWith('--')), opened })
+    reply = JSON.stringify({ config: { ...config, 'mcp_servers.openkumi.url': undefined }, disabled: args.filter((_, i) => args[i - 1] === '--disable'), flags: args.filter((a) => a.startsWith('--')), opened })
   } else {
     // At work for a while, unless it is told something more, which it then answers too.
     if (/^!(slow|busy)/.test(prompt)) for (let waited = 0; waited < 8000 && active === turn && !turn.told.length; waited += 50) await sleep(50)
@@ -103,6 +105,7 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
     }
     if (method === 'thread/start') fs.writeFileSync(file(session), JSON.stringify({ turn: 0 }))
     thread = session
+    instructions = params.developerInstructions
     opened = { sandbox: params.sandbox, approvalPolicy: params.approvalPolicy, model: params.model ?? null, cwd: params.cwd }
     answer(id, { thread: { id: session }, model: params.model ?? 'fake-model' })
     if (method === 'thread/start') print({ method: 'thread/started', params: { thread: { id: session } } })
