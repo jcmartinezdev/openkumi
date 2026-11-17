@@ -9,6 +9,9 @@ import { test } from 'node:test'
 
 const PORT = 5000 + Math.floor(Math.random() * 90)
 
+/** The servers that are running. A test that fails part-way leaves one behind, and the tests would then never end. */
+const running = new Set()
+
 /** Starts the server on the data in `home`. `stop` shuts it down the way the desktop app does; `kill` as a crash would. */
 async function start(home) {
   const server = spawn(process.execPath, ['src/index.ts'], {
@@ -16,6 +19,8 @@ async function start(home) {
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   const exited = new Promise((resolve) => server.on('exit', resolve))
+  running.add(server)
+  void exited.then(() => running.delete(server))
   await new Promise((resolve, reject) => {
     server.stdout.on('data', (d) => String(d).includes('running at') && resolve())
     exited.then((code) => reject(new Error(`server exited with ${code}`)))
@@ -31,7 +36,16 @@ async function start(home) {
     if (!res.ok) throw new Error(`${method} ${url}: ${json.error}`)
     return json
   }
-  return { api, stop: () => (server.kill('SIGTERM'), exited), kill: () => (server.kill('SIGKILL'), exited) }
+  /** Asked to stop, a server has its bots wind down first. One that is still there after that long is ended, and the test told. */
+  const stop = async () => {
+    server.kill('SIGTERM')
+    const late = setTimeout(() => server.kill('SIGKILL'), 20_000)
+    const code = await exited
+    clearTimeout(late)
+    if (server.signalCode === 'SIGKILL') throw new Error('The server was asked to stop and was still running 20 seconds later.')
+    return code
+  }
+  return { api, stop, kill: () => (server.kill('SIGKILL'), exited) }
 }
 
 async function until(check, timeoutMs = 10_000) {
@@ -49,7 +63,9 @@ async function withHome(fn) {
   try {
     await fn(home)
   } finally {
-    fs.rmSync(home, { recursive: true, force: true })
+    // Whatever the test left running holds the port the next one needs, and the folder this one used.
+    await Promise.all([...running].map((server) => new Promise((resolve) => (server.once('exit', resolve), server.kill('SIGKILL')))))
+    fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
   }
 }
 
