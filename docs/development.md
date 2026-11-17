@@ -41,7 +41,8 @@ they do and run in this order, each only when the ones before it passed:
 | 1 | Check the version and run the tests | refuses a tag that is not the code's version, or a release without the Mac signing secrets |
 | 2 | Server: build the archives | the server as it is installed on its own, for macOS and Linux |
 | 2 | Server: install and start on … | installs each archive with `install.sh` on a computer of its kind, and starts it |
-| 2 | Desktop app: build for Mac, Windows, Linux | the installers, signed and notarized on a Mac |
+| 2 | Desktop app: build for Mac, Windows, Linux | the installers, signed and notarized on a Mac; each is then installed the way people install it, opened and used |
+| 2 | Desktop app: open it on Linux ARM | the same for the ARM AppImage, on a computer that can run it |
 | 3 | Publish the release: desktop app and server | the GitHub release people download from, and that installed apps and servers update from |
 | 4 | Release the iPhone app | over the air, or a build for TestFlight (see [Releasing the iPhone app](mobile-releases.md)) |
 
@@ -83,8 +84,23 @@ does both with these repository secrets, and refuses to release without them:
 
 The Windows installer is not signed, so Windows warns before running it the first time.
 
+Before anything is published, every desktop app is used as installed
+(`apps/desktop/scripts/try.mjs`): its window, the server it starts, a bot on each kind of engine
+and a bot's browser. The engines are the tests' stand-ins, installed as the real ones are (on
+Windows as npm's launcher scripts), so the server has to find and start them itself. To run it
+here against an app made with `npm run dist:dir`:
+
+```sh
+node apps/desktop/scripts/try.mjs release/mac-arm64/OpenKumi.app/Contents/MacOS/OpenKumi --hidden --browser
+```
+
 Once people have installed a release, what they keep in `~/.openkumi` has to keep working with
-every release after it.
+every release after it. The format of that folder has a number, `FORMAT` in
+`apps/server/src/db.ts`, which is written into the database. A version that finds a higher number
+than its own was started on data a newer version wrote: it changes nothing, says so, and does not
+start. Raise the number with any change an older version cannot work with, and add the step that
+brings older data up to it; a new table, or a column older versions can ignore, needs no new
+number.
 
 The iPhone app is released by the same tag, once the release is published: over the air when
 only its JavaScript changed, through TestFlight when its native side did. It needs the

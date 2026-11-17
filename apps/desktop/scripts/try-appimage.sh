@@ -22,20 +22,29 @@ note() {
 }
 
 # 1. Simply run. An app that opens is still there when its time is up; one that cannot open ends at once.
-plain=$(mktemp -d)
-set +e
-OPENKUMI_DESKTOP_DATA="$plain/app" OPENKUMI_HOME="$plain/home" OPENKUMI_PORT=4979 xvfb-run -a timeout 25 "$appimage" > "$out/simply-run.log" 2>&1
-code=$?
-set -e
-rm -rf "$plain"
-if [ "$code" = 124 ]; then
-  note ":white_check_mark: $(basename "$appimage") opens when it is simply run on $(. /etc/os-release && echo "$PRETTY_NAME")."
-else
-  note ":warning: $(basename "$appimage") does not open when it is simply run on $(. /etc/os-release && echo "$PRETTY_NAME") (it ended with $code). What it said:"
+system=$(. /etc/os-release && echo "$PRETTY_NAME")
+# simply <what is tried, in words> [VARIABLE=value]: whether the AppImage stays open, run that way.
+simply() {
+  how=$1
+  shift
+  plain=$(mktemp -d)
+  set +e
+  env OPENKUMI_DESKTOP_DATA="$plain/app" OPENKUMI_HOME="$plain/home" OPENKUMI_PORT=4979 "$@" xvfb-run -a timeout 25 "$appimage" > "$out/simply-run.log" 2>&1
+  code=$?
+  set -e
+  rm -rf "$plain"
+  if [ "$code" = 124 ]; then
+    note ":white_check_mark: $(basename "$appimage") opens when it is $how on $system."
+    return 0
+  fi
+  note ":warning: $(basename "$appimage") does not open when it is $how on $system (it ended with $code). What it said:"
   note '```'
   note "$(tail -n 15 "$out/simply-run.log")"
   note '```'
-fi
+  return 1
+}
+# Unpacking itself first is what an AppImage is told to do where it cannot open itself in place.
+simply 'simply run' || simply 'told to unpack itself first (APPIMAGE_EXTRACT_AND_RUN=1)' APPIMAGE_EXTRACT_AND_RUN=1 || true
 
 # 2. Taken out of the AppImage, which needs nothing of the computer, and without Chromium's
 # sandbox, which the computers the release is made on do not allow an unpacked app.

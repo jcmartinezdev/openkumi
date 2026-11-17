@@ -55,6 +55,13 @@ await build({
     appId: 'ai.openkumi.desktop',
     productName: 'OpenKumi',
     artifactName,
+    // The packager names folders after the package: where Windows installs the app, and where an
+    // update is kept while it downloads. "@openkumi/desktop" gave "@openkumidesktop".
+    extraMetadata: { name: 'openkumi' },
+    // The AppImage is made with the newer of the packager's tools for it. One made with the
+    // older needs a library (libfuse2) that Ubuntu and others no longer install, and without it
+    // does not open at all.
+    toolsets: { appimage: '1.0.3' },
     // Where an installed app looks for a newer version: this project's releases.
     publish: [{ provider: 'github', owner: 'jcmartinezdev', repo: 'openkumi' }],
     // Electron is installed at the top of the repository, where the packager does not look.
