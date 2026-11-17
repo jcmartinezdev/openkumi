@@ -183,6 +183,13 @@ const steps = [
     assert.ok(text.includes('\n') && text.length > 2000, 'a bot’s instructions are long')
     assert.equal(told.length, text.length, `the bot was told ${told.length} characters of the ${text.length} it should have been`)
   }]),
+  ['What a bot changes in its own files is kept in its history', async () => {
+    // Kept with git, which every computer the release is made on has.
+    for (const bot of (await api('GET', '/api/state')).bots) {
+      const history = await api('GET', `/api/bots/${bot.id}/history`)
+      assert.ok(history.available && !history.problem && history.entries.length, `${bot.name} has no history: ${JSON.stringify(history).slice(0, 300)}`)
+    }
+  }],
   ['A bot opens a page in its browser', async () => {
     const { bots } = await api('GET', '/api/state')
     const bot = bots.find((b) => b.provider === 'claude-code')
