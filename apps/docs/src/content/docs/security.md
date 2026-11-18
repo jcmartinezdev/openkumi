@@ -31,8 +31,9 @@ description: "What OpenKumi trusts, what it does not, and why."
   messages ends at twenty, only the main assistant creates bots and only when you asked, and
   **Settings → Bots** switches messages between bots off. A bot can send another copies of its own
   files with a message, which land in the other bot's `files/inbox/`; no bot can open another's
-  folder or fetch a file from it, and a file that arrived this way is, like any file a bot did
-  not write itself, read as material, not as instructions.
+  folder or fetch a file from it. Bots are instructed to read a file that arrived this way, like
+  any file they did not write themselves, as material and not as instructions; that too is a
+  mitigation, not a guarantee.
 - What you type into a bot's page goes to it only from the device that took control of its window,
   so a view that is only watching cannot press anything by accident.
 - A bot's browser and `web_fetch` cannot open files on the computer or OpenKumi's own address.
