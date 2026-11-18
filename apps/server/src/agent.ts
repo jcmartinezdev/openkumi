@@ -7,8 +7,8 @@
 // reporting back) waits in the thread's queue and is let in one message at a time: the bot answers each in a
 // turn of its own. The owner can have a waiting message read at once, by the bot as it works.
 import crypto from 'node:crypto'
-import type { Bot, Item, ItemData, Partial, Queued, Said, Thread } from '@openkumi/shared'
-import { attach, discard, handOver, toShow, withFiles } from './attachments.ts'
+import type { Attachment, Bot, Item, ItemData, Partial, Queued, Said, Thread } from '@openkumi/shared'
+import { attach, discard, handOver, outgoing, stageCopy, toShow, unstage, withFiles } from './attachments.ts'
 import { getBot, listBots } from './bots.ts'
 import { browserFor, retireWindow } from './browser.ts'
 import { emit, workspaceDir } from './config.ts'
@@ -123,10 +123,10 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
 export const systemPrompt = (bot: Bot) => instructions(bot, conversation(bot.id), {})
 
 const isUserMessage = (item: Item) => item.data.type === 'message' && item.data.role === 'user'
-/** The files the owner sent with a message. */
+/** The files that came with a message: the owner's, or another bot's. */
 const filesOf = (data: ItemData) => (data.type === 'message' && data.role === 'user' ? (data.attachments ?? []) : [])
 /** What was said to the bot, for an engine to read: each message with the files that came with it. */
-const told = (messages: ItemData[]) => messages.map((d) => (d.type === 'message' && d.role === 'user' ? withFiles(heard(d), d.attachments) : '')).join('\n\n')
+const told = (messages: ItemData[]) => messages.map((d) => (d.type === 'message' && d.role === 'user' ? withFiles(heard(d), d) : '')).join('\n\n')
 /** What an engine is told with a message its turn was cut short for. */
 const CUT_SHORT =
   '[You were at work on what came before when the user had this put in front of you, and what you were writing ' +
@@ -544,9 +544,11 @@ export function basisOf(thread: Thread): Basis {
 /**
  * Sends a message from a bot to another bot's own conversation with the owner, where that bot
  * answers it as it would the owner, in its turn. The sender's conversation keeps a record of it
- * for the owner to read. Gives how the message stands, and the bot it went to.
+ * for the owner to read. Files of the sender's can go with it: the other bot gets a copy of each,
+ * as it does of a file the owner sends it, and never reaches the sender's folder.
+ * Gives how the message stands, the bot it went to, and the files that went with it.
  */
-export function messageBot(from: Thread, sender: Bot, to: unknown, text: unknown, replyWanted: boolean): Delivery & { bot: Bot } {
+export function messageBot(from: Thread, sender: Bot, to: unknown, text: unknown, replyWanted: boolean, files?: unknown): Delivery & { bot: Bot; sent: Attachment[] } {
   if (!canMessage(from)) throw new Error('Bots cannot message each other from here.')
   const target = typeof to === 'string' ? getBot(to) : undefined
   if (!target) throw new Error(`No bot with id ${to}. Use list_bots to see the bots that exist.`)
@@ -565,16 +567,28 @@ export function messageBot(from: Thread, sender: Bot, to: unknown, text: unknown
     db.addItem(from.id, { type: 'notice', level: 'info', text: `${MAX_CHAIN} messages have gone between bots without you saying anything, so ${sender.name} was not let send another. Write to it to carry on.` })
     throw new Error(`${MAX_CHAIN} messages have gone between bots, one leading to the next, without the user saying anything. Send no more: tell the user where things stand, in your reply.`)
   }
+  const sending = outgoing(sender.id, files)
   const key = `m_${crypto.randomBytes(9).toString('base64url')}`
   const conversationId = conversation(target.id).id
-  // A reply that was asked for always gets in: the bot that asked is waiting for it.
-  const delivery = postMessage(
-    conversationId,
-    { source: 'bot', text: words, bot: { id: sender.id, name: sender.name }, replyWanted, key, chain: basis.chain + 1 },
-    { always: !!basis.mayMessage },
-  )
-  db.addItem(from.id, { type: 'sent', to: { id: target.id, name: target.name }, threadId: conversationId, text: words, replyWanted, key })
-  return { ...delivery, bot: target }
+  // The copies wait on the other bot's side, as files the owner picked for it do. The record here says where each came from.
+  const sent: Attachment[] = []
+  let delivery: Delivery
+  try {
+    for (const file of sending) sent.push({ ...stageCopy(target.id, file), path: file.path })
+    // A reply that was asked for always gets in: the bot that asked is waiting for it.
+    delivery = postMessage(
+      conversationId,
+      { source: 'bot', text: words, bot: { id: sender.id, name: sender.name }, replyWanted, key, chain: basis.chain + 1 },
+      { always: !!basis.mayMessage, files: sent.map((file) => file.id) },
+    )
+  } catch (e) {
+    // A message that did not go leaves no copy behind: neither one still waiting, nor one the conversation had already taken.
+    for (const file of sent) unstage(target.id, file.id)
+    discard(target.id, conversationId, sent)
+    throw e
+  }
+  db.addItem(from.id, { type: 'sent', to: { id: target.id, name: target.name }, threadId: conversationId, text: words, replyWanted, key, ...(sent.length ? { attachments: sent } : {}) })
+  return { ...delivery, bot: target, sent }
 }
 
 // ---- a bot's one conversation

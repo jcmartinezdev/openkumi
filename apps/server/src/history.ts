@@ -70,7 +70,7 @@ export function prepare(all: Item[]): ItemData[] {
 export function transcript(all: Item[]): string {
   const { summary, items } = live(all)
   const turns = items.flatMap(({ data }) =>
-    data.type !== 'message' ? [] : data.role === 'assistant' ? [`You: ${data.text}`] : data.source === 'bot' ? [heard(data)] : [`User: ${withFiles(data.text, data.attachments)}`],
+    data.type !== 'message' ? [] : data.role === 'assistant' ? [`You: ${data.text}`] : data.source === 'bot' ? [withFiles(heard(data), data)] : [`User: ${withFiles(data.text, data)}`],
   )
   if (!turns.length && !summary) return ''
   const said = turns.join('\n\n')
@@ -128,9 +128,9 @@ function digest(items: Item[]): string {
     if (data.type === 'message' && data.role === 'assistant') return [`Bot: ${data.text.slice(0, 6000)}`]
     if (data.type === 'message') {
       const who = data.source === 'user' ? 'User' : data.source === 'automation' ? 'Automation report' : data.source === 'bot' ? `Message from ${data.bot?.name ?? 'another bot'}` : 'Subagent report'
-      return [`${who}: ${withFiles(data.text.slice(0, 6000), data.attachments)}`]
+      return [`${who}: ${withFiles(data.text.slice(0, 6000), data)}`]
     }
-    if (data.type === 'sent') return [`(the bot wrote to ${data.to.name}: ${data.text.slice(0, 2000)})`]
+    if (data.type === 'sent') return [`(the bot wrote to ${data.to.name}: ${data.text.slice(0, 2000)}${data.attachments?.length ? ` [with its files ${data.attachments.map((a) => a.path).join(', ')}]` : ''})`]
     if (data.type === 'function_call') return [`(the bot used ${data.name} ${data.arguments.slice(0, 160)})`]
     return []
   }).join('\n\n')

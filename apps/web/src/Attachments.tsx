@@ -122,20 +122,28 @@ const save = (threadId: string, file: Attachment) => void download(keptAt(thread
 /** The files that went with one of the owner's messages: pictures as pictures, anything else as a card that saves a copy. */
 export function SentFiles({ threadId, files }: { threadId: string; files: Attachment[] }) {
   const [viewing, setViewing] = useState<Attachment | null>(null)
+  // Pictures in a row of their own, then the other files: a file's card beside a picture four times its height looks lost.
+  const pictures = files.filter((f) => isPicture(f.type))
+  const others = files.filter((f) => !isPicture(f.type))
   return (
     <div className="sent-files">
-      {files.map((f) =>
-        isPicture(f.type) ? (
-          <SentPicture key={f.id} threadId={threadId} file={f} view={() => setViewing(f)} />
-        ) : (
-          <button key={f.id} className="sent-file" title={`Save a copy of ${f.name}`} onClick={() => save(threadId, f)}>
-            <span className="tray-kind"><Icon name="file" size={16} /></span>
-            <span className="tray-text">
-              <span className="tray-name">{f.name}</span>
-              <span className="tray-meta">{kindOf(f.name, f.type)} · {sizeOf(f.size)}</span>
-            </span>
-          </button>
-        ),
+      {!!pictures.length && (
+        <div className="sent-row">
+          {pictures.map((f) => <SentPicture key={f.id} threadId={threadId} file={f} view={() => setViewing(f)} />)}
+        </div>
+      )}
+      {!!others.length && (
+        <div className="sent-row">
+          {others.map((f) => (
+            <button key={f.id} className="sent-file" title={`Save a copy of ${f.name}`} onClick={() => save(threadId, f)}>
+              <span className="tray-kind"><Icon name="file" size={16} /></span>
+              <span className="tray-text">
+                <span className="tray-name">{f.name}</span>
+                <span className="tray-meta">{kindOf(f.name, f.type)} · {sizeOf(f.size)}</span>
+              </span>
+            </button>
+          ))}
+        </div>
       )}
       {viewing && <PictureViewer threadId={threadId} file={viewing} close={() => setViewing(null)} />}
     </div>

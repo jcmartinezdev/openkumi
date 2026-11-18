@@ -280,7 +280,8 @@ export const safeName = (name: string) =>
 export function incoming(botId: string, name: string, folder = 'files/inbox'): string {
   const safe = safeName(name)
   const ext = path.extname(safe)
-  const dir = path.join(workspaceDir(botId), ...folder.split('/'))
+  // Checked before it is made: a folder that is a link leading out of the workspace gets nothing put behind it.
+  const dir = resolve(botId, folder).abs
   fs.mkdirSync(dir, { recursive: true })
   let candidate = safe
   for (let n = 2; fs.existsSync(path.join(dir, candidate)); n++) candidate = `${safe.slice(0, safe.length - ext.length)} (${n})${ext}`

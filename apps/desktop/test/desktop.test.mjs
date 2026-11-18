@@ -958,9 +958,18 @@ test('what is said to a busy bot waits in view, to be taken back, sent now or le
   await win.locator('.msg.assistant', { hasText: 'Echo: held one' }).waitFor({ timeout: 20_000 })
 
   // A message to another bot is shown here as what was sent, and there as what came; each opens the other.
-  await send(`!tool message_bot {"bot_id":"${other.id}","message":"plan a trip to Lisbon","reply_wanted":true}`)
+  // Files of the sender's that go with it are shown in both, from the copies the other conversation keeps.
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
+  const trip = `${tmp}/local-home/bots/${busy.id}/workspace/files/trip`
+  fs.mkdirSync(trip, { recursive: true })
+  fs.writeFileSync(`${trip}/plan.md`, 'Day 1: Alfama')
+  fs.writeFileSync(`${trip}/map.png`, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))
+  await send(`!tool message_bot {"bot_id":"${other.id}","message":"plan a trip to Lisbon","reply_wanted":true,"files":["files/trip/plan.md","files/trip/map.png"]}`)
   const sent = win.locator('.msg.between.to', { hasText: 'plan a trip to Lisbon' })
   await sent.waitFor({ timeout: 20_000 })
+  await sent.locator('.sent-file', { hasText: 'plan.md' }).waitFor()
+  await sent.locator('.sent-picture img').waitFor()
+  await shot('between-sent')
   assert.match(await sent.locator('.between-head').innerText(), /^to other\s*asked for a reply$/i)
   assert.equal(await win.locator('.step', { hasText: 'Write to' }).count(), 0, 'the card stands for the call that sent it')
   await sent.locator('.between-head').click()
@@ -968,6 +977,10 @@ test('what is said to a busy bot waits in view, to be taken back, sent now or le
   await came.waitFor({ timeout: 20_000 })
   assert.match(await here(), new RegExp(`^#/${other.id}/t_[\\w-]+/\\d+$`))
   assert.match(await came.locator('.between-head').innerText(), /^from busy\s*asks for a reply$/i)
+  await came.locator('.sent-file', { hasText: 'plan.md' }).waitFor()
+  await came.locator('.sent-picture img').waitFor()
+  await shot('between-came')
+  assert.equal(fs.readFileSync(`${tmp}/local-home/bots/${other.id}/workspace/files/inbox/plan.md`, 'utf8'), 'Day 1: Alfama')
   await came.locator('.between-head').click()
   await win.locator('.msg.between.to.found', { hasText: 'plan a trip to Lisbon' }).waitFor({ timeout: 20_000 })
   assert.match(await here(), new RegExp(`^#/${busy.id}/t_[\\w-]+/\\d+$`))

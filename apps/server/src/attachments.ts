@@ -1,17 +1,20 @@
-// Files the owner sends with a message: a photo, a PDF, a spreadsheet. Each goes up as soon as it
-// is picked and waits, out of the bot's sight, until the message is sent. Then the conversation
+// Files sent with a message: a photo, a PDF, a spreadsheet. The owner's go up as soon as each
+// is picked and wait, out of the bot's sight, until the message is sent. Then the conversation
 // keeps it, where the bot cannot reach, so that what was said stays whole whatever becomes of the
 // bot's files; and the bot gets a copy of its own in files/inbox/, to file away, rename, use or
 // delete as suits it. Pictures, and PDFs for the models that read them, are also put in front of
 // the model with the message, in whatever form its provider takes them; any other file is only
 // named, for the bot to open with read_file (which gives a PDF's text).
+// A bot can send files of its own to another bot with message_bot. They travel the same way: a
+// copy is taken as the message is sent, the conversation it goes to keeps it, and the bot that
+// reads the message gets its copy in files/inbox/. Neither bot ever reaches the other's folder.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Attachment } from '@openkumi/shared'
+import type { Attachment, Said } from '@openkumi/shared'
 import { privateDir } from './config.ts'
 import type { Sees } from './providers/types.ts'
-import { bytes, copyIn, safeName } from './workspace.ts'
+import { bytes, copyIn, resolve, safeName } from './workspace.ts'
 
 const TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -49,11 +52,13 @@ const PICTURES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
 export const isPicture = (type: string) => PICTURES.has(type)
 const isPdf = (type: string) => type === 'application/pdf'
 
-/** How many files may go with one message. */
+/** How many files may go with one message, the owner's or a bot's. */
 const MAX_FILES = 10
 /** The most a picture or a PDF may weigh to be shown to a model; a larger one is only named. A picture is sent as base64, which Claude takes up to 5 MB of. */
 const MAX_PICTURE = 3_750_000
 const MAX_PDF = 20_000_000
+/** The most the files a bot sends another with one message may weigh together: what one file of the owner's may. */
+const MAX_SENT = 100_000_000
 
 /** Where a bot's conversations keep the files sent in them, each in a folder of its own: <thread>/<file id>/<name>. */
 export const keptIn = (botId: string) => path.join(privateDir(botId), 'attachments')
@@ -63,17 +68,68 @@ const ID = /^[a-z0-9]{16}$/
 /** A file picked and never sent (the app was closed with it in the composer) is thrown away after a day. */
 const STALE = 24 * 60 * 60_000
 
-/** Keeps a file the owner picked until the message it goes with is sent. */
-export function stage(botId: string, name: string, data: Buffer): Pick<Attachment, 'id' | 'name' | 'type' | 'size'> {
+/** A place for a file to wait in until the message it goes with is sent. Ones never sent are cleared away as it is made. */
+function room(botId: string, name: string): { id: string; file: string } {
   for (const old of fs.existsSync(waiting(botId)) ? fs.readdirSync(waiting(botId)) : []) {
     const dir = path.join(waiting(botId), old)
     if (Date.now() - fs.statSync(dir).mtimeMs > STALE) fs.rmSync(dir, { recursive: true, force: true })
   }
   const id = [...crypto.randomBytes(16)].map((b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('')
-  const safe = safeName(name)
   fs.mkdirSync(path.join(waiting(botId), id), { recursive: true })
-  fs.writeFileSync(path.join(waiting(botId), id, safe), data)
-  return { id, name: safe, type: typeOf(safe), size: data.length }
+  return { id, file: path.join(waiting(botId), id, safeName(name)) }
+}
+
+const staged = (id: string, file: string): Staged => ({ id, name: path.basename(file), type: typeOf(file), size: fs.statSync(file).size })
+type Staged = Pick<Attachment, 'id' | 'name' | 'type' | 'size'>
+
+/** Keeps a file the owner picked until the message it goes with is sent. */
+export function stage(botId: string, name: string, data: Buffer): Staged {
+  const { id, file } = room(botId, name)
+  fs.writeFileSync(file, data)
+  return staged(id, file)
+}
+
+/** A file in a bot's workspace that it sends to another bot. */
+export interface Outgoing {
+  /** Its path in the sender's workspace, cleaned up. */
+  path: string
+  abs: string
+  size: number
+}
+
+/** Checks the files a bot wants to send with a message to another bot: its own, by their paths in its workspace. */
+export function outgoing(botId: string, given: unknown): Outgoing[] {
+  if (given === undefined || given === null) return []
+  if (!Array.isArray(given) || !given.every((file) => typeof file === 'string')) throw new Error('files must be a list of paths in your workspace.')
+  if (given.length > MAX_FILES) throw new Error(`At most ${MAX_FILES} files can go with one message.`)
+  const files = (given as string[]).map((file) => {
+    const target = resolve(botId, file)
+    if (target.readOnly) throw new Error(`${target.rel} is not yours to send: only files in your own workspace can go with a message.`)
+    const info = fs.statSync(target.abs, { throwIfNoEntry: false })
+    if (!info) throw new Error(`No file at ${target.rel || '(workspace)'}`)
+    if (info.isDirectory()) throw new Error(`${target.rel || 'Your workspace'} is a folder. Name the files to send, one by one.`)
+    if (!info.isFile()) throw new Error(`${target.rel} is not a file that can be sent.`)
+    return { path: target.rel, abs: target.abs, size: info.size }
+  })
+  const weight = files.reduce((sum, file) => sum + file.size, 0)
+  if (weight > MAX_SENT) throw new Error(`These files are too large to send together (${bytes(weight)}; at most ${bytes(MAX_SENT)} with one message).`)
+  return files
+}
+
+/**
+ * Takes a copy of a file one bot sends another, to wait for the message as a file the owner picked
+ * does. From here on it is the copy that travels: what the sender does to its own file changes nothing.
+ */
+export function stageCopy(botId: string, file: Outgoing): Staged {
+  const { id, file: copy } = room(botId, path.basename(file.abs))
+  try {
+    fs.copyFileSync(file.abs, copy)
+  } catch {
+    fs.rmSync(path.dirname(copy), { recursive: true, force: true })
+    // In the sender's own words for the file: the error itself names where the copy was going.
+    throw new Error(`${file.path} could not be copied.`)
+  }
+  return staged(id, copy)
 }
 
 /** The one file in an attachment's folder, or null. */
@@ -142,14 +198,20 @@ export function kept(botId: string, threadId: string, id: string): string | null
 const kind = (type: string) =>
   isPicture(type) ? 'picture' : isPdf(type) ? 'PDF' : type.startsWith('text/') || type === 'application/json' ? 'text' : type.startsWith('image/') ? 'picture' : 'file'
 
-/** What a model is told of the files that came with a message, after what the user wrote. */
-export function withFiles(text: string, attachments: Attachment[] | undefined): string {
+/**
+ * What a model is told of the files that came with a message, after what was written: the owner's,
+ * or another bot's. `text` is the message as the model reads it.
+ */
+export function withFiles(text: string, said: Pick<Said, 'attachments' | 'source' | 'bot'>): string {
+  const attachments = said.attachments
   if (!attachments?.length) return text
   const named = attachments.map((a) => `${a.path} (${kind(a.type)}, ${bytes(a.size)})`).join(', ')
-  return (
-    `${text}${text ? '\n\n' : ''}[The user attached ${attachments.length === 1 ? 'a file. Your copy' : `${attachments.length} files. Your copies`}: ` +
-    `${named}. read_file gives the text of a PDF or a text file.]`
-  )
+  const one = attachments.length === 1
+  const came =
+    said.source === 'bot'
+      ? `${said.bot?.name ?? 'The bot'} sent ${one ? 'a file' : `${attachments.length} files`} with this message`
+      : `The user attached ${one ? 'a file' : `${attachments.length} files`}`
+  return `${text}${text ? '\n\n' : ''}[${came}. Your ${one ? 'copy' : 'copies'}: ${named}. read_file gives the text of a PDF or a text file.]`
 }
 
 /** A file to show a model with a message: where it is on disk, and what it is. */

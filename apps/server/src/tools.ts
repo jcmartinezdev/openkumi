@@ -75,14 +75,15 @@ const listBotsTool: Tool = {
 }
 
 /** How a message to another bot stands, as the bot that sent it is told. */
-function delivered({ place, held, bot }: ReturnType<typeof agent.messageBot>, replyWanted: boolean): string {
+function delivered({ place, held, bot, sent }: ReturnType<typeof agent.messageBot>, replyWanted: boolean): string {
   const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : (['th', 'st', 'nd', 'rd'][n % 10] ?? 'th')}`
   const where = held
     ? `Delivered, but ${bot.name} was stopped and what waits for it is held back until the user lets it go on. Tell the user.`
     : place
       ? `Delivered. ${bot.name} is busy: your message is ${ordinal(place)} in its queue, and it will read it in turn.`
       : `Delivered. ${bot.name} has started on it.`
-  return `${where} ${replyWanted ? 'Its reply will arrive here as a message from it, which wakes you: end your turn rather than wait.' : `It answers the user in its own conversation, not you.`}`
+  const files = sent.length ? ` When it reads the message, ${bot.name} gets its own copy of ${sent.map((file) => file.path).join(', ')} in its files/inbox/.` : ''
+  return `${where}${files} ${replyWanted ? 'Its reply will arrive here as a message from it, which wakes you: end your turn rather than wait.' : `It answers the user in its own conversation, not you.`}`
 }
 
 /** Messaging another bot: offered in a bot's own conversation, while the owner has it switched on. Who may be written to when is decided in agent.ts. */
@@ -91,8 +92,8 @@ const messageBotTool: Tool = {
   description:
     'Send a message to another of the user\'s bots. It goes into that bot\'s own conversation with the user, where the ' +
     'bot reads it in its turn and does what it asks as itself, with its own instructions, files, logins and ' +
-    'superpowers. It sees nothing of your conversation, so the message must stand on its own. The user sees it in ' +
-    'both conversations.',
+    'superpowers. It sees nothing of your conversation and cannot open your files, so the message must stand on its ' +
+    'own: send along the files it needs. The user sees it in both conversations.',
   parameters: params(
     {
       bot_id: str('The bot to write to, from the list of the other bots or list_bots'),
@@ -101,12 +102,19 @@ const messageBotTool: Tool = {
         type: 'boolean',
         description: 'Set it when you need what comes of this: the bot then writes back to you. Without it, it answers the user in its own conversation.',
       },
+      files: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Files from your workspace to send with the message, by path, e.g. ["files/report.pdf"]: at most 10, 100 MB together. ' +
+          'The bot gets a copy of each in its files/inbox/; yours stay as they are.',
+      },
     },
     ['bot_id', 'message'],
   ),
   run: (a, ctx) => {
     try {
-      return delivered(agent.messageBot(ctx.thread, ctx.bot, a.bot_id, a.message, a.reply_wanted === true), a.reply_wanted === true)
+      return delivered(agent.messageBot(ctx.thread, ctx.bot, a.bot_id, a.message, a.reply_wanted === true, a.files), a.reply_wanted === true)
     } catch (e) {
       if (e instanceof agent.Busy) throw new Error(`${e.message} Try again later, or tell the user.`)
       throw e

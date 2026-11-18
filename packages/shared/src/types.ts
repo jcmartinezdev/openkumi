@@ -148,9 +148,10 @@ export interface HistoryEntry {
 }
 
 /**
- * A file the owner sent with a message: a photo, a PDF, anything. The conversation keeps it, and the
- * bot gets a copy of its own in files/inbox/, which it may file away, rename or delete. Pictures and
- * PDFs are also shown to its model with the message, when the model can take them.
+ * A file sent with a message, by the owner or by another bot: a photo, a PDF, anything. The
+ * conversation keeps it, and the bot gets a copy of its own in files/inbox/, which it may file
+ * away, rename or delete. Pictures and PDFs are also shown to its model with the message, when the
+ * model can take them.
  */
 export interface Attachment {
   /** The conversation's copy, at /api/threads/<thread>/attachments/<id>. */
@@ -241,9 +242,10 @@ export type ItemData =
   | { type: 'summary'; text: string; upTo: number }
   /**
    * A message this bot sent to another bot with message_bot, for the owner to read here. It went to
-   * the conversation `threadId`, where the message with the same `key` is.
+   * the conversation `threadId`, where the message with the same `key` is. `attachments` are the
+   * files that went with it: that conversation's copies, each with the `path` it had in this bot's workspace.
    */
-  | { type: 'sent'; to: BotRef; threadId: string; text: string; replyWanted: boolean; key: string }
+  | { type: 'sent'; to: BotRef; threadId: string; text: string; replyWanted: boolean; key: string; attachments?: Attachment[] }
 
 /**
  * A message waiting for a bot. Everything said to a bot (by the owner, another bot, a subagent or a

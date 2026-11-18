@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Bot, Item, ItemData, Thread } from '@openkumi/shared'
+import type { Attachment, Bot, Item, ItemData, Thread } from '@openkumi/shared'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
@@ -132,7 +132,17 @@ function Report({ id, text }: { id: number; text: string }) {
  * A message between bots, as the owner reads it in either conversation: whose it is, or whom it
  * went to, and what it says. It opens the other end: the same message in the other bot's conversation.
  */
-function BotMessage({ id, from, to, text, replyWanted, messageKey }: { id: number; from?: string; to?: { id: string; name: string }; text: string; replyWanted: boolean; messageKey?: string }) {
+function BotMessage({ id, from, to, text, replyWanted, messageKey, files, keptIn }: {
+  id: number
+  from?: string
+  to?: { id: string; name: string }
+  text: string
+  replyWanted: boolean
+  messageKey?: string
+  /** The files that went with it, and the conversation that keeps them: the one it was sent to. */
+  files?: Attachment[]
+  keptIn: string
+}) {
   const [error, setError] = useState('')
   const open = () => {
     if (!messageKey) return
@@ -156,6 +166,7 @@ function BotMessage({ id, from, to, text, replyWanted, messageKey }: { id: numbe
         <Icon name="chevron" size={12} />
       </button>
       <div className="between-text">{text}</div>
+      {!!files?.length && <SentFiles threadId={keptIn} files={files} />}
       {error && <div className="faint">{error}</div>}
     </div>
   )
@@ -292,7 +303,7 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
           </div>,
         )
       }
-      else if (data.source === 'bot') blocks.push(<BotMessage key={id} id={id} from={data.bot?.name ?? 'another bot'} text={data.text} replyWanted={!!data.replyWanted} messageKey={data.key} />)
+      else if (data.source === 'bot') blocks.push(<BotMessage key={id} id={id} from={data.bot?.name ?? 'another bot'} text={data.text} replyWanted={!!data.replyWanted} messageKey={data.key} files={data.attachments} keptIn={threadId} />)
       else if (data.source === 'subagent' || data.source === 'automation') blocks.push(<Report key={id} id={id} text={data.text} />)
       else if (data.source === 'parent') blocks.push(<div key={id} className="msg task"><div className="eyebrow">Task</div>{data.text}</div>)
       else if (data.source === 'trigger') {
@@ -313,7 +324,7 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
     } else if (data.type === 'page') {
       blocks.push(<div key={id} data-item={id}><PageFrame title={data.title} html={data.html} height={data.height} /></div>)
     } else if (data.type === 'sent') {
-      blocks.push(<BotMessage key={id} id={id} to={data.to} text={data.text} replyWanted={data.replyWanted} messageKey={data.key} />)
+      blocks.push(<BotMessage key={id} id={id} to={data.to} text={data.text} replyWanted={data.replyWanted} messageKey={data.key} files={data.attachments} keptIn={data.threadId} />)
     }
   }
   flush(-1, running)
