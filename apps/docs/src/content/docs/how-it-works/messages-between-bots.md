@@ -16,6 +16,11 @@ either one opens the other end.
   for; anything else is refused. When it answers you, it may message any bot.
 - **Twenty messages** leading from one to the next, without you saying anything in between, is
   where a chain ends.
+- **Files go along as copies.** A bot can send up to ten of its own files with a message (100 MB
+  together). The conversation that gets the message keeps them, and the bot that reads it finds its
+  copies in `files/inbox/`, exactly as with a file you send it. Nothing is shared: neither bot can
+  open the other's folder, a bot cannot fetch a file from another, and what each does to its own
+  copy changes nothing for the other. Both conversations show which files went.
 - Only a bot's own conversation can send one: not a subagent, and not a run of an automation (whose
   result reaches the conversation, which can).
 - **Settings → Bots → Bots can message each other** switches it all off.

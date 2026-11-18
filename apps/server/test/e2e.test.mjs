@@ -1206,6 +1206,97 @@ test('attachments: the conversation keeps what was sent, the bot gets its copy i
   }
 })
 
+test('files between bots: a bot sends another copies of its own files with a message, and neither reaches the other’s folder', async () => {
+  const travel = await api('POST', '/api/bots', { name: 'Travel', emoji: '🧳', provider: 'mock', description: 'Plans trips and books travel.' })
+  const theirs = (...parts) => path.join(home, 'bots', 'travel', ...parts)
+  const waitingFor = (botId) => fs.readdirSync(path.join(home, 'bots', botId, 'private', 'attachments', 'waiting'))
+  try {
+    fs.mkdirSync(botPath('workspace', 'files', 'trip'), { recursive: true })
+    fs.writeFileSync(botPath('workspace', 'files', 'trip', 'plan.md'), 'Day 1: Alfama')
+    fs.writeFileSync(botPath('workspace', 'files', 'trip', 'map.png'), PNG)
+
+    // The files are named by their paths in the sender's workspace; one named twice goes once.
+    const id = await fresh()
+    const out = await toolIn(id, 'message_bot', { bot_id: 'travel', message: 'book this', files: ['files/trip/plan.md', 'files/trip/map.png', './files/trip/plan.md'] })
+    assert.equal(out, 'Delivered. Travel has started on it. Travel gets its own copy of files/trip/plan.md, files/trip/map.png in its files/inbox/. It answers the user in its own conversation, not you.')
+
+    // The other bot's conversation keeps them, the bot has its copies in its inbox, and its model is told of them and shown the picture.
+    const there = await until(() => conversationOf(travel.id))
+    const got = await settle(there.id)
+    const files = got[0].attachments
+    assert.deepEqual(files.map((f) => [f.name, f.path, f.type, f.size]), [['plan.md', 'files/inbox/plan.md', 'text/markdown', 13], ['map.png', 'files/inbox/map.png', 'image/png', PNG.length]])
+    assert.equal(lastText(got), 'Echo: <bot_message from="Tester" bot_id="tester" reply_wanted="no">\nbook this\n</bot_message> [files/inbox/plan.md, files/inbox/map.png; 1 shown]')
+    assert.equal(fs.readFileSync(theirs('workspace', 'files', 'inbox', 'plan.md'), 'utf8'), 'Day 1: Alfama')
+    assert.deepEqual(fs.readFileSync(theirs('workspace', 'files', 'inbox', 'map.png')), PNG)
+    assert.deepEqual(waitingFor('travel'), [], 'nothing is left waiting')
+    const res = await fetch(`${BASE}/api/threads/${there.id}/attachments/${files[0].id}`, { headers: auth() })
+    assert.equal(await res.text(), 'Day 1: Alfama')
+
+    // The sender's record names what went, by where it had it, and finds the copies the other conversation keeps.
+    const sent = (await settle(id)).find((d) => d.type === 'sent')
+    assert.deepEqual([sent.threadId, sent.attachments], [there.id, [{ ...files[0], path: 'files/trip/plan.md' }, { ...files[1], path: 'files/trip/map.png' }]])
+
+    // They are copies: what either bot does to its own changes nothing for the other.
+    fs.writeFileSync(botPath('workspace', 'files', 'trip', 'plan.md'), 'Day 1: Belém')
+    assert.equal(await toolIn(there.id, 'read_file', { path: 'files/inbox/plan.md' }), 'Day 1: Alfama')
+    assert.equal(await toolIn(there.id, 'delete_file', { path: 'files/inbox/plan.md' }), 'Deleted files/inbox/plan.md.')
+    assert.equal(await tool('read_file', { path: 'files/trip/plan.md' }), 'Day 1: Belém')
+
+    // Only a bot's own files go: nothing of another bot's, nothing outside its workspace, no folder, no superpower's file.
+    await api('PUT', `/api/bots/${bot.id}/superpowers/field-guide`, { on: true })
+    const before = (await settle(there.id)).length
+    for (const [file, why] of [
+      ['../../travel/workspace/files/inbox/map.png', /^Error: Paths cannot contain "\.\."/],
+      [theirs('workspace', 'files', 'inbox', 'map.png'), /^Error: No file at /],
+      ['files/trip', /^Error: files\/trip is a folder\. Name the files to send, one by one\./],
+      ['files/trip/nothing.md', /^Error: No file at files\/trip\/nothing\.md/],
+      ['superpowers/field-guide/SKILL.md', /^Error: superpowers\/field-guide\/SKILL\.md is not yours to send/],
+    ]) {
+      assert.match(await tool('message_bot', { bot_id: 'travel', message: 'and this', files: ['files/trip/map.png', file] }), why, file)
+    }
+    assert.match(await tool('message_bot', { bot_id: 'travel', message: 'and this', files: 'files/trip/map.png' }), /^Error: files must be a list of paths in your workspace\./)
+    assert.match(await tool('message_bot', { bot_id: 'travel', message: 'and this', files: Array.from({ length: 11 }, (_, n) => `files/${n}.md`) }), /^Error: At most 10 files can go with one message\./)
+    await api('PUT', `/api/bots/${bot.id}/superpowers/field-guide`, { on: false })
+    assert.equal((await settle(there.id)).length, before, 'a message whose files are refused is not sent')
+    assert.deepEqual(waitingFor('travel'), [], 'and none of its files is kept')
+
+    // A link in the workspace that leads to another bot's file is refused like any path that leads outside.
+    fs.symlinkSync(theirs('workspace', 'files', 'inbox', 'map.png'), botPath('workspace', 'files', 'trip', 'theirs.png'))
+    assert.match(await tool('message_bot', { bot_id: 'travel', message: 'and this', files: ['files/trip/theirs.png'] }), /^Error: That path leads outside your workspace\./)
+    fs.rmSync(botPath('workspace', 'files', 'trip', 'theirs.png'))
+
+    // A message taken back before it is read takes its files along; the sender keeps its own.
+    await api('POST', `/api/threads/${there.id}/messages`, { text: '!slow' })
+    assert.match(await tool('message_bot', { bot_id: 'travel', message: 'when you can', files: ['files/trip/map.png'] }), /^Delivered\. Travel is busy: your message is 1st in its queue/)
+    const [waiting] = await waitingIn(there.id)
+    assert.deepEqual([waiting.message.attachments[0].name, waiting.message.attachments[0].path], ['map.png', ''], 'the bot has no copy until it reads the message')
+    const keptAt = theirs('private', 'attachments', there.id, waiting.message.attachments[0].id)
+    assert.ok(fs.existsSync(keptAt))
+    await api('DELETE', `/api/queue/${waiting.id}`)
+    assert.ok(!fs.existsSync(keptAt) && fs.existsSync(botPath('workspace', 'files', 'trip', 'map.png')))
+    await api('POST', `/api/threads/${there.id}/stop`)
+    await settle(there.id)
+
+    // An engine is told in words whose files they are, and where its copies went.
+    const runner = await api('POST', '/api/bots', { name: 'Runner', provider: 'codex' })
+    try {
+      await tool('message_bot', { bot_id: runner.id, message: 'look', files: ['files/trip/map.png', 'files/trip/plan.md'] })
+      const theirs = await until(() => conversationOf(runner.id))
+      assert.equal(
+        lastText(await settle(theirs.id)),
+        'Echo (turn 1): <bot_message from="Tester" bot_id="tester" reply_wanted="no">\nlook\n</bot_message>\n\n' +
+          '[Tester sent 2 files with this message. Your copies: files/inbox/map.png (picture, 70 B), files/inbox/plan.md (text, 13 B). ' +
+          'read_file gives the text of a PDF or a text file.] [shown: image/png]',
+      )
+    } finally {
+      await api('DELETE', `/api/bots/${runner.id}`)
+    }
+  } finally {
+    fs.rmSync(botPath('workspace', 'files', 'trip'), { recursive: true, force: true })
+    await api('DELETE', '/api/bots/travel')
+  }
+})
+
 test('local models: a model server on this computer is found and runs a bot, with tools', async () => {
   // Stands in for Ollama or LM Studio: the same API, with one scripted model.
   const asked = []

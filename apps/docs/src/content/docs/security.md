@@ -29,7 +29,10 @@ description: "What OpenKumi trusts, what it does not, and why."
   never taken as your word: the bot that gets it is told to ask you before a purchase, sending or
   deleting. A bot answering a bot can write back only when it was asked to, a chain of such
   messages ends at twenty, only the main assistant creates bots and only when you asked, and
-  **Settings → Bots** switches messages between bots off.
+  **Settings → Bots** switches messages between bots off. A bot can send another copies of its own
+  files with a message, which land in the other bot's `files/inbox/`; no bot can open another's
+  folder or fetch a file from it, and a file that arrived this way is read as material, not as
+  instructions.
 - What you type into a bot's page goes to it only from the device that took control of its window,
   so a view that is only watching cannot press anything by accident.
 - A bot's browser and `web_fetch` cannot open files on the computer or OpenKumi's own address.

@@ -103,27 +103,38 @@ export function Tray({ files, remove }: { files: Pending[]; remove: (id: string)
 const isText = (type: string) => type.startsWith('text/') || type === 'application/json'
 
 /**
- * The files that went with one of the owner's messages: pictures as pictures, anything else as a
- * card. A text file opens with `show`; others are for the computer.
+ * The files that went with a message, the owner's or one between bots: pictures as pictures in a
+ * row of their own, then anything else as a card. A text file opens with `show`; others are for
+ * the computer. They sit at the side the message is on (`side`).
  */
-export function SentFiles({ threadId, files, show }: { threadId: string; files: Attachment[]; show: (name: string, text: string) => void }) {
+export function SentFiles({ threadId, files, show, side = 'end' }: { threadId: string; files: Attachment[]; show: (name: string, text: string) => void; side?: 'start' | 'end' }) {
   const theme = useTheme()
   const router = useRouter()
   const open = (f: Attachment) => {
     if (!isText(f.type)) return Alert.alert(f.name, 'This kind of file cannot be shown on the phone. On the computer, a copy can be saved from the conversation.')
     request('GET', keptAt(threadId, f.id)).then((res) => res.text()).then((text) => show(f.name, text), (e) => Alert.alert(f.name, (e as Error).message))
   }
+  const pictures = files.filter((f) => isPicture(f.type))
+  const others = files.filter((f) => !isPicture(f.type))
+  const row = [styles.sentRow, { justifyContent: `flex-${side}` as const }]
   return (
-    <View style={styles.sent}>
-      {files.map((f) =>
-        isPicture(f.type) ? (
-          <SentPicture key={f.id} threadId={threadId} file={f} view={() => router.push({ pathname: '/picture', params: { threadId, id: f.id, name: f.name } })} />
-        ) : (
-          <Pressable key={f.id} accessibilityRole="button" accessibilityLabel={`Open ${f.name}`} onPress={() => open(f)} style={[styles.card, { borderColor: theme.border, backgroundColor: theme.raised }]}>
-            <Text style={{ color: theme.text, fontSize: 14 }} numberOfLines={1}>{f.name}</Text>
-            <Text style={{ color: theme.faint, fontSize: 12 }}>{kindOf(f.name, f.type)} · {sizeOf(f.size)}</Text>
-          </Pressable>
-        ),
+    <View style={[styles.sent, { alignItems: `flex-${side}` }]}>
+      {!!pictures.length && (
+        <View style={row}>
+          {pictures.map((f) => (
+            <SentPicture key={f.id} threadId={threadId} file={f} view={() => router.push({ pathname: '/picture', params: { threadId, id: f.id, name: f.name } })} />
+          ))}
+        </View>
+      )}
+      {!!others.length && (
+        <View style={row}>
+          {others.map((f) => (
+            <Pressable key={f.id} accessibilityRole="button" accessibilityLabel={`Open ${f.name}`} onPress={() => open(f)} style={[styles.card, { borderColor: theme.border, backgroundColor: theme.raised }]}>
+              <Text style={{ color: theme.text, fontSize: 14 }} numberOfLines={1}>{f.name}</Text>
+              <Text style={{ color: theme.faint, fontSize: 12 }}>{kindOf(f.name, f.type)} · {sizeOf(f.size)}</Text>
+            </Pressable>
+          ))}
+        </View>
       )}
     </View>
   )
@@ -166,7 +177,8 @@ const styles = StyleSheet.create({
   doc: { flex: 1, padding: 6, justifyContent: 'space-between' },
   wait: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)' },
   x: { position: 'absolute', top: 4, right: 4, width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)' },
-  sent: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 6, marginTop: 6 },
+  sent: { gap: 6, marginTop: 6 },
+  sentRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   picture: { borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', minWidth: 90, minHeight: HEIGHT },
   card: { maxWidth: 240, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth, gap: 2 },
 })

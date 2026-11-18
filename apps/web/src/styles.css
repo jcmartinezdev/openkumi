@@ -364,6 +364,11 @@ a.row { text-decoration: none; }
 .between-head .eyebrow { margin: 0; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .between-head .faint { white-space: nowrap; }
 .between-text { white-space: pre-wrap; }
+/* The files that went with it sit under its words, inside the card. */
+.msg.between .sent-files { align-items: flex-start; margin-top: 10px; }
+.msg.between .sent-row { justify-content: flex-start; }
+.msg.between button.sent-picture img { height: 120px; max-width: 220px; }
+.msg.between button.sent-picture:not(:has(img)) { width: 120px; height: 122px; }
 /* What a subagent or an automation's run reports: it arrives like a message, so it is set apart from the bot's steps. */
 .msg.report { padding: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
 .report-head { display: flex; align-items: center; gap: 6px; height: 24px; margin-bottom: 2px; color: var(--faint); }
@@ -556,7 +561,8 @@ details[open] > summary.step-head > .ic:last-child { transform: rotate(90deg); }
 /* What the owner sent: their files above what they wrote, on their side of the conversation. */
 .said { align-self: flex-end; max-width: 85%; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .said > .msg.user { max-width: 100%; }
-.sent-files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.sent-files { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.sent-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 100%; }
 /* Pictures side by side at one height, each as wide as it is, up to a point. */
 button.sent-picture { display: block; height: auto; padding: 0; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--hover); cursor: zoom-in; }
 button.sent-picture img { display: block; height: 160px; width: auto; max-width: 280px; object-fit: cover; }

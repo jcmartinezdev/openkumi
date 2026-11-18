@@ -34,7 +34,7 @@ type Row =
   /** What a subagent or a run of an automation came to, and when it said so. */
   | { key: string; kind: 'report'; report: Report; at: number }
   /** A message between bots: one that came from another bot (`from`), or one this bot sent (`to`). */
-  | { key: string; kind: 'between'; from?: string; to?: BotRef; text: string; replyWanted: boolean; messageKey?: string }
+  | { key: string; kind: 'between'; from?: string; to?: BotRef; text: string; replyWanted: boolean; messageKey?: string; attachments?: Attachment[]; threadId?: string }
 
 /** Who a message the user did not write is from. */
 /** A run's first message as a notice shows it: the prompt, then what its watch found changed. */
@@ -57,9 +57,9 @@ function rows(items: Item[]): Row[] {
     const key = String(item.id)
     const report = d.type === 'message' && d.role === 'user' && (d.source === 'subagent' || d.source === 'automation') ? parseReport(d.text) : null
     if (report) out.push({ key, kind: 'report', report, at: item.createdAt })
-    else if (d.type === 'message' && d.role === 'user' && d.source === 'bot') out.push({ key, kind: 'between', from: d.bot?.name ?? 'another bot', text: d.text, replyWanted: !!d.replyWanted, messageKey: d.key })
+    else if (d.type === 'message' && d.role === 'user' && d.source === 'bot') out.push({ key, kind: 'between', from: d.bot?.name ?? 'another bot', text: d.text, replyWanted: !!d.replyWanted, messageKey: d.key, attachments: d.attachments, threadId: item.threadId })
     else if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId } : { key, kind: 'notice', text: `${FROM[d.source as keyof typeof FROM]}: ${d.source === 'trigger' ? brief(d.text) : d.text}` })
-    else if (d.type === 'sent') out.push({ key, kind: 'between', to: d.to, text: d.text, replyWanted: d.replyWanted, messageKey: d.key })
+    else if (d.type === 'sent') out.push({ key, kind: 'between', to: d.to, text: d.text, replyWanted: d.replyWanted, messageKey: d.key, attachments: d.attachments, threadId: d.threadId })
     // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
     else if (d.type === 'function_call' && ((d.name !== 'show_page' && d.name !== 'message_bot') || failed.has(d.call_id))) step(key, describe(d))
     else if (d.type === 'web_search_call') step(key, 'Search the web')
@@ -176,6 +176,7 @@ const OpenOtherEnd = createContext<(row: Row & { kind: 'between' }) => void>(() 
 /** A message between bots, as the owner reads it in either conversation: whose it is, or whom it went to, and what it says. */
 function Between({ row, theme, scale }: { row: Row & { kind: 'between' }; theme: Theme; scale: number }) {
   const open = useContext(OpenOtherEnd)
+  const show = useContext(ShowText)
   const who = row.to ? `To ${row.to.name}` : `From ${row.from}`
   return (
     <Pressable
@@ -188,6 +189,8 @@ function Between({ row, theme, scale }: { row: Row & { kind: 'between' }; theme:
     >
       <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{who}{row.replyWanted ? (row.to ? ' · asked for a reply' : ' · asks for a reply') : ''}  ›</Text>
       <Text style={{ color: theme.text, fontSize: 16 * scale, lineHeight: 22 * scale }}>{row.text}</Text>
+      {/* The files that went with it are kept by the conversation it was sent to. */}
+      {!!row.attachments?.length && <SentFiles threadId={row.threadId!} files={row.attachments} show={show} side="start" />}
     </Pressable>
   )
 }

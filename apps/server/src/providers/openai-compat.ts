@@ -28,7 +28,7 @@ function toMessages(instructions: string, items: ItemData[], show?: ModelRequest
   const pictured = new Set(items.filter((it) => it.type === 'message' && it.role === 'user' && it.attachments?.length).slice(-PICTURED))
   for (const it of items) {
     if (it.type === 'message' && it.role === 'user') {
-      const text = withFiles(it.text, it.attachments)
+      const text = withFiles(it.text, it)
       const shown = show && pictured.has(it) ? show(it.attachments!) : []
       const pictures = shown.map((file) => ({ type: 'image_url', image_url: { url: `data:${file.type};base64,${base64(file)}` } }))
       messages.push({ role: 'user', content: pictures.length ? [{ type: 'text', text }, ...pictures] : text })
