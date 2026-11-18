@@ -14,6 +14,8 @@ import readline from 'node:readline'
 const args = process.argv.slice(2)
 const flag = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined)
 const print = (obj) => process.stdout.write(JSON.stringify(obj) + '\n')
+/** The instructions it was started with, which are given as a file. */
+const system = () => fs.readFileSync(flag('--system-prompt-file'), 'utf8')
 
 if (args[0] === '--version') {
   console.log('2.0.0 (Claude Code)')
@@ -26,7 +28,7 @@ if (args[0] === 'auth' && args[1] === 'status') {
 }
 
 // Asked about itself instead of being given a message: it says which models it offers, as the real program does.
-if (args.includes('--input-format') && !args.includes('--system-prompt')) {
+if (args.includes('--input-format') && !args.includes('--system-prompt-file')) {
   const levels = ['low', 'medium', 'high', 'xhigh', 'max']
   const models = [
     { value: 'default', resolvedModel: 'claude-opus-9', displayName: 'Default (recommended)', description: 'Opus 9 · Best for everyday tasks', supportedEffortLevels: levels },
@@ -74,12 +76,12 @@ async function run({ message, uuid }) {
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: call[1], arguments: JSON.parse(call[2] || '{}') } }),
     })
     reply = `Tool result: ${(await res.json()).result.content[0].text.slice(0, 600)}`
-  } else if (flag('--system-prompt').startsWith('You dress up the mascot')) {
+  } else if (system().startsWith('You dress up the mascot')) {
     // Asked to choose a bot's look, which it is given no tools for.
     const tools = Object.keys(JSON.parse(flag('--mcp-config')).mcpServers)
     reply = JSON.stringify({ creature: 'bunny', color: 'mint', hat: tools.length ? 'crown' : 'headband', extra: 'none', clothes: 'red', emoji: '🧬' })
   } else if (prompt === '!system') {
-    reply = flag('--system-prompt')
+    reply = system()
   } else if (prompt === '!args') {
     reply = JSON.stringify({ tools: flag('--tools'), allowed: flag('--allowedTools'), model: flag('--model') ?? null, flags: args.filter((a) => a.startsWith('--')) })
   } else {

@@ -57,13 +57,17 @@ const anyPort = () =>
   })
 
 /**
- * An app opened from the Dock gets a bare PATH, without the folders where programs the server
- * looks for (git, Claude Code, Codex, npx) are usually installed. This adds the usual ones.
+ * What the server is started with. An app opened from the Dock gets a bare PATH, without the
+ * folders where programs the server looks for (git, Claude Code, Codex, npx) are usually
+ * installed, so the usual ones are added. Windows spells the variable "Path" and takes whichever
+ * spelling it meets first: there the app's own is passed on, under the one name the server reads.
  */
-function searchPath() {
-  const usual = ['/opt/homebrew/bin', '/usr/local/bin', path.join(os.homedir(), '.local', 'bin')]
+function serverEnv(port: number): NodeJS.ProcessEnv {
+  const usual = process.platform === 'win32' ? [] : ['/opt/homebrew/bin', '/usr/local/bin', path.join(os.homedir(), '.local', 'bin')]
   const have = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)
-  return [...have, ...usual.filter((dir) => !have.includes(dir))].join(path.delimiter)
+  const env: NodeJS.ProcessEnv = {}
+  for (const [name, value] of Object.entries(process.env)) if (name.toUpperCase() !== 'PATH') env[name] = value
+  return { ...env, PATH: [...have, ...usual.filter((dir) => !have.includes(dir))].join(path.delimiter), OPENKUMI_PORT: String(port), NODE_COMPILE_CACHE: path.join(USER_DATA, 'server-cache') }
 }
 
 /** OpenKumi is running on this computer in a version this app cannot work with. */
@@ -122,7 +126,7 @@ async function start(turn: number) {
     serviceName: 'OpenKumi Server',
     stdio: ['ignore', 'pipe', 'pipe'],
     // The compiled server is kept between starts, so every start after the first is quicker.
-    env: { ...process.env, PATH: searchPath(), OPENKUMI_PORT: String(port), NODE_COMPILE_CACHE: path.join(USER_DATA, 'server-cache') },
+    env: serverEnv(port),
   })
   local.child = child
   /** The last things the server printed, for saying why it could not start. */

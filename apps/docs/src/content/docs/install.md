@@ -15,6 +15,10 @@ own server, so nothing else has to be installed. The first time, the app asks wh
 should run. Check under **Settings → Providers** that something shows as connected, then start
 chatting.
 
+Every release is installed, opened and tried on Windows and Linux automatically before it is
+published, but nobody has used OpenKumi there day to day yet. If something is off,
+[tell us](https://github.com/jcmartinezdev/openkumi/issues).
+
 **The server alone**, on a Mac or a Linux computer that runs your bots with no app in front of it
 (a Mac mini in a cupboard, a machine in a rack):
 

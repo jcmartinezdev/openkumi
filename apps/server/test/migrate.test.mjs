@@ -215,3 +215,40 @@ test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi
     fs.rmSync(user, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
   }
 })
+
+test('data written by a newer version is left alone: the server says so and does not start', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-migrate-'))
+  const file = path.join(home, 'openkumi.db')
+  const format = () => {
+    const db = new DatabaseSync(file)
+    const { user_version } = db.prepare('PRAGMA user_version').get()
+    const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all().map((r) => r.name)
+    db.close()
+    return { format: user_version, tables }
+  }
+  try {
+    // A start on a new folder writes down the format it keeps the data in.
+    await withServer(home, (get) => get('/api/state'))
+    const ours = format().format
+    assert.ok(ours >= 1, 'the format is written into the database')
+
+    // The same folder, after a newer version has been at it.
+    const db = new DatabaseSync(file)
+    db.exec(`PRAGMA user_version = ${ours + 1}; CREATE TABLE from_the_future (id TEXT); DROP TABLE queue;`)
+    db.close()
+    const before = format()
+
+    const server = spawn(process.execPath, ['src/index.ts'], { env: { ...process.env, OPENKUMI_HOME: home, OPENKUMI_PORT: String(PORT), OPENKUMI_MOCK: '1' }, stdio: ['ignore', 'pipe', 'pipe'] })
+    let said = ''
+    server.stdout.on('data', (d) => (said += d))
+    server.stderr.on('data', (d) => (said += d))
+    const code = await new Promise((r) => server.on('exit', r))
+    assert.equal(code, 1)
+    assert.match(said, /written by a newer version of OpenKumi \(data format \d+; OpenKumi [\d.]+ reads up to \d+\)\. Nothing was changed\. Update OpenKumi to use it\./)
+    assert.doesNotMatch(said, /running at/)
+    // Nothing was put back or added: not the table this version would have made again, nor its own number.
+    assert.deepEqual(format(), before)
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+  }
+})

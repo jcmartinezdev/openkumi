@@ -4,9 +4,30 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { Automation, HistoryMatch, Hook, Item, ItemData, Queued, Said, Thread } from '@openkumi/shared'
 import type { Seen } from './watch.ts'
-import { DATABASE, emit, privateDir } from './config.ts'
+import { DATABASE, HOME_LABEL, VERSION, emit, privateDir } from './config.ts'
 
 const db = new DatabaseSync(DATABASE)
+
+/**
+ * The format the data folder is kept in: this database, and the settings and bots' folders beside
+ * it. The number is written into the database. A version of OpenKumi that finds a higher one than
+ * its own was started on data a newer version has written, which it would misread, so it leaves
+ * everything as it is and says so.
+ *
+ * Raise it with any change an older version cannot work with (a column that comes to mean
+ * something else, a file that moves), and put the step that brings older data up to it at the end
+ * of the steps below, under `if (found < n)`. A new table, or a new column that older versions
+ * can ignore, needs no new number.
+ */
+export const FORMAT = 1
+const found = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
+if (found > FORMAT) {
+  db.close()
+  console.error(
+    `The data in ${HOME_LABEL} was written by a newer version of OpenKumi (data format ${found}; OpenKumi ${VERSION} reads up to ${FORMAT}). Nothing was changed. Update OpenKumi to use it.`,
+  )
+  process.exit(1)
+}
 
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -109,6 +130,9 @@ for (const { id } of db.prepare(`SELECT id FROM threads WHERE status = 'running'
   changed(id)
 }
 db.exec(`UPDATE automations SET last_status = 'stopped' WHERE last_status = 'running'`)
+
+// Everything above has brought the data to this version's format.
+if (found < FORMAT) db.exec(`PRAGMA user_version = ${FORMAT}`)
 
 /** What a conversation is called until its first message names it. */
 export const UNTITLED = 'New chat'

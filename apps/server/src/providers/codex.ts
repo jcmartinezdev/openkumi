@@ -89,7 +89,6 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     '-c', 'notify=[]',
     '-c', 'sandbox_mode="read-only"',
     '-c', 'approval_policy="never"',
-    '-c', `developer_instructions=${toml(req.instructions)}`,
     // OpenKumi passes the bot's AGENTS.md itself, fresh on every turn.
     '-c', 'project_doc_max_bytes=0',
     // Codex has skills of its own (and finds the user's); the bot's superpowers are the ones in its instructions.
@@ -153,7 +152,9 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   else req.signal.addEventListener('abort', stop, { once: true })
 
   // The conversation is opened and the turn begun while the answers are read below.
-  const settings = { cwd: req.cwd, approvalPolicy: 'never', sandbox: 'read-only', ...(req.model && req.model !== 'default' ? { model: req.model } : {}) }
+  // The instructions go with the conversation, not on the command line: they can be longer than
+  // one may be (on Windows about 32,000 characters, for all of it).
+  const settings = { cwd: req.cwd, approvalPolicy: 'never', sandbox: 'read-only', developerInstructions: req.instructions, ...(req.model && req.model !== 'default' ? { model: req.model } : {}) }
   const began = (async () => {
     await started
     await ask('initialize', { clientInfo: { name: 'openkumi', title: 'OpenKumi', version: VERSION }, capabilities: { experimentalApi: false, requestAttestation: false } })

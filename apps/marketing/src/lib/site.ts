@@ -24,24 +24,29 @@ const file = (name: string) => `${RELEASES_URL}/download/${name}`
 /**
  * The desktop app for each system, as the release names its installers. The first of each is the
  * one most people with that system need, and is what the page's main button gives them.
+ * `usedByPeople` is false where the app has so far only been tried by the release's own check
+ * (apps/desktop/scripts/try.mjs): the page says so. Set it once someone uses it there.
  */
 export const DOWNLOADS = [
   {
     id: 'mac',
     name: 'Mac',
     needs: 'Apple silicon, macOS 12 or later',
+    usedByPeople: true,
     files: [{ label: 'Apple silicon', href: file('OpenKumi-mac-arm64.dmg') }],
   },
   {
     id: 'windows',
     name: 'Windows',
     needs: 'Windows 10 or later',
+    usedByPeople: false,
     files: [{ label: '64-bit', href: file('OpenKumi-win-x64.exe') }],
   },
   {
     id: 'linux',
     name: 'Linux',
     needs: 'An AppImage, which runs as it is',
+    usedByPeople: false,
     files: [
       { label: 'x64', href: file('OpenKumi-linux-x86_64.AppImage') },
       { label: 'ARM', href: file('OpenKumi-linux-arm64.AppImage') },

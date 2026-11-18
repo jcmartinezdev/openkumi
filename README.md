@@ -114,6 +114,10 @@ server, and keeps itself up to date.
   **More info**, then **Run anyway**.
 - **Linux:** make the file runnable (`chmod +x OpenKumi-linux-*.AppImage`) and open it.
 
+Every release is installed, opened and tried on Windows and Linux automatically, but nobody has
+used OpenKumi there day to day yet. If something is off,
+[tell us](https://github.com/jcmartinezdev/openkumi/issues).
+
 ### What the bots need
 
 - **Google Chrome**, which the bots browse with.

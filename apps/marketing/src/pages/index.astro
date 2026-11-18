@@ -370,6 +370,9 @@ const faq = [
                   </a>
                 ))}
               </div>
+              {!system.usedByPeople && (
+                <p class="untried">Every release is installed, opened and tried on {system.name} automatically, but nobody has used it there day to day yet. <a href={ISSUES_URL}>Tell us how it goes.</a></p>
+              )}
             </li>
           ))
         }
@@ -1356,6 +1359,19 @@ const faq = [
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 18px;
+  }
+  /* Beneath the buttons, so that the buttons of the three systems stay in one row. */
+  .system .untried {
+    margin-top: 12px;
+    font-size: 14px;
+  }
+  .system .untried a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .system .untried a:hover {
+    color: var(--text);
   }
   .server {
     display: grid;

@@ -3,7 +3,7 @@
 #   git tag v0.0.2 && git push origin v0.0.2
 #     1. Check the version and run the tests
 #     2. Server: build the archives, then install and start one on each kind of computer
-#        Desktop app: build for Mac, Windows and Linux
+#        Desktop app: build for Mac, Windows and Linux, then install each, open it and use it
 #     3. Publish the release: desktop app and server      (the GitHub release people download from)
 #     4. Release the iPhone app                           (over the air, or a build for TestFlight)
 #
@@ -215,6 +215,40 @@ jobs:
         run: |
           codesign --verify --deep --strict release/mac-arm64/OpenKumi.app
           spctl --assess --type execute --verbose release/mac-arm64/OpenKumi.app
+      # An app can be put together without a fault and still not open, or open and not find a
+      # program that is installed. So what was just built is installed the way people install
+      # it, opened, and used: its window, the server it starts, a bot on each kind of engine
+      # (stand-ins for Claude Code, Codex and Grok, installed as the real ones are) and a bot's
+      # browser. What it does is in apps/desktop/scripts/try.mjs.
+      - name: Install it from the .dmg, open it, and talk to a bot on each engine
+        if: runner.os == 'macOS'
+        run: |
+          set -eu
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" release/OpenKumi-mac-arm64.dmg
+          mkdir "$RUNNER_TEMP/Applications"
+          cp -R "$RUNNER_TEMP/dmg/OpenKumi.app" "$RUNNER_TEMP/Applications/"
+          hdiutil detach "$RUNNER_TEMP/dmg" -force
+          node apps/desktop/scripts/try.mjs "$RUNNER_TEMP/Applications/OpenKumi.app/Contents/MacOS/OpenKumi" --out "$RUNNER_TEMP/tried" --browser
+      - name: Run the installer, open what it installed, and talk to a bot on each engine
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # /S: without its window, as nobody is there to click through it.
+          Start-Process -FilePath release\OpenKumi-win-x64.exe -ArgumentList '/S' -Wait
+          $program = Get-ChildItem "$env:LOCALAPPDATA\Programs" -Recurse -Filter OpenKumi.exe -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $program) { throw 'The installer ran, but OpenKumi.exe is not where it installs.' }
+          node apps/desktop/scripts/try.mjs $program --out "$env:RUNNER_TEMP\tried" --browser
+          exit $LASTEXITCODE
+      - name: Unpack the AppImage, open it, and talk to a bot on each engine
+        if: runner.os == 'Linux'
+        run: sh apps/desktop/scripts/try-appimage.sh release/OpenKumi-linux-x86_64.AppImage "$RUNNER_TEMP/tried" --browser
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: tried-${{ matrix.name }}
+          path: ${{ runner.temp }}/tried/
+          if-no-files-found: ignore
+          retention-days: 7
       - uses: actions/upload-artifact@v5
         with:
           name: desktop-${{ matrix.name }}
@@ -226,11 +260,40 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The Linux apps are both built on an x64 computer, which cannot open the one for ARM: that one
+  # is opened here, on a computer of its kind, the same way.
+  desktop-try-arm:
+    name: '2. Desktop app: open it on Linux ARM'
+    needs: desktop-app
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+      # Only to drive the app with: nothing is built here.
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v5
+        with:
+          name: desktop-linux
+          path: release
+      - name: Unpack the AppImage, open it, and talk to a bot on each engine
+        run: sh apps/desktop/scripts/try-appimage.sh release/OpenKumi-linux-arm64.AppImage "$RUNNER_TEMP/tried"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: tried-linux-arm
+          path: ${{ runner.temp }}/tried/
+          if-no-files-found: ignore
+          retention-days: 7
+
   # ---- 3. the release people download from: every desktop installer and server archive
   publish-desktop-and-server:
     name: '3. Publish the release: desktop app and server'
     if: github.ref_type == 'tag'
-    needs: [check, server-archives, server-try, desktop-app]
+    needs: [check, server-archives, server-try, desktop-app, desktop-try-arm]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -242,6 +305,8 @@ jobs:
           sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v5
         with:
+          # The installers and the server archives, and not what was kept from trying them.
+          pattern: '{server,desktop-*}'
           path: files
           merge-multiple: true
       - name: Publish

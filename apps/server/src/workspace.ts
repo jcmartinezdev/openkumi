@@ -7,7 +7,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import type { FileEntry, HistoryEntry } from '@openkumi/shared'
-import { emit, privateDir, workspaceDir } from './config.ts'
+import { HOME, emit, privateDir, workspaceDir } from './config.ts'
 import { settings } from './settings.ts'
 import { SUPERPOWERS, enabledSuperpowers, superpowerDir } from './superpowers.ts'
 
@@ -333,10 +333,23 @@ export function memoryIndex(botId: string): string[] {
 
 // ---- history
 
+/**
+ * An empty file and an empty folder, for telling git that there are no settings and no hooks. The
+ * system's own "nothing" does for both, except on Windows, where git cannot open it (\\.\nul):
+ * there OpenKumi keeps an empty file and folder of its own for this.
+ */
+const NOTHING = (() => {
+  if (process.platform !== 'win32') return { file: os.devNull, folder: os.devNull }
+  const folder = path.join(HOME, 'git-nothing')
+  fs.mkdirSync(path.join(folder, 'hooks'), { recursive: true })
+  fs.writeFileSync(path.join(folder, 'config'), '')
+  return { file: path.join(folder, 'config'), folder: path.join(folder, 'hooks') }
+})()
+
 const GIT_ENV = {
   ...process.env,
   // The user's own git settings (signing, hooks, templates) must not apply to a bot's history.
-  GIT_CONFIG_GLOBAL: os.devNull,
+  GIT_CONFIG_GLOBAL: NOTHING.file,
   GIT_CONFIG_NOSYSTEM: '1',
   GIT_TERMINAL_PROMPT: '0',
 }
@@ -357,7 +370,7 @@ function git(botId: string, args: string[], author: Author = 'system'): Promise<
     GIT_COMMITTER_EMAIL: 'openkumi@localhost',
   }
   // Hooks are switched off so nothing in the repository can make git run a program.
-  const safe = ['-c', `core.hooksPath=${os.devNull}`, '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-c', 'core.quotepath=false']
+  const safe = ['-c', `core.hooksPath=${NOTHING.folder}`, '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false', '-c', 'core.quotepath=false']
   return new Promise((done, fail) => {
     execFile('git', [...safe, ...args], { cwd: workspaceDir(botId), env, maxBuffer: 8_000_000 }, (error, stdout, stderr) => {
       if (error) fail(new Error((stderr || error.message).trim().split('\n')[0]))

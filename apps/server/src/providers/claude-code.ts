@@ -3,13 +3,14 @@
 // account, runs the model-and-tools loop itself, and reaches the bot's tools over MCP. All of its
 // built-in tools are switched off, so the bot can do exactly what it could do on OpenKumi's own
 // loop and nothing more.
-import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 import os from 'node:os'
+import path from 'node:path'
 import readline from 'node:readline'
 import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { type Shown, base64 } from '../attachments.ts'
-import { type Exit, type Pipe, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
+import { type Exit, type Pipe, capture, cleanEnv, end, findBinary, lastError, lines, start, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
@@ -44,17 +45,18 @@ interface Offered {
  */
 function askModels(program: string): Promise<ModelInfo[] | null> {
   return new Promise((resolve) => {
-    const proc = spawn(program, ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--setting-sources', ''], {
-      cwd: os.tmpdir(),
-      env: cleanEnv({ DISABLE_AUTOUPDATER: '1' }),
-      stdio: ['pipe', 'pipe', 'ignore'],
-    })
+    let proc: ReturnType<typeof start>
+    try {
+      proc = start(program, ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--setting-sources', ''], { cwd: os.tmpdir(), env: cleanEnv({ DISABLE_AUTOUPDATER: '1' }), errors: 'ignore' })
+    } catch {
+      return resolve(null)
+    }
     let answered = false
     const answer = (found: ModelInfo[] | null) => {
       if (answered) return
       answered = true
       clearTimeout(late)
-      proc.kill('SIGTERM')
+      end(proc)
       resolve(found)
     }
     const late = setTimeout(() => answer(null), 20_000)
@@ -149,6 +151,11 @@ const TAKE_UP = 5000
 async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   const program = bin()
   if (!program) throw new Error('Claude Code is not installed on this computer.')
+  // The instructions go in a file of their own: they can be longer than a command line may be
+  // (on Windows about 32,000 characters, for all of it).
+  const told = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-claude-'))
+  const instructions = path.join(told, 'instructions.md')
+  fs.writeFileSync(instructions, req.instructions, { mode: 0o600 })
   const args = [
     '--print',
     // The message goes in as JSON, which can carry pictures and PDFs beside the text.
@@ -156,7 +163,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     '--output-format', 'stream-json',
     '--verbose',
     '--include-partial-messages',
-    '--system-prompt', req.instructions,
+    '--system-prompt-file', instructions,
     // The instructions are rebuilt every turn (the bot edits them), so they must not be frozen at the first one.
     '--system-prompt-snapshot', 'off',
     // No built-in tools: no commands, no files, no fetching. Web search runs on Anthropic's side.
@@ -260,6 +267,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     }
   } finally {
     close()
+    fs.rmSync(told, { recursive: true, force: true })
   }
   if (req.signal.aborted) return
   if (!finished) throw new Error(`Claude Code stopped unexpectedly: ${lastError(exit, `exit code ${exit.code}`)}`)
