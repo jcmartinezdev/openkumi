@@ -82,7 +82,7 @@ function delivered({ place, held, bot, sent }: ReturnType<typeof agent.messageBo
     : place
       ? `Delivered. ${bot.name} is busy: your message is ${ordinal(place)} in its queue, and it will read it in turn.`
       : `Delivered. ${bot.name} has started on it.`
-  const files = sent.length ? ` ${bot.name} gets its own copy of ${sent.map((file) => file.path).join(', ')} in its files/inbox/.` : ''
+  const files = sent.length ? ` When it reads the message, ${bot.name} gets its own copy of ${sent.map((file) => file.path).join(', ')} in its files/inbox/.` : ''
   return `${where}${files} ${replyWanted ? 'Its reply will arrive here as a message from it, which wakes you: end your turn rather than wait.' : `It answers the user in its own conversation, not you.`}`
 }
 

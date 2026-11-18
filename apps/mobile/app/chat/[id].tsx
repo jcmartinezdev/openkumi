@@ -178,20 +178,23 @@ function Between({ row, theme, scale }: { row: Row & { kind: 'between' }; theme:
   const open = useContext(OpenOtherEnd)
   const show = useContext(ShowText)
   const who = row.to ? `To ${row.to.name}` : `From ${row.from}`
+  // The words open the other end; the files under them are buttons of their own, so each can be reached by itself (also with VoiceOver).
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${who}: ${row.text}`}
-      accessibilityHint="Opens it in the other bot’s conversation"
-      onPress={() => open(row)}
-      onLongPress={() => offerCopy(row.text)}
-      style={[styles.between, { borderColor: theme.border, alignSelf: row.to ? 'flex-end' : 'flex-start' }]}
-    >
-      <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{who}{row.replyWanted ? (row.to ? ' · asked for a reply' : ' · asks for a reply') : ''}  ›</Text>
-      <Text style={{ color: theme.text, fontSize: 16 * scale, lineHeight: 22 * scale }}>{row.text}</Text>
+    <View style={[styles.between, { borderColor: theme.border, alignSelf: row.to ? 'flex-end' : 'flex-start' }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${who}: ${row.text}`}
+        accessibilityHint="Opens it in the other bot’s conversation"
+        onPress={() => open(row)}
+        onLongPress={() => offerCopy(row.text)}
+        style={styles.betweenWords}
+      >
+        <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{who}{row.replyWanted ? (row.to ? ' · asked for a reply' : ' · asks for a reply') : ''}  ›</Text>
+        <Text style={{ color: theme.text, fontSize: 16 * scale, lineHeight: 22 * scale }}>{row.text}</Text>
+      </Pressable>
       {/* The files that went with it are kept by the conversation it was sent to. */}
       {!!row.attachments?.length && <SentFiles threadId={row.threadId!} files={row.attachments} show={show} side="start" />}
-    </Pressable>
+    </View>
   )
 }
 
@@ -569,7 +572,8 @@ const styles = StyleSheet.create({
   reportBody: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   working: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 6 },
-  between: { maxWidth: '86%', marginVertical: 6, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, gap: 3 },
+  between: { maxWidth: '86%', marginVertical: 6, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16 },
+  betweenWords: { gap: 3 },
   eyebrow: { fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
   waiting: { marginTop: 8, padding: 10, gap: 6, borderWidth: StyleSheet.hairlineWidth, borderStyle: 'dashed', borderRadius: 16 },
   waitingHead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 2, paddingBottom: 2 },

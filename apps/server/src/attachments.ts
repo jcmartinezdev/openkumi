@@ -101,14 +101,14 @@ export interface Outgoing {
 export function outgoing(botId: string, given: unknown): Outgoing[] {
   if (given === undefined || given === null) return []
   if (!Array.isArray(given) || !given.every((file) => typeof file === 'string')) throw new Error('files must be a list of paths in your workspace.')
-  // A file named twice goes once.
-  const targets = [...new Map((given as string[]).map((file) => resolve(botId, file)).map((target) => [target.rel, target])).values()]
-  if (targets.length > MAX_FILES) throw new Error(`At most ${MAX_FILES} files can go with one message.`)
-  const files = targets.map((target) => {
+  if (given.length > MAX_FILES) throw new Error(`At most ${MAX_FILES} files can go with one message.`)
+  const files = (given as string[]).map((file) => {
+    const target = resolve(botId, file)
     if (target.readOnly) throw new Error(`${target.rel} is not yours to send: only files in your own workspace can go with a message.`)
     const info = fs.statSync(target.abs, { throwIfNoEntry: false })
     if (!info) throw new Error(`No file at ${target.rel || '(workspace)'}`)
-    if (!info.isFile()) throw new Error(`${target.rel || 'Your workspace'} is a folder. Name the files to send, one by one.`)
+    if (info.isDirectory()) throw new Error(`${target.rel || 'Your workspace'} is a folder. Name the files to send, one by one.`)
+    if (!info.isFile()) throw new Error(`${target.rel} is not a file that can be sent.`)
     return { path: target.rel, abs: target.abs, size: info.size }
   })
   const weight = files.reduce((sum, file) => sum + file.size, 0)
@@ -122,7 +122,13 @@ export function outgoing(botId: string, given: unknown): Outgoing[] {
  */
 export function stageCopy(botId: string, file: Outgoing): Staged {
   const { id, file: copy } = room(botId, path.basename(file.abs))
-  fs.copyFileSync(file.abs, copy)
+  try {
+    fs.copyFileSync(file.abs, copy)
+  } catch {
+    fs.rmSync(path.dirname(copy), { recursive: true, force: true })
+    // In the sender's own words for the file: the error itself names where the copy was going.
+    throw new Error(`${file.path} could not be copied.`)
+  }
   return staged(id, copy)
 }
 

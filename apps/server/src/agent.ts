@@ -571,9 +571,10 @@ export function messageBot(from: Thread, sender: Bot, to: unknown, text: unknown
   const key = `m_${crypto.randomBytes(9).toString('base64url')}`
   const conversationId = conversation(target.id).id
   // The copies wait on the other bot's side, as files the owner picked for it do. The record here says where each came from.
-  const sent = sending.map((file) => ({ ...stageCopy(target.id, file), path: file.path }))
+  const sent: Attachment[] = []
   let delivery: Delivery
   try {
+    for (const file of sending) sent.push({ ...stageCopy(target.id, file), path: file.path })
     // A reply that was asked for always gets in: the bot that asked is waiting for it.
     delivery = postMessage(
       conversationId,
@@ -581,7 +582,9 @@ export function messageBot(from: Thread, sender: Bot, to: unknown, text: unknown
       { always: !!basis.mayMessage, files: sent.map((file) => file.id) },
     )
   } catch (e) {
+    // A message that did not go leaves no copy behind: neither one still waiting, nor one the conversation had already taken.
     for (const file of sent) unstage(target.id, file.id)
+    discard(target.id, conversationId, sent)
     throw e
   }
   db.addItem(from.id, { type: 'sent', to: { id: target.id, name: target.name }, threadId: conversationId, text: words, replyWanted, key, ...(sent.length ? { attachments: sent } : {}) })

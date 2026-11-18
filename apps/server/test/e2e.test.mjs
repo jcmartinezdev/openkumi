@@ -1215,10 +1215,10 @@ test('files between bots: a bot sends another copies of its own files with a mes
     fs.writeFileSync(botPath('workspace', 'files', 'trip', 'plan.md'), 'Day 1: Alfama')
     fs.writeFileSync(botPath('workspace', 'files', 'trip', 'map.png'), PNG)
 
-    // The files are named by their paths in the sender's workspace; one named twice goes once.
+    // The files are named by their paths in the sender's workspace.
     const id = await fresh()
-    const out = await toolIn(id, 'message_bot', { bot_id: 'travel', message: 'book this', files: ['files/trip/plan.md', 'files/trip/map.png', './files/trip/plan.md'] })
-    assert.equal(out, 'Delivered. Travel has started on it. Travel gets its own copy of files/trip/plan.md, files/trip/map.png in its files/inbox/. It answers the user in its own conversation, not you.')
+    const out = await toolIn(id, 'message_bot', { bot_id: 'travel', message: 'book this', files: ['files/trip/plan.md', './files/trip/map.png'] })
+    assert.equal(out, 'Delivered. Travel has started on it. When it reads the message, Travel gets its own copy of files/trip/plan.md, files/trip/map.png in its files/inbox/. It answers the user in its own conversation, not you.')
 
     // The other bot's conversation keeps them, the bot has its copies in its inbox, and its model is told of them and shown the picture.
     const there = await until(() => conversationOf(travel.id))
@@ -1259,6 +1259,14 @@ test('files between bots: a bot sends another copies of its own files with a mes
     await api('PUT', `/api/bots/${bot.id}/superpowers/field-guide`, { on: false })
     assert.equal((await settle(there.id)).length, before, 'a message whose files are refused is not sent')
     assert.deepEqual(waitingFor('travel'), [], 'and none of its files is kept')
+
+    // A file that cannot be copied stops the message, and the ones copied before it are not left behind.
+    fs.writeFileSync(botPath('workspace', 'files', 'trip', 'locked.md'), 'no')
+    fs.chmodSync(botPath('workspace', 'files', 'trip', 'locked.md'), 0o000)
+    assert.equal(await tool('message_bot', { bot_id: 'travel', message: 'and this', files: ['files/trip/map.png', 'files/trip/locked.md'] }), 'Error: files/trip/locked.md could not be copied.')
+    assert.deepEqual(waitingFor('travel'), [])
+    assert.equal((await settle(there.id)).length, before)
+    fs.rmSync(botPath('workspace', 'files', 'trip', 'locked.md'))
 
     // A link in the workspace that leads to another bot's file is refused like any path that leads outside.
     fs.symlinkSync(theirs('workspace', 'files', 'inbox', 'map.png'), botPath('workspace', 'files', 'trip', 'theirs.png'))
