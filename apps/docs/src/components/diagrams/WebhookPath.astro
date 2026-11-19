@@ -1,0 +1,28 @@
+---
+// The way a webhook call comes in, what is checked, and what the run is told.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Zone from '../diagram/Zone.astro'
+
+const { caption } = Astro.props as { caption?: string }
+---
+
+<Figure width={680} height={322} title="How a webhook call reaches a bot: through your tunnel, to a door on this computer, checked, and passed on by id alone" caption={caption}>
+  <Zone x={326} y={8} w={350} h={262} label="The computer that runs your bots" kind="trusted" side="bottom-right" />
+  <Box x={8} y={40} w={128} h={60} kind="outside" title="Linear" lines={['an issue changes']} />
+  <Box x={176} y={40} w={128} h={60} kind="outside" title="Your tunnel" lines={['Tailscale Funnel', 'or your own']} />
+  <Box x={346} y={40} w={152} h={60} kind="ours" title="Webhook door" lines={['port 4318, only', 'from this computer']} />
+  <Box x={526} y={40} w={142} h={60} kind="ours" title="A run" lines={['told what', 'happened, by id']} />
+  <Box x={168} y={176} w={142} h={60} kind="danger" title="Anyone else" lines={['without the secret']} />
+  <Box x={520} y={176} w={148} h={60} kind="ours" title="The bot" lines={['reads the issue with', 'its own sign-in']} />
+
+  <Arrow points={[[136, 70], [176, 70]]} kind="secret" />
+  <Arrow points={[[304, 70], [346, 70]]} kind="secret" />
+  <Arrow points={[[498, 70], [526, 70]]} kind="ours" />
+  <Arrow points={[[597, 100], [597, 176]]} kind="ours" />
+  <Arrow points={[[310, 206], [422, 206], [422, 104]]} blocked label="refused" at={0.32} />
+  <Arrow points={[[597, 236], [597, 300], [72, 300], [72, 100]]} dashed kind="secret" label="the bot’s own account, over MCP" at={0.45} />
+  <Arrow points={[[422, 100], [422, 140]]} bare />
+  <text x={432} y={128} class="dg-sub">signature, once</text>
+</Figure>

@@ -1,0 +1,47 @@
+---
+// A box in a diagram: a part of OpenKumi, something of yours, or something elsewhere.
+//   ours     a part of OpenKumi
+//   plain    something of yours, or on your computer
+//   outside  a service somewhere else (dashed)
+//   secret   a place a key or a sign-in is kept
+//   danger   something refused, or not to be trusted
+import { textWidth } from './geometry.ts'
+
+interface Props {
+  x: number
+  y: number
+  w: number
+  h: number
+  title?: string
+  lines?: string[]
+  kind?: 'ours' | 'plain' | 'outside' | 'secret' | 'danger'
+  /** Lines in the monospace face, for file names and commands. */
+  code?: boolean
+  align?: 'center' | 'left'
+  /** Where the words sit: in the middle, or at the top (for a box with others inside it). */
+  valign?: 'middle' | 'top'
+}
+const { x, y, w, h, title, lines = [], kind = 'plain', code = false, align = 'center', valign = 'middle' } = Astro.props
+// SVG text does not wrap, so say at build time when a line is wider than its box.
+const needed = (title ? 17 : 0) + lines.length * 15
+for (const [text, size] of [[title ?? '', 14.5], ...lines.map((l) => [l, code ? 12 : 12.5] as const)] as const) {
+  if (textWidth(text, size) > w - 10) console.warn(`[diagram] "${text}" is wider than its box (${w}).`)
+}
+if (needed > h - 8) console.warn(`[diagram] "${title}" has more lines than its box (${h}) holds.`)
+const block = (title ? 17 : 0) + lines.length * 15
+const top = valign === 'top' ? y + 8 : y + h / 2 - block / 2
+const tx = align === 'center' ? x + w / 2 : x + 12
+const anchor = align === 'center' ? 'middle' : 'start'
+---
+
+<g class={`dg-box dg-${kind}`}>
+  <rect x={x} y={y} width={w} height={h} rx="9" />
+  {title && <text x={tx} y={top + 13} text-anchor={anchor} class="dg-title">{title}</text>}
+  {
+    lines.map((line, i) => (
+      <text x={tx} y={top + (title ? 17 : 0) + 12 + i * 15} text-anchor={anchor} class={code ? 'dg-sub dg-code' : 'dg-sub'}>
+        {line}
+      </text>
+    ))
+  }
+</g>

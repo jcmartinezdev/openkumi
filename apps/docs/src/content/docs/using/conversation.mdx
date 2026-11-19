@@ -1,0 +1,86 @@
+---
+title: Talking with a bot
+description: "The one conversation you have with each bot: writing while it works, Send now and Stop, files, dictation, earlier conversations, and what its replies can hold."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+
+A bot is someone you talk to, not a list of chats. Each bot has **one conversation** with you:
+whatever you say lands in the same place, and the bot can look up anything said there, however
+long ago.
+
+## Writing while it works
+
+You never have to wait for a bot to finish. What you write while it is busy waits in a queue, in
+view at the foot of the conversation (on the computer and the phone), and the bot reads it when the
+turn it is on is over, one message at a time.
+
+- **×** takes a waiting message back before the bot has read it.
+- **Send now** has the bot read a waiting message as it works, ahead of the others, so you can
+  change its course without stopping it ("actually, only direct flights").
+- **Stop** stops the bot. It does not then start again by itself on what was waiting: those
+  messages are held back until you write to it, press **Resume**, or send one of them now.
+- At most ten messages wait for a bot. One more is refused, and you keep what you wrote.
+
+[The queue](/how-it-works/queue/) explains how each engine takes a message mid-turn.
+
+## Sending files
+
+Attach files to a message with **Attach files** in the composer, or drop or paste them there: up
+to ten at once,
+100 MB each. The conversation keeps a copy, which you can open from the message later. When the bot
+reads the message, it gets a copy of its own in `files/inbox/`, which it can keep, move or tidy
+away like any of its files.
+
+Every engine looks at pictures you send (PNG, JPEG, GIF, WebP); Claude Code also reads PDFs. Any
+other file reaches the bot as a file to open with its tools. A file taken out of a message before
+it was sent is thrown away.
+
+## Talking instead of typing
+
+The microphone in the composer, on the computer and on the phone, writes what you say into the
+message as you say it, where the cursor was. It is written down on the device itself, with Apple's
+speech models (macOS 26 or iOS 26 and later), so no sound leaves it, and the words go to the bot
+only when you send them, like anything typed. **Esc** (or **×**) gives up and leaves the message
+as it was; **Enter** while it listens sends once the last words are in.
+
+To talk out loud and hear the bot answer, [call it](/calls/).
+
+## What you see while it works
+
+- **Steps.** Each thing the bot does (a page opened, a file written, a search) shows as a step.
+  Once a turn is over, its steps fold into one line ("12 steps · 1m 04s"). **Settings → Chat →
+  Show the details of each step** chooses how much a step shows.
+- **Its browser.** When the bot starts browsing, a small live view of its browser floats over the
+  chat. See [A bot's browser](/using/browser/).
+- **Subagents.** A bot can split work into parallel subagents, each in a thread of its own beneath
+  the conversation. Watch them live, open one to read or write to it, or stop it. What each comes
+  to arrives back in the conversation as a report. See [Subagents](/how-it-works/subagents/).
+- **Messages between bots.** A bot passing work to another shows it in both conversations ("To
+  Travel", "From Assistant"); either opens the other end.
+- **Automation results** arrive as cards, with the bot's word on them.
+
+## What a reply can hold
+
+Replies are drawn the same way on the computer and the phone: code in colour with a copy button,
+tables that scroll sideways, ```` ```mermaid ```` diagrams, and formulas (`$…$` within a line,
+`$$…$$` on lines of their own). When a picture says more than words, a bot can show a page in the
+conversation (a chart, a dashboard, a timeline) that follows light and dark mode and opens full
+size. See [Replies and pages](/how-it-works/replies-and-pages/).
+
+## Starting fresh, and earlier conversations
+
+**Start fresh**, in the conversation's header, sets the conversation so far aside and begins an
+empty one. What the bot knows is untouched, because that lives in its folder, not in the
+conversation. The clock button beside it lists earlier conversations and searches everything that
+was said; any of them can be read, or continued in place of the current one.
+
+Nothing is deleted unless you delete it: every message, run and subagent thread is kept.
+**Settings → Advanced → Delete all conversations** is there when you want a clean slate.
+
+<Aside title="Long conversations">
+  A conversation that never ends cannot be sent to a model whole for ever. Engines shorten it by
+  themselves; with a local model or an API, OpenKumi summarises the older part. You still see every
+  message, and the bot can look up anything said with `search_history` and `read_history`. See
+  [One conversation per bot](/how-it-works/conversation/).
+</Aside>

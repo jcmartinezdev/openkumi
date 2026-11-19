@@ -1,0 +1,73 @@
+---
+title: The big picture
+description: "The parts of OpenKumi, where each one runs, and how they talk to each other: the apps, the server, engines, browsers and the services they reach."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import BigPicture from '../../../components/diagrams/BigPicture.astro'
+
+OpenKumi has one part that does the work, the **server**, and apps that are windows onto it. The
+server runs on a computer of yours, starts what the bots need, and keeps everything in one folder.
+There is no OpenKumi service in the cloud.
+
+<BigPicture caption="Your devices talk to the server with a key. The server starts an engine for each turn of a bot, drives each bot's browser, and reaches your AI plan, the web and the apps you sign the bots in to." />
+
+## The parts
+
+| Part | What it does | Where it runs | In the code |
+| --- | --- | --- | --- |
+| **The server** | runs the bots: their queues, turns, tools, browsers, automations, webhooks and calls. Serves an API and a stream of events; has no pages. | the computer that runs your bots: inside the desktop app as a process of its own, or installed alone | `apps/server` (Node, run straight from TypeScript) |
+| **The desktop app** | the window you use. Starts the local server when the local environment is on; holds the list of environments and their keys. | Mac, Windows, Linux | `apps/desktop` (Electron) and `apps/web` (the interface, React) |
+| **The iPhone app** | chat, browsers, settings and automations, from anywhere | your phone | `apps/mobile` (Expo, React Native) |
+| **Engines** | Codex, Claude Code and Grok: run the model on your plan, one process for each turn of a bot | the computer that runs your bots, signed in as you | your own installed programs |
+| **The bots' browsers** | Chrome, one profile per bot, a window per thread | the computer that runs your bots | `apps/server/src/browser.ts` (Playwright) |
+| **The data folder** | bots as folders, the database, keys and settings | `~/.openkumi` on the computer that runs your bots | see [Where everything lives](/how-it-works/where-everything-lives/) |
+| **Superpowers** | apps and know-how a bot can be given | folders that ship with the server; the apps' own MCP servers elsewhere | `apps/server/superpowers` |
+| **Shared code** | the types every app agrees on; what every app needs to talk to a server | in every app | `packages/shared`, `packages/client` |
+| **Dictation** | turns speech into text on the device | the Mac or iPhone you speak to | `packages/dictation` (Swift) |
+
+## How they talk
+
+- **The apps and the server**: an HTTP API for everything you do, and one WebSocket for everything
+  that happens (a reply being written, a step done, a bot starting to browse). Every request
+  carries a key. Pictures of a bot's browser come down the same WebSocket as raw bytes, and are
+  drawn by a worker thread so the window never stutters.
+- **The server and an engine**: the server starts the engine program with what the bot is told and
+  an address for its tools, a Model Context Protocol (MCP) endpoint that exists for that one turn
+  and only answers this computer. See [Engines and models](/how-it-works/engines/).
+- **The server and a bot's browser**: the Chrome DevTools Protocol, through Playwright. The live
+  view is Chrome's own screencast.
+- **The server and a superpower's app**: that app's MCP server, over the internet, with the bot's
+  own sign-in.
+- **On a call**: the sound goes straight between the desktop app and OpenAI over WebRTC; the server
+  only sets the call up, through Codex. See [How a call works](/how-it-works/calls/).
+
+## A copy on each device
+
+An app connected to a server on another computer keeps a copy of what it last saw (the list of
+bots and threads, and the most recent conversations) on the device: in the window's own storage on
+a computer, in a small database on the phone. Opening the app shows that copy at once, then asks
+the server only for what changed since. A copy from another server, or from a database that was
+replaced, is thrown away. The copy is limited (50 conversations, 300 messages each, 32 MB) and
+holds no keys.
+
+## Starting up
+
+When the server starts, it:
+
+1. moves a folder from an older layout into place if it finds one, and refuses to start on data a
+   newer version wrote;
+2. records edits you made to the bots' folders while it was not running, as yours;
+3. makes **Assistant** if there are no bots yet;
+4. starts serving the apps, then the automations, then the webhook door (if a webhook is set up);
+5. lets each bot go on with the messages that were waiting for it when it last stopped;
+6. finds out in the background whether Codex, Claude Code and Grok are installed and signed in.
+
+When it stops, it hangs up a call, stops replies being written (keeping what they had), closes the
+browsers and the apps' connections, and then the database.
+
+<Aside title="Going deeper">
+  [How a bot works](/how-it-works/a-bot/) follows one message from you to the bot's reply.
+  [Processes and threads](/how-it-works/inside-the-app/) shows how the desktop app spreads its
+  work. [Security overview](/security/) shows what each part trusts.
+</Aside>

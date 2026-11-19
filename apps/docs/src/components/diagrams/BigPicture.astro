@@ -1,0 +1,47 @@
+---
+// The parts of OpenKumi and where each runs: the apps, the server, what the server starts, and
+// what it reaches elsewhere.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Note from '../diagram/Note.astro'
+import Zone from '../diagram/Zone.astro'
+
+const { caption } = Astro.props as { caption?: string }
+// Four lanes, top to bottom.
+const lane = [16, 181, 346, 526]
+const W = 153
+const c = (i: number) => lane[i] + W / 2
+---
+
+<Figure width={680} height={492} title="The parts of OpenKumi: the apps you use, the server that runs the bots, and what the server reaches" caption={caption}>
+  <Zone x={4} y={8} w={672} h={100} label="Your devices" />
+  <Box x={lane[0]} y={36} w={W} h={56} kind="ours" title="Desktop app" lines={['this computer']} />
+  <Box x={lane[1]} y={36} w={W} h={56} kind="ours" title="Desktop app" lines={['another computer']} />
+  <Box x={lane[2]} y={36} w={W} h={56} kind="ours" title="iPhone app" lines={['paired with a code']} />
+  <Note x={lane[3] - 4} y={56} lines={['Each app holds a key,', 'and does no work', 'of its own.']} />
+
+  <Zone x={4} y={124} w={672} h={236} label="The computer that runs your bots" side="bottom-right" />
+  <Box x={16} y={160} w={490} h={62} kind="ours" title="OpenKumi server" lines={['the API and its events · the queue · turns · tools · automations']} />
+  <Box x={526} y={160} w={138} h={62} kind="secret" title="~/.openkumi" lines={['bots as folders,', 'database, keys']} />
+  <Box x={lane[0]} y={254} w={W} h={64} title="Engines" lines={['claude · codex · grok,', 'one for each turn']} />
+  <Box x={lane[1]} y={254} w={W} h={64} title="Bots’ browsers" lines={['Chrome, a profile', 'for each bot']} />
+  <Box x={526} y={254} w={138} h={64} title="Local models" lines={['Ollama, LM Studio', '(if you use them)']} />
+
+  <Zone x={4} y={376} w={672} h={104} label="Elsewhere" kind="outside" side="right" />
+  <Box x={lane[0]} y={404} w={W} h={60} kind="outside" title="Your AI plan" lines={['Claude, ChatGPT, Grok']} />
+  <Box x={lane[1]} y={404} w={W} h={60} kind="outside" title="The web" lines={['what bots browse']} />
+  <Box x={lane[2]} y={404} w={W} h={60} kind="outside" title="Superpower apps" lines={['Notion, Linear, …']} />
+  <Note x={lane[3] - 4} y={420} lines={['No OpenKumi server', 'in the cloud: nothing', 'passes through us.']} />
+
+  <Arrow points={[[c(0), 92], [c(0), 160]]} both kind="secret" label="access code" />
+  <Arrow points={[[c(1), 92], [c(1), 160]]} both kind="secret" label="its own key" />
+  <Arrow points={[[c(2), 92], [c(2), 160]]} both kind="secret" label="its own key" />
+  <Arrow points={[[506, 191], [526, 191]]} both />
+  <Arrow points={[[c(0), 222], [c(0), 254]]} both label="starts · tools" />
+  <Arrow points={[[c(1), 222], [c(1), 254]]} label="drives" />
+  <Arrow points={[[486, 222], [486, 286], [526, 286]]} />
+  <Arrow points={[[c(0), 318], [c(0), 404]]} kind="secret" label="your sign-in" />
+  <Arrow points={[[c(1), 318], [c(1), 404]]} />
+  <Arrow points={[[c(2), 222], [c(2), 404]]} kind="secret" label="the bot’s own account" at={0.5} />
+</Figure>

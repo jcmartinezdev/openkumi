@@ -1,0 +1,96 @@
+---
+title: Making and shaping a bot
+description: "Making a bot, and everything you can set for it: what it is for, its rules, model, browser, voice, files, memory and mascot."
+---
+
+import { Aside, FileTree } from '@astrojs/starlight/components'
+
+A bot is someone you hand a kind of work to: a travel planner, a researcher, a bot that keeps your
+inbox in order. Each one keeps its own memory, files, browser sign-ins and superpowers, so make one
+for each kind of work rather than one bot for everything.
+
+## Making a bot
+
+- **In the app:** press **+** in the sidebar, give it a **Name** and say in a sentence or two
+  what it is for, then **Create**.
+- **By asking:** tell your main assistant (the first bot, **Assistant** unless you renamed it)
+  what you want: "Make me a bot called Research that digs into a topic and writes me a summary."
+  It can give the new bot a first job at once, which the new bot starts on in its own
+  conversation.
+
+A new bot writes its first instructions to itself from what it is for, dresses its mascot from its
+name, and runs on what new bots run on (**Settings → General**). Only the main assistant can make
+bots, and only when you asked for one: never because a web page, another bot or an automation
+said so.
+
+## What you can set
+
+Everything is on the bot's page: its name in **Settings → Bots**, or **Bot settings** in the
+header of its conversation. Changes are saved as you make them.
+
+| Section | What it holds |
+| --- | --- |
+| **Identity** | its **Name**, emoji and **What it is for**: the one line every other bot is told about it, so they know when to pass it work. Only you set this line; no bot can change it, its own included. |
+| **Look** | its mascot: creature, colour, hat, extra and clothes. |
+| **Rules** | rules from you, which the bot must follow. They win where they and OpenKumi's principles disagree, and the bot cannot change them. |
+| **Model** | what it **Runs on**, the **Model**, and the **Reasoning effort** where the model has one. See [What bots run on](/setup/providers/). |
+| **Web search** | whether it may use its engine's own web search. |
+| **Browser** | **Show the browser window**: whether its Chrome window is also shown on the computer that runs it. Either way you watch it in the app. |
+| **Calls** | the **Voice** it speaks with on a [call](/calls/). |
+| **Superpowers** | what it can do beyond its own tools, and its sign-ins. See [Superpowers](/superpowers/). |
+| **Automations** | the automations it runs. See [Automations](/automations/). |
+| **Workspace** | its files, and every recorded change to its instructions and notes. |
+| **Where it lives** | its folder, and **Open folder** on the computer that runs it. |
+| **Danger zone** | **Delete this bot**: removes its conversations, files, memory and saved logins. This cannot be undone. |
+
+## Rules or instructions?
+
+A bot has two kinds of written guidance, and the difference matters.
+
+- **Rules** are yours. They sit in `bot.md`, outside the bot's reach. Use them for what must hold
+  whatever happens: "Never book anything over 300 euros", "Always answer in Spanish".
+- **Instructions** are the bot's own. It keeps them in `AGENTS.md` in its workspace, and rewrites
+  them as it learns how you like things done ("Juan prefers aisle seats"). You can read and edit
+  them too, and undo any change it made.
+
+Something a bot reads can talk it into a bad edit of its own instructions. It can never edit your
+rules, which is why anything that must hold belongs there.
+
+## Its workspace: instructions, memory and files
+
+<FileTree>
+- workspace/
+  - AGENTS.md its instructions to itself, loaded on every turn
+  - memory/ notes; only the list is loaded, a note is read when needed
+  - files/ its working files
+    - inbox/ files you or another bot sent it, and browser downloads
+</FileTree>
+
+The **Workspace** section shows the folder as a tree. Open a file to read or edit it; add one, or
+download one. **Changes** lists every change to `AGENTS.md` and `memory/`, newest first, with who
+made it (the bot, you, or OpenKumi) and exactly what changed. **Undo** takes one back, as a new
+change of its own; when a later change touched the same lines, it says so and you edit the file
+instead. `files/` is for working material and is not kept in that history.
+
+The history needs git on the computer that runs the bots. Edits you make to the folder by hand
+while OpenKumi is not running are recorded as yours the next time it starts.
+
+<Aside>
+  A bot's folder is plain files you can read, edit and back up. [Where everything
+  lives](/how-it-works/where-everything-lives/) shows the whole folder, including the parts the
+  bot never sees.
+</Aside>
+
+## The main assistant
+
+The first bot is the **main assistant**, marked in **Settings → Bots**. It can do three things
+other bots cannot: make new bots when you ask, see and set up automations for every bot, and be
+the default stop for anything that has no bot of its own yet. Otherwise it is a bot like the
+others.
+
+## Bots that work together
+
+Each bot is told who the other bots are, what each is for, and which superpowers each has. A bot
+that gets something another bot is better at can pass it on with a message, which you read in
+both conversations. See [Messages between bots](/how-it-works/messages-between-bots/).
+**Settings → Bots → Bots can message each other** turns that off.

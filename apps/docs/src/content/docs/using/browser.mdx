@@ -1,0 +1,75 @@
+---
+title: A bot's browser
+description: "The browser every bot has: watching it, taking control for a sign-in or a CAPTCHA, handing back, and how it stays signed in."
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components'
+
+Every bot has a browser of its own: a Chrome profile that belongs to that bot alone. Sign it in to
+a site once and it stays signed in. Nothing is shared between bots, or with your own Chrome.
+
+Inside that browser, each session (the conversation, every subagent, every run of an automation)
+browses in a window of its own, so sessions running at once never get in each other's way. A
+subagent's or a run's window closes a minute after it finishes.
+
+## Watching
+
+When a bot starts browsing, a small live view floats over its chat. From there you can:
+
+- **dock it beside the chat** (the dock button), or make it fill the window;
+- pop it out in **picture in picture**, to keep an eye on it while you do something else;
+- close it; the bot goes on browsing.
+
+**Settings → Browser → Show the browser when a bot starts browsing** decides whether the live view
+opens by itself. The live view works the same from another computer or the phone. Separately, a
+bot's **Show the browser window** setting also shows its real Chrome window on the computer that
+runs it; off, Chrome runs without a window there and you watch it only in the app.
+
+## Taking control
+
+Watching is not driving: while you watch, nothing you do reaches the page.
+
+<Steps>
+
+1. Press **Take control**. The page is now yours to use, with the mouse and keyboard, from the
+   computer or the phone. On a computer that is not the one in control, the button reads **Take
+   control here**.
+
+2. Do what is needed: sign in, solve a CAPTCHA, pick a seat. The address bar, back, forward,
+   reload and tabs work as in any browser.
+
+3. Press **Hand back**. The bot is told you used the window, and carries on from where the page is
+   now.
+
+</Steps>
+
+While you have control, the bot can still read the page (`browser_snapshot`, `browser_read`), but
+anything else it tries in that window is refused at once, with a note saying so. So you and the
+bot never act on a page at the same time.
+
+## When a bot asks for you
+
+A bot that needs you for something it cannot or should not do (a sign-in, a CAPTCHA, a payment
+form) asks with `browser_ask_user`. Its window shows what it needs ("Sign in to LinkedIn") with
+**Take control** and **Not now**. The bot waits until you hand back, say no, or 25 minutes pass.
+Runs of automations cannot ask, since nobody is watching them.
+
+## Downloads and files
+
+What a bot downloads lands in its `files/inbox/`, under a name of its own. The browser opens web
+addresses only: `http`, `https`, and blank or data pages. Files on the computer stay out of it,
+whoever is driving.
+
+## Which browser
+
+**Settings → Browser → Browser program** chooses what the bots browse with: Google Chrome, Microsoft
+Edge, or the Chromium that comes with OpenKumi. The page also lists
+which bots have a browser running now, with a way to stop each. `OPENKUMI_BROWSER_CHANNEL`
+overrides the setting.
+
+<Aside type="caution" title="A bot's browser holds real logins">
+  Web pages can contain text written to manipulate an AI. Bots are told to treat what they read as
+  material, never instructions, and to ask you before buying, sending or deleting anything, but
+  that is a safeguard, not a guarantee. Sign a bot in only to what you are comfortable with it
+  using. See [What a bot can reach](/security/bots/).
+</Aside>

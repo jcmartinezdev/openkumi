@@ -1,0 +1,102 @@
+---
+title: Automations
+description: "Giving a bot a prompt without asking: at set times, when something changes, or when one of its apps calls. What starts one, where it runs, and who may do what."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import AutomationFlow from '../../components/diagrams/AutomationFlow.astro'
+
+An automation gives a bot a prompt without you asking: at set times, when something changes, or
+when one of its apps calls. The bot does the work in a run of its own, and tells you in its
+conversation what came of it.
+
+<AutomationFlow caption="A time, a watch or an app's call starts a run. When it is done, the result arrives in the bot's conversation, and the bot tells you about it there." />
+
+## Making one
+
+- **Ask the bot.** "Every weekday at 8:00, give me a briefing of my calendar and the weather." "Tell
+  me when an issue is assigned to me in Linear." A bot knows its own tools and what they give back,
+  so this is the easiest way to set up a watch on an app.
+- **In the app.** **Automations**, at the bottom of the sidebar, lists every automation with its
+  latest runs beneath it, and is where you make, change, pause, run and delete them. On the iPhone
+  it is at the bottom of the list of bots.
+
+An automation has a name, the bot that runs it, what starts it, and a **prompt**: what the bot
+should do each time. A run sees nothing of the conversation, so the prompt has to stand on its own.
+
+## What starts one
+
+### A time
+
+Once (at a date and time), at a time of day (every day, or on chosen days), or every so often
+(every 5 minutes at most).
+
+Times of day keep to the time zone of the computer running OpenKumi, also across a change of the
+clocks. When that computer was asleep or off, a run at a time of day that is more than ten minutes
+late is marked as missed and the next one is awaited. An automation that runs once, or every so
+often, runs as soon as it can.
+
+### A watch
+
+OpenKumi itself looks at something every few minutes (every 15 unless told otherwise, 5 at the
+least, once a day at most) and starts a run only when what it finds differs from the last look. No
+model is used for looking, so a watch costs nothing while nothing changes. It can watch:
+
+- **one of the bot's superpower tools that only reads**, called with the same arguments each time
+  ("my open issues in Linear"). A tool counts as reading when its service marks it so, or when the
+  superpower lists it under `mcp.reads`;
+- **a public web page**: `https` only, no sign-in, at most 1 MB. Addresses on this computer, the
+  home network or Tailscale are refused, also when a redirect or a name leads there.
+
+When what comes back is a list of items in JSON, a watch can **track** fields: the first tells
+items apart and the others (up to four) are what counts as an item changing. The run is then told
+which items are new, updated or gone. Without tracked fields, any change counts; a web page is
+compared as the text a reader sees.
+
+- The first look, made when the watch is set up, only notes where things stand.
+- A watch does not look while its last run is still at work, and nothing is lost by that: the next
+  look is compared with the same last one, as it is after the computer was asleep or offline.
+- A look that fails is tried again at the next one, and the automation's page says so. When looks
+  have failed for a whole day, or at once when the watch cannot work as it is set up (the tool is
+  gone, the bot's sign-in lapsed, the page answers "not found"), the automation is paused and the
+  bot tells you why. Turned on again, it looks at once.
+- **Look now**, on a watch's page, looks at once. Changing only how often it looks keeps what it
+  last saw.
+
+The form in the app makes watches on web pages; ask the bot for a watch on an app.
+
+### An app's call
+
+An app the bot is signed in to calls OpenKumi the moment something happens there (a webhook), and
+the automation starts at once instead of at a watch's next look. Linear can, for now. It takes a
+little setting up, once: see [Webhooks](/webhooks/).
+
+## Runs
+
+Each run is a thread of its own beneath the bot's conversation, like a subagent's, with the bot's
+tools (but no way to ask you to take over its browser, since nobody is watching). A run that a
+watch or a call started is also told what changed or happened, set apart as information and not as
+an instruction.
+
+When the run is done, what it came to arrives in the conversation and the bot tells you about it
+there. A run that ends with exactly "Nothing to report." is not passed on, for automations that
+only matter when something happened. Runs never overlap: while one is at work, the next is skipped.
+
+A run opens like any conversation: from beneath its automation, from under the bot in the sidebar
+while it is recent, or from its result in the conversation. Every run is kept, also after the
+automation is deleted.
+
+## Who may do what
+
+- **You** can make, change and delete any automation.
+- **A bot** makes automations only for itself. It sees the ones it runs and the ones it made, and
+  changes or deletes only the ones it made.
+- **The main assistant** (the first bot, marked in **Settings → Bots**) makes automations for every
+  bot, and sees, changes and deletes every one.
+- **On a call**, a bot can only make automations that start at a time; one that watches or waits
+  for an app is set up by a subagent it starts.
+
+<Aside type="caution" title="An automation a bot wrote is not your go-ahead">
+  A run is told who set its automation up. One that a bot wrote is not taken as your word: a
+  purchase, a message to send or something to delete is left for you, and the result says so.
+</Aside>

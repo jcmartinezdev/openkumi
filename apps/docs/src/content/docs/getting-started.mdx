@@ -1,0 +1,111 @@
+---
+title: Your first bot
+description: "From the first launch to a bot that knows what it is for, has the powers it needs, and works for you every morning."
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components'
+
+This page takes you from a fresh install to a small team that works for you. It assumes the app is
+installed ([Installing and updating](/install/)) and that one thing for the bots to run on is
+signed in on this computer: Codex, Claude Code or Grok, or a local model
+([What bots run on](/setup/providers/)).
+
+## 1. Open OpenKumi
+
+<Steps>
+
+1. Open the app. It asks where your bots should run. Choose **Run them on this computer**.
+
+   (Choose **Connect to another computer** instead when your bots run on a computer of yours that
+   already has OpenKumi; see [Other computers and your phone](/environments/).)
+
+2. Open **Settings → Providers** and check that at least one shows as connected, such as "Codex:
+   Signed in with ChatGPT". Each one that is not connected says why and what to do ("Run `codex
+   login` in a terminal on this computer").
+
+3. Close Settings. In the sidebar is **Assistant**, the bot that comes with OpenKumi.
+
+</Steps>
+
+## 2. Say hello to Assistant
+
+Assistant is your **main assistant**: the first bot, the one for everyday questions and the first
+stop for anything new. It is like the other bots in every way but three: it can make new bots, it
+can set up automations for any bot, and it is the one to ask when you are not sure which bot fits.
+
+Write to it as you would to a person. Some things to try:
+
+- "What is on the front page of Hacker News? Show me the five most discussed as a table."
+- "Compare the three cheapest flights from Lisbon to Berlin next Friday." It opens its own browser
+  for this; a small live view floats over the chat while it works.
+- "From now on, always answer in British English." It writes that into its own instructions
+  (`AGENTS.md`), so it holds from then on.
+
+A bot has **one conversation** with you, not a list of chats: whatever you say lands in the same
+place, and it can look up anything said there, however long ago. While it works, you can keep
+writing; your messages wait their turn in view, and **Send now** has it read one at once. See
+[Talking with a bot](/using/conversation/).
+
+## 3. Make a bot of your own
+
+Make a bot for each kind of work you hand out, so each keeps its own memory, sign-ins and powers.
+Either:
+
+- press **+** in the sidebar, give it a name and say in a sentence or two what it is for, then
+  **Create**; or
+- ask Assistant: "Make me a bot called Travel that plans my trips, and have it find me a hotel in
+  Porto for the 12th."
+
+The new bot dresses itself (a mascot from its name and purpose), writes its own first
+instructions from what it is for, and runs on what new bots run on (**Settings → General**). Change
+any of that on its page: [Making and shaping a bot](/setup/bots/).
+
+## 4. Give it a superpower
+
+A superpower is something a bot can do beyond chatting and browsing: work in Notion, Linear or
+Todoist, or know-how such as the weather or SEO. You switch each one on for one bot at a time.
+
+<Steps>
+
+1. Open **Settings → Superpowers** (or the bot's settings), pick one, and choose **Activate**.
+
+2. If it works in an app, sign the bot in. The usual way is **With your browser**: the app's own
+   sign-in page opens in your browser, and the bot gets an account of its own with it.
+
+3. Ask the bot to use it: "What is assigned to me in Linear this week?"
+
+</Steps>
+
+See [Superpowers](/superpowers/) for the full list and the other ways to sign in.
+
+## 5. Have it work without asking
+
+An automation gives a bot a prompt by itself: at set times, when something changes, or when an app
+calls. The quickest way to make one is to ask the bot:
+
+> Every weekday at 8:00, look at my calendar and the weather and give me a short briefing.
+
+It sets the automation up with its own tools; you see it under **Automations**, at the bottom of
+the sidebar, where you can change, pause, run or delete it. When a run is done, the bot tells you
+what came of it in its conversation. See [Automations](/automations/).
+
+## 6. Reach it from anywhere
+
+<Steps>
+
+1. On this computer, open **Settings → Environments**, turn on **Let other computers connect**,
+   and choose **Pair a computer**. It shows a code and a QR code.
+
+2. On your laptop, open OpenKumi, choose **Connect to another computer**, and enter the address
+   and the code. On the iPhone app, scan the QR code.
+
+</Steps>
+
+At home they connect directly; away from home, over [Tailscale](https://tailscale.com) when it is
+on for both. See [Other computers and your phone](/environments/).
+
+<Aside type="tip" title="Where to go next">
+  - [How a bot works](/how-it-works/a-bot/) explains what happens between your message and its reply.
+  - [Security overview](/security/) explains what a bot can and cannot do, and what to be careful with.
+  - [Calls](/calls/) lets you talk with a bot out loud.
+</Aside>

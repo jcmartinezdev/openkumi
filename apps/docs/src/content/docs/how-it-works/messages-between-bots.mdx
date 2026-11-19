@@ -1,0 +1,48 @@
+---
+title: Messages between bots
+description: "How one bot passes work to another, how files go along, and the limits that keep that safe."
+---
+
+import BotThreads from '../../../components/diagrams/BotThreads.astro'
+
+A bot reaches another with `message_bot`: the message goes into that bot's **own conversation with
+you**, through its queue, and the bot answers it there as itself, with its own instructions, files,
+sign-ins and superpowers. So the work is where you would look for it, the bot remembers it, and you
+can carry on with it. Both conversations show the message ("To Travel", "From Assistant"), and
+either one opens the other end.
+
+<BotThreads caption="Assistant passes a job to Travel. Travel works on it in its own conversation, as itself, and writes back only if Assistant asked for a reply." />
+
+## The rules
+
+- **A message from a bot is a teammate's request, not your word.** The bot that gets it is told
+  so, and does not buy, send or delete anything on the strength of it.
+- **A bot writes back only when it was asked to.** The sender says whether it wants a reply. A bot
+  that is answering another bot's message can message only that bot, and only if a reply was
+  asked for; anything else is refused. When it answers you, it may message any bot.
+- **Twenty messages** leading from one to the next, without you saying anything in between, is
+  where a chain ends.
+- **Only a bot's own conversation can send one**: not a subagent, and not a run of an automation
+  (whose result reaches the conversation, which can).
+- **A busy bot can refuse.** At most ten messages wait for a bot; one more is refused, and the
+  sender is told to try later or tell you. A reply a bot asked for always gets in.
+- **Settings → Bots → Bots can message each other** switches it all off.
+
+## Files go along as copies
+
+A bot can send up to ten of its own files with a message (100 MB together). The conversation that
+gets the message keeps them, and the bot that reads it finds its copies in `files/inbox/`, exactly
+as with a file you send it. Nothing is shared: neither bot can open the other's folder, a bot
+cannot fetch a file from another, and what each does to its own copy changes nothing for the other.
+Both conversations show which files went.
+
+Bots are told to read a file that arrived this way, like any file they did not write themselves,
+as material and not as instructions. That is an instruction to the bot, not a lock; see [What a
+bot can reach](/security/bots/).
+
+## Making bots
+
+Only the main assistant (the first bot) can make a bot, in its own conversation, and only in answer
+to something you said: not when another bot, a subagent's report or an automation's run woke it. A
+new bot runs on what new bots run on (**Settings → General**), and `create_bot` can give it a first
+message, which it starts on at once in its own conversation.

@@ -1,0 +1,51 @@
+---
+title: Subagents
+description: "How a bot splits a job into parallel parts, how deep that goes, and how the results come back."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import BotThreads from '../../../components/diagrams/BotThreads.astro'
+
+A subagent is the bot itself, at work on a part of a job in a thread of its own. A bot asked to
+compare five hotels can start five subagents, one per hotel, and bring what they find together. To
+give work to a *different* bot, a bot messages it instead (see [Messages between
+bots](/how-it-works/messages-between-bots/)).
+
+<BotThreads caption="Subagents and automation runs work in threads beneath the bot's conversation and report back into it. A message to another bot goes into that bot's own conversation." />
+
+## How they work
+
+- **Starting one.** The bot calls `spawn_subagent` with the task and a short title, and can give it
+  another model. The subagent starts at once, in a thread beneath the conversation, with the bot's
+  instructions, files, sign-ins and superpowers, and a browser window of its own.
+- **What it is told.** The task, and that it is a subagent. It sees nothing of the conversation, so
+  the task has to say everything it needs.
+- **Coming back.** When a subagent is done, what it came to arrives in the parent's thread as a
+  report, which the bot reads in its turn like any message. A bot that has nothing else to do can
+  wait for its subagents with `wait_subagents` instead; **Send now** on a message of yours cuts
+  that wait short.
+- **Looking in.** The bot can list its subagents, read what one has done so far, write to one
+  that is still at work, or stop it (`list_subagents`, `read_subagent`, `message_subagent`,
+  `cancel_subagent`). So can you: open one from beneath the conversation to watch it live, write
+  to it, or stop it.
+- **Stopping.** Stopping a bot stops every subagent beneath it.
+
+## Limits
+
+| Limit | Default | Where |
+| --- | --- | --- |
+| Subagents a thread can have at work at once | 8 (1 to 16) | **Settings → Advanced → Subagents at once** |
+| Levels of subagents beneath a conversation | 2 (0 to 3) | **Settings → Advanced → Subagent levels** |
+
+A subagent at the last level has no subagent tools at all. A run of an automation counts as one
+level, so its subagents are one level down.
+
+A subagent cannot message other bots or make bots: only the conversation itself talks to other
+bots. It can ask you to take over its browser window, like the conversation can. Its window
+closes a minute after it finishes, and its thread is kept.
+
+<Aside>
+  A subagent shares everything with the bot: the same folder, the same sign-ins, the same
+  superpowers. It is a way to work in parallel, not a way to give part of a job less power. To keep
+  a kind of work apart, give it a bot of its own.
+</Aside>

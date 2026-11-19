@@ -1,0 +1,64 @@
+---
+// A line from one point to another, through any corners in between, with an arrowhead and a label.
+//   kind      plain, ours (OpenKumi's own traffic), secret (a key or sign-in travelling),
+//             danger (refused), muted (something that may happen)
+//   both      a head at each end
+//   blocked   a cross where the head would be: this way is refused
+import { type Point, along, asLines, head, pathOf, pullBack, round, textWidth } from './geometry.ts'
+
+interface Props {
+  points: Point[]
+  label?: string | string[]
+  /** How far along the line the label sits, from 0 to 1. */
+  at?: number
+  /** Moves the label from where it would sit. */
+  dx?: number
+  dy?: number
+  kind?: 'plain' | 'ours' | 'secret' | 'danger' | 'muted'
+  dashed?: boolean
+  both?: boolean
+  blocked?: boolean
+  /** No arrowhead at all. */
+  bare?: boolean
+}
+const { points, label, at = 0.5, dx = 0, dy = 0, kind = 'plain', dashed = false, both = false, blocked = false, bare = false } = Astro.props
+const n = points.length
+const tip = points[n - 1]
+const before = points[n - 2]
+const line = [...points]
+if (!bare && !blocked) line[n - 1] = pullBack(before, tip, 7)
+if (both) line[0] = pullBack(points[1], points[0], 7)
+const lines = asLines(label)
+const spot = along(points, at)
+const lx = spot.at[0] + dx
+const ly = spot.at[1] + dy - ((lines.length - 1) * 15) / 2
+const cross = 5.5
+---
+
+<g class={`dg-arrow dg-k-${blocked ? 'danger' : kind}`}>
+  <path d={pathOf(line)} class="dg-line" stroke-dasharray={dashed ? '5 4' : undefined} />
+  {!bare && !blocked && <polygon points={head(before, tip)} class="dg-head" />}
+  {both && <polygon points={head(points[1], points[0])} class="dg-head" />}
+  {
+    blocked && (
+      <path
+        d={`M${round(tip[0] - cross)} ${round(tip[1] - cross)} L${round(tip[0] + cross)} ${round(tip[1] + cross)} M${round(tip[0] + cross)} ${round(tip[1] - cross)} L${round(tip[0] - cross)} ${round(tip[1] + cross)}`}
+        class="dg-cross"
+      />
+    )
+  }
+  {
+    lines.map((text, i) => {
+      const w = textWidth(text, 12) + 10
+      const y = ly + i * 15
+      return (
+        <g>
+          <rect x={round(lx - w / 2)} y={round(y - 11)} width={round(w)} height="15" rx="3" class="dg-label-bg" />
+          <text x={round(lx)} y={round(y)} text-anchor="middle" class="dg-label">
+            {text}
+          </text>
+        </g>
+      )
+    })
+  }
+</g>

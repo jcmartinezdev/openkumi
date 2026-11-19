@@ -1,0 +1,155 @@
+---
+title: Installing and updating
+description: "How to install the OpenKumi desktop app, or the server alone on a computer with no screen, and how both keep themselves up to date."
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components'
+
+There are two ways to run OpenKumi. Most people want the first.
+
+- **The desktop app**, on a Mac, Windows or Linux computer. It carries its own server, so nothing
+  else has to be installed, and your bots run on the computer you use.
+- **The server alone**, on a Mac or Linux computer that runs your bots with no screen in front of
+  it (a Mac mini in a cupboard, a machine in a rack). You then use the desktop app on another
+  computer, or the iPhone app, to talk to them.
+
+## What the bots need
+
+Whichever way you install it, the computer that runs the bots needs:
+
+- **Google Chrome**, which the bots browse with. Each bot gets a profile of its own; your own
+  Chrome profile is never touched.
+- **Something for the bots to run on.** Any one of these is enough, and
+  [What bots run on](/setup/providers/) explains each:
+  - Codex, signed in with your ChatGPT plan (`codex login`)
+  - [Claude Code](https://claude.com/claude-code), signed in (run `claude` once)
+  - Grok Build, signed in (`grok login`)
+  - [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai), running, with a model that can call tools
+  - an OpenAI-compatible API (OpenAI, OpenRouter and the like), with its key
+- **git**, optional. With it, every change a bot makes to its own instructions and notes is kept
+  as a history you can read and undo.
+
+Calls need Codex signed in with a ChatGPT plan, whatever the bots run on (see [Calls](/calls/)).
+
+## The desktop app
+
+<Tabs>
+  <TabItem label="Mac">
+    Download
+    [OpenKumi-mac-arm64.dmg](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-mac-arm64.dmg),
+    open it and drag OpenKumi to Applications. It needs a Mac with Apple silicon (2020 and later);
+    Macs with an Intel processor are not supported. Dictation needs macOS 26 or later.
+  </TabItem>
+  <TabItem label="Windows">
+    Download
+    [OpenKumi-win-x64.exe](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-win-x64.exe)
+    and run it (Windows 10 or later). It is not signed yet, so Windows asks before running it the
+    first time: choose **More info**, then **Run anyway**.
+  </TabItem>
+  <TabItem label="Linux">
+    Download the AppImage for your processor,
+    [x64](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-linux-x86_64.AppImage)
+    or
+    [ARM](https://github.com/jcmartinezdev/openkumi/releases/latest/download/OpenKumi-linux-arm64.AppImage),
+    make it runnable (`chmod +x OpenKumi-linux-*.AppImage`) and open it.
+  </TabItem>
+</Tabs>
+
+The first time, the app asks where your bots should run: **Run them on this computer**, or
+**Connect to another computer** that already runs OpenKumi. [Your first bot](/getting-started/)
+goes on from there.
+
+Every release is installed, opened and tried on Windows and Linux automatically before it is
+published, but nobody has used OpenKumi there day to day yet. If something is off,
+[tell us](https://github.com/jcmartinezdev/openkumi/issues).
+
+## The server alone
+
+On a Mac with Apple silicon, or a Linux computer (x64 or ARM, with glibc):
+
+```sh
+curl -fsSL https://openkumi.ai/install.sh | sh
+```
+
+<Steps>
+
+1. The script downloads the newest release for that kind of computer and checks it against the
+   checksums published with it (`SHA256SUMS`).
+
+2. It unpacks it under `~/.openkumi/runtime`, with the Node it runs on, so the computer needs
+   neither Node nor npm, and starts it once to be sure it works.
+
+3. It puts an `openkumi` command in `~/.local/bin`.
+
+4. It keeps the server running in the background, also after a restart: a launchd agent on a Mac
+   (`ai.openkumi.server`), a systemd unit of your own user on Linux.
+
+</Steps>
+
+Options go after `sh -s --`: `--no-service` leaves the background service out (start it yourself
+with `openkumi start`), and `--version 0.2.0` installs that version instead of the newest.
+
+```sh
+curl -fsSL https://openkumi.ai/install.sh | sh -s -- --no-service
+```
+
+The server runs as you, not as the system, because the bots use your sign-ins to Claude Code,
+Codex and Grok. Then let your other devices in:
+
+```sh
+openkumi status     # whether it runs, which version, what the bots can run on
+openkumi lan on     # let your other computers and your phone reach it
+openkumi pair       # a code to enter in the app: Settings → Environments → Add environment
+```
+
+[The openkumi command](/reference/cli/) lists the rest, and
+[Other computers and your phone](/environments/) explains pairing.
+
+## From the source
+
+With Node.js 22.18 or later (and Xcode's command line tools on a Mac, for dictation):
+
+```sh
+git clone https://github.com/jcmartinezdev/openkumi.git
+cd openkumi
+npm install
+npm start          # builds the app and opens it
+```
+
+`npm run server` runs the server alone, and `npm run pair` prints a pairing code for it.
+[Working on OpenKumi](https://github.com/jcmartinezdev/openkumi/blob/main/docs/development.md) has
+the rest, for contributors.
+
+## Updates
+
+Both parts keep themselves up to date from the project's releases on GitHub. You do not have to do
+anything.
+
+- **The desktop app** looks for a newer version 8 seconds after it starts and every 4 hours,
+  downloads it in the background, and shows **Restart to update** in the sidebar and under
+  **Settings → About** when it is ready. It never restarts by itself: quitting stops the bots that
+  run on this computer, so when any are working it asks first. Left alone, the new version takes
+  over the next time you quit. The server inside the app is part of it and comes with it. (On
+  Linux only the AppImage updates itself.)
+- **A server installed alone** looks 30 seconds after it starts and every 6 hours. It downloads the
+  new version, checks it against the checksum the release gives for it, tries it once, and starts
+  it as soon as no bot is working. **Settings → About**, in an app connected to it, shows where it
+  stands, has **Update** to do it now, and a switch to stop it updating by itself. With that off it
+  only updates when you ask, there or with `openkumi update`.
+
+<Aside title="Versions do not have to match">
+  What has to match between an app and a server is not the version but one number that says how
+  they talk to each other, raised only when a change would break one for the other. When they
+  differ, the app says which of the two has to be updated instead of half working. For a server
+  that is behind, **Update it**, beside the environment, asks that server to update itself.
+</Aside>
+
+Your data in `~/.openkumi` is kept across versions. A version that finds data written by a newer
+one changes nothing and does not start, so going back to an older version never damages it.
+
+## Removing it
+
+- **The desktop app:** delete it as you would any app. Your bots and their data stay in
+  `~/.openkumi` until you delete that folder too.
+- **A server installed alone:** `openkumi uninstall` removes the program, the command and the
+  background service. Your bots and their data stay in `~/.openkumi`.

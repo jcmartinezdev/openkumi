@@ -1,0 +1,99 @@
+---
+title: How a call works
+description: "A call step by step: how it is set up through Codex, where the sound goes, how a request reaches the bot, and how its answer is read out."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import Sequence from '../../../components/diagram/Sequence.astro'
+
+A call has two paths. **The sound** goes straight between the desktop app and OpenAI's speech
+model, over WebRTC. **The words** that matter (what the voice hands over, and what the bot answers)
+go through Codex and the OpenKumi server. The server never carries sound. For how a call feels in
+use, see [Calls](/calls/).
+
+<Sequence
+  title="A call, from setting it up to a request answered and read out"
+  numbered
+  actors={[
+    { id: 'app', label: 'Desktop app', sub: 'mic and speaker', kind: 'ours' },
+    { id: 'server', label: 'OpenKumi', sub: 'the server', kind: 'ours' },
+    { id: 'codex', label: 'Codex', sub: 'your ChatGPT plan' },
+    { id: 'openai', label: 'OpenAI', sub: 'the speech model', kind: 'outside' },
+    { id: 'bot', label: 'The bot', sub: 'its own engine', kind: 'ours' },
+  ]}
+  steps={[
+    { section: 'Setting it up' },
+    { from: 'app', to: 'server', text: ['a call to this bot:', 'the app’s half (SDP)'] },
+    { from: 'server', to: 'codex', text: ['start a voice call,', 'with that half'] },
+    { from: 'codex', to: 'openai', text: ['set up, on your', 'ChatGPT sign-in'], kind: 'secret' },
+    { from: 'openai', to: 'codex', text: 'the other half', reply: true },
+    { from: 'codex', to: 'server', text: 'the other half', reply: true },
+    { from: 'server', to: 'app', text: 'the other half', reply: true },
+    { section: 'Talking' },
+    { from: 'app', to: 'openai', text: 'your voice, and the bot’s, directly', kind: 'ours' },
+    { section: 'Something for the bot' },
+    { from: 'openai', to: 'codex', text: ['a hand-off:', 'what you asked'] },
+    { from: 'codex', to: 'server', text: 'the hand-off' },
+    { from: 'server', to: 'bot', text: ['a message, marked', '“On a call”'] },
+    { from: 'bot', to: 'server', text: ['its answer, written', 'to be said'], reply: true },
+    { from: 'server', to: 'codex', text: 'say this' },
+    { from: 'codex', to: 'openai', text: 'speech to say' },
+  ]}
+  caption="Steps 8 to 13 happen for every request the voice hands over. Work the bot starts on a call comes back later, and its result is read out the same way."
+/>
+
+## Setting it up
+
+1. The app opens the microphone (with echo cancellation), makes its half of a WebRTC connection,
+   and sends it to the server with the bot to call.
+2. The server starts Codex's app server in an empty folder (`~/.openkumi/calls/workspace`), with
+   everything that could run commands or touch files switched off, and asks it to start a voice
+   call with the app's half, in the bot's voice.
+3. Codex sets the call up with OpenAI on your ChatGPT sign-in, and hands back OpenAI's half, which
+   the server passes to the app. From then on the app and OpenAI talk directly. The whole set-up
+   has 25 seconds to finish.
+
+There is one call at a time; starting another ends the first.
+
+## What the voice is told
+
+The voice is not the bot: it is a speech model, told to speak as the bot and to hand over almost
+everything. It is given:
+
+- the bot's name, whether it is the main assistant, and the line saying what it is for;
+- rules for what to answer itself and what to hand over, with examples;
+- today's date and the time zone;
+- the last eight messages of the conversation, each cut to 700 characters, of which only what you
+  wrote and what the bot answered (not what other bots or tools put in).
+
+It is not given the bot's rules, instructions, notes or files.
+
+## A request, handed over
+
+When the voice hands something over, Codex passes it to the server, which puts it in the bot's
+queue as a message from you, marked **On a call**, with what was said just before it. The bot
+answers it in a turn of its own, on its own engine, with only the tools for passing work on (see
+[What a bot can do on a call](/calls/#what-a-bot-can-do-on-a-call)). Its answer goes back through
+Codex for the voice to say, cut at 3,500 characters.
+
+Results of work started on the call (a subagent's report, another bot's reply, an automation's
+result) come back into the conversation later. The bot answers them there with all its tools, and
+that answer is read out too, while the call lasts. Nothing else that reaches the conversation
+meanwhile is said or sent to the speech model.
+
+## Ending
+
+The app tells the server it is still there every ten seconds. The server ends the call after five
+minutes in which nothing was said and the bot is not at work on anything asked, when it has not
+heard from the app for 40 seconds, when the bot is deleted, or when the app hangs up.
+
+When the call ends, the conversation gets its record (how long, and what was said). If you said
+something after the last thing the voice handed over, the bot goes over it in a subagent called
+**After the call**, and does what was asked or promised: keeps what was to be remembered, sets up
+what was to be scheduled, and leaves anything that needs your go-ahead. If it finds nothing to do,
+you do not hear of it.
+
+<Aside>
+  The way Codex reaches the speech model is one OpenAI marks experimental. A new version of Codex
+  may change it; if calls stop working after Codex was updated, update OpenKumi.
+</Aside>
