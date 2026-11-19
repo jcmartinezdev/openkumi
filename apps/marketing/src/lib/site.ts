@@ -64,3 +64,19 @@ export const NAV = [
   { href: '/#faq', label: 'FAQ' },
   { href: DOCS_URL, label: 'Docs' },
 ]
+
+/**
+ * The company behind OpenKumi's website, its TestFlight beta and its usage reports, as its own
+ * imprint and privacy pages give it (gotolcs.com). The imprint and the privacy policy say it.
+ */
+export const COMPANY = {
+  name: 'goto LCS UG (haftungsbeschränkt)',
+  address: ['Paul-Heyse-Straße 31 b', '80336 München', 'Germany'],
+  director: 'Juan Cruz Martinez',
+  /** For privacy questions and anything else. */
+  email: 'contact@gotolcs.com',
+  /** Where TestFlight testers send feedback (apps/mobile/scripts/testflight.mjs). */
+  support: 'support@gotolcs.com',
+  register: 'Amtsgericht München, HRB 259655',
+  vat: 'DE335066751',
+} as const

@@ -68,7 +68,9 @@ A build reaches that group only after two steps, which `apps/mobile/scripts/test
    `review-notes.txt`, with the website and the privacy policy. Apple wants the feedback address
    and the reviewer's contact beside them, and those come from the environment
    (`TESTFLIGHT_FEEDBACK_EMAIL`, `TESTFLIGHT_CONTACT_FIRST_NAME`, `_LAST_NAME`, `_EMAIL`, `_PHONE`),
-   since a phone number does not belong here. Run it when those words change.
+   since a phone number does not belong here. Run it when those words change. The feedback
+   address is support@gotolcs.com, and the reviewer's contact is the one goto LCS's other apps
+   give Apple.
 
 Both sign in with the App Store Connect key in `EXPO_ASC_API_KEY_PATH`, `EXPO_ASC_KEY_ID` and
 `EXPO_ASC_ISSUER_ID`, as the release does.

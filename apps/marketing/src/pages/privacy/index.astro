@@ -4,22 +4,9 @@
 // Keep it in step with what the apps really do: the docs' "What leaves your computer"
 // (apps/docs/src/content/docs/security/outside.mdx) and "Usage and error reports" say it in detail.
 import Layout from '../../layouts/Layout.astro'
-import { DOCS_URL, GITHUB_URL, ISSUES_URL } from '../../lib/site'
+import { COMPANY, DOCS_URL, GITHUB_URL, ISSUES_URL } from '../../lib/site'
 
-/** Who is responsible for the data that does reach OpenKumi's makers, and how to reach them. */
-const RESPONSIBLE = {
-  name: 'goto LCS UG (haftungsbeschränkt)',
-  address: ['TODO street and number', 'TODO postcode and city', 'Germany'],
-  email: 'TODO@openkumi.ai',
-}
-/** How long usage and error reports are kept at PostHog. */
-const KEPT = 'TODO: how long'
 const UPDATED = '19 November 2026'
-
-// A page with a gap in it is not put on the real website; a preview may show it.
-const gaps = JSON.stringify({ RESPONSIBLE, KEPT }).includes('TODO')
-if (gaps && process.env.VERCEL_ENV === 'production') throw new Error('The privacy policy still has a TODO in it (apps/marketing/src/pages/privacy/index.astro).')
-
 const TELEMETRY = `${DOCS_URL}/telemetry/`
 const OUTSIDE = `${DOCS_URL}/security/outside/`
 ---
@@ -48,9 +35,10 @@ const OUTSIDE = `${DOCS_URL}/security/outside/`
       <h2>Who is responsible</h2>
       <p>
         For the usage and error reports, this website and the TestFlight beta of the iPhone app:<br />
-        {RESPONSIBLE.name}<br />
-        {RESPONSIBLE.address.map((line) => <>{line}<br /></>)}
-        <a href={`mailto:${RESPONSIBLE.email}`}>{RESPONSIBLE.email}</a>
+        {COMPANY.name}<br />
+        {COMPANY.address.map((line) => <>{line}<br /></>)}
+        Represented by its managing director, {COMPANY.director}<br />
+        <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a>
       </p>
       <p>
         Everything else OpenKumi does happens on your own computers, which you are in charge of. The
@@ -100,7 +88,7 @@ const OUTSIDE = `${DOCS_URL}/security/outside/`
         <li><strong>Who sends it:</strong> only the computer that runs your bots. The desktop and iPhone apps hand it what they record about themselves (such as which screens were opened), and send nothing on their own.</li>
         <li><strong>Under what:</strong> a random id for that computer, made from nothing about you.</li>
         <li><strong>Where:</strong> to PostHog, a company that stores this kind of data, on its servers in the EU, through <code>pulse.openkumi.ai</code>. PostHog is set not to keep the internet address a report came from; it notes the country before dropping it.</li>
-        <li><strong>How long:</strong> {KEPT}.</li>
+        <li><strong>How long:</strong> PostHog deletes them after two years at the latest.</li>
         <li><strong>Why we may:</strong> because you agreed (Article 6(1)(a) GDPR). You can take that back at any time: <strong>Settings → Privacy</strong> in the app, or <code>openkumi telemetry off</code>. Switching off throws the id away.</li>
       </ul>
       <p>
@@ -117,7 +105,20 @@ const OUTSIDE = `${DOCS_URL}/security/outside/`
         app’s makers: the feedback and screenshots you choose to send, crash reports, and the model and
         system of your device. If you were invited by email, we also see your name and email address.
         Apple’s <a href="https://www.apple.com/legal/privacy/data/en/test-flight/">TestFlight &amp; Privacy</a>
-        says what that is. We use it only to fix what breaks.
+        says what that is. We use it only to fix what breaks. Feedback you email to
+        <a href={`mailto:${COMPANY.support}`}>{COMPANY.support}</a>, the address TestFlight shows,
+        reaches us as any email does (below).
+      </p>
+    </section>
+
+    <section>
+      <h2>Emailing us</h2>
+      <p>
+        If you email us, we receive your address, your message and anything you attach. Our email is
+        handled by Google Workspace (<a href="https://policies.google.com/privacy">Google’s privacy policy</a>).
+        We use it to answer you, and keep it only as long as needed to sort out what you wrote about
+        or to meet a legal duty. We may do that because you asked us something (Article 6(1)(f) GDPR,
+        our interest in answering you).
       </p>
     </section>
 
@@ -137,13 +138,26 @@ const OUTSIDE = `${DOCS_URL}/security/outside/`
     </section>
 
     <section>
+      <h2>Transfers outside the EU</h2>
+      <p>
+        PostHog keeps the usage and error reports in the EU. Vercel, GitHub, Expo and Google may
+        process data outside the European Economic Area. Where they do, the transfer is covered by an
+        adequacy decision such as the EU–U.S. Data Privacy Framework, or by the EU’s Standard
+        Contractual Clauses.
+      </p>
+    </section>
+
+    <section>
       <h2>Your rights</h2>
       <p>
         You may ask us what we hold about you, and to correct it, delete it, limit what we do with it,
         or give it to you in a form you can take elsewhere. You may object to what we do on the
-        grounds of our own interest, and take back a consent at any time. Write to
-        <a href={`mailto:${RESPONSIBLE.email}`}>{RESPONSIBLE.email}</a>. You may also complain to a data
-        protection authority, in the country you live in or in Germany.
+        grounds of our own interest, and take back a consent at any time, without that changing
+        what was done before. Write to <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a>.
+      </p>
+      <p>
+        You may also complain to a data protection authority. Ours is the Bavarian State Office for Data
+        Protection Supervision (<a href="https://www.lda.bayern.de/">BayLDA</a>).
       </p>
     </section>
 

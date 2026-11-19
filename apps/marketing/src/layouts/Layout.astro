@@ -81,6 +81,7 @@ const socialCard = new URL('/social-card.png', Astro.site)
           <a href={ISSUES_URL}>Report a problem</a>
           <a href="/#faq">FAQ</a>
           <a href="/privacy">Privacy policy</a>
+          <a href="/imprint">Imprint</a>
         </nav>
       </div>
     </footer>
@@ -245,5 +246,13 @@ const socialCard = new URL('/social-card.png', Astro.site)
   }
   .foot p a {
     color: var(--text);
+  }
+  /* Six links do not fit in one line on a phone: they go on to the next. */
+  .foot nav {
+    flex-wrap: wrap;
+    gap: 8px 24px;
+  }
+  .foot nav a {
+    white-space: nowrap;
   }
 </style>
