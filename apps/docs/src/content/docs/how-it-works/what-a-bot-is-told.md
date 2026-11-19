@@ -8,7 +8,9 @@ Before each step a bot is given the **master prompt**, one file that comes with 
 change what every bot is told, edit that file, which is read again on every step. The server fills
 in what it knows of the bot and the thread, so in this order a bot is told:
 
-1. **Who it is**, and today's date.
+1. **Who it is**, and today's date: its name, that it is one of your bots in OpenKumi, what
+   OpenKumi is and who made it, and the name of the model that powers it. Asked who it is, a bot
+   answers as itself, not as that model; it may say what it is powered by.
 2. **Principles**: how to behave, how to work, and how to work with the others.
 3. **The other bots**: each one's name, its `bot_id`, the line saying what it is for, the
    superpowers it has, and which is the main assistant. Then how to reach them, with

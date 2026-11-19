@@ -441,6 +441,11 @@ route('POST', '/api/bots/:id/call', ([id], body) => called(() => calls.startCall
 route('POST', '/api/calls/:id/alive', ([id]) => (calls.alive(id) ? undefined : fail(404, 'That call is over.')))
 route('DELETE', '/api/calls/:id', ([id]) => calls.endCall(id))
 route('GET', '/api/calls/voices', () => called(() => calls.voices()))
+// A voice is tried out like a call in small: the app's half of a connection goes in, the other half comes back,
+// and once the sound can reach the app it asks for the voice's one line.
+route('POST', '/api/bots/:id/voice-sample', ([id], body) => called(() => calls.startSample(needBot(id).id, body.voice ?? '', body.sdp)))
+route('POST', '/api/calls/samples/:id/say', ([id]) => called(() => calls.saySample(id)))
+route('DELETE', '/api/calls/samples/:id', ([id]) => calls.endSample(id))
 
 // ---- providers
 route('GET', '/api/providers/:id/models', async ([id]) => getProvider(id).models())

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, type GestureResponderEvent, Keyboard, KeyboardAvoidingView, type LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Canvas, Image } from '@shopify/react-native-skia'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useCallBarRoom } from '../../src/CallBar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { BrowserInput } from '@openkumi/shared'
 import { control, driverOf, hostOf, sessionName, windowOf } from '@openkumi/client/browser'
@@ -16,6 +17,8 @@ import { useTheme } from '../../src/theme'
 export default function Browser() {
   const theme = useTheme()
   const insets = useSafeAreaInsets()
+  // A call under way takes room at the top of the screen, which what stays above the keyboard reckons with.
+  const callBarRoom = useCallBarRoom()
   // No thread is the bot's conversation; `take` asks for control as soon as the window is there.
   const params = useLocalSearchParams<{ botId: string; threadId?: string; take?: string }>()
   const { botId } = params
@@ -96,7 +99,7 @@ export default function Browser() {
 
   return (
     // Typing into the page happens in the bar at the bottom, which, with Hand back, stays above the keyboard.
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={insets.top + 44}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding" keyboardVerticalOffset={insets.top + 44 + callBarRoom}>
       <ScreenTitle title="Browser" subtitle={bot ? `${bot.name} · ${name}` : name} />
       <View style={[styles.bar, { borderBottomColor: theme.border }]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Back" disabled={!drive} hitSlop={8} onPress={() => act('back')}><Text style={[styles.icon, { color: drive ? theme.text : theme.faint }]}>‹</Text></Pressable>

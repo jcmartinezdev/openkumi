@@ -25,7 +25,8 @@
           "NSAllowsLocalNetworking": true
         },
         "NSLocalNetworkUsageDescription": "OpenKumi connects to the computer on your network that runs your bots.",
-        "NSMicrophoneUsageDescription": "OpenKumi listens while you dictate a message to a bot. What you say is written down on this iPhone and never leaves it as sound.",
+        "NSMicrophoneUsageDescription": "OpenKumi listens while you dictate a message to a bot, and while you are on a call with one. Dictation is written down on this iPhone and never leaves it as sound; on a call, your voice goes to the speech model that answers you.",
+        "UIBackgroundModes": ["audio"],
         "ITSAppUsesNonExemptEncryption": false
       },
       "appleTeamId": "48U5Q483NS"
@@ -37,7 +38,7 @@
         "expo-camera",
         {
           "cameraPermission": "OpenKumi uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
-          "microphonePermission": "OpenKumi listens while you dictate a message to a bot. What you say is written down on this iPhone and never leaves it as sound.",
+          "microphonePermission": "OpenKumi listens while you dictate a message to a bot, and while you are on a call with one. Dictation is written down on this iPhone and never leaves it as sound; on a call, your voice goes to the speech model that answers you.",
           "recordAudioAndroid": false
         }
       ],
@@ -48,7 +49,7 @@
         {
           "photosPermission": "OpenKumi lets you choose photos to send to your bots.",
           "cameraPermission": "OpenKumi uses the camera to scan the pairing code shown on your computer, and to take photos you send to your bots.",
-          "microphonePermission": "OpenKumi listens while you dictate a message to a bot. What you say is written down on this iPhone and never leaves it as sound."
+          "microphonePermission": "OpenKumi listens while you dictate a message to a bot, and while you are on a call with one. Dictation is written down on this iPhone and never leaves it as sound; on a call, your voice goes to the speech model that answers you."
         }
       ],
       "expo-sqlite"

@@ -6,9 +6,9 @@ description: "A call step by step: how it is set up through Codex, where the sou
 import { Aside } from '@astrojs/starlight/components'
 import Sequence from '../../../components/diagram/Sequence.astro'
 
-A call has two paths. **The sound** goes straight between the desktop app and OpenAI's speech
-model, over WebRTC. **The words** that matter (what the voice hands over, and what the bot answers)
-go through Codex and the OpenKumi server. The server never carries sound. For how a call feels in
+A call has two paths. **The sound** goes straight between the app you call from (the desktop app
+or the iPhone app) and OpenAI's speech model, over WebRTC. **The words** that matter (what the
+voice hands over, and what the bot answers) go through Codex and the OpenKumi server. The server never carries sound. For how a call feels in
 use, see [Calls](/calls/).
 
 <Sequence

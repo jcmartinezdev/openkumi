@@ -38,7 +38,7 @@ test('a mistake in the template is not passed over', () => {
 
 test('the master prompt OpenKumi comes with fills in for every kind of thread', () => {
   const fill = {
-    bot_name: 'Travel', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Assistant (bot_id: assistant), the main assistant: Everyday questions\n- 🧳 Travel (bot_id: travel): Plans trips and books',
+    bot_name: 'Travel', model: 'Claude Opus 5.5', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Assistant (bot_id: assistant), the main assistant: Everyday questions\n- 🧳 Travel (bot_id: travel): Plans trips and books',
     main: false, chat: true, can_message: true, automation: false, watch: false, hook: false, subagent: false, call: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
     instructions_limit: '12000', agents_md: '', memory: '', superpowers: '', automation_title: '', by_user: false, by_you: false,
     by_other: false, automation_author: '', automation_gone: true,
@@ -46,6 +46,9 @@ test('the master prompt OpenKumi comes with fills in for every kind of thread', 
   const told = masterPrompt(fill)
   assert.match(told, /^You are Travel, an AI bot running locally[\s\S]*# Your notes \(memory\/\)\n\(none yet\)$/)
   assert.match(told, /# Your instructions \(AGENTS\.md\)\n\(AGENTS\.md is empty\./)
+  // Who it is, and what powers it: said when it is known, left to the bot when it is not.
+  assert.match(told, /# Who you are\nYou are Travel, one of the user's bots in OpenKumi\.[\s\S]*You are powered by Claude Opus 5\.5, and you can say so, as in "I'm Travel, your bot in OpenKumi, powered by Claude Opus 5\.5"\./)
+  assert.match(masterPrompt({ ...fill, model: '' }), /It is no secret either\. When the user asks which model powers you, tell them what you know\./)
   assert.ok(!told.includes('# Rules from your owner') && !told.includes('# Your superpowers') && !told.includes('Your tools come from OpenKumi'))
 
   const run = masterPrompt({ ...fill, automation: true, automation_title: 'Check fares', automation_gone: false, by_other: true, automation_author: 'Assistant' })

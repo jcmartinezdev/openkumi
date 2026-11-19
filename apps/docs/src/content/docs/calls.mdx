@@ -3,16 +3,38 @@ title: Calls
 description: "Talking with a bot out loud: what a call needs, setting it up, what the voice does itself and what it hands to the bot, and where the sound goes."
 ---
 
-import { Aside, Steps } from '@astrojs/starlight/components'
+import { Steps } from '@astrojs/starlight/components'
 import CallPaths from '../../components/diagrams/CallPaths.astro'
 
 A call is a conversation with a bot out loud: you talk, it talks back at once, and you can
 interrupt it as you would a person. The phone button at the top of a bot's conversation starts
-one. While it lasts, a small panel stays over the window with who is on the line, what is being
-said, a way to mute your microphone and a way to hang up; the call goes on while you look at
-another bot or at the settings.
+one, in the desktop app and in the iPhone app.
 
-Calls are made from the desktop app, on any computer that has a microphone.
+On the computer, a small panel stays over the window while the call lasts, with who is on the
+line, what is being said, a way to mute your microphone and a way to hang up; the call goes on
+while you look at another bot or at the settings. The computer needs a microphone.
+
+## On the iPhone
+
+The call comes up as a screen of its own: the bot, how long you have been talking, what is being
+said, and three buttons, **Mute**, **Speaker** and **Hang up**. Pull the screen down, or press
+the arrow at its top, and the call goes on while you read the conversation or do something else
+in the app. A bar under the title then says who is on the line and for how long; its red button
+hangs up, and a tap on the rest of it brings the call's screen back.
+
+- A call starts on the loudspeaker. **Speaker** puts it at your ear instead, like a phone call,
+  and the screen goes dark while the phone is held there. When headphones or a car are
+  connected, the sound is theirs.
+- The call goes on while the phone is locked or another app is in front.
+- The first call asks whether OpenKumi may use the microphone. If that was refused, the phone's
+  Settings are where to allow it; the app offers to open them.
+- While a call is on, the microphone in the composer (dictation) is put away: the microphone is
+  the call's.
+- A call made on the computer shows on the phone as well, and can be ended from there, and the
+  other way round.
+
+The phone needs nothing but the app. What a call needs (below) is needed on the computer that
+runs your bots, as for a call made there.
 
 ## What a call needs
 
@@ -35,10 +57,10 @@ the same way: the voice is ChatGPT's, the work is still done by the bot's own en
    on.
 
 3. Optionally, pick the bot's **Voice**, under **Calls** in its settings. A bot that was not given
-   one has the usual voice.
+   one has the usual voice. Each voice can be [heard first](#hearing-a-voice-before-choosing-it).
 
-4. Press the phone button at the top of the bot's conversation. The first time, your computer asks
-   whether OpenKumi may use the microphone.
+4. Press the phone button at the top of the bot's conversation. The first time, your computer or
+   phone asks whether OpenKumi may use the microphone.
 
 </Steps>
 
@@ -51,6 +73,9 @@ may change it; if calls stop working after Codex was updated, update OpenKumi.
 ## Who is on the line
 
 The voice speaks as the bot, by name, and knows what the two of you were last talking about.
+Asked who it is, it says so: the bot, in OpenKumi, who made OpenKumi, and the model the bot is
+powered by, as the bot does in writing. Asked what is behind the voice, it says that the voice
+comes with your ChatGPT plan.
 Small talk, thinking out loud and anything it can answer from the call, it answers itself, at
 once.
 
@@ -111,12 +136,28 @@ was handed over during the call, so that nothing is done twice, and it leaves an
 your go-ahead for you. You hear of it in the conversation only when there was something to do. A
 call on which you said nothing more after the last thing handed over is not gone over at all.
 
+## Hearing a voice before choosing it
+
+A voice can be heard before it is chosen. It says one short line as the bot ("Hi, I'm Kumi. This
+is how I sound when you call me."), over a line like a call's, so it sounds the way it will on a
+call; it takes a couple of seconds to come on.
+
+- **On the computer**, the play button beside the list says the line in the voice that is chosen.
+- **On the iPhone**, Voice opens a page with the voices side by side, one in view at a time. Swipe
+  to the next one and it says its line by itself; the play button says it again. **Use …** makes
+  the voice in view the bot's.
+
+Hearing a voice is a very short call on your ChatGPT plan, with nobody listening: the speech
+model only speaks to a line that sends it sound, so the app opens the microphone and keeps it
+switched off, and what it sends is silence. That is why the first time asks for the microphone.
+No voice can be heard while a call is on.
+
 ## Where the sound goes
 
-Between your computer and OpenAI, directly. The app makes one half of the connection and the
-OpenKumi server passes it to Codex, which sets the call up with your ChatGPT sign-in and hands
-back the other half. The server never carries the sound, and no recording is kept anywhere by
-OpenKumi: only the words, as the speech model wrote them down.
+Between the device you call from (the computer or the phone) and OpenAI, directly. The app makes
+one half of the connection and the OpenKumi server passes it to Codex, which sets the call up
+with your ChatGPT sign-in and hands back the other half. The server never carries the sound, and
+no recording is kept anywhere by OpenKumi: only the words, as the speech model wrote them down.
 
 What OpenAI receives is what a call is made of: your voice; the bot's name and the line saying what
 it is for; today's date and time zone; the last eight messages of your conversation with it, each
@@ -132,12 +173,8 @@ bot. [How a call works](/how-it-works/calls/) goes through it step by step.
   seconds.
 - Another call was started. There is one call at a time.
 - The bot was deleted.
-- Your plan does not allow more voice use for now. The panel says what Codex said.
+- Your plan does not allow more voice use for now. The panel, or the bar on the phone, says what
+  Codex said.
 
 What the bot was asked to do before the call ended, it still does: the answer is in the
 conversation.
-
-<Aside>
-  Calls are not in the iPhone app yet. A call made on the computer shows on the phone afterwards, as
-  its record in the conversation.
-</Aside>

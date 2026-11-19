@@ -10,7 +10,7 @@ const { caption } = Astro.props as { caption?: string }
 ---
 
 <Figure width={680} height={330} title="A call: sound goes straight between the app and OpenAI; what the voice hands over goes through Codex and the server to the bot" caption={caption}>
-  <Box x={8} y={30} w={180} h={64} kind="ours" title="Desktop app" lines={['your microphone', 'and speaker']} />
+  <Box x={8} y={30} w={180} h={64} kind="ours" title="Desktop or iPhone app" lines={['your microphone', 'and speaker']} />
   <Box x={492} y={30} w={180} h={64} kind="outside" title="OpenAI" lines={['the speech model,', 'on your ChatGPT plan']} />
   <Box x={8} y={160} w={180} h={64} kind="ours" title="OpenKumi server" lines={['sets the call up,', 'passes work on']} />
   <Box x={250} y={160} w={180} h={64} title="Codex" lines={['signed in with', 'your ChatGPT plan']} />

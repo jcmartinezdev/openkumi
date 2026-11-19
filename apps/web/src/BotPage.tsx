@@ -8,7 +8,7 @@ import { triggerLabel } from '@openkumi/client/automations'
 import { sizeOf } from '@openkumi/client/attachments'
 import { windowCount } from '@openkumi/client/browser'
 import { describeLook } from '@openkumi/client/mascot'
-import { useVoiceChoices } from '@openkumi/client/calls'
+import { hearVoice, stopHearing, useCalling, useHearing, useVoiceChoices } from '@openkumi/client/calls'
 import { EFFORT_LABEL, effortsOf, useModels } from '@openkumi/client/models'
 import { INSTRUCTIONS, authorOf, byDay, childrenOf, clockOf, fileUrl, findFiles, folderOf, hintOf, isRecorded, kindOfFile, lastChange, nameOf, notesAndFiles, parseDiff, since, summarize } from '@openkumi/client/workspace'
 import { type Dress, LookEditor } from './LookEditor'
@@ -102,6 +102,10 @@ function General({ bot }: { bot: Bot }) {
   const models = useModels(bot.provider, provider?.connected)
   const calls = useStore((s) => s.calls)
   const voiceChoices = useVoiceChoices(bot.voice ?? '')
+  const hearing = useHearing()
+  /** This bot's voice is being heard, or is on its way. */
+  const heard = hearing.phase !== 'off' && hearing.voice === (bot.voice ?? '')
+  const onCall = useCalling().phase !== 'off'
   // What the bot could run on: everything that is ready, plus what it runs on now.
   const choices = providers.filter((p) => (p.connected && p.enabled !== false) || p.id === bot.provider)
   // The first model is the provider's default, stored as "" so the bot follows it if it changes.
@@ -187,8 +191,22 @@ function General({ bot }: { bot: Bot }) {
           id="bot-voice"
           title="Voice"
           description={`How ${bot.name} sounds when you call it. The voice on a call comes with your ChatGPT plan, through Codex, whatever the bot itself runs on.`}
-          status={calls?.available === false ? calls.reason : undefined}
-          control={<Pick label="Voice" value={bot.voice ?? ''} options={voiceChoices ?? [[bot.voice ?? '', bot.voice || 'Usual'] as const]} disabled={!voiceChoices} onChange={(voice) => save({ voice })} />}
+          status={calls?.available === false ? calls.reason : hearing.error || undefined}
+          control={
+            <>
+              {/* The voice chosen says a line as the bot, to be heard before it is kept. */}
+              <button
+                className="icon"
+                title={heard ? 'Stop' : onCall ? 'Hang up to hear the voice' : 'Hear it'}
+                aria-label={heard ? 'Stop the voice' : 'Hear the voice'}
+                disabled={!voiceChoices || onCall}
+                onClick={() => (heard ? stopHearing() : void hearVoice(bot.id, bot.voice ?? ''))}
+              >
+                {heard && hearing.phase === 'connecting' ? <span className="spinner" /> : <Icon name={heard ? 'stop' : 'play'} size={15} />}
+              </button>
+              <Pick label="Voice" value={bot.voice ?? ''} options={voiceChoices ?? [[bot.voice ?? '', bot.voice || 'Usual'] as const]} disabled={!voiceChoices} onChange={(voice) => (stopHearing(), save({ voice }))} />
+            </>
+          }
         />
       </Section>
 
