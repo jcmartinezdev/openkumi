@@ -46,6 +46,8 @@ export interface Bot {
   superpowers: string[]
   /** How its mascot looks. The mascot holds a sign with `emoji` on it. */
   look: Look
+  /** The voice it speaks with on a call (see Call), by name. Empty means the usual one. */
+  voice: string
   /** Set while the bot's model is choosing its look, just after the bot was made. */
   choosingLook?: boolean
   createdAt: number
@@ -168,6 +170,31 @@ export interface Attachment {
 export type ThreadStatus = 'idle' | 'running' | 'error'
 
 /**
+ * A call: the owner talks with a bot, out loud, and it talks back at once. The voice on the line
+ * is a speech model of the owner's ChatGPT plan, reached through Codex; it speaks as the bot and
+ * makes small talk itself. Whatever needs the bot (its tools, its memory, its accounts) it passes
+ * to the bot's own conversation as a message, and it reads the bot's answer out when it comes.
+ * Sound goes between the device and the speech model directly, never through the OpenKumi server.
+ * There is one call at a time.
+ */
+export interface Call {
+  id: string
+  botId: string
+  /** 'connecting' until the voice is on the line. */
+  state: 'connecting' | 'live'
+  startedAt: number
+  /** How many things the owner asked for on the call are still being worked on: by the bot, or by a subagent it started for one. */
+  working: number
+}
+
+/** Whether bots can be called, and why not when they cannot. */
+export interface CallsInfo {
+  available: boolean
+  /** What is missing, when calls are not available. */
+  reason: string
+}
+
+/**
  * A bot has one conversation with its owner: the thread of kind 'chat' that is not archived.
  * Starting fresh archives it and begins an empty one. Subagents work in threads beneath it.
  */
@@ -222,6 +249,18 @@ export interface Said {
   key?: string
   /** From another bot: how many messages between bots in a row led to this one, the owner having said nothing in between. */
   chain?: number
+  /** From another bot: the `key` of the message it answers, when that message asked this bot for a reply. */
+  answers?: string
+  /** The owner said it on a call (see Call), and the bot's answer is read out to them. */
+  via?: 'call'
+  /** Said on a call: what was said on the call just before, for the bot to understand the request. Not shown as part of the message. */
+  before?: string
+}
+
+/** One thing said on a call, by the owner or by the bot's voice. */
+export interface CallLine {
+  role: 'user' | 'assistant'
+  text: string
 }
 
 export type ItemData =
@@ -246,6 +285,11 @@ export type ItemData =
    * files that went with it: that conversation's copies, each with the `path` it had in this bot's workspace.
    */
   | { type: 'sent'; to: BotRef; threadId: string; text: string; replyWanted: boolean; key: string; attachments?: Attachment[] }
+  /**
+   * The record of a call that ended, for the owner to read: how long it lasted and what was said.
+   * What the owner asked the bot to do on it is in the conversation as messages of its own.
+   */
+  | { type: 'call'; seconds: number; lines: CallLine[] }
 
 /**
  * A message waiting for a bot. Everything said to a bot (by the owner, another bot, a subagent or a
@@ -522,7 +566,12 @@ export type ServerEvent =
   /** A waiting message went into its conversation, or was taken back. */
   | { type: 'queue.remove'; id: number }
   | { type: 'stream.delta'; threadId: string; kind: 'text' | 'reasoning'; delta: string }
-  | { type: 'providers'; providers: ProviderInfo[] }
+  /** `calls` is sent along because whether bots can be called depends on the providers. */
+  | { type: 'providers'; providers: ProviderInfo[]; calls: CallsInfo }
+  /** The call under way began, changed or ended (null). `error` is why it ended, when it was not hung up. */
+  | { type: 'call'; call: Call | null; error?: string }
+  /** Something was said on the call: `text` is the next few words, or with `done` the whole of what was just said. */
+  | { type: 'call.words'; callId: string; role: 'user' | 'assistant'; text: string; done: boolean }
   | { type: 'settings'; settings: Settings }
   | { type: 'update'; update: ServerUpdate }
   | { type: 'superpowers'; superpowers: Superpower[]; categories: string[] }
@@ -577,6 +626,10 @@ export interface AppState {
   /** Every message that waits for a bot, oldest first. */
   queue: Queued[]
   providers: ProviderInfo[]
+  /** Whether bots can be called. */
+  calls: CallsInfo
+  /** The call under way, if there is one. */
+  call: Call | null
   browsers: Record<string, BrowserState>
   superpowers: Superpower[]
   /** The groups the superpower catalog shows, in its order. */

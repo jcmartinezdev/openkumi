@@ -82,10 +82,12 @@ async function until(check, timeoutMs = 40_000) {
 
 let electron
 let app
+/** What a test starts the app with, besides the usual. */
+let switches = []
 const launch = async () => {
   // A test that failed left its app open, and a second one would not start beside it: the tests after it would fail for that alone.
   await app?.close().catch(() => {})
-  app = await _electron.launch({ executablePath: electron, args: packaged ? [] : ['.'], env })
+  app = await _electron.launch({ executablePath: electron, args: [...(packaged ? [] : ['.']), ...switches], env })
   return app.firstWindow()
 }
 /** Waits until the window shows an environment that has a bot with this name. */
@@ -1383,6 +1385,81 @@ test('dictation: what is said goes into the message where the cursor was, and on
   const { threads } = await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
   const { items } = await ask(LOCAL_PORT, 'local-home', 'GET', `/api/threads/${threads.find((th) => th.botId === bot.id).id}`)
   assert.deepEqual(items.filter((i) => i.data.role === 'user').map((i) => i.data), [{ type: 'message', role: 'user', source: 'user', text: 'Could you check my calendar for tomorrow?' }])
+
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${bot.id}`)
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('calls: a bot is called from its conversation, what is said shows as it is said, and the call is kept in the conversation', async (t) => {
+  // Chromium's made-up microphone stands in for a real one, which the system is then not asked about,
+  // and the stand-in for Codex plays the voice: small talk it answers itself, then something it hands to the bot.
+  switches = ['--use-fake-device-for-media-stream']
+  env.OPENKUMI_FAKE_CALL = 'chat:Hello there|says:!say Tomorrow is free.'
+  t.after(() => {
+    switches = []
+    delete env.OPENKUMI_FAKE_CALL
+  })
+  const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
+
+  const win = await launch()
+  await showsBot(win, 'Assistant')
+  const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Caller', provider: 'mock' })
+  await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
+  // Calls need Codex, signed in with ChatGPT: the server has found it by now, or is about to, and the window hears of it.
+  await until(async () => (await state()).calls.available)
+  await win.locator('header button[aria-label="Call Caller"][title="Call Caller"]').waitFor()
+
+  await win.getByRole('button', { name: 'Call Caller' }).click()
+  const panel = win.locator('.call-panel')
+  await panel.locator('.call-time').waitFor()
+  assert.equal(await win.locator('header button.calling').count(), 1, 'the button in the conversation shows the call is on')
+  // What is said shows in the panel as it is said.
+  await panel.locator('.call-words p.user', { hasText: 'Hello there' }).waitFor()
+  await panel.locator('.call-words p', { hasText: 'You said: Hello there' }).waitFor()
+  // What the voice handed over is in the conversation, as said on a call, and the bot answered it there; the voice said the answer.
+  await win.locator('.said', { hasText: 'On a call' }).locator('.msg.user', { hasText: '!say Tomorrow is free.' }).waitFor()
+  await win.locator('.msg.assistant', { hasText: 'Tomorrow is free.' }).waitFor()
+  await panel.locator('.call-words p', { hasText: 'Spoken: What came back for “!say Tomorrow is free.”' }).waitFor()
+
+  // Muted, the bot does not hear; the call goes on, and stays in view whatever the window shows.
+  await panel.getByRole('button', { name: 'Mute', exact: true }).click()
+  await panel.locator('.call-status', { hasText: 'Muted' }).waitFor()
+  await panel.getByRole('button', { name: 'Unmute' }).click()
+  await panel.locator('.call-status', { hasText: 'On a call' }).waitFor()
+  await win.evaluate(() => (location.hash = '/settings/general'))
+  await win.locator('.set-view').waitFor()
+  // Not behind the settings: it can be hung up from there.
+  await panel.getByRole('button', { name: 'Hang up' }).click({ trial: true })
+  await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
+
+  // Hanging up leaves a record of the call in the conversation, with what was said to unfold.
+  await panel.getByRole('button', { name: 'Hang up' }).click()
+  await panel.waitFor({ state: 'detached' })
+  const record = win.locator('.call-record')
+  await record.locator('summary', { hasText: /Talked with Caller for \d+ s/ }).click()
+  assert.deepEqual(await record.locator('.call-lines p').allInnerTexts().then((lines) => lines.slice(0, 2).map((line) => line.replace(/\s+/g, ' '))), ['YOU Hello there', 'CALLER You said: Hello there'])
+  assert.equal((await state()).call, null)
+  assert.equal(await win.locator('header button.calling').count(), 0)
+
+  // The bot's voice is chosen in its settings, from the ones Codex offers.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}`), bot.id)
+  const voice = win.getByRole('combobox', { name: 'Voice' })
+  await until(async () => (await voice.locator('option').allTextContents()).join() === 'Usual (Cove),Juniper,Maple,Cove')
+  await voice.selectOption('maple')
+  await until(async () => (await state()).bots.find((b) => b.id === bot.id).voice === 'maple')
+
+  // Where bots cannot be called, the button says what is missing, in the conversation.
+  const { settings } = await state()
+  await ask(LOCAL_PORT, 'local-home', 'PATCH', '/api/settings', { disabledProviders: [...settings.disabledProviders, 'codex'] })
+  await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
+  await until(async () => !(await state()).calls.available)
+  // (Once the window has heard of it too: pointing at the button then says why.)
+  await win.locator('header button[aria-label="Call Caller"][title^="Calls use your ChatGPT plan through Codex, which is switched off"]').waitFor()
+  await win.getByRole('button', { name: 'Call Caller' }).click()
+  await win.locator('.notice.error', { hasText: 'Calls use your ChatGPT plan through Codex, which is switched off in Settings' }).waitFor()
+  assert.equal(await panel.count(), 0)
+  await ask(LOCAL_PORT, 'local-home', 'PATCH', '/api/settings', { disabledProviders: settings.disabledProviders })
 
   await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${bot.id}`)
   await app.close()

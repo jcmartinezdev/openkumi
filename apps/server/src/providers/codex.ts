@@ -13,6 +13,8 @@ import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
 
 const bin = () => findBinary('codex', 'OPENKUMI_CODEX_BIN', settings().codexPath)
+/** Where the Codex program is, or null. */
+export const codexProgram = bin
 const base = { id: 'codex', name: 'Codex', kind: 'cli' as const }
 let info: ProviderInfo = { ...base, connected: false, detail: 'Checking…' }
 
@@ -65,6 +67,24 @@ function ownServers(): string[] {
   return [...new Set(names)].filter((name) => name !== 'openkumi')
 }
 
+/**
+ * What Codex's app server is started with so that it is OpenKumi's and nothing else: its own tools
+ * and extras switched off, a sandbox that only reads, and the user's own Codex setup left out as
+ * far as it would reach a bot (their servers, their skills, what they have run when a turn ends).
+ */
+export const sealed = (): string[] => [
+  ...SWITCHED_OFF.flatMap((feature) => ['--disable', feature]),
+  ...ownServers().flatMap((name) => ['-c', `mcp_servers.${name}.enabled=false`]),
+  '-c', 'notify=[]',
+  '-c', 'sandbox_mode="read-only"',
+  '-c', 'approval_policy="never"',
+  // OpenKumi passes the bot's AGENTS.md itself, fresh on every turn.
+  '-c', 'project_doc_max_bytes=0',
+  // Codex has skills of its own (and finds the user's); the bot's superpowers are the ones in its instructions.
+  '-c', 'skills.include_instructions=false',
+  '-c', 'skills.bundled.enabled=false',
+]
+
 const EXTENSIONS: Record<string, string> = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' }
 
 const GONE = 'Codex stopped.'
@@ -83,17 +103,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   if (!program) throw new Error('Codex is not installed on this computer.')
   const args = [
     'app-server',
-    ...SWITCHED_OFF.flatMap((feature) => ['--disable', feature]),
-    // The user's own Codex setup is left out as far as it would reach a bot: their servers, and what they have run when a turn ends.
-    ...ownServers().flatMap((name) => ['-c', `mcp_servers.${name}.enabled=false`]),
-    '-c', 'notify=[]',
-    '-c', 'sandbox_mode="read-only"',
-    '-c', 'approval_policy="never"',
-    // OpenKumi passes the bot's AGENTS.md itself, fresh on every turn.
-    '-c', 'project_doc_max_bytes=0',
-    // Codex has skills of its own (and finds the user's); the bot's superpowers are the ones in its instructions.
-    '-c', 'skills.include_instructions=false',
-    '-c', 'skills.bundled.enabled=false',
+    ...sealed(),
     ...(req.toolsUrl
       ? [
           '-c', `mcp_servers.openkumi.url=${toml(req.toolsUrl)}`,

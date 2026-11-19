@@ -2,6 +2,7 @@ import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { browsingThread, control, windowOf } from '@openkumi/client/browser'
 import { BrowserPane, BrowserPip } from './BrowserPane'
+import { CallPanel } from './Call'
 import { Chat } from './Chat'
 import { desktop, useDesktop } from './desktop'
 import { Gate } from './Gate'
@@ -208,6 +209,8 @@ export function App() {
       {current.settings && <SettingsView path={current.settings} newBot={() => setModal({ kind: 'new-bot' })} />}
       {/* A bot made from the settings is opened there, ready to be set up; otherwise its chat opens. */}
       {modal?.kind === 'new-bot' && <NewBot close={() => setModal(null)} created={(made) => ((current.settings ? openSettings('bots', made.id) : navigate(made.id)), setModal(null))} />}
+      {/* A call goes on whatever the window shows. */}
+      <CallPanel />
       {!connected && <div className="toast">Reconnecting…</div>}
     </div>
   )

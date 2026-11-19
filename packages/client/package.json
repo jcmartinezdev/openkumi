@@ -26,7 +26,8 @@
     "./attachments": "./src/attachments.ts",
     "./workspace": "./src/workspace.ts",
     "./superpowers": "./src/superpowers.ts",
-    "./dictation": "./src/dictation.ts"
+    "./dictation": "./src/dictation.ts",
+    "./calls": "./src/calls.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

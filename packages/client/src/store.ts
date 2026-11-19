@@ -2,7 +2,7 @@
 // the server's events. Shared by the desktop app's window and the phone app; each brings its own
 // connection (see connection.ts) and hands it over with `useTransport`.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { AppState, ClientEvent, FileEntry, HistoryEntry, Item, Partial, ServerEvent, Settings, Thread } from '@openkumi/shared'
+import type { AppState, CallLine, ClientEvent, FileEntry, HistoryEntry, Item, Partial, ServerEvent, Settings, Thread } from '@openkumi/shared'
 import type { Link } from '@openkumi/shared/desktop'
 import { reach } from './addresses'
 import type { Command, Report } from './connection'
@@ -13,6 +13,12 @@ export interface State extends AppState {
   /** Whether a thread that has been opened has older items than the ones held, to load with `loadOlder`. */
   older: Record<string, boolean>
   partial: Record<string, Partial>
+  /** What has been said on the call under way, as far as this app heard it. */
+  callLines: CallLine[]
+  /** What is being said on the call right now, by each side, until it is whole and joins `callLines`. */
+  callSaying: { user: string; assistant: string }
+  /** Why the last call ended, when it was not hung up. */
+  callError: string
   /** Counts changes to each bot's workspace, so views of its files know when to refetch. */
   filesVersion: Record<string, number>
   connected: boolean
@@ -37,6 +43,11 @@ const EMPTY: State = {
   hooks: [],
   queue: [],
   providers: [],
+  calls: { available: false, reason: '' },
+  call: null,
+  callLines: [],
+  callSaying: { user: '', assistant: '' },
+  callError: '',
   browsers: {},
   superpowers: [],
   superpowerCategories: [],
@@ -227,7 +238,18 @@ function handle(ev: ServerEvent) {
       return set({ partial: { ...state.partial, [ev.threadId]: { ...partial, [ev.kind]: partial[ev.kind] + ev.delta } } })
     }
     case 'providers':
-      return set({ providers: ev.providers })
+      return set({ providers: ev.providers, calls: ev.calls ?? state.calls })
+    case 'call': {
+      // Another call, or none: what was said on the one before is not this one's.
+      const same = !!ev.call && ev.call.id === state.call?.id
+      return set({ call: ev.call, callError: ev.error ?? '', ...(same ? {} : { callLines: [], callSaying: EMPTY.callSaying }) })
+    }
+    case 'call.words': {
+      if (ev.callId !== state.call?.id) return
+      // Said in full: it takes the place of the words that came one by one.
+      if (ev.done) return set({ callLines: [...state.callLines, { role: ev.role, text: ev.text }], callSaying: { ...state.callSaying, [ev.role]: '' } })
+      return set({ callSaying: { ...state.callSaying, [ev.role]: state.callSaying[ev.role] + ev.text } })
+    }
     case 'settings':
       return set({ settings: ev.settings })
     case 'update':
@@ -464,7 +486,9 @@ async function opened() {
   waiting = null
   batching = true
   const { removed, ...fresh } = snapshot
-  const live = { connected: true, loaded: true, failures: 0, refused: false, outdated: false, newer: false }
+  // What was said on a call is not in a snapshot: it is kept only while it is the same call.
+  const sameCall = !!fresh.call && fresh.call.id === state.call?.id
+  const live = { connected: true, loaded: true, failures: 0, refused: false, outdated: false, newer: false, ...(sameCall ? {} : { callLines: [], callSaying: EMPTY.callSaying }) }
   if (removed) {
     // Only what changed: laid over the threads held. What is held of each chat stays, and the
     // chats catch up on what was said meanwhile as views show them (see openThread).

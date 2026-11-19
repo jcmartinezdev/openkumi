@@ -4,6 +4,7 @@ import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/cl
 import { runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { SentFiles, Tray, picked } from './Attachments'
+import { CallButton, CallRecord } from './Call'
 import { DictationFailed, Listening, MicButton, useListener } from './Dictation'
 import { History, day } from './History'
 import { Icon } from './Icon'
@@ -241,7 +242,7 @@ function Activity({ steps, took, live }: { steps: ReactNode[]; took: number; liv
   )
 }
 
-function Items({ items, running, openFile }: { items: Item[]; running: boolean; openFile: OpenFile }) {
+function Items({ items, running, openFile, name }: { items: Item[]; running: boolean; openFile: OpenFile; name: string }) {
   const outputs = useMemo(() => {
     const map = new Map<string, string>()
     for (const { data } of items) if (data.type === 'function_call_output') map.set(data.call_id, data.output)
@@ -310,6 +311,15 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
         const { prompt, change, heading } = runBrief(data.text)
         blocks.push(<div key={id} className="msg task"><div className="eyebrow">Automation</div>{prompt}{change && <div className="watch-change"><div className="eyebrow">{heading}</div>{change}</div>}</div>)
       }
+      else if (data.via === 'call') {
+        // Said out loud, on a call: the voice passed it on, and read the answer out.
+        blocks.push(
+          <div key={id} data-item={id} className="said">
+            <div className="via"><Icon name="phone" size={11} /> On a call</div>
+            <div className="msg user">{data.text}</div>
+          </div>,
+        )
+      }
       else if (!data.attachments?.length) blocks.push(<div key={id} data-item={id} className="msg user">{data.text}</div>)
       else {
         blocks.push(
@@ -325,6 +335,8 @@ function Items({ items, running, openFile }: { items: Item[]; running: boolean; 
       blocks.push(<div key={id} data-item={id}><PageFrame title={data.title} html={data.html} height={data.height} /></div>)
     } else if (data.type === 'sent') {
       blocks.push(<BotMessage key={id} id={id} to={data.to} text={data.text} replyWanted={data.replyWanted} messageKey={data.key} files={data.attachments} keptIn={data.threadId} />)
+    } else if (data.type === 'call') {
+      blocks.push(<CallRecord key={id} id={id} seconds={data.seconds} lines={data.lines} name={name} />)
     }
   }
   flush(-1, running)
@@ -603,6 +615,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
         </div>
         {main && (
           <>
+            <CallButton bot={bot} setError={setError} />
             <History bot={bot} open={historyOpen} setOpen={setHistoryOpen} />
             <button className="icon" title="Start fresh" aria-label="Start fresh" disabled={running || !items?.length} onClick={startFresh}><Icon name="compose" size={17} /></button>
           </>
@@ -654,7 +667,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               )}
             </div>
           )}
-          {items && <Items items={items} running={running} openFile={openFile} />}
+          {items && <Items items={items} running={running} openFile={openFile} name={bot.name} />}
           {partial?.reasoning && (
             <div className="activity">
               <details className="step">

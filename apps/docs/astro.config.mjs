@@ -30,7 +30,7 @@ export default defineConfig({
         },
         {
           label: 'Using OpenKumi',
-          items: ['environments', 'automations', 'superpowers', 'settings'],
+          items: ['environments', 'automations', 'superpowers', 'calls', 'settings'],
         },
         {
           label: 'How it works',

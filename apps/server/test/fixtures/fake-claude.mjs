@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Stands in for the `claude` program in tests: same command line and output format, scripted replies.
-// "!tool <name> <json>" calls a tool at the address it was given, "!system" and "!args" report what
-// it was started with, "!slow" takes a while, anything else is echoed with the turn number and the
+// "!tool <name> <json>" calls a tool at the address it was given, "!system" (also as the last line of
+// what it is told) and "!args" report what it was started with, "!slow" takes a while, anything else is echoed with the turn number and the
 // kinds of the files it was shown. Asked to choose a bot's look, it gives one. Its input stays open
 // while it works: a message marked to be read next is taken into the turn that is running, or
 // answered in a turn of its own when none is.
@@ -80,7 +80,7 @@ async function run({ message, uuid }) {
     // Asked to choose a bot's look, which it is given no tools for.
     const tools = Object.keys(JSON.parse(flag('--mcp-config')).mcpServers)
     reply = JSON.stringify({ creature: 'bunny', color: 'mint', hat: tools.length ? 'crown' : 'headband', extra: 'none', clothes: 'red', emoji: '🧬' })
-  } else if (prompt === '!system') {
+  } else if (prompt === '!system' || prompt.endsWith('\n!system')) {
     reply = system()
   } else if (prompt === '!args') {
     reply = JSON.stringify({ tools: flag('--tools'), allowed: flag('--allowedTools'), model: flag('--model') ?? null, flags: args.filter((a) => a.startsWith('--')) })

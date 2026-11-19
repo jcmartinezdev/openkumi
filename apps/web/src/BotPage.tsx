@@ -8,6 +8,7 @@ import { triggerLabel } from '@openkumi/client/automations'
 import { sizeOf } from '@openkumi/client/attachments'
 import { windowCount } from '@openkumi/client/browser'
 import { describeLook } from '@openkumi/client/mascot'
+import { useVoiceChoices } from '@openkumi/client/calls'
 import { EFFORT_LABEL, effortsOf, useModels } from '@openkumi/client/models'
 import { INSTRUCTIONS, authorOf, byDay, childrenOf, clockOf, fileUrl, findFiles, folderOf, hintOf, isRecorded, kindOfFile, lastChange, nameOf, notesAndFiles, parseDiff, since, summarize } from '@openkumi/client/workspace'
 import { type Dress, LookEditor } from './LookEditor'
@@ -99,6 +100,8 @@ function General({ bot }: { bot: Bot }) {
   const save = (patch: Partial<Bot>) => run(() => api('PATCH', `/api/bots/${bot.id}`, patch))
   const provider = providers.find((p) => p.id === bot.provider)
   const models = useModels(bot.provider, provider?.connected)
+  const calls = useStore((s) => s.calls)
+  const voiceChoices = useVoiceChoices(bot.voice ?? '')
   // What the bot could run on: everything that is ready, plus what it runs on now.
   const choices = providers.filter((p) => (p.connected && p.enabled !== false) || p.id === bot.provider)
   // The first model is the provider's default, stored as "" so the bot follows it if it changes.
@@ -177,6 +180,16 @@ function General({ bot }: { bot: Bot }) {
           control={<Pick<Effort> label="Reasoning effort" value={bot.effort} options={effortOptions} onChange={(effort) => save({ effort })} />}
         />
         <Row title="Web search" description="Use the model’s built-in search." control={<Switch label="Web search" checked={bot.webSearch} onChange={(webSearch) => save({ webSearch })} />} />
+      </Section>
+
+      <Section title="Calls">
+        <Row
+          id="bot-voice"
+          title="Voice"
+          description={`How ${bot.name} sounds when you call it. The voice on a call comes with your ChatGPT plan, through Codex, whatever the bot itself runs on.`}
+          status={calls?.available === false ? calls.reason : undefined}
+          control={<Pick label="Voice" value={bot.voice ?? ''} options={voiceChoices ?? [[bot.voice ?? '', bot.voice || 'Usual'] as const]} disabled={!voiceChoices} onChange={(voice) => save({ voice })} />}
+        />
       </Section>
 
       <Section title="Automations" action={<button onClick={() => openAutomations('new', bot.id)}><Icon name="plus" size={14} /> New automation</button>}>

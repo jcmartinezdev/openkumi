@@ -60,6 +60,7 @@ const bridge: DesktopBridge | null = initial && {
     },
     openMicrophoneSettings: () => ipcRenderer.invoke('desktop:microphone-settings'),
   },
+  microphone: () => ipcRenderer.invoke('desktop:microphone'),
   onSignIn(listener) {
     returns.add(listener)
     if (returned) {

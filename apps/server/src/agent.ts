@@ -21,7 +21,7 @@ import { settings } from './settings.ts'
 import { superpowerIndex, superpowerNames } from './superpowers.ts'
 import { TIME_ZONE, finishRun, isMain } from './automations.ts'
 import { type ToolEndpoint, openToolEndpoint } from './tool-endpoint.ts'
-import { runTool, toolsFor } from './tools.ts'
+import { onACall, runTool, toolsFor } from './tools.ts'
 import { agentsFile, memoryIndex } from './workspace.ts'
 
 /** An engine's turn while it runs, for a message to be given to it as it works. */
@@ -88,7 +88,7 @@ function team(bot: Bot): string {
 export const canMessage = (thread: Thread) => thread.kind === 'chat' && settings().botMessages
 
 /** The system prompt: the master prompt, filled in from the bot's folder on every step so its own edits take effect at once. */
-function instructions(bot: Bot, thread: Thread, problems: Record<string, string>): string {
+function instructions(bot: Bot, thread: Thread, problems: Record<string, string>, call = false): string {
   // Who wrote an automation decides whether it counts as the user's say-so; one deleted since is not taken to be theirs.
   const automation = thread.kind === 'automation' && thread.automationId ? db.getAutomation(thread.automationId) : undefined
   const by = automation?.createdBy ?? ''
@@ -103,6 +103,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     watch: automation?.trigger.kind === 'watch',
     hook: automation?.trigger.kind === 'hook',
     subagent: thread.kind === 'subagent',
+    call,
     codex: bot.provider === 'codex',
     rules: bot.rules,
     time_zone: TIME_ZONE,
@@ -123,6 +124,8 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
 export const systemPrompt = (bot: Bot) => instructions(bot, conversation(bot.id), {})
 
 const isUserMessage = (item: Item) => item.data.type === 'message' && item.data.role === 'user'
+/** Asked on a call (calls.ts). */
+const onCall = (item: Item) => item.data.type === 'message' && item.data.role === 'user' && item.data.via === 'call'
 /** The files that came with a message: the owner's, or another bot's. */
 const filesOf = (data: ItemData) => (data.type === 'message' && data.role === 'user' ? (data.attachments ?? []) : [])
 /** What was said to the bot, for an engine to read: each message with the files that came with it. */
@@ -150,6 +153,64 @@ function withCopies(waiting: Queued, thread: Thread): Queued {
   return db.updateQueued(waiting.id, { message: { ...waiting.message, attachments: handOver(thread.botId, thread.id, files) } })!
 }
 
+/**
+ * Someone waiting to hear what the bot answers to one message: a call, where the answer is read
+ * out to the owner (calls.ts). Settled once, when the turn that answers the message is over.
+ */
+export interface Answer {
+  /** `also` is what else the turn that answered it was the answer to. */
+  resolve: (text: string, also: Said[]) => void
+  reject: (error: Error) => void
+}
+/** Those waiting, by the message's place in the queue while it waits there (and the thread it waits in), */
+const awaited = new Map<number, Answer & { threadId: string }>()
+/** and by its item once the bot has it in front of it. */
+const answering = new Map<number, Answer>()
+
+/** Tells whoever waits for an answer to a message that still waits in a queue that none is coming. */
+function unanswered(queuedId: number, why: string) {
+  const answer = awaited.get(queuedId)
+  awaited.delete(queuedId)
+  answer?.reject(new Error(why))
+}
+
+/** Told each time a bot has answered: the thread, what its turn was the answer to, and the last thing it said in it (worked out when asked for). */
+type Hearer = (threadId: string, asked: Item[], reply: () => string) => void
+const hearers = new Set<Hearer>()
+/** Has `fn` told whenever a bot has answered something: a call says what the bot answers to its own work coming back (calls.ts). */
+export function onAnswered(fn: Hearer) {
+  hearers.add(fn)
+}
+
+/** The turn that answers these messages is over: whoever waits for an answer gets what the bot said last in it, or why there is nothing. */
+function answered(threadId: string, asked: Item[], failure?: string) {
+  let said: string | undefined
+  const reply = () => {
+    if (said !== undefined) return said
+    const first = Math.min(...asked.map((item) => item.id))
+    const last = db.listItems(threadId).findLast((i) => i.id > first && i.data.type === 'message' && i.data.role === 'assistant')?.data
+    return (said = last?.type === 'message' ? last.text : '')
+  }
+  for (const item of asked) {
+    const answer = answering.get(item.id)
+    if (!answer) continue
+    answering.delete(item.id)
+    if (failure !== undefined) answer.reject(new Error(failure))
+    else answer.resolve(reply(), asked.filter((other) => other.id !== item.id).map((other) => other.data as Said))
+  }
+  if (failure === undefined && asked.length) for (const fn of hearers) fn(threadId, asked, reply)
+}
+
+/** How many subagents a thread started since `since` are at work now. Found from the threads that are running, which are few. */
+export function subagentsAtWork(threadId: string, since: number): number {
+  let count = 0
+  for (const id of running.keys()) {
+    const thread = db.getThread(id)
+    if (thread?.kind === 'subagent' && thread.parentId === threadId && thread.createdAt >= since) count++
+  }
+  return count
+}
+
 /** A queue with nothing left in it is not held back any more. */
 function emptied(threadId: string) {
   if (db.getThread(threadId)?.held && !db.queueOf(threadId).length) db.updateThread(threadId, { held: false })
@@ -166,6 +227,11 @@ function letIn(waiting: Queued, thread: Thread): Item {
   const item = db.addItem(thread.id, message)
   db.removeQueued(waiting.id)
   emptied(thread.id)
+  const answer = awaited.get(waiting.id)
+  if (answer) {
+    awaited.delete(waiting.id)
+    answering.set(item.id, answer)
+  }
   return item
 }
 
@@ -185,9 +251,14 @@ export class Busy extends Error {}
 /**
  * Says something to a thread: the message joins the thread's queue, and the thread is set to work
  * if it is not at work already. `files` are the ids of files the owner sent with it, waiting to go
- * (see attachments.ts). `always` lets it in however many are waiting.
+ * (see attachments.ts). `always` lets it in however many are waiting. `answer` is told what the
+ * bot answers to it.
  */
-export function postMessage(threadId: string, said: Omit<Said, 'type' | 'role' | 'attachments'>, opts: { files?: string[]; always?: boolean } = {}): Delivery {
+export function postMessage(
+  threadId: string,
+  said: Omit<Said, 'type' | 'role' | 'attachments'>,
+  opts: { files?: string[]; always?: boolean; answer?: Answer } = {},
+): Delivery {
   const thread = db.getThread(threadId)
   if (!thread) throw new Error('No such thread')
   if (thread.archivedAt) throw new Error('This is an earlier conversation, which can only be read. Continue it to write in it again.')
@@ -202,11 +273,31 @@ export function postMessage(threadId: string, said: Omit<Said, 'type' | 'role' |
   }
   const attachments = opts.files?.length ? attach(thread.botId, thread.id, opts.files) : []
   const waiting = db.addQueued(threadId, { type: 'message', role: 'user', ...said, ...(attachments.length ? { attachments } : {}) })
+  if (opts.answer) awaited.set(waiting.id, { ...opts.answer, threadId })
   // The owner writing to a bot lets go what was held back for it, which goes in first.
   if (said.source === 'user' && thread.held) db.updateThread(threadId, { held: false })
   run(threadId)
   const place = db.queueOf(threadId).findIndex((w) => w.id === waiting.id) + 1
   return { place, held: place > 0 && !!db.getThread(threadId)?.held }
+}
+
+/**
+ * Says something to a thread and waits for what the bot answers to it: the last thing it says in
+ * the turn that answers the message, or nothing when it said nothing. Fails when the bot was
+ * stopped, or failed, or the message never reached it. `also` is what else that turn answered
+ * (something the owner had the bot read at once, as it worked). `waits` is called when the bot is
+ * at work on something else and the message has to wait its turn.
+ */
+export function ask(threadId: string, said: Omit<Said, 'type' | 'role' | 'attachments'>, opts: { waits?: () => void } = {}): Promise<{ text: string; also: Said[] }> {
+  return new Promise((resolve, reject) => {
+    try {
+      const { place } = postMessage(threadId, said, { answer: { resolve: (text, also) => resolve({ text, also }), reject } })
+      // The bot is at work on something else, and this waits its turn.
+      if (place > 0) opts.waits?.()
+    } catch (e) {
+      reject(e as Error)
+    }
+  })
 }
 
 /** Takes a waiting message back before the bot has read it: one of the owner's, or one from another bot. */
@@ -218,6 +309,7 @@ export function takeBack(id: number) {
   if (thread && waiting.message.attachments) discard(thread.botId, thread.id, waiting.message.attachments)
   db.removeQueued(id)
   emptied(waiting.threadId)
+  unanswered(id, 'The message was taken back before the bot read it.')
 }
 
 /** Lets a queue that was held back go on: the bot reads what waited, in order. */
@@ -318,7 +410,11 @@ async function loop(threadId: string, state: Run) {
       // A turn that was cut short for this message is not over: its answer is to what it was asked before, too.
       state.asked = state.cutShort ? [...state.asked, item] : [item]
       await turn(threadId, state)
+      // A turn that was cut short for the next message answers that one too, when it is over.
+      if (!state.cutShort) answered(threadId, state.asked)
     }
+    // Cut short for a message that was then taken back: what it had said is all the answer there is.
+    if (state.cutShort) answered(threadId, state.asked)
   } catch (e: any) {
     // What had been written of a reply is kept as it stood, for the owner to read and the bot to see.
     if (state.partial.text.trim()) db.addItem(threadId, { type: 'message', role: 'assistant', text: state.partial.text, stopped: true })
@@ -330,6 +426,7 @@ async function loop(threadId: string, state: Run) {
       status = 'error'
       db.addItem(threadId, { type: 'notice', level: 'error', text: String(e?.message ?? e) })
     }
+    answered(threadId, state.asked, signal.aborted ? 'It was stopped before it was done.' : String(e?.message ?? e))
   } finally {
     running.delete(threadId)
     // Stopped or failed, the bot does not start again by itself on what was waiting: that is held
@@ -337,6 +434,13 @@ async function loop(threadId: string, state: Run) {
     // conversation as it is. Not so when it is only the server shutting down.
     const stopped = broken && !closing ? db.getThread(threadId) : undefined
     if (stopped) for (const waiting of db.queueOf(threadId)) if (isReport(waiting.message)) letIn(waiting, stopped)
+    // Nobody is kept waiting for an answer to what waited here and will not be read now: it is held back, the
+    // server is stopping, or it went with the conversation, which was deleted.
+    for (const [id, waiter] of awaited) {
+      if (waiter.threadId !== threadId) continue
+      const waits = !!db.getQueued(id)
+      if (broken || closing || !waits) unanswered(id, waits ? 'The bot stopped before it got to that. It waits in the conversation.' : 'The conversation was deleted before the bot got to that.')
+    }
     const held = !!stopped && db.queueOf(threadId).length > 0
     const thread = db.updateThread(threadId, { status, ...(held ? { held } : {}) })
     if (thread) finished(thread)
@@ -351,6 +455,9 @@ async function turn(threadId: string, state: Run) {
   /** The turn before was cut short for what this one begins with. */
   const resumed = state.cutShort
   state.cutShort = false
+  // A turn that answers something asked on a call: the bot only passes work on in it (tools.ts onACall). So also when
+  // the turn answers something else besides, as one does that was cut short for a message the owner had read at once.
+  const call = state.asked.some(onCall)
   for (let step = 0; ; step++) {
     const thread = db.getThread(threadId)
     const bot = thread && getBot(thread.botId)
@@ -362,7 +469,8 @@ async function turn(threadId: string, state: Run) {
     if (disabledProviders.includes(provider.id)) throw new Error(`${provider.info().name} is switched off in Settings.`)
     const model = thread.model || bot.model || (await provider.models())[0]?.id
     if (!model) throw new Error(`No model is available from ${provider.info().name}. Check Settings.`)
-    const { tools, problems } = await toolsFor(thread)
+    const { tools: all, problems } = await toolsFor(thread)
+    const tools = call ? onACall(all) : all
     signal.throwIfAborted()
     // What the owner asked to be read now goes in before the model is asked again.
     for (const waiting of db.queueOf(threadId)) if (waiting.now) state.asked.push(letIn(waiting, thread))
@@ -395,12 +503,15 @@ async function turn(threadId: string, state: Run) {
       const upTo = session ? session.upTo : Math.max(kept?.upTo ?? 0, lastReply)
       const fresh = items.filter((i) => i.id > upTo && isUserMessage(i))
       if (!fresh.length) return
+      // Something asked on a call that the engine never got to hear (the turn for it failed before the engine ran) is
+      // told to it now, with whatever came next: this turn answers it too, so it is one in which the bot only passes work on.
+      const passing = call || fresh.some(onCall)
       const said = (resumed ? CUT_SHORT : '') + told(fresh.map((i) => i.data))
       const input = session ? said : transcript(items.filter((i) => i.id < fresh[0].id)) + said
       // The engine runs until it is done, the bot is stopped, or the turn is cut short for a message to be read now.
       const engine: EngineTurn = {
         steering: {},
-        endpoint: openToolEndpoint({ thread, bot, tools, signal, hurry: () => state.hurry.signal }),
+        endpoint: openToolEndpoint({ thread, bot, tools: passing && !call ? onACall(all) : tools, signal, hurry: () => state.hurry.signal }),
         cut: new AbortController(),
         given: [],
       }
@@ -410,7 +521,7 @@ async function turn(threadId: string, state: Run) {
       try {
         const events = provider.turn({
           model,
-          instructions: instructions(bot, thread, problems),
+          instructions: instructions(bot, thread, problems, passing),
           input,
           // What came with the messages it has not seen yet; earlier files are named in what it is told, and kept in the workspace.
           files: toShow(bot.id, threadId, fresh.flatMap((i) => filesOf(i.data)), provider.sees),
@@ -418,7 +529,8 @@ async function turn(threadId: string, state: Run) {
           cwd: workspaceDir(bot.id),
           toolsUrl: engine.endpoint.url,
           effort: bot.effort,
-          webSearch: bot.webSearch,
+          // Looking something up is work too: on a call it is passed on.
+          webSearch: bot.webSearch && !passing,
           signal: AbortSignal.any([signal, engine.cut.signal]),
           steering: engine.steering,
         })
@@ -454,7 +566,7 @@ async function turn(threadId: string, state: Run) {
     // An engine that ran this thread earlier has missed what happens from here on, so its
     // conversation is dropped; if the thread goes back to it, it starts again from what was said.
     if (db.getSession(threadId)) db.setSession(threadId, null)
-    const system = instructions(bot, thread, problems)
+    const system = instructions(bot, thread, problems, call)
     // The conversation is sent whole each time, so it is kept within what the model can take.
     const room = Math.max(1000, settings().historyLimit - Math.ceil(system.length / 4))
     if (await shorten(threadId, room, { provider, model, signal })) items = db.listItems(threadId)
@@ -465,7 +577,7 @@ async function turn(threadId: string, state: Run) {
         items: prepare(items),
         tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
         effort: bot.effort,
-        webSearch: bot.webSearch,
+        webSearch: bot.webSearch && !call,
         sessionId: threadId,
         signal,
         show: (attachments) => toShow(bot.id, threadId, attachments, provider.sees),
@@ -519,8 +631,8 @@ export const MAX_CHAIN = 20
 export interface Basis {
   /** The owner said something in it. Only then may the main assistant create a bot. */
   owner: boolean
-  /** The bots it may message: any (null), or only the ones whose message it is answering and that asked for a reply. */
-  mayMessage: Set<string> | null
+  /** The bots it may message: any (null), or only the ones whose message it is answering and that asked for a reply, each with the key of that message. */
+  mayMessage: Map<string, string> | null
   /** How many messages between bots in a row led to it. */
   chain: number
 }
@@ -536,7 +648,7 @@ export function basisOf(thread: Thread): Basis {
   if (!bots.length || causes.some((m) => m.source === 'user')) return { owner, mayMessage: null, chain: 0 }
   return {
     owner,
-    mayMessage: new Set(bots.filter((m) => m.replyWanted && m.bot).map((m) => m.bot!.id)),
+    mayMessage: new Map(bots.filter((m) => m.replyWanted && m.bot).map((m) => [m.bot!.id, m.key ?? ''])),
     chain: Math.max(...bots.map((m) => m.chain ?? 1)),
   }
 }
@@ -578,7 +690,8 @@ export function messageBot(from: Thread, sender: Bot, to: unknown, text: unknown
     // A reply that was asked for always gets in: the bot that asked is waiting for it.
     delivery = postMessage(
       conversationId,
-      { source: 'bot', text: words, bot: { id: sender.id, name: sender.name }, replyWanted, key, chain: basis.chain + 1 },
+      // A reply says which message it answers, so that whoever asked can tell it from anything else the bot writes.
+      { source: 'bot', text: words, bot: { id: sender.id, name: sender.name }, replyWanted, key, chain: basis.chain + 1, ...(basis.mayMessage?.get(target.id) ? { answers: basis.mayMessage.get(target.id) } : {}) },
       { always: !!basis.mayMessage, files: sent.map((file) => file.id) },
     )
   } catch (e) {

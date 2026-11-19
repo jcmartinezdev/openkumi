@@ -25,9 +25,14 @@ function parse(json: string): Record<string, unknown> {
 
 /**
  * What was said to the bot, as its model reads it. A message from another bot says whose it is and
- * whether it asked to be written back to; the conversation keeps only its words.
+ * whether it asked to be written back to; one the owner said on a call says so, with what was
+ * said on the call just before. The conversation keeps only the words.
  */
 export function heard(data: Said): string {
+  if (data.via === 'call') {
+    const before = data.before?.trim() ? `\nSaid on the call just before:\n${data.before.trim()}\n` : ''
+    return `<call_request>${before || '\n'}The user asks, on the call:\n${data.text}\n</call_request>`
+  }
   if (data.source !== 'bot') return data.text
   const from = data.bot ? ` from="${data.bot.name.replace(/"/g, "'")}" bot_id="${data.bot.id}"` : ''
   return `<bot_message${from} reply_wanted="${data.replyWanted ? 'yes' : 'no'}">\n${data.text}\n</bot_message>`
@@ -51,12 +56,12 @@ export function prepare(all: Item[]): ItemData[] {
   const recent = new Set([...outputs.keys()].slice(-12))
   const out: ItemData[] = summary ? [asMessage(summary)] : []
   for (const { data } of items) {
-    // Shown to the owner only: a notice, a page, and the record of a message sent to another bot (the call that sent it is there).
-    if (data.type === 'notice' || data.type === 'page' || data.type === 'sent' || data.type === 'function_call_output') continue
+    // Shown to the owner only: a notice, a page, the record of a call (what was asked on it is there as messages), and the record of a message sent to another bot (the call that sent it is there).
+    if (data.type === 'notice' || data.type === 'page' || data.type === 'sent' || data.type === 'call' || data.type === 'function_call_output') continue
     // A page the bot showed a while ago is not sent again in full: it is in the conversation, and can be read there.
     if (data.type === 'function_call' && data.name === 'show_page' && !recent.has(data.call_id) && data.arguments.length > 3000) {
       out.push({ ...data, arguments: JSON.stringify({ title: parse(data.arguments).title, html: '[shown earlier; left out here]' }) })
-    } else out.push(data.type === 'message' && data.role === 'user' && data.source === 'bot' ? { ...data, text: heard(data) } : data)
+    } else out.push(data.type === 'message' && data.role === 'user' && (data.source === 'bot' || data.via === 'call') ? { ...data, text: heard(data) } : data)
     if (data.type !== 'function_call') continue
     const result = outputs.get(data.call_id) as Extract<ItemData, { type: 'function_call_output' }> | undefined
     if (!result) out.push({ type: 'function_call_output', call_id: data.call_id, output: '[interrupted before it finished]' })

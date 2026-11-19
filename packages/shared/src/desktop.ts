@@ -144,6 +144,11 @@ export interface DesktopBridge {
     openMicrophoneSettings(): Promise<void>
   }
   /**
+   * Asks the person, the first time, whether the app may use the microphone, for a call. Resolves
+   * with whether it may. Missing from older apps.
+   */
+  microphone?(): Promise<boolean>
+  /**
    * Called with the address a sign-in in this computer's own browser came back to, for the window
    * to pass on to its environment. One that came before anything listened goes to the first listener.
    * Missing from older apps.

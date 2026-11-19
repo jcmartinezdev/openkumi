@@ -10,6 +10,7 @@ import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/cl
 import { moment, runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
+import { callLength } from '@openkumi/client/calls'
 import { type Report, parseReport, reportWord } from '@openkumi/client/reports'
 import { describe } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
@@ -66,6 +67,8 @@ function rows(items: Item[]): Row[] {
     else if (d.type === 'page') out.push({ key, kind: 'page', title: d.title, html: d.html, height: d.height })
     else if (d.type === 'notice') out.push({ key, kind: 'notice', text: d.text, error: d.level === 'error' })
     else if (d.type === 'summary') out.push({ key, kind: 'notice', text: 'The conversation has grown long: the bot now works from a summary of its older part.' })
+    // A call made from the computer: that it took place, and how long. What was asked on it is here as messages.
+    else if (d.type === 'call') out.push({ key, kind: 'notice', text: `Call · ${callLength(d.seconds)}` })
   }
   return out
 }

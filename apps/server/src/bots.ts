@@ -41,6 +41,7 @@ function readSettings(id: string): Settings | undefined {
     emoji: data.emoji || '🤖',
     description: oneLine(data.description ?? ''),
     look: readLook(data.look, id),
+    voice: voiceName(data.voice),
     rules: body.trim(),
     provider: data.provider || FALLBACK,
     model: data.model ?? '',
@@ -58,6 +59,8 @@ function writeSettings(s: Settings) {
     emoji: s.emoji,
     description: s.description,
     look: writeLook(s.look),
+    // Only written once one was chosen.
+    ...(s.voice ? { voice: s.voice } : {}),
     provider: s.provider,
     model: s.model,
     effort: s.effort,
@@ -67,6 +70,9 @@ function writeSettings(s: Settings) {
   }
   fs.writeFileSync(file(s.id), formatFrontMatter(front, s.rules))
 }
+
+/** A voice by name ("juniper"), or empty for the usual one. Which names there are is Codex's to say (calls.ts). */
+const voiceName = (value: unknown) => (typeof value === 'string' && /^[a-z]{1,30}$/.test(value.trim()) ? value.trim() : '')
 
 /** Bots whose model is choosing their look right now. */
 const choosing = new Set<string>()
@@ -121,6 +127,7 @@ function clean(patch: Record<string, unknown>): BotPatch {
   if (EFFORTS.includes(patch.effort as string)) out.effort = patch.effort
   if (typeof patch.webSearch === 'boolean') out.webSearch = patch.webSearch
   if (typeof patch.headless === 'boolean') out.headless = patch.headless
+  if (typeof patch.voice === 'string') out.voice = voiceName(patch.voice)
   const look = cleanLook(patch.look)
   if (Object.keys(look).length) out.look = look
   return out
@@ -161,6 +168,7 @@ export async function createBot(input: Record<string, unknown>): Promise<Bot> {
     id,
     emoji: '🤖',
     look: { ...lookFrom(id), ...look },
+    voice: '',
     rules: '',
     provider: newBotProvider(),
     model: '',
@@ -288,6 +296,7 @@ export async function importLegacyBots(rows: Record<string, any>[]) {
       emoji: String(r.emoji || '🤖'),
       description: '',
       look: lookFrom(id),
+      voice: '',
       rules: '',
       provider: String(r.provider || FALLBACK),
       model: String(r.model ?? ''),
