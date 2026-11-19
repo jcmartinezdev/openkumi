@@ -114,13 +114,17 @@ function over(error = '', denied = false) {
   set({ ...OFF, error, denied, last: calling.id || calling.last })
 }
 
+/** Counts the calls started and the hang-ups, so that a call that had to wait before it starts can tell it was overtaken. */
+let moves = 0
+
 /** Calls a bot. A call this app is already on is hung up first. */
 export async function call(botId: string) {
   if (!phone) return
-  if (calling.phase !== 'off') await hangUp()
-  // Another call may have been started while that one was being hung up. It gives way to this one, and lets go of
-  // its microphone: taking its place without that would leave the microphone open with nothing to close it.
-  release()
+  const move = ++moves
+  if (calling.phase !== 'off') await end()
+  // Overtaken while the call before was being hung up: by a newer call, which goes ahead in its place, or by the
+  // person hanging up. Taking the place regardless would leave the other's microphone open with nothing to close it.
+  if (move !== moves) return
   const mine: Held = {}
   held = mine
   /** Hung up, or replaced by another call, while this one was being set up. */
@@ -169,7 +173,10 @@ export async function call(botId: string) {
 }
 
 /** Ends the call from this side because something went wrong with it. */
-async function fail(error: string) {
+const fail = (error: string) => end(error)
+
+/** Ends the call this app is on, on this side and on the server. */
+async function end(error = '') {
   const id = calling.id
   over(error)
   if (id) await api('DELETE', `/api/calls/${id}`).catch(() => {})
@@ -177,9 +184,8 @@ async function fail(error: string) {
 
 /** Hangs up. */
 export async function hangUp() {
-  const id = calling.id
-  over()
-  if (id) await api('DELETE', `/api/calls/${id}`).catch(() => {})
+  moves++
+  await end()
 }
 
 /** Stops the bot hearing the person, or lets it hear them again. They still hear the bot. */
