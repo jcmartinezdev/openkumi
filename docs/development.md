@@ -26,15 +26,21 @@ instead of the source: `OPENKUMI_DESKTOP_APP="release/mac-arm64/OpenKumi.app/Con
 One tag releases everything. Nothing else does: not a merge, not a pull request.
 
 ```sh
+git switch -c release-0.2.0 main
 npm run bump 0.2.0                     # gives every part the version, the iPhone app included
 git commit -am "Release 0.2.0"
-git tag v0.2.0
-git push origin main v0.2.0            # the tag is what starts the release
+git push -u origin release-0.2.0
+gh pr create --fill                    # merge it once the tests pass
+git switch main && git pull
+git tag v0.2.0                         # on the merged commit
+git push origin v0.2.0                 # the tag is what starts the release
 ```
 
-The tag has to be `v` and the version the code says; the release stops at its first step if it
-is not. What the tag starts is `.github/workflows/release.yml`, whose jobs are named for what
-they do and run in this order, each only when the ones before it passed:
+Nothing reaches `main` but through a pull request, the version too (see
+[What GitHub enforces](#what-github-enforces)). The tag has to be `v` and the version the code
+says; the release stops at its first step if it is not. What the tag starts is
+`.github/workflows/release.yml`, whose jobs are named for what they do and run in this order,
+each only when the ones before it passed:
 
 | | Job | What it does |
 | --- | --- | --- |
@@ -106,6 +112,38 @@ The iPhone app is released by the same tag, once the release is published: over 
 only its JavaScript changed, through TestFlight and its public beta when its native side did. It
 needs the `EXPO_TOKEN` secret; without it everything else is still released. See
 [Releasing the iPhone app](mobile-releases.md).
+
+## What GitHub enforces
+
+Two rulesets guard the repository, under **Settings → Rules → Rulesets**.
+
+**Protect main** (`main`) holds for everyone, the repository's admin and anything working with
+the admin's sign-in included:
+
+- a change reaches it only through a pull request; none is pushed to it directly;
+- **Tests** ("Run the tests") has to pass on the pull request first. When it fails for a reason
+  that is not the change, run the failed job again from the pull request's page;
+- every commit is signed, and GitHub shows it as Verified. Merges made on GitHub are signed by
+  GitHub. To sign your own, with an SSH key you already have:
+
+  ```sh
+  git config --global gpg.format ssh
+  git config --global user.signingkey ~/.ssh/id_ed25519.pub
+  git config --global commit.gpgsign true
+  ```
+
+  and add the same key on GitHub (**Settings → SSH and GPG keys**) as a *Signing key*;
+- it cannot be force-pushed or deleted.
+
+No approval is required, as a pull request's author cannot approve their own. Ask for one when
+there is someone else to give it.
+
+**Protect release tags** (`v*`): only an admin can make, move or delete one, so neither a
+workflow nor anyone with write access can start or change a release. An admin can still delete
+a tag and push it again on a fixed commit, as described above.
+
+Also on, in the repository's security settings: secret scanning, with push protection (a push
+with a key or token in it is refused), Dependabot alerts, and private vulnerability reporting.
 
 ## Where the code is
 

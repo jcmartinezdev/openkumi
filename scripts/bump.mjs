@@ -3,10 +3,8 @@
 //   npm run bump 0.2.0
 //
 // The server, the desktop app and the iPhone app say this version, and the release is named
-// after it. Then commit, tag and push: the tag is what starts the release
-// (.github/workflows/release.yml, docs/development.md):
-//
-//   git commit -am "Release 0.2.0" && git tag v0.2.0 && git push origin main v0.2.0
+// after it. Then it goes to main through a pull request, and the merged commit is tagged: the tag
+// is what starts the release (.github/workflows/release.yml, docs/development.md, "Releasing").
 //
 // The iPhone app gets it too (apps/mobile/app.json): it is released with the rest (docs/mobile-releases.md).
 import { execFileSync } from 'node:child_process'
@@ -38,4 +36,6 @@ fs.writeFileSync(app, fs.readFileSync(app, 'utf8').replace(/("version":\s*")[^"]
 execFileSync(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' })
 
 console.log(`\n  Everything is at ${version}. To release it:\n`)
-console.log(`    git commit -am "Release ${version}" && git tag v${version} && git push origin main v${version}\n`)
+console.log(`    git switch -c release-${version} && git commit -am "Release ${version}" && git push -u origin HEAD && gh pr create --fill`)
+console.log(`\n  Once it is merged, tag the merged commit:\n`)
+console.log(`    git switch main && git pull && git tag v${version} && git push origin v${version}\n`)
