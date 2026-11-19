@@ -10,6 +10,7 @@ import * as Haptics from 'expo-haptics'
 import { Canvas, Circle, RadialGradient, vec } from '@shopify/react-native-skia'
 import type { Look } from '@openkumi/shared'
 import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
+import { PRIVACY_POLICY_URL } from '@openkumi/shared/telemetry'
 import { BODY_COLORS, describeLook, surprise } from '@openkumi/client/mascot'
 import { note } from '@openkumi/client/telemetry'
 import { AlphaBadge } from '../src/Alpha'
@@ -218,6 +219,8 @@ export default function Welcome() {
         <Text style={[styles.alpha, { color: theme.muted }]}>
           {ALPHA_NOTE}{' '}
           <Text accessibilityRole="link" style={{ color: theme.text, textDecorationLine: 'underline' }} onPress={() => void Linking.openURL(ISSUES_URL)}>Report a problem</Text>
+          {' · '}
+          <Text accessibilityRole="link" style={{ color: theme.text, textDecorationLine: 'underline' }} onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}>Privacy policy</Text>
         </Text>
       </View>
     </ScrollView>

@@ -4,7 +4,7 @@
 // The iPhone has the same two (apps/mobile/src/Telemetry.tsx); keep them alike.
 import { useEffect, useState } from 'react'
 import type { TelemetryEvent, TelemetryReport } from '@openkumi/shared'
-import { TELEMETRY_ASK, TELEMETRY_CHOICE, TELEMETRY_HOW, TELEMETRY_NEVER, TELEMETRY_SENT, TELEMETRY_TITLE, TELEMETRY_URL } from '@openkumi/shared/telemetry'
+import { PRIVACY_POLICY_URL, TELEMETRY_ASK, TELEMETRY_CHOICE, TELEMETRY_HOW, TELEMETRY_NEVER, TELEMETRY_SENT, TELEMETRY_TITLE, TELEMETRY_URL } from '@openkumi/shared/telemetry'
 import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { Page, Row, Section, Switch, useSetting } from './settingsUi'
@@ -82,11 +82,13 @@ export function PrivacyPage() {
   }, [connected, telemetry.value])
   const on = telemetry.value === true
   const newId = () => api<TelemetryReport>('POST', '/api/telemetry/id').then(setReport, (e) => setError(e.message))
+  const policy = <a href={PRIVACY_POLICY_URL} target="_blank" rel="noreferrer">privacy policy</a>
 
   // A server from before any of this sends nothing and has nothing to ask.
   if (!info) {
     return (
       <Page>
+        <p className="set-intro">What OpenKumi does with data is in its {policy}.</p>
         <Section title="Usage and errors">
           <Row title="Nothing is sent" description="The OpenKumi this app is connected to is a version that tells its makers nothing." />
         </Section>
@@ -95,7 +97,7 @@ export function PrivacyPage() {
   }
   return (
     <Page>
-      <p className="set-intro">This is about the computer that runs your bots, and applies to every app that uses it.</p>
+      <p className="set-intro">This is about the computer that runs your bots, and applies to every app that uses it. What OpenKumi does with data is in its {policy}.</p>
       <Section title="Usage and errors">
         <Row
           id="telemetry"

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Alert, Linking, View } from 'react-native'
 import type { TelemetryEvent, TelemetryReport } from '@openkumi/shared'
-import { TELEMETRY_ASK, TELEMETRY_CHOICE, TELEMETRY_HOW, TELEMETRY_URL } from '@openkumi/shared/telemetry'
+import { PRIVACY_POLICY_URL, TELEMETRY_ASK, TELEMETRY_CHOICE, TELEMETRY_HOW, TELEMETRY_URL } from '@openkumi/shared/telemetry'
 import { api, saveSettings, useStore } from '@openkumi/client/store'
 import { useSession } from '../../src/session'
 import { Note, Row, Section, SettingsPage, SwitchRow } from '../../src/SettingsUi'
@@ -34,12 +34,14 @@ export default function Privacy() {
   }, [connected, answer])
   const name = server?.name ?? 'the server'
   const on = answer === true
+  const policy = <Row label="Privacy policy" tone="action" accessibilityHint="Opens OpenKumi’s privacy policy" onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)} />
 
   // A server from before any of this sends nothing and has nothing to ask.
   if (!info) {
     return (
       <SettingsPage title="Privacy">
         <Note>{name} runs a version of OpenKumi that tells its makers nothing.</Note>
+        <Section>{policy}</Section>
       </SettingsPage>
     )
   }
@@ -56,6 +58,7 @@ export default function Privacy() {
 
       <Section>
         <Row label="Everything that can be sent" tone="action" accessibilityHint="Opens the page in OpenKumi’s docs" onPress={() => void Linking.openURL(TELEMETRY_URL)} />
+        {policy}
       </Section>
 
       {on && info.can && (

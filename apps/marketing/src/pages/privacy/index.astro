@@ -1,0 +1,207 @@
+---
+// The privacy policy, for the apps and this website. The App Store and TestFlight link to it
+// (apps/mobile/scripts/testflight.mjs), and so do the apps' Privacy pages (PRIVACY_POLICY_URL).
+// Keep it in step with what the apps really do: the docs' "What leaves your computer"
+// (apps/docs/src/content/docs/security/outside.mdx) and "Usage and error reports" say it in detail.
+import Layout from '../../layouts/Layout.astro'
+import { DOCS_URL, GITHUB_URL, ISSUES_URL } from '../../lib/site'
+
+/** Who is responsible for the data that does reach OpenKumi's makers, and how to reach them. */
+const RESPONSIBLE = {
+  name: 'goto LCS UG (haftungsbeschränkt)',
+  address: ['TODO street and number', 'TODO postcode and city', 'Germany'],
+  email: 'TODO@openkumi.ai',
+}
+/** How long usage and error reports are kept at PostHog. */
+const KEPT = 'TODO: how long'
+const UPDATED = '19 November 2026'
+
+// A page with a gap in it is not put on the real website; a preview may show it.
+const gaps = JSON.stringify({ RESPONSIBLE, KEPT }).includes('TODO')
+if (gaps && process.env.VERCEL_ENV === 'production') throw new Error('The privacy policy still has a TODO in it (apps/marketing/src/pages/privacy/index.astro).')
+
+const TELEMETRY = `${DOCS_URL}/telemetry/`
+const OUTSIDE = `${DOCS_URL}/security/outside/`
+---
+
+<Layout title="Privacy policy · OpenKumi" description="What OpenKumi and openkumi.ai do with data: what stays on your devices, what goes to the services you use, and the one thing its makers receive if you agree.">
+  <article class="container policy">
+    <span class="eyebrow">Updated {UPDATED}</span>
+    <h1>Privacy policy</h1>
+    <p class="lead">
+      OpenKumi runs AI bots on your own computers. It has no accounts and no cloud of its own: your
+      bots, their files and everything you say to them stay on the computer that runs them. This page
+      says what the OpenKumi apps (for the desktop, the iPhone and the server) and this website do
+      with data, and who is responsible for it.
+    </p>
+
+    <section>
+      <h2>In short</h2>
+      <ul>
+        <li>There is no OpenKumi account. Its makers never see your conversations, files, bots, sign-ins or keys.</li>
+        <li>What a bot sends to an AI model, an app or a website goes there because you or your bot chose it, on your account or the bot’s own.</li>
+        <li>The only thing OpenKumi’s makers receive is usage and error reports, and only if you agree to send them.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Who is responsible</h2>
+      <p>
+        For the usage and error reports, this website and the TestFlight beta of the iPhone app:<br />
+        {RESPONSIBLE.name}<br />
+        {RESPONSIBLE.address.map((line) => <>{line}<br /></>)}
+        <a href={`mailto:${RESPONSIBLE.email}`}>{RESPONSIBLE.email}</a>
+      </p>
+      <p>
+        Everything else OpenKumi does happens on your own computers, which you are in charge of. The
+        services your bots use, such as your AI plan, are responsible for what you send them.
+      </p>
+    </section>
+
+    <section>
+      <h2>What stays on your devices</h2>
+      <ul>
+        <li><strong>The computer that runs your bots</strong> keeps everything in one folder, <code>~/.openkumi</code>: the bots, their memory and files, the conversations, the settings, and the keys of the computers and phones paired with it.</li>
+        <li><strong>The iPhone app</strong> keeps the key it was given when you paired it (in the iPhone’s keychain), a copy of recent conversations so it opens without a connection, and its own settings, such as the theme. Deleting the app deletes them.</li>
+        <li><strong>Dictation</strong> is written down on the device itself, by Apple’s speech recognition. No sound leaves it; only the words go to the bot, when you send them.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>What goes to the services you use</h2>
+      <p>
+        These receive data because you set OpenKumi up to use them, and their own privacy policies
+        apply. <a href={OUTSIDE}>What leaves your computer</a> lists each one and exactly what goes there.
+      </p>
+      <ul>
+        <li><strong>Your AI plan or API</strong> (Anthropic, OpenAI, xAI, or one you set up): what a bot is told, the conversation, and the files you send it, on your account.</li>
+        <li><strong>OpenAI, on a call</strong>: your voice and the last few messages, through your ChatGPT plan.</li>
+        <li><strong>The apps of superpowers</strong> and <strong>websites</strong>: what a bot reads and does there, with its own sign-in.</li>
+        <li><strong>Tailscale</strong>, if you use it to reach your computer from away.</li>
+      </ul>
+      <p>And these, to keep OpenKumi working:</p>
+      <ul>
+        <li><strong>GitHub</strong>, where the desktop app and the server look for a newer version and download it.</li>
+        <li><strong>Expo</strong>, where the iPhone app looks for a newer version of itself when it starts. Expo sees the request, the app’s version and a random id for the installed app, which it uses to count installs.</li>
+        <li><strong>Apple</strong>, which delivers the iPhone app through TestFlight or the App Store, and the speech model for dictation.</li>
+        <li><strong>jsDelivr</strong>, from which the iPhone app loads the code that draws diagrams and formulas, when a conversation has one.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Usage and error reports</h2>
+      <p>
+        The first time an app connects to the computer that runs your bots, it asks whether that
+        computer may tell OpenKumi’s makers how OpenKumi is used and where it breaks. Nothing is sent
+        before you answer, and nothing ever if you say no.
+      </p>
+      <ul>
+        <li><strong>What:</strong> which features are used and how often, how many tokens each model used, the version of OpenKumi and the kind of computer, and where in OpenKumi’s own code something went wrong. Never what you or your bots write, the names of your bots or files, addresses or sign-ins. <a href={TELEMETRY}>Every event and value</a> is listed, and each is checked against that list before it is sent.</li>
+        <li><strong>Who sends it:</strong> only the computer that runs your bots. The desktop and iPhone apps hand it what they record about themselves (such as which screens were opened), and send nothing on their own.</li>
+        <li><strong>Under what:</strong> a random id for that computer, made from nothing about you.</li>
+        <li><strong>Where:</strong> to PostHog, a company that stores this kind of data, on its servers in the EU, through <code>pulse.openkumi.ai</code>. PostHog is set not to keep the internet address a report came from; it notes the country before dropping it.</li>
+        <li><strong>How long:</strong> {KEPT}.</li>
+        <li><strong>Why we may:</strong> because you agreed (Article 6(1)(a) GDPR). You can take that back at any time: <strong>Settings → Privacy</strong> in the app, or <code>openkumi telemetry off</code>. Switching off throws the id away.</li>
+      </ul>
+      <p>
+        <strong>Settings → Privacy</strong> also shows each report exactly as it was sent, and the id.
+        Since the id is all we know, we can only find what came from your computer if you tell us that
+        id: write to us with it and we delete everything sent under it.
+      </p>
+    </section>
+
+    <section>
+      <h2>Testing the iPhone app with TestFlight</h2>
+      <p>
+        When you test the iPhone app through TestFlight, Apple shares with us what it shares with every
+        app’s makers: the feedback and screenshots you choose to send, crash reports, and the model and
+        system of your device. If you were invited by email, we also see your name and email address.
+        Apple’s <a href="https://www.apple.com/legal/privacy/data/en/test-flight/">TestFlight &amp; Privacy</a>
+        says what that is. We use it only to fix what breaks.
+      </p>
+    </section>
+
+    <section>
+      <h2>This website</h2>
+      <p>
+        openkumi.ai and docs.openkumi.ai use no cookies, no analytics and nothing from other sites; the
+        fonts are served from here. They are hosted by Vercel, which records each request (the
+        internet address, the page and the browser) to deliver the sites and keep them safe, and keeps
+        those records for a short time. We may do that because the sites could not work without it
+        (Article 6(1)(f) GDPR).
+      </p>
+      <p>
+        Downloads come from GitHub, and what you write in an <a href={ISSUES_URL}>issue</a> is public
+        there. GitHub’s privacy statement applies to both.
+      </p>
+    </section>
+
+    <section>
+      <h2>Your rights</h2>
+      <p>
+        You may ask us what we hold about you, and to correct it, delete it, limit what we do with it,
+        or give it to you in a form you can take elsewhere. You may object to what we do on the
+        grounds of our own interest, and take back a consent at any time. Write to
+        <a href={`mailto:${RESPONSIBLE.email}`}>{RESPONSIBLE.email}</a>. You may also complain to a data
+        protection authority, in the country you live in or in Germany.
+      </p>
+    </section>
+
+    <section>
+      <h2>Children</h2>
+      <p>OpenKumi is not meant for children, and we do not knowingly receive anything about them.</p>
+    </section>
+
+    <section>
+      <h2>Changes</h2>
+      <p>
+        When OpenKumi changes what it does with data, this page changes with it, and the date at the
+        top says when. Every earlier version is in the <a href={`${GITHUB_URL}/commits/main/apps/marketing/src/pages/privacy/index.astro`}>history on GitHub</a>.
+      </p>
+    </section>
+  </article>
+</Layout>
+
+<style>
+  .policy {
+    max-width: 760px;
+    padding-top: 72px;
+    padding-bottom: 112px;
+  }
+  h1 {
+    font-size: clamp(38px, 6vw, 56px);
+    margin: 10px 0 20px;
+  }
+  .lead {
+    color: var(--muted);
+    font-size: 19px;
+  }
+  section {
+    margin-top: 44px;
+  }
+  h2 {
+    font-size: 26px;
+    margin-bottom: 12px;
+  }
+  section p + p,
+  section ul + p,
+  section p + ul {
+    margin-top: 12px;
+  }
+  ul {
+    margin: 0;
+    padding-left: 22px;
+  }
+  li + li {
+    margin-top: 8px;
+  }
+  a {
+    color: var(--sky);
+    text-underline-offset: 2px;
+  }
+  code {
+    padding: 1px 5px;
+    border-radius: 6px;
+    background: var(--bg-sunk);
+  }
+</style>
