@@ -15,6 +15,11 @@ export const RELEASES_URL = `${GITHUB_URL}/releases/latest`
  * (apps/desktop/scripts/dist.mjs), so this address always gives the newest.
  */
 export const DOWNLOAD_URL = `${RELEASES_URL}/download/OpenKumi-mac-arm64.dmg`
+/**
+ * The iPhone app: the public link of its TestFlight beta (the group "Public beta",
+ * docs/mobile-releases.md). It is not in the App Store while OpenKumi is an alpha.
+ */
+export const IPHONE_BETA_URL = 'https://testflight.apple.com/join/dvcBQvNu'
 /** What installs the server on a Mac or Linux computer that runs the bots with no app in front of it (public/install.sh). */
 export const INSTALL_COMMAND = 'curl -fsSL https://openkumi.ai/install.sh | sh'
 

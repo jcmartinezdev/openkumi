@@ -4,7 +4,7 @@ import Layout from '../layouts/Layout.astro'
 import Mascot from '../components/Mascot.astro'
 import ProviderMark from '../components/ProviderMark.astro'
 import Shot from '../components/Shot.astro'
-import { DOWNLOADS, DOWNLOAD_URL, GITHUB_URL, INSTALL_COMMAND, ISSUES_URL, RELEASES_URL } from '../lib/site'
+import { DOWNLOADS, DOWNLOAD_URL, GITHUB_URL, INSTALL_COMMAND, IPHONE_BETA_URL, ISSUES_URL, RELEASES_URL } from '../lib/site'
 
 // The superpowers that ship with the app, read from the server's own folder of them, by name as the app lists them.
 const powers = Object.entries(import.meta.glob<{ name: string; tagline: string }>('../../../server/superpowers/*/superpower.json', { eager: true, import: 'default' }))
@@ -388,6 +388,15 @@ const faq = [
           <button type="button" class="button secondary" data-copy={INSTALL_COMMAND}>Copy</button>
         </div>
       </div>
+      <div class="server iphone" data-system="iphone">
+        <div>
+          <h3>On your iPhone</h3>
+          <p>The iPhone app is a public beta on TestFlight, Apple’s app for trying apps before they reach the App Store. It pairs with the computer that runs your bots, and reaches it over Wi-Fi at home and Tailscale away.</p>
+        </div>
+        <div class="files">
+          <a class="button primary" href={IPHONE_BETA_URL}>Join the beta on TestFlight</a>
+        </div>
+      </div>
       <p class="fine center">Every file, with its checksum, is in the <a href={RELEASES_URL}>newest release on GitHub</a>.</p>
     </div>
   </section>
@@ -441,6 +450,8 @@ const faq = [
     }
   }
   if (system) document.querySelector(`[data-system="${mine}"]`)?.classList.add('yours')
+  // On an iPhone, the app for it is what the visitor can get from here.
+  if (/iPhone|iPod/.test(agent)) document.querySelector('[data-system="iphone"]')?.classList.add('yours')
 
   for (const button of document.querySelectorAll('[data-copy]')) {
     button.addEventListener('click', async () => {
@@ -1342,7 +1353,8 @@ const faq = [
     gap: 6px;
   }
   /* The visitor's own system, when the page can tell. */
-  .system.yours {
+  .system.yours,
+  .server.yours {
     border-color: var(--sky);
     box-shadow: 0 0 0 3px var(--sky-soft);
   }
@@ -1384,6 +1396,9 @@ const faq = [
   .server div:first-child {
     display: grid;
     gap: 8px;
+  }
+  .iphone .files {
+    margin-top: 0;
   }
   .command {
     display: flex;
