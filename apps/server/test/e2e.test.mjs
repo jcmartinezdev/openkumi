@@ -2341,10 +2341,15 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
     assert.equal((await beneath()).length, 4)
 
     // There is one call at a time: a new one ends the one under way.
+    const under = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer() })
+    assert.deepEqual(await api('POST', `/api/calls/${under.call.id}/alive`), { ok: true })
     const third = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer() })
-    await assert.rejects(api('POST', `/api/calls/${second.call.id}/alive`), /That call is over/)
+    await assert.rejects(api('POST', `/api/calls/${under.call.id}/alive`), /That call is over/)
     assert.equal((await api('GET', '/api/state')).call.id, third.call.id)
     await api('DELETE', `/api/calls/${third.call.id}`)
+    // A bot that is gone cannot be called, and that is said as what it is.
+    const gone = await fetch(`${BASE}/api/bots/no-such-bot/call`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...auth() }, body: JSON.stringify({ sdp: offer() }) })
+    assert.deepEqual([gone.status, (await gone.json()).error], [404, 'No such bot'])
 
     // A bot that is stopped, or fails, while the caller waits: the voice says so.
     events.length = 0
@@ -2410,16 +2415,21 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
     // owner writes next. The turn that then answers both is still one in which the bot only passes work on.
     const engine = await api('POST', '/api/bots', { name: 'Engine', provider: 'claude-code' })
     const { settings: usual } = await api('GET', '/api/state')
-    await api('PATCH', '/api/settings', { disabledProviders: [...usual.disabledProviders, 'claude-code'] })
-    events.length = 0
-    const unheard = await api('POST', `/api/bots/${engine.id}/call`, { sdp: offer('a=says:Said on the call') })
-    await until(() => words().some((line) => line.startsWith('assistant: Spoken: What came back for “Said on the call”:\n\nThat did not work. Claude Code is switched off')))
-    await api('DELETE', `/api/calls/${unheard.call.id}`)
-    await api('PATCH', '/api/settings', { disabledProviders: usual.disabledProviders })
-    const later = await say((await conversationOf(engine.id)).id, '!system')
-    assert.match(lastText(later), /# You are answering on a call\n/)
-    assert.match(await told('!system', engine.id), /^(?![\s\S]*# You are answering on a call)/)
-    await api('DELETE', `/api/bots/${engine.id}`)
+    try {
+      await api('PATCH', '/api/settings', { disabledProviders: [...usual.disabledProviders, 'claude-code'] })
+      events.length = 0
+      const unheard = await api('POST', `/api/bots/${engine.id}/call`, { sdp: offer('a=says:Said on the call') })
+      await until(() => words().some((line) => line.startsWith('assistant: Spoken: What came back for “Said on the call”:\n\nThat did not work. Claude Code is switched off')))
+      await api('DELETE', `/api/calls/${unheard.call.id}`)
+      await api('PATCH', '/api/settings', { disabledProviders: usual.disabledProviders })
+      const later = await say((await conversationOf(engine.id)).id, '!system')
+      assert.match(lastText(later), /# You are answering on a call\n/)
+      assert.match(await told('!system', engine.id), /^(?![\s\S]*# You are answering on a call)/)
+    } finally {
+      // Whatever went wrong, the tests after this one find Claude Code switched on.
+      await api('PATCH', '/api/settings', { disabledProviders: usual.disabledProviders })
+      await api('DELETE', `/api/bots/${engine.id}`).catch(() => {})
+    }
 
     // A bot at work on something else gets to what was asked on a call after that, and the voice says so. When its
     // conversation is deleted with the request still waiting, the voice says that nothing came of it.

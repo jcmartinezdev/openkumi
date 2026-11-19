@@ -430,6 +430,8 @@ const called = async <T>(act: () => Promise<T>): Promise<T> => {
   try {
     return await act()
   } catch (e: any) {
+    // What was refused for a reason of its own (a bot that is gone) is passed on as it is.
+    if (e instanceof HttpError) throw e
     fail(e instanceof calls.CallError ? 409 : 500, e.message)
   }
 }

@@ -61,6 +61,10 @@ meanwhile, and you can go on talking. Only what was started on the call is read 
 else that happens to come in meanwhile, from work you asked for in writing or from another bot,
 stays in the conversation and is not sent to the speech model.
 
+There is one way round this, and it is yours: when a request from a call is still waiting for a
+bot that is at work on something else, pressing **Send now** on it puts it into the turn that is
+already running, which has all the bot's tools.
+
 This keeps the call free, and it means nothing is done on a few spoken words alone: what you
 asked for, what was started for it and what came of it are all in the conversation, to read
 afterwards. It also costs time. Something the bot would look up in a few seconds when you write

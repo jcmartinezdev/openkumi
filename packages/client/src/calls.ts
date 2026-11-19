@@ -118,6 +118,9 @@ function over(error = '', denied = false) {
 export async function call(botId: string) {
   if (!phone) return
   if (calling.phase !== 'off') await hangUp()
+  // Another call may have been started while that one was being hung up. It gives way to this one, and lets go of
+  // its microphone: taking its place without that would leave the microphone open with nothing to close it.
+  release()
   const mine: Held = {}
   held = mine
   /** Hung up, or replaced by another call, while this one was being set up. */
