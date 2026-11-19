@@ -1,0 +1,26 @@
+---
+// What leaves the computer that runs the bots, and where it goes.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Zone from '../diagram/Zone.astro'
+
+const { caption } = Astro.props as { caption?: string }
+const out = [
+  ['Your AI plan', 'the prompt, the conversation, tool results'],
+  ['Superpower apps', 'what the bot reads and does there, as itself'],
+  ['Websites', 'whatever the bots browse, fetch and watch'],
+  ['GitHub', 'a look for a newer version of OpenKumi'],
+]
+const y = (i: number) => 16 + i * 64
+---
+
+<Figure width={680} height={370} title="What leaves your computer, and where it goes" caption={caption}>
+  <Zone x={4} y={4} w={208} h={360} label="Your computer" side="bottom-left" />
+  <Box x={18} y={16} w={180} h={248} kind="ours" title="OpenKumi server" lines={['your bots at work']} />
+  <Box x={18} y={282} w={180} h={56} kind="ours" title="Desktop app" lines={['on a call']} />
+  {out.map(([title, line], i) => <Box x={300} y={y(i)} w={372} h={52} kind="outside" title={title} lines={[line]} />)}
+  {out.map((_, i) => <Arrow points={[[198, y(i) + 26], [300, y(i) + 26]]} kind="secret" />)}
+  <Box x={300} y={276} w={372} h={68} kind="outside" title="OpenAI, during a call" lines={['your voice, the bot’s name and description,', 'the last few messages, the bot’s answers']} />
+  <Arrow points={[[198, 310], [300, 310]]} kind="secret" />
+</Figure>

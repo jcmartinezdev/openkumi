@@ -1,0 +1,127 @@
+---
+title: Superpowers
+description: "What a bot can do beyond its own tools, the superpowers that ship with OpenKumi, how to switch one on, and how a bot signs in to an app."
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components'
+import Sequence from '../../components/diagram/Sequence.astro'
+
+A superpower is something a bot can do beyond chatting, browsing and keeping its files: working in
+one of your apps, or know-how for a kind of job. You switch each one on for one bot at a time, and
+a bot can use what you gave it but cannot change it or give itself more.
+
+## What there is
+
+Every superpower ships with OpenKumi; there is no way to add one from the app. They are grouped by
+what they are for (Productivity, Work, Creative, Marketing, Travel, Everyday), and the same one can
+be in several groups.
+
+**Apps**, which a bot signs in to with an account of its own:
+
+| For | Superpowers |
+| --- | --- |
+| Tasks and notes | Notion, Todoist, ClickUp, Evernote, Readwise |
+| Work | Linear, Atlassian (Jira and Confluence), Miro, Sentry, PostHog |
+| Customers and documents | Attio, folk, PandaDoc, Jotform |
+| Meetings | Granola, Otter.ai, Fathom, tl;dv |
+| Sites and marketing | Webflow, Wix, Klaviyo, Typefully |
+| Money | PocketSmith |
+
+**Know-how**, with nothing to sign in to: Weather, Exchange rates, Holidays, Watch a page, SEO &
+AI search, Social posts, Launch, Landing pages, Competitors. These use free services the bot
+reaches with `web_fetch`, or show it how to use its own browser, files, pages and automations for a
+kind of job.
+
+Each superpower has a page in the app that says what it does and lets you read every file it gives
+a bot.
+
+## Switching one on
+
+<Steps>
+
+1. Open **Settings → Superpowers** and pick one, or open a bot's settings and go to its
+   superpowers.
+
+2. Choose **Activate superpower** for the bot you want. Nothing is switched on for all bots at
+   once.
+
+3. If it works in an app, sign the bot in (below). It is active once the bot is signed in.
+
+4. Ask the bot to use it. It is told one line about each of its superpowers and where its
+   instructions are, and reads them when a task calls for it.
+
+</Steps>
+
+Deactivating a superpower for a bot forgets that bot's sign-in. A bot whose sign-in lapsed shows
+**Sign in again**.
+
+## Signing a bot in to an app
+
+**Activate superpower** on one that works in an app opens a popup that asks how:
+
+- **With your browser** (the desktop app, installed). The app's own sign-in page opens in the
+  browser on your computer, with the accounts you already have there. It sends the browser back to
+  `openkumi://sign-in/callback`, which your computer opens with OpenKumi, and the app passes that
+  on to the environment it shows. This works whichever computer the bots run on.
+- **On the phone.** The sign-in page opens in a sheet that has the accounts you have in Safari,
+  and the sheet hands the way back to the app, which passes it on the same way.
+- **Inside the bot's browser.** The page opens in a window of the bot's own browser, which you use
+  from the app as you would any window you take control of. It suits giving a bot an account other
+  than yours. This also leaves the bot's browser signed in to that app's website; the other two
+  ways do not.
+
+Either way the bot gets an account of its own (two bots can use two different accounts), and
+cancelling leaves the superpower as it was, with nothing kept.
+
+<Sequence
+  title="Signing a bot in to an app with your browser"
+  numbered
+  actors={[
+    { id: 'app', label: 'The app', sub: 'on your computer', kind: 'ours' },
+    { id: 'server', label: 'OpenKumi server', sub: 'where the bot runs', kind: 'ours' },
+    { id: 'browser', label: 'Your browser', sub: 'your own accounts' },
+    { id: 'service', label: 'The app’s service', sub: 'e.g. Notion', kind: 'outside' },
+  ]}
+  steps={[
+    { from: 'app', to: 'server', text: 'activate, with your browser' },
+    { from: 'server', to: 'service', text: ['how do you sign in?', 'register OpenKumi'] },
+    { from: 'server', to: 'app', text: ['the sign-in page, with a', 'one-time value to expect back'], reply: true },
+    { from: 'app', to: 'browser', text: 'open it' },
+    { from: 'browser', to: 'service', text: 'you sign in and allow it' },
+    { from: 'service', to: 'browser', text: ['back to', 'openkumi://sign-in/callback'], reply: true },
+    { from: 'browser', to: 'app', text: 'opens OpenKumi with it' },
+    { from: 'app', to: 'server', text: 'the way back', kind: 'secret' },
+    { note: ['Is this the sign-in it began, for this bot,', 'within 15 minutes, and not used yet?'], over: ['server'] },
+    { from: 'server', to: 'service', text: ['swaps the code for', 'the bot’s own tokens'], kind: 'secret' },
+    { note: ['Kept in the bot’s private folder,', 'readable only by your account'], over: ['server'], kind: 'secret' },
+  ]}
+  caption="The sign-in finishes only the way it was started, once, for the bot it was started for. The tokens never leave the computer that runs the bots."
+/>
+
+## What a superpower is made of
+
+Each superpower is a folder in the code, `apps/server/superpowers/<id>`:
+
+```
+superpower.json   name, tagline, groups, what a bot can do with it, the line the bot is told,
+                  and its service (an MCP server), when it has one
+icon.svg          its icon
+README.md         its page in the app
+instructions.md   how the bot goes about it; the bot reads it when a task calls for it
+```
+
+Any other file in the folder is the bot's to read too, and you can read every one of them (never
+change them) on the superpower's page. A superpower has instructions, a service, or both. The app
+ones are both: instructions, and the app's own MCP server, whose tools the bot gets as
+`mcp__<superpower>__<tool>`. The know-how ones are instructions only.
+
+`superpower.json` can also say which of a service's tools only read (`mcp.reads`, so a
+[watch](/automations/#what-starts-one) can call them) and how its app calls OpenKumi back
+(`hooks`, for [webhooks](/webhooks/)).
+
+<Aside type="caution" title="A superpower acts as the bot">
+  A superpower's instructions are followed with the bot's own browser and accounts, so each is
+  written to ask you before anything is sent, changed or paid. That is an instruction to the bot,
+  not a lock: give a bot only the accounts you are comfortable with it using. See [What a bot can
+  reach](/security/bots/).
+</Aside>

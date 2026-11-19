@@ -1,0 +1,215 @@
+---
+title: Servers and addresses
+description: "How one app works with several OpenKumi servers, and how it reaches each one at several addresses (home network, Tailscale, a public https address): what is tried first, what second, how addresses are found by themselves, and the settings for all of it."
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components'
+import Sequence from '../../components/diagram/Sequence.astro'
+import Reaching from '../../components/diagrams/Reaching.astro'
+
+An OpenKumi app can work with **several servers** (environments), and reach each one at **several
+addresses**. You pair once; from then on the app finds the best way to each server by itself, at
+home and away, and moves when a better way appears. This page explains how, and where to change it.
+
+## Several servers
+
+A computer that runs the OpenKumi server is an **environment**. The desktop app can hold several:
+
+- **the local environment**, the server on this computer, which the app starts itself;
+- **any number of remote environments**: a Mac mini in a cupboard, a computer at the office, a
+  friend's server you were given a code for. Each was paired on its own and has its own key.
+
+**Settings → Environments** lists them, each with a switch (**Use …**) and a status:
+
+| Status | Meaning |
+| --- | --- |
+| Connected | it answers, and has shown it is that server |
+| Not reachable | nothing answers at any of its addresses |
+| No longer lets this computer in | it answers, but this computer was removed there: pair again |
+| Runs an older OpenKumi, which has to be updated first | **Update it** asks it to update itself |
+| Runs a newer OpenKumi than this app | update the app (**Settings → About**) |
+| Turned off | its switch is off; the app does not try it |
+
+The window shows **one environment at a time** (marked **Showing now**). **Open**, the sidebar, or
+the **Environment** menu switches to another; the window stays as it is and only what it is
+connected to changes. The app connects only to the one it shows, so while you look at one, the
+bots of the others go on working on their own computers, unaffected.
+
+The iPhone app holds one environment at a time.
+
+### The local environment
+
+When the local environment is on, the app first looks for an OpenKumi server already running on
+this computer, at port 4317 (or `OPENKUMI_PORT`). If one answers and proves it is the real thing,
+by signing a value the app made up with the access code in the data folder, the app uses it and
+leaves it running when you quit; that is how the app works with a server you installed alone on the
+same computer. If nothing answers there, the app starts its own server: on port 4317, or on a free
+port if 4317 is taken by something that is not an OpenKumi of yours.
+
+## Several addresses
+
+The same server can usually be reached in more than one way. A device keeps every address it knows
+for a server, each of one kind:
+
+| Kind | Recognised by | Plain `http`? |
+| --- | --- | --- |
+| **This computer** | `127.x.x.x`, `localhost`, `::1` | yes |
+| **Home network** | `10.x`, `172.16–31.x`, `192.168.x`, `169.254.x`; IPv6 local addresses; a computer's own name (`mac-mini`, `mac-mini.local`, or ending in `.lan`, `.home`, `.internal`, `.home.arpa`) | yes |
+| **Tailscale** | `100.64.x.x` to `100.127.x.x`, `fd7a:115c:a1e0:…`, or a name ending in `.ts.net` | yes: Tailscale encrypts the connection itself |
+| **Internet** | anything else: a public IP or a domain | no: `https` only |
+
+They come from three places:
+
+1. **The address you paired with**, from the code or QR code.
+2. **The server itself.** Every time a device connects, it asks the server where else it can be
+   reached, and the server tells it its home network addresses and its Tailscale name and
+   addresses. (A server that does not let other computers connect reports none.)
+3. **You.** Any address you add by hand: a Tailscale name, an IP, or a public `https` address in
+   front of the server.
+
+<Reaching caption="Each address is tried in turn: the home network first, then Tailscale, then any public address. Before any key is sent, whatever answers has to prove it is that server." />
+
+## What is tried first
+
+The addresses are put in this order, and the first one where the server answers is used:
+
+1. **This computer.**
+2. **The home network**, waiting up to 2.5 seconds for an answer.
+3. **Tailscale**, waiting up to 5 seconds.
+4. **The internet**, waiting up to 6 seconds.
+
+Within each kind, the addresses the server reported come before the ones you added, and then the
+order they were added in.
+
+**All of them are asked at once**, not one after another, so being away from home costs at most
+the 2.5 seconds it takes to give up on the home address. An address only wins when every address
+before it has answered or given up: a home address that answers is always preferred to Tailscale,
+even when Tailscale answered a moment sooner.
+
+**Asking is not sending the key.** At each address the device asks "who are you?", with a value it
+made up and a tag made from its key, and only an address that answers with a signature that only
+its own server could make is a candidate. Something else at a saved address (another device that
+got the same home address on another network, another OpenKumi server) is never sent the key. See
+[Before a key is sent anywhere](/security/access/#before-a-key-is-sent-anywhere).
+
+<Sequence
+  title="Away from home: every address is asked at once, and the first in order that proves itself is used"
+  numbered
+  actors={[
+    { id: 'app', label: 'Your laptop', sub: 'away from home', kind: 'ours' },
+    { id: 'home', label: '192.168.1.20', sub: 'home network' },
+    { id: 'ts', label: 'mac-mini…ts.net', sub: 'Tailscale' },
+    { id: 'pub', label: 'kumi.example.com', sub: 'your https address', kind: 'outside' },
+  ]}
+  steps={[
+    { section: 'All at once, without the key' },
+    { from: 'app', to: 'home', text: 'who are you?' },
+    { from: 'app', to: 'ts', text: 'who are you?' },
+    { from: 'app', to: 'pub', text: 'who are you?' },
+    { from: 'pub', to: 'app', text: 'proof: your server', reply: true },
+    { from: 'ts', to: 'app', text: 'proof: your server', reply: true },
+    { note: ['No answer here: given up', 'after 2.5 seconds'], over: ['home'], kind: 'danger' },
+    { note: ['Home gave up; Tailscale comes', 'before the public address: use it'], over: ['app'], kind: 'ours' },
+    { from: 'app', to: 'ts', text: 'connect, with the key', kind: 'secret' },
+    { section: 'Back home, at the next look' },
+    { from: 'app', to: 'home', text: 'who are you?' },
+    { from: 'home', to: 'app', text: 'proof: your server', reply: true },
+    { from: 'app', to: 'home', text: 'move here, with the key', kind: 'secret' },
+  ]}
+  caption="The public address answered first, but Tailscale comes before it, so once the home address had given up, Tailscale was used. Back home, the app moves to the home address on its own."
+/>
+
+## Staying on the best address
+
+While connected, the device asks every address again **once a minute**, and **whenever the
+network changes** (the computer comes back online, or the app comes back to the front; on the
+phone, whenever the app becomes active). Then:
+
+- an earlier address that answers now wins: home again, after Tailscale;
+- when the address in use stops answering, the next one that answers takes over;
+- when something other than the server answers at the address in use, the device leaves it at once.
+
+When no address answers, it tries again every 2 seconds, and every 5 seconds when the server
+answered but refused this device or runs a version this app cannot work with. Nothing is lost in
+between: what you were looking at stays on the screen from the copy the app keeps.
+
+## Finding addresses by themselves
+
+You pair once, wherever you are, and do not have to type an address again:
+
+- **The server reports its addresses** each time a device connects: its addresses on every home
+  network it is on, and its name and addresses on Tailscale. The device keeps them, in place of the
+  ones it reported before, so a server that got a new home address (a new router, a move) is found
+  at the new one, and one it no longer has goes away. At most eight are kept, and only home network
+  and Tailscale addresses are taken from a server; a public address is only ever yours to add.
+- **Addresses you added are never touched** by what the server reports.
+- **Tailscale is found by itself.** The server asks the Tailscale program on its computer (the Mac
+  app's own copy, or `tailscale` on the `PATH`; `OPENKUMI_TAILSCALE_BIN` names another) for this
+  computer's name and addresses on your tailnet, and also notices any Tailscale address the
+  computer has. It knows the name even while Tailscale is off, so a phone that learns it at home
+  can use it as soon as Tailscale is on, away from home. With Tailscale on both devices, there is
+  nothing to set up.
+- **A server that reports nothing** (one reached through a tunnel, say) never takes away the way to
+  it.
+
+## A public address
+
+Tailscale is the easy way to reach your bots from anywhere, and the one we recommend. If you would
+rather use an address of your own on the internet:
+
+<Steps>
+
+1. Put a reverse proxy or tunnel with a certificate in front of port 4317 on the computer that runs
+   the bots, so it answers at an `https` address, such as `https://kumi.example.com`. A plain
+   `http` address on the internet is refused ("Needs https"): whoever is in between could read the
+   device's key.
+
+2. On each device, open **Settings → Environments**, press **N addresses** under the environment,
+   type the address and press **Add address**.
+
+</Steps>
+
+The server treats what comes through a proxy as coming from elsewhere: a paired device's key works
+there, the access code of the computer itself never does, and pairing or removing devices still
+only happens at that computer. But the API's door is then on the internet, guarded by the paired
+keys alone, so prefer Tailscale where you can.
+
+## The settings
+
+### On a computer
+
+**Settings → Environments**, under each remote environment:
+
+- the line under its name says which address is in use and of what kind: "Connected · via Home
+  network · 192.168.1.20:4317";
+- **N addresses** opens the list, in the order they are tried. Each shows its kind, how it answered
+  just now (**In use**, **Answers**, **Not reachable from here**, **Something else answers**,
+  **Needs https**, **No longer lets this computer in**, **Runs an older/newer OpenKumi**), and
+  "reported by it" for those the server keeps up to date;
+- **Remove** takes away an address you added (the ones the server reported cannot be removed: it
+  keeps them up to date);
+- **Add address** takes another. Type it as you like: `mac-mini.tail1234.ts.net`,
+  `192.168.1.20`, or `https://kumi.example.com`. When you leave them out, `http://` and the port
+  `4317` are added (no port is added to an `https` address).
+
+An address is checked when you add it. If something else answers there, it is refused and nothing
+is sent. If nothing answers yet, it is kept, and the key goes there only once the server answers
+and proves itself.
+
+### On the computer that runs the bots
+
+**Settings → Environments → Let other computers connect** (or `openkumi lan on`) lets other devices
+reach it at all; off, it listens on this computer only and reports no addresses. Below it, **Pair a
+computer** shows the computer's home network addresses and Tailscale names, for typing in; the QR
+code carries the first home network address, and the device learns the rest once it connects.
+
+### On the iPhone
+
+In the phone's Settings, the server's name at the top opens its page: **Addresses** lists them in
+the order they are tried, with which one is in use, and **Add** takes another, the same way.
+
+<Aside title="Troubleshooting">
+  An environment never connects away from home: turn Tailscale on, on both, or add a public `https`
+  address. Never at home: **Let other computers connect** has to be on, and a firewall must let
+  port 4317 in. See [When something is wrong](/troubleshooting/#the-app-cannot-connect).
+</Aside>

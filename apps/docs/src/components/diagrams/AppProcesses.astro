@@ -1,0 +1,31 @@
+---
+// The desktop app's processes and threads, and what the server starts.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Zone from '../diagram/Zone.astro'
+
+const { caption } = Astro.props as { caption?: string }
+---
+
+<Figure width={680} height={372} title="The desktop app's processes and threads, and the programs the server starts" caption={caption}>
+  <Zone x={4} y={8} w={672} h={196} label="The desktop app" side="bottom-right" />
+  <Box x={20} y={40} w={190} h={64} title="Main process" lines={['window, menu, environments']} />
+  <Box x={240} y={40} w={240} h={140} kind="ours" title="The window" lines={['openkumi://app/']} code valign="top" />
+  <Box x={256} y={104} w={208} h={60} title="Worker thread" lines={['the connection, and the', 'browser’s pictures']} />
+  <Box x={510} y={40} w={154} h={64} title="Dictation" lines={['a Mac program,', 'while you dictate']} />
+  <Arrow points={[[210, 72], [240, 72]]} both />
+  <Arrow points={[[510, 72], [480, 72]]} />
+
+  <Zone x={4} y={220} w={672} h={144} label="The server’s process" side="bottom-left" />
+  <Box x={20} y={262} w={170} h={64} kind="ours" title="OpenKumi Server" lines={['your bots, at work']} />
+  <Box x={250} y={268} w={128} h={54} title="Chrome" lines={['one per bot']} />
+  <Box x={393} y={268} w={128} h={54} title="Engine" lines={['one per turn']} />
+  <Box x={536} y={268} w={128} h={54} title="Codex" lines={['on a call']} />
+  <Arrow points={[[190, 280], [220, 280], [220, 246], [600, 246], [600, 268]]} />
+  <Arrow points={[[314, 246], [314, 268]]} />
+  <Arrow points={[[457, 246], [457, 268]]} />
+
+  <Arrow points={[[90, 104], [90, 262]]} label="starts and stops it" at={0.42} />
+  <Arrow points={[[360, 164], [360, 214], [150, 214], [150, 262]]} both kind="secret" label="HTTP + WebSocket, with the key" at={0.5} />
+</Figure>

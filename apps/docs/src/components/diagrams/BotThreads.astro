@@ -1,0 +1,42 @@
+---
+// A bot's one conversation, the threads that work beneath it, and a message to another bot.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Note from '../diagram/Note.astro'
+
+const { caption } = Astro.props as { caption?: string }
+const kids = [
+  { x: 96, title: 'Subagent', lines: ['a part of the job'] },
+  { x: 246, title: 'Subagent', lines: ['another part'] },
+  { x: 396, title: 'Automation run', lines: ['at 8:00 every day'] },
+]
+---
+
+<Figure width={680} height={332} title="A bot's conversation, the subagents and automation runs beneath it, and a message to another bot" caption={caption}>
+  <Box x={8} y={22} w={84} h={50} title="You" />
+  <Box x={150} y={14} w={250} h={66} kind="ours" title="Assistant" lines={['its one conversation with you']} />
+  <Box x={494} y={14} w={178} h={66} kind="ours" title="Travel" lines={['its own conversation']} />
+  <Arrow points={[[92, 47], [150, 47]]} both />
+  <Arrow points={[[400, 36], [494, 36]]} label="message_bot" />
+  <Arrow points={[[494, 60], [400, 60]]} dashed label="reply, if asked" />
+  <Note x={583} y={102} align="middle" lines={['answers as itself, with', 'its own files and sign-ins']} />
+
+  {
+    kids.map((k) => (
+      <Box x={k.x} y={150} w={136} h={56} kind={k.title === 'Automation run' ? 'plain' : 'plain'} title={k.title} lines={k.lines} />
+    ))
+  }
+  <Arrow points={[[205, 80], [158, 150]]} />
+  <Arrow points={[[180, 150], [225, 80]]} dashed />
+  <Arrow points={[[268, 80], [308, 150]]} />
+  <Arrow points={[[330, 150], [290, 80]]} dashed />
+  <Arrow points={[[360, 80], [452, 150]]} />
+  <Arrow points={[[472, 150], [380, 80]]} dashed />
+  <Note x={546} y={174} lines={['each sends back', 'what it came to']} />
+
+  <Box x={96} y={262} w={136} h={56} title="Subagent" lines={['a second level']} />
+  <Arrow points={[[150, 206], [150, 262]]} />
+  <Arrow points={[[178, 262], [178, 206]]} dashed />
+  <Note x={252} y={284} lines={['Solid: starts it.  Dashed: what comes back,', 'into the conversation above it.']} />
+</Figure>

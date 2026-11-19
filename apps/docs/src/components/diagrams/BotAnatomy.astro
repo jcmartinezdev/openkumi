@@ -1,0 +1,33 @@
+---
+// A bot's folder in three parts: what is yours, what is the bot's, and what it never sees.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Lines from '../diagram/Lines.astro'
+
+const { caption } = Astro.props as { caption?: string }
+const col = [8, 236, 464]
+const W = 208
+---
+
+<Figure width={680} height={396} title="A bot's folder: what is yours, what is the bot's own, and what is private" caption={caption}>
+  <Box x={250} y={10} w={180} h={50} title="You, in the app" lines={['settings, the Files tab']} />
+
+  <Box x={col[0]} y={108} w={W} h={172} title="Yours" lines={['bots/<id>/']} code valign="top" />
+  <Lines x={col[0] + 16} y={168} items={[{ code: 'bot.md' }, 'name, model, rules', { code: 'superpowers.json' }, 'what it may use', '', 'Read out to the bot,', 'out of its reach.']} />
+
+  <Box x={col[1]} y={108} w={W} h={172} kind="ours" title="The bot’s own" lines={['workspace/']} code valign="top" />
+  <Lines x={col[1] + 16} y={168} items={[{ code: 'AGENTS.md' }, 'its instructions to itself', { code: 'memory/' }, 'its notes', { code: 'files/   files/inbox/' }, 'its work, what it is sent', 'Every change recorded.']} />
+
+  <Box x={col[2]} y={108} w={W} h={172} kind="secret" title="Private" lines={['private/']} code valign="top" />
+  <Lines x={col[2] + 16} y={168} items={[{ code: 'browser-profile/' }, 'its cookies and logins', { code: 'superpowers/<id>.json' }, 'its accounts with apps', { code: 'history.git/' }, 'the record of changes', 'Never visible to the bot.']} />
+
+  <Box x={250} y={332} w={180} h={52} kind="ours" title="The bot" lines={['its file tools']} />
+
+  <Arrow points={[[290, 60], [112, 108]]} label="sets" at={0.45} />
+  <Arrow points={[[340, 60], [340, 108]]} label="reads, edits, undoes" />
+  <Arrow points={[[390, 60], [568, 108]]} label="signs it in" at={0.45} />
+  <Arrow points={[[340, 332], [340, 280]]} kind="ours" label="reads and writes" />
+  <Arrow points={[[250, 358], [112, 358], [112, 280]]} blocked label="no" at={0.3} />
+  <Arrow points={[[430, 358], [568, 358], [568, 280]]} blocked label="no" at={0.3} />
+</Figure>

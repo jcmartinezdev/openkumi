@@ -1,0 +1,137 @@
+---
+title: Other computers and your phone
+description: "Environments, pairing another computer or an iPhone with the one that runs your bots, and reaching your bots from anywhere."
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components'
+import Reaching from '../../components/diagrams/Reaching.astro'
+
+Your bots run on one computer, and you can talk to them from others. A computer that runs the
+OpenKumi server is an **environment**. This page is about letting another computer or a phone in,
+reaching it away from home, and keeping that safe.
+
+## Environments
+
+**Settings → Environments** holds them:
+
+- **Local environment.** A switch. On, the app runs the server on this computer, in a process of
+  its own, with its data in `~/.openkumi`, and stops it when you quit. Off, no server runs here
+  and your bots only run in remote environments. If OpenKumi is already running on this computer
+  when the app starts (a server you installed alone, say), the app uses that one, after it has
+  shown it is the real thing, and leaves it running when you quit.
+- **Environments.** Other computers that run OpenKumi, each paired with this one. Each has a
+  switch, one or more addresses, and can be renamed or removed.
+
+The window shows one environment at a time. With more than one turned on, switch between them from
+the sidebar or the **Environment** menu; the window stays as it is and only what it is connected
+to changes. See [Servers and addresses](/connections/#several-servers).
+
+## Pairing another computer
+
+<Steps>
+
+1. **On the computer that runs the bots**, open **Settings → Environments**, turn on **Let other
+   computers connect**, then choose **Pair a computer**. It shows its address, a code like
+   `ABCD-EFGH-JKMN`, and the same as a QR code.
+
+   With no app there (a server installed alone), run `openkumi lan on`, then `openkumi pair`. From
+   a clone of the repository it is `npm run pair`.
+
+2. **On the other computer**, open **Settings → Environments → Add environment** (or, on a fresh
+   install, **Connect to another computer**), and enter the address and the code.
+
+3. That is all. The other computer now has a key of its own, and the bots appear.
+
+</Steps>
+
+The code works once, for ten minutes, and five wrong tries use it up. It is never sent over the
+network: each side shows the other that it has the code by signing values made up for the
+occasion with it. So the app cannot be talked into pairing with something else at that address,
+and the server only lets in a computer that was given the code.
+[Keys, pairing and the network](/security/access/#pairing) draws the exchange.
+
+**Settings → Environments → Paired computers**, on the computer that runs the bots, lists every
+computer and phone it has let in, with when each was last seen. **Remove** shuts one out at once,
+and ends whatever it has open, without disturbing the others. Who gets in is decided only at the
+computer that runs the bots: a paired computer cannot pair another.
+
+## Reaching it from anywhere
+
+An environment can have several addresses: its address on your home network, its address on
+[Tailscale](https://tailscale.com), and any you add yourself, such as a public `https` address. The
+app asks them all at once and uses the first, in that order, that proves it is your server.
+
+<Reaching caption="At home the app goes straight there; away from home it goes over Tailscale. Whatever answers has to prove who it is before any key is sent." />
+
+- **You only pair once, wherever you are.** While connected, the server tells the devices paired
+  with it its other addresses, its Tailscale name among them, and they keep them up to date (a new
+  address on the home network replaces the old one). With Tailscale on both, nothing else needs
+  setting up. Addresses you added yourself are only changed by you.
+- **It moves back home by itself.** While connected, the app looks again every minute and whenever
+  the network changes, and moves to a better address as soon as one answers.
+- **Plain http only where it is safe enough.** On the home network and on Tailscale (which
+  encrypts the connection itself) the app uses plain `http`. Any other address you add has to be
+  `https`, behind a proxy or tunnel of your own.
+
+[Servers and addresses](/connections/) explains all of it in detail: how each address is
+recognised, what is tried first and how long each is waited for, how addresses are found by
+themselves, adding a public address, and where each setting is.
+
+<Aside type="caution" title="A key is never sent just because an address is saved">
+  Before connecting, the app asks whatever answers who it is, without sending the key. The server
+  has to sign a value the app made up, with something only that server and that device know.
+  Another device that got the same home address on another network, or another OpenKumi server,
+  is told nothing it could use, and an address where something else answers cannot be added. See
+  [Keys, pairing and the network](/security/access/).
+</Aside>
+
+## A computer with no screen
+
+A Mac mini or a Linux machine can run your bots with no app in front of it. Install the server
+alone ([Installing and updating](/install/#the-server-alone)), then:
+
+```sh
+openkumi lan on     # let your other computers and your phone reach it
+openkumi pair       # a code for the app on another computer or phone
+```
+
+From the source it is `OPENKUMI_LAN=1 npm run server`, then `npm run pair`. An app connected to it can do everything but open its folder in a file manager and
+pair or remove devices, which are only done at that computer.
+
+## On an iPhone
+
+The iPhone app talks to your bots from anywhere: chat with them (with dictation),
+[call them](/calls/#on-the-iphone), watch and steer
+their browsers, read and undo the changes they made to their files, and look after them. Its
+Settings (the gear above the list of bots) change each bot's name, rules, model, browser, look and
+superpowers, switch providers on and off, set what new bots start with, and choose light or dark
+and the size of messages. **Automations** are at the bottom of the list of bots, as on the
+computer: turn them on and off, run them, read their runs, and make or change them (a watch is set
+up on the computer, or by asking a bot).
+
+<Steps>
+
+1. On the computer that runs the bots, choose **Pair a computer** as above.
+2. In the phone app, scan the QR code it shows, or type the address and the code.
+
+</Steps>
+
+The phone app is paired with one environment at a time. The key it is given is kept in its
+keychain, and the server lists the phone among the paired computers so you can remove it. The phone reaches the server the same way as a computer, at each of
+its addresses in turn; its Settings list them and which one is in use, and one can be added there.
+
+Some things are only done on a computer: making bots (ask a bot instead), calls, the master prompt,
+the browser and advanced settings, signing in to providers, and pairing other devices.
+
+<Aside title="Getting the iPhone app">
+  It is not in the App Store yet. It is built from the source (`apps/mobile`, Expo and React
+  Native): `npm run mobile` builds it and opens it in the iPhone simulator, with Xcode and
+  CocoaPods installed.
+</Aside>
+
+## No web version
+
+The server has no pages: opening its address in a browser shows a short note saying so. The only
+way in is an OpenKumi app. The desktop app keeps its environments, with the key each one gave it,
+in `desktop.json` in the app's data folder (on a Mac,
+`~/Library/Application Support/OpenKumi`), a file only your account can read.

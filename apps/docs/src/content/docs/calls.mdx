@@ -1,7 +1,10 @@
 ---
 title: Calls
-description: "Talking with a bot out loud: what a call needs, what the voice does itself and what it hands to the bot, and where the sound goes."
+description: "Talking with a bot out loud: what a call needs, setting it up, what the voice does itself and what it hands to the bot, and where the sound goes."
 ---
+
+import { Steps } from '@astrojs/starlight/components'
+import CallPaths from '../../components/diagrams/CallPaths.astro'
 
 A call is a conversation with a bot out loud: you talk, it talks back at once, and you can
 interrupt it as you would a person. The phone button at the top of a bot's conversation starts
@@ -43,6 +46,24 @@ called there.
 That holds whatever the bot itself runs on. A bot on Claude Code, Grok or a local model is called
 the same way: the voice is ChatGPT's, the work is still done by the bot's own engine.
 
+## Setting it up
+
+<Steps>
+
+1. On the computer that runs the bots, install Codex and run `codex login`, signing in with your
+   ChatGPT account (not an API key).
+
+2. In **Settings → Providers**, check that Codex shows as signed in with ChatGPT and is switched
+   on.
+
+3. Optionally, pick the bot's **Voice**, under **Calls** in its settings. A bot that was not given
+   one has the usual voice. Each voice can be [heard first](#hearing-a-voice-before-choosing-it).
+
+4. Press the phone button at the top of the bot's conversation. The first time, your computer or
+   phone asks whether OpenKumi may use the microphone.
+
+</Steps>
+
 When calls are not available, the phone button says what is missing: Codex is not installed, is
 not signed in, is signed in with an API key instead of a plan, or is switched off in Settings.
 
@@ -62,6 +83,8 @@ Everything else it hands to the bot: anything about your own things (your calend
 notes, accounts), anything that needs the web, anything to be done. What it hands over arrives in
 the bot's conversation as a message from you, marked **On a call**, and the bot answers it on its
 own engine. A bot that is at work on something else gets to it right after, and the voice says so.
+
+<CallPaths caption="The sound goes straight between the app and OpenAI. What the voice hands over goes through Codex and the server to the bot, and the bot's answer comes back the same way to be read out." />
 
 ### What a bot can do on a call
 
@@ -109,14 +132,11 @@ from a call comes with what was said just before it, and the bot is told to do w
 promised there too. And when a call ends, the bot itself goes over what you said after the last
 thing the voice handed over, in the background (a subagent called **After the call**), and does
 what it finds: keeps what was to be remembered, sets up what was to be scheduled. It is told what
-was handed over during the call, so that nothing is done twice. You hear of it in the
-conversation only when there was something to do. A call on which you said nothing more after
-the last thing handed over is not gone over at all.
+was handed over during the call, so that nothing is done twice, and it leaves anything that needs
+your go-ahead for you. You hear of it in the conversation only when there was something to do. A
+call on which you said nothing more after the last thing handed over is not gone over at all.
 
-## The bot's voice
-
-A bot's settings have **Voice**, under Calls: the voices Codex offers, by name. A bot that was not
-given one has the usual voice.
+## Hearing a voice before choosing it
 
 A voice can be heard before it is chosen. It says one short line as the bot ("Hi, I'm Kumi. This
 is how I sound when you call me."), over a line like a call's, so it sounds the way it will on a
@@ -139,19 +159,20 @@ one half of the connection and the OpenKumi server passes it to Codex, which set
 with your ChatGPT sign-in and hands back the other half. The server never carries the sound, and
 no recording is kept anywhere by OpenKumi: only the words, as the speech model wrote them down.
 
-What OpenAI receives is what a call is made of: your voice, the bot's name and one-line
-description (in the instructions the voice is given), the last few messages of your conversation
-with it (so that the voice knows what you were talking about), and the bot's answers to what you
+What OpenAI receives is what a call is made of: your voice; the bot's name and the line saying what
+it is for; today's date and time zone; the last eight messages of your conversation with it, each
+cut short (so that the voice knows what you were talking about); and the bot's answers to what you
 asked on the call. The bot's own instructions, memory and files are not sent; they stay with the
-bot.
+bot. [How a call works](/how-it-works/calls/) goes through it step by step.
 
 ## When a call ends by itself
 
 - Nothing was said for five minutes, and the bot is not at work on anything you asked. A call
   left open would only use up your plan.
-- The app that made it went away (it was closed, or lost its connection for more than about half
-  a minute).
+- The app that made it went away: it was closed, or the server has not heard from it for 40
+  seconds.
 - Another call was started. There is one call at a time.
+- The bot was deleted.
 - Your plan does not allow more voice use for now. The panel, or the bar on the phone, says what
   Codex said.
 

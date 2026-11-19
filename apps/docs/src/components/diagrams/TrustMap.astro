@@ -1,0 +1,31 @@
+---
+// Who and what OpenKumi trusts: you; the server between you and the bots; the bots, which act for
+// you and can be misled; and everything they read, which is never an instruction.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Note from '../diagram/Note.astro'
+import Zone from '../diagram/Zone.astro'
+
+const { caption } = Astro.props as { caption?: string }
+const outside = ['Web pages', 'Mail, issues, docs', 'Messages from bots', 'Files from bots', 'Webhook calls']
+---
+
+<Figure width={680} height={322} title="What OpenKumi trusts: you; the server keeps each bot to its own tools; what bots read is never an instruction" caption={caption}>
+  <Zone x={4} y={8} w={196} h={306} label="Trusted" kind="trusted" />
+  <Box x={18} y={40} w={168} h={260} kind="plain" title="You" lines={['the owner, at the', 'computer or on a', 'paired device', 'with its key']} />
+
+  <Box x={236} y={40} w={208} h={84} kind="ours" title="OpenKumi server" lines={['checks every key;', 'keeps each bot to', 'its own tools']} />
+  <Box x={236} y={196} w={208} h={84} title="The bots" lines={['act for you by the rules', 'you gave them, and', 'can be misled']} />
+
+  <Zone x={476} y={8} w={200} h={306} label="Never instructions" kind="outside" side="right" />
+  {outside.map((title, i) => <Box x={490} y={40 + i * 54} w={172} h={42} kind="outside" title={title} />)}
+  {outside.map((_, i) => <Arrow points={[[490, 61 + i * 54], [466, 61 + i * 54]]} bare kind="muted" />)}
+  <Arrow points={[[466, 61], [466, 277]]} bare kind="muted" />
+  <Arrow points={[[466, 238], [444, 238]]} kind="muted" />
+
+  <Arrow points={[[186, 82], [236, 82]]} kind="secret" />
+  <Arrow points={[[340, 124], [340, 196]]} label="only its own tools" />
+  <Arrow points={[[236, 238], [186, 238]]} />
+  <Note x={340} y={300} align="middle" lines={['asks you before it buys, sends or deletes']} />
+</Figure>

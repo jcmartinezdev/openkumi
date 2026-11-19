@@ -1,0 +1,288 @@
+/* The diagrams (src/components/diagram): plain SVG coloured only from here, so they follow the
+   site's light and dark colours. Kinds of box and line:
+     ours     a part of OpenKumi (the mascot's sky blue)
+     plain    something of yours, or on your computer
+     outside  a service somewhere else (dashed)
+     secret   where a key or a sign-in is, or travels (orange)
+     danger   refused, or not to be trusted */
+:root {
+  --dg-ink: var(--sl-color-white);
+  --dg-muted: var(--sl-color-gray-3);
+  --dg-line: var(--sl-color-gray-3);
+  --dg-box: var(--sl-color-gray-6);
+  --dg-edge: var(--sl-color-gray-4);
+  --dg-ours: var(--sl-color-accent);
+  --dg-ours-fill: var(--sl-color-accent-low);
+  --dg-secret: var(--orange);
+  --dg-secret-fill: color-mix(in srgb, var(--orange) 13%, var(--sl-color-bg));
+  --dg-danger: #ff6f6f;
+  --dg-danger-fill: color-mix(in srgb, #ff6f6f 12%, var(--sl-color-bg));
+}
+:root[data-theme='light'] {
+  --dg-danger: #c42b2b;
+  --dg-danger-fill: color-mix(in srgb, #c42b2b 8%, var(--sl-color-bg));
+}
+
+.dg {
+  margin: 1.75rem 0 2rem;
+  /* The figure takes the width of the column and never widens it: on a narrow screen the
+     diagram scrolls sideways inside it, and the page itself does not. */
+  contain: inline-size;
+}
+.dg-scroll {
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+.dg-scroll:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+.dg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+  font-family: var(--sl-font);
+  overflow: visible;
+}
+.dg figcaption {
+  margin-top: 0.7rem;
+  color: var(--sl-color-gray-3);
+  font-size: var(--sl-text-sm);
+  line-height: 1.5;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.dg text {
+  fill: var(--dg-ink);
+  font-size: 13px;
+}
+.dg .dg-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.dg .dg-sub {
+  fill: var(--dg-muted);
+  font-size: 12px;
+}
+.dg .dg-code {
+  font-family: var(--__sl-font-mono, ui-monospace, monospace);
+  font-size: 11.5px;
+}
+.dg .dg-code-ink {
+  fill: var(--dg-ink);
+  font-size: 12px;
+}
+
+/* Boxes */
+.dg-box rect {
+  fill: var(--dg-box);
+  stroke: var(--dg-edge);
+  stroke-width: 1.25;
+}
+.dg-ours rect {
+  fill: var(--dg-ours-fill);
+  stroke: var(--dg-ours);
+}
+.dg-outside rect {
+  fill: none;
+  stroke: var(--dg-muted);
+  stroke-dasharray: 5 4;
+}
+.dg-secret rect {
+  fill: var(--dg-secret-fill);
+  stroke: var(--dg-secret);
+}
+.dg-danger rect {
+  fill: var(--dg-danger-fill);
+  stroke: var(--dg-danger);
+}
+
+/* Areas round boxes */
+.dg-zone rect {
+  fill: none;
+  stroke: var(--dg-edge);
+  stroke-width: 1.25;
+  stroke-dasharray: 7 5;
+}
+.dg-zone .dg-zone-label {
+  fill: var(--dg-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.dg-zone-trusted rect {
+  stroke: var(--dg-ours);
+}
+.dg-zone-trusted .dg-zone-label {
+  fill: var(--dg-ours);
+}
+.dg-zone-outside rect {
+  stroke: var(--dg-secret);
+}
+.dg-zone-outside .dg-zone-label {
+  fill: var(--dg-secret);
+}
+
+/* Lines */
+.dg-line {
+  fill: none;
+  stroke: var(--dg-line);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.dg-head {
+  fill: var(--dg-line);
+}
+.dg-cross {
+  fill: none;
+  stroke: var(--dg-danger);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+}
+.dg-k-ours .dg-line {
+  stroke: var(--dg-ours);
+}
+.dg-k-ours .dg-head {
+  fill: var(--dg-ours);
+}
+.dg-k-secret .dg-line {
+  stroke: var(--dg-secret);
+}
+.dg-k-secret .dg-head {
+  fill: var(--dg-secret);
+}
+.dg-k-danger .dg-line {
+  stroke: var(--dg-danger);
+}
+.dg-k-danger .dg-head {
+  fill: var(--dg-danger);
+}
+.dg-k-muted .dg-line {
+  stroke: var(--dg-edge);
+}
+.dg-k-muted .dg-head {
+  fill: var(--dg-edge);
+}
+.dg .dg-label {
+  font-size: 12px;
+}
+.dg-label-bg {
+  fill: var(--sl-color-bg);
+  opacity: 0.92;
+}
+
+/* Loose words */
+.dg-note text {
+  fill: var(--dg-muted);
+  font-size: 12px;
+}
+.dg-note-ink text {
+  fill: var(--dg-ink);
+}
+.dg-note-danger text {
+  fill: var(--dg-danger);
+}
+.dg-note-ours text {
+  fill: var(--dg-ours);
+}
+.dg-note-secret text {
+  fill: var(--dg-secret);
+}
+
+/* Sequence diagrams */
+.dg-lifeline {
+  stroke: var(--dg-edge);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+.dg-seqnote rect {
+  fill: var(--dg-box);
+  stroke: var(--dg-edge);
+  stroke-width: 1;
+}
+.dg-seqnote text {
+  fill: var(--dg-muted);
+  font-size: 12px;
+}
+.dg-seqnote-secret rect {
+  fill: var(--dg-secret-fill);
+  stroke: var(--dg-secret);
+}
+.dg-seqnote-secret text {
+  fill: var(--dg-ink);
+}
+.dg-seqnote-danger rect {
+  fill: var(--dg-danger-fill);
+  stroke: var(--dg-danger);
+}
+.dg-seqnote-danger text {
+  fill: var(--dg-ink);
+}
+.dg-seqnote-ours rect {
+  fill: var(--dg-ours-fill);
+  stroke: var(--dg-ours);
+}
+.dg-seqnote-ours text {
+  fill: var(--dg-ink);
+}
+.dg-section line {
+  stroke: var(--dg-edge);
+  stroke-width: 1;
+}
+.dg-section rect {
+  fill: var(--sl-color-bg);
+  stroke: var(--dg-edge);
+}
+.dg-section text {
+  fill: var(--dg-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* A legend under a diagram: which colour means what. */
+.dg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 1.1rem;
+  margin: -1.2rem 0 2rem;
+  padding: 0;
+  list-style: none;
+  font-size: var(--sl-text-xs);
+  color: var(--sl-color-gray-3);
+}
+.dg-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 !important;
+}
+.dg-legend i {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.6rem;
+  border-radius: 2px;
+  border: 1.25px solid var(--dg-edge);
+  background: var(--dg-box);
+}
+.dg-legend i.ours {
+  border-color: var(--dg-ours);
+  background: var(--dg-ours-fill);
+}
+.dg-legend i.outside {
+  border-style: dashed;
+  border-color: var(--dg-muted);
+  background: none;
+}
+.dg-legend i.secret {
+  border-color: var(--dg-secret);
+  background: var(--dg-secret-fill);
+}
+.dg-legend i.danger {
+  border-color: var(--dg-danger);
+  background: var(--dg-danger-fill);
+}

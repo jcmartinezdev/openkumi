@@ -1,0 +1,85 @@
+---
+title: "Engines and models: Claude Code, Codex, Grok and local models"
+description: "What bots run on: how OpenKumi starts the Claude Code, Codex and Grok programs for a turn, what it switches off in them, and how it runs local models and APIs itself."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import EngineTurn from '../../../components/diagrams/EngineTurn.astro'
+
+Bots run on an **engine** by default: a program that keeps the conversation and runs the
+model-and-tools loop itself. OpenKumi also has a **loop of its own**, which asks a model for one
+step at a time; it is what bots on local models or an OpenAI-compatible API run on. Tool calls are
+carried out and recorded the same way on either path. What changes is whose model and account the
+bot runs on.
+
+<EngineTurn caption="On an engine, the program runs the model on your sign-in and calls the bot's tools at an address the server opens for that turn. On OpenKumi's own loop, the server asks the model for each step itself." />
+
+## A turn on an engine
+
+For each turn, OpenKumi starts the `claude`, `codex` or `grok` program installed on the computer,
+gives it the bot's instructions and what was said since it last ran, and serves the bot's tools to
+it over MCP at an address that exists only for that turn.
+
+- **The tools address** is `http://127.0.0.1:4317/mcp/<token>`, with a token made up for the turn
+  and kept only in memory. It answers this computer alone, and stops working the moment the turn
+  ends.
+- **Codex** runs as its app server (`codex app-server`), the program its own apps talk to, which
+  sends a reply as it is written and takes one more message into a turn that is running.
+- **Claude Code** runs with its input left open while it works, for the same purpose. The bot's
+  instructions go to it in a file only your account can read, deleted after the turn.
+- **Grok** takes an MCP server only from a settings file in a folder it has been told to trust, so
+  OpenKumi keeps a folder for that inside each bot (`private/grok/`), and Grok's own list of
+  trusted folders (`~/.grok/trusted_folders.toml`) gains an entry per bot.
+
+When the engine already holds the conversation from an earlier turn, it is sent only what is new.
+When it does not (a new conversation, or a bot moved from another engine), it is sent the most
+recent part of the conversation as a transcript.
+
+## What is switched off
+
+The engines are started with their own tools for running commands and touching files switched off,
+and without your personal setup in them, so a bot on an engine can do exactly what it can do on
+OpenKumi's own loop:
+
+| | Switched off |
+| --- | --- |
+| Claude Code | every built-in tool but web search (when the bot has it); your settings, instruction files, skills, slash commands and MCP servers. Only OpenKumi's tools are allowed, and permission prompts are off. |
+| Codex | the shell, file editing, image tools, its own agents, plugins, apps, browser and computer use, hooks and skills; the MCP servers in your Codex config, by name; what you have Codex run when a turn ends. Its sandbox is read-only and it never asks for approval. |
+| Grok | every built-in tool but web search; its subagents, plan mode, memory and workflows. Its sandbox is read-only. Its skill list is not switched off, but with its tools off a skill there has nothing to act with. |
+
+- You sign in to each program yourself (`claude`, `codex login`, `grok login`); OpenKumi never sees
+  the credentials. Usage counts against that account.
+- Each program keeps its own record of the conversations it ran (under `~/.claude`, `~/.codex`
+  and `~/.grok`).
+- Codex's app server reads your own Codex config file. Your default model there is the one a bot on
+  "Default" runs on.
+
+## OpenKumi's own loop
+
+For a local model (Ollama, LM Studio) or an OpenAI-compatible API, OpenKumi runs the loop itself:
+
+1. It sends the model what the bot is told, the conversation, and the bot's tools.
+2. The model answers with text, or with tools to call. Tools asked for in one step run at the same
+   time, and each result is cut at 40,000 characters.
+3. It sends the results back and asks again, until the model answers without calling a tool, or
+   the turn reaches **Settings → Advanced → Steps per turn** (80 unless you change it).
+
+A long conversation is cut to fit **Settings → Advanced → Length of a conversation**: the model
+summarises the older part, and from then on is sent that summary and what came after it (see [One
+conversation per bot](/how-it-works/conversation/)). The newest results of tools are sent whole and
+older ones shortened. On this loop the bot has no web search of its own; it still has its browser
+and `web_fetch`.
+
+## Local models
+
+Start Ollama or LM Studio on the computer that runs the bots and it shows up under **Settings →
+Providers → Local models**, with the models it has; a bot's settings then offer them. For another
+program or port, enter its address there. Bots need a model that can call tools, and small models
+are often poor at it: expect a bot on one to be less capable than on the engines above.
+
+<Aside title="Adding a model provider">
+  A provider implements one interface (`apps/server/src/providers/types.ts`): either `stream`,
+  which answers one model request while OpenKumi runs the tools, or `turn`, which runs a whole turn
+  as the engines do. [Working on OpenKumi](https://github.com/jcmartinezdev/openkumi/blob/main/docs/development.md#adding-a-model-provider)
+  has the details.
+</Aside>

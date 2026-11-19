@@ -1,0 +1,114 @@
+---
+title: How a bot works
+description: "What a bot is made of, and the life of one message: the queue, what the bot is told, the turn on its engine, tool calls, and the reply."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import Sequence from '../../../components/diagram/Sequence.astro'
+import BotAnatomy from '../../../components/diagrams/BotAnatomy.astro'
+
+A bot is three things: **a folder** that holds what it is and what it knows, **a conversation**
+with you, and **turns**, in which a model reads what the bot is told and the conversation, and acts
+with the bot's tools.
+
+## What a bot is made of
+
+A bot is a folder in `~/.openkumi/bots/`. The folder is split by who it belongs to, and the split
+is what keeps a bot from granting itself anything.
+
+<BotAnatomy caption="What a bot can do is yours: its model, rules and superpowers sit outside its reach. What it knows is its own: it rewrites its instructions and notes freely, and every change is recorded. Its sign-ins are kept where it can never see them." />
+
+- **Yours** (`bot.md`, `superpowers.json`): its name, what it is for, the model it runs on, your
+  rules, and the superpowers you switched on. The bot is told what they say, but its tools cannot
+  reach them.
+- **The bot's own** (`workspace/`): `AGENTS.md`, its instructions to itself; `memory/`, its notes;
+  `files/`, its work and what it is sent. Its file tools reach this folder and nothing else.
+- **Private** (`private/`): its browser profile, its accounts with the apps of its superpowers,
+  the history of changes to its workspace, and the files sent in its conversation. Never visible to
+  the bot.
+
+[Where everything lives](/how-it-works/where-everything-lives/) lists every file.
+
+## The life of one message
+
+Here is what happens between the moment you send a message and the bot's reply, for a bot on an
+engine (Codex, Claude Code or Grok).
+
+<Sequence
+  title="The life of one message, from the app to the bot's reply"
+  numbered
+  actors={[
+    { id: 'app', label: 'The app', sub: 'where you write', kind: 'ours' },
+    { id: 'server', label: 'OpenKumi server', sub: 'queue, turns, tools', kind: 'ours' },
+    { id: 'engine', label: 'The engine', sub: 'claude, codex or grok' },
+    { id: 'plan', label: 'Your AI plan', sub: 'the model', kind: 'outside' },
+  ]}
+  steps={[
+    { from: 'app', to: 'server', text: 'your message, with the key', kind: 'secret' },
+    { from: 'server', to: 'server', text: ['waits in the queue,', 'then goes in'] },
+    { from: 'server', to: 'engine', text: ['starts it: what the bot is told,', 'the new messages, a tools address'] },
+    { from: 'engine', to: 'plan', text: 'the prompt, on your sign-in', kind: 'secret' },
+    { from: 'plan', to: 'engine', text: '“call browser_navigate”', reply: true },
+    { from: 'engine', to: 'server', text: ['the tool call, at', 'the turn’s tools address'] },
+    { from: 'server', to: 'server', text: ['runs it with the bot’s', 'browser; records it'] },
+    { from: 'server', to: 'engine', text: 'what came of it', reply: true },
+    { from: 'engine', to: 'plan', text: 'the result' },
+    { from: 'plan', to: 'engine', text: 'the reply, as it is written', reply: true },
+    { from: 'engine', to: 'server', text: 'the reply, as it comes', reply: true },
+    { from: 'server', to: 'app', text: 'every step and word, live', reply: true },
+    { note: ['The turn is over: its tools address stops working.', 'The next waiting message goes in.'], over: ['server', 'engine'] },
+  ]}
+  caption="Steps 5 to 9 repeat for as many tools as the bot uses in the turn. The tools always run in the server, never in the engine."
+/>
+
+1. **Your message goes into the bot's queue.** Everything said to a bot waits there first: what you
+   write, what another bot writes, and what the bot's own subagents and automations report. One
+   message goes in at a time. See [The queue](/how-it-works/queue/).
+2. **The turn starts.** The server puts together what the bot is told: the master prompt, filled in
+   with who the other bots are, your rules, its own `AGENTS.md`, the list of its notes and its
+   superpowers. See [What every bot is told](/how-it-works/what-a-bot-is-told/).
+3. **The engine is started** for this turn, with its own tools for running commands and touching
+   files switched off and your personal setup left out. It is given the bot's tools instead, at an
+   address that exists only for this turn. When the engine already knows the conversation from an
+   earlier turn, it is only sent what is new.
+4. **The model works.** The engine sends the prompt to your plan with your own sign-in, and the
+   model answers with text or a tool to call.
+5. **Tools run in the server.** Each tool call comes back to the server, which runs it with the
+   bot's workspace, browser or accounts, records it in the conversation, and sends the result
+   back. The bot can use many tools in a turn; each one shows as a step in the app.
+6. **The reply streams** to every app connected, word by word, as it is written.
+7. **The turn ends.** The tools address stops working, and the next message in the queue goes in.
+   When there is none, the bot is idle until something new arrives.
+
+A bot on a local model or an API works the same way, except that the server runs the loop itself,
+asking the model for one step at a time. See [Engines and models](/how-it-works/engines/).
+
+## Turns that are not yours
+
+Not every turn starts with a message from you:
+
+- **A subagent** is the bot itself, at work on a part of a job in a thread of its own; its result
+  comes back into the conversation as a message. See [Subagents](/how-it-works/subagents/).
+- **An automation's run** is a thread of its own too, started at a time, by a watch or by an app's
+  call; its result comes back the same way. See [Automations](/automations/).
+- **Another bot** can write into the conversation, to pass work on or ask for something. See
+  [Messages between bots](/how-it-works/messages-between-bots/).
+
+In each case the bot knows where the message came from, and is told that only you can give it
+the go-ahead to buy, send or delete something.
+
+## What stays between turns
+
+- **In the folder:** its instructions (`AGENTS.md`), its notes, its files, and your rules. This is
+  what a bot knows, and it is the same whatever engine it runs on.
+- **In the conversation:** every message and step, kept in the database. The bot can search and
+  read it with `search_history` and `read_history`.
+- **In its browser:** its sign-ins and cookies, in its own Chrome profile.
+- **In the engine:** its own record of the conversation, so a turn only needs what is new. A bot
+  moved to another engine is told what was said most recently instead.
+
+<Aside title="One bot, many threads at once">
+  A bot can be at work in several threads at once (its conversation, a few subagents, an
+  automation's run), each with its own turns, its own browser window and its own queue. They share
+  the bot's folder, sign-ins and superpowers.
+</Aside>

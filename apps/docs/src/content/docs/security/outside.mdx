@@ -1,0 +1,78 @@
+---
+title: What leaves your computer
+description: "Every place OpenKumi sends data, what goes there and on whose account: your AI plan, the apps of superpowers, the web, calls, updates. And what never leaves."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import DataLeaves from '../../../components/diagrams/DataLeaves.astro'
+import WebhookPath from '../../../components/diagrams/WebhookPath.astro'
+
+OpenKumi has no server of its own in between: no account, no cloud, nothing about you or your use
+sent to its makers. What leaves the computer that runs your bots goes to services you chose, on
+your accounts or the bots' own.
+
+<DataLeaves caption="What goes where. A bot on a local model sends nothing to an AI plan at all." />
+
+| Where | What goes there | On whose account |
+| --- | --- | --- |
+| **Your AI plan**: Anthropic, OpenAI or xAI, through the engine | what the bot is told (the master prompt, your rules, its `AGENTS.md`, the list of its notes, its superpowers), the conversation, what its tools found, and pictures or PDFs you sent it | yours, signed in to the program |
+| **An API** you set up | the same | the key you gave |
+| **A local model** | the same, but it never leaves the computer | — |
+| **A superpower's app** | what the bot reads and does there | the bot's own sign-in |
+| **Websites** | whatever the bot browses, fetches and watches, from your computer's address | the bot's browser, with its sign-ins |
+| **OpenAI, on a call** | your voice; the bot's name and the line saying what it is for; the date; the last eight messages, cut short; the bot's answers | your ChatGPT plan, through Codex |
+| **GitHub** | a look for a newer version (the app every 4 hours, a server alone every 6), and the download | — |
+| **Apple** | on first use of dictation in a language, the speech model is downloaded; no sound is sent | — |
+| **jsDelivr**, on the phone | a request for the diagram and formula libraries when one is drawn | — |
+
+What never leaves: your keys, the bots' tokens, their browser profiles, and the files in their
+workspaces (unless a bot itself sends one somewhere with its tools). Dictation writes down what you
+say on the device; only the words go to the bot, when you send them.
+
+## Signing a bot in to an app
+
+A bot signs in to a superpower's app (Notion, Linear and the rest) with an account of its own, by
+the app's standard sign-in (OAuth). The steps are drawn on [Superpowers](/superpowers/#signing-a-bot-in-to-an-app).
+
+- **It finishes only the way it was started.** Each sign-in has a one-time value the server keeps
+  for 15 minutes. The way back has to carry it, for the same bot, by the same way it was begun
+  (your browser, the phone, or the bot's browser), and only once.
+- **It cannot be finished from outside.** The server has no address on the network that a sign-in
+  can come back to. The way back from your own browser comes through the app, with its key; in the
+  bot's browser, it is caught only from the window the sign-in opened, and OpenKumi's own address,
+  where it points, cannot be reached from a bot's browser at all.
+- **The tokens stay where the bot runs**, in its `private/` folder, readable only by your account,
+  and are used by the server on the bot's behalf. The bot never sees them.
+- **Deactivating** the superpower for that bot forgets the sign-in.
+
+## Webhooks
+
+<WebhookPath caption="Calls come in through your tunnel to a door of their own, on this computer only. A call is taken only when signed with the secret, once; the run is told ids, never text." />
+
+- The door is a port of its own (4318), open on this computer only, that takes `POST /hooks/…` and
+  nothing else, and only once a webhook is set up. The internet reaches it only through a tunnel
+  you point at it.
+- Each webhook has an address made of random letters nobody can guess, and a secret the app signs
+  each call with (HMAC-SHA256). An unsigned or wrongly signed call gets the same answer as an
+  address nobody set up. The same call is taken once.
+- A run is told the kind of event, its ids and numbers, and which fields changed. Nothing anyone
+  wrote in the app reaches it through the webhook; the bot reads the item with its own sign-in.
+
+See [Webhooks](/webhooks/) for setting one up.
+
+## Calls
+
+The sound of a call goes straight between your computer and OpenAI; the OpenKumi server never
+carries it, and no recording is kept. Only the words are kept in the conversation, as the speech
+model wrote them down. See [How a call works](/how-it-works/calls/).
+
+## Watches
+
+A watch on a web page looks at public `https` pages only: addresses on this computer, the home
+network or Tailscale are refused, also when a redirect or a name leads there, and what comes back is
+read up to 1 MB. A watch on an app calls one of the bot's superpower tools that only reads.
+
+<Aside>
+  The engines are your own programs, and keep their own records of the conversations they ran, in
+  their own folders (such as `~/.claude` and `~/.codex`), under their makers' terms.
+</Aside>
