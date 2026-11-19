@@ -194,8 +194,8 @@ Bots can run on one computer of yours while you talk to them from another, or fr
    and the code it shows. On the phone, scan the QR code.
 
 At home they connect directly. Away from home they connect over [Tailscale](https://tailscale.com)
-when it is on for both. The iPhone app is in this repository (`apps/mobile`) and is built from
-the source for now; it is not in the App Store yet. More in
+when it is on for both. The iPhone app is a public beta on TestFlight:
+[join it](https://testflight.apple.com/join/dvcBQvNu) from your iPhone. Its source is in `apps/mobile`. More in
 [Other computers and your phone](https://docs.openkumi.ai/environments/).
 
 ## Documentation
