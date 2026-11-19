@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/desktop",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "The OpenKumi desktop app.",
   "private": true,
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/web",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "The OpenKumi interface. It is built into the desktop app; no server serves it.",
   "private": true,
   "type": "module",
