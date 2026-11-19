@@ -88,7 +88,7 @@ await build({
       category: 'public.app-category.productivity',
       icon,
       // Dictation listens with the microphone (src/dictation.ts). A signed app has to say it may.
-      extendInfo: { NSMicrophoneUsageDescription: 'OpenKumi listens while you dictate a message to a bot. What you say is written down on this Mac and never leaves it as sound.' },
+      extendInfo: { NSMicrophoneUsageDescription: 'OpenKumi listens while you dictate a message to a bot, and while you are on a call with one. Dictation is written down on this Mac and never leaves it as sound; on a call, your voice goes to the speech model of your ChatGPT plan.' },
       entitlements: 'assets/entitlements.mac.plist',
       entitlementsInherit: 'assets/entitlements.mac.plist',
       // With no certificate to sign with (a rehearsal on a build machine), it is signed by nobody

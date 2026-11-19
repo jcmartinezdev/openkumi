@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- What the signed app may do. The first three are the packager's own defaults, which Electron needs;
-     the microphone is for dictation, which a hardened app is otherwise refused without a word. -->
+     the microphone is for dictation and for calls, which a hardened app is otherwise refused without a word. -->
 <plist version="1.0">
   <dict>
     <key>com.apple.security.cs.allow-jit</key>

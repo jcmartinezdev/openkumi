@@ -123,6 +123,8 @@ apps/
       providers/       what bots run on: the Codex and Claude Code engines (codex.ts,
                        claude-code.ts, grok.ts), local models, OpenAI-compatible APIs, a mock for tests
       tool-endpoint.ts serves a bot's tools to an engine over MCP for the length of one turn
+      calls.ts         calls: sets one up through Codex, passes what the voice hands over to the bot,
+                       and has the voice say what the bot answers
       settings.ts      app-wide settings, kept in settings.json
       http.ts          the API and the stream of events. No pages
       history.ts       what a model is shown of a long conversation: trimming, and the summary of its older part
@@ -153,6 +155,25 @@ packages/
   dictation/         dictation on the device (Swift, Apple's speech models): one engine, run by the
                      desktop app as a small program on a Mac and built into the phone app as an Expo module
 ```
+
+## Trying a call without a microphone
+
+A call needs the real Codex, signed in with a ChatGPT plan; the tests use a stand-in for it
+(`apps/server/test/fixtures/fake-codex.mjs`), which plays the voice from a script. To hear the
+real thing on a computer with no microphone, start the built app with Chromium's made-up one,
+which "says" a recording (a WAV file) from the moment the call starts:
+
+```sh
+cd apps/desktop
+npx electron . --use-fake-device-for-media-stream \
+  --use-file-for-fake-audio-capture=/path/to/question.wav \
+  --disable-features=AudioServiceSandbox,AudioServiceOutOfProcess
+```
+
+Without the last switch the recording is not read, and the microphone is silent. With a made-up
+microphone the app does not ask the system whether it may listen. `say -o question.wav
+--data-format=LEI16@48000 "What is on my calendar tomorrow?"` makes a recording on a Mac; a few
+seconds of silence in front of it give the call time to connect.
 
 ## Adding a model provider
 

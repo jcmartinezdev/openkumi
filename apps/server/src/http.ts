@@ -17,10 +17,11 @@ import { beginPairing, computerWith, finishPairing, listComputers, newPairingCod
 import * as mcp from './mcp.ts'
 import * as db from './db.ts'
 import { homeAddresses, nearby, tailscaleAddresses } from './network.ts'
-import { announceProviders, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
+import { announceProviders, callsInfo, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
 import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower, superpowerCategories, superpowerFile } from './superpowers.ts'
 import * as automations from './automations.ts'
+import * as calls from './calls.ts'
 import * as hooks from './hooks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
 import { PROTOCOL } from './protocol.ts'
@@ -162,6 +163,8 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     hooks: hooks.listHooks(),
     queue: db.allQueued(),
     providers: providerInfos(),
+    calls: callsInfo(),
+    call: calls.currentCall(),
     browsers: browserStates(),
     superpowers: listSuperpowers(),
     superpowerCategories: superpowerCategories(),
@@ -223,6 +226,8 @@ route('PATCH', '/api/bots/:id', ([id], body) => updateBot(needBot(id).id, body))
 route('GET', '/api/bots/:id/instructions', ([id]) => ({ text: agent.systemPrompt(needBot(id)) }))
 route('DELETE', '/api/bots/:id', async ([id]) => {
   needBot(id)
+  const call = calls.currentCall()
+  if (call?.botId === id) calls.endCall(call.id)
   for (const t of db.listThreads().filter((t) => t.botId === id)) agent.stop(t.id)
   await stopBrowser(id)
   const had = enabledSuperpowers(id).length
@@ -418,6 +423,22 @@ route('DELETE', '/api/threads/:id', ([id]) => {
   agent.stop(needThread(id).id)
   db.deleteThread(id)
 })
+
+// ---- calls: the owner talks with a bot out loud (calls.ts)
+// What cannot be done (no Codex, a plan that does not allow it) is for the owner to put right.
+const called = async <T>(act: () => Promise<T>): Promise<T> => {
+  try {
+    return await act()
+  } catch (e: any) {
+    fail(e instanceof calls.CallError ? 409 : 500, e.message)
+  }
+}
+// The app sends its half of the connection and gets back the other half; sound never comes through here.
+route('POST', '/api/bots/:id/call', ([id], body) => called(() => calls.startCall(needBot(id).id, body.sdp)))
+// The app on the call says it is still there, every few seconds: a call whose app is gone is ended.
+route('POST', '/api/calls/:id/alive', ([id]) => (calls.alive(id) ? undefined : fail(404, 'That call is over.')))
+route('DELETE', '/api/calls/:id', ([id]) => calls.endCall(id))
+route('GET', '/api/calls/voices', () => called(() => calls.voices()))
 
 // ---- providers
 route('GET', '/api/providers/:id/models', async ([id]) => getProvider(id).models())

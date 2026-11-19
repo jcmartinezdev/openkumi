@@ -39,7 +39,7 @@ test('a mistake in the template is not passed over', () => {
 test('the master prompt OpenKumi comes with fills in for every kind of thread', () => {
   const fill = {
     bot_name: 'Travel', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Assistant (bot_id: assistant), the main assistant: Everyday questions\n- 🧳 Travel (bot_id: travel): Plans trips and books',
-    main: false, chat: true, can_message: true, automation: false, watch: false, hook: false, subagent: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
+    main: false, chat: true, can_message: true, automation: false, watch: false, hook: false, subagent: false, call: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
     instructions_limit: '12000', agents_md: '', memory: '', superpowers: '', automation_title: '', by_user: false, by_you: false,
     by_other: false, automation_author: '', automation_gone: true,
   }
@@ -67,6 +67,10 @@ test('the master prompt OpenKumi comes with fills in for every kind of thread', 
   )
 
   assert.match(masterPrompt({ ...fill, subagent: true, chat: false, can_message: false }), /# You are running as a subagent\nThe task in the first message was split off for you/)
+  // A turn that answers something asked on a call is told that it only passes work on.
+  assert.doesNotMatch(told, /# You are answering on a call/)
+  assert.match(masterPrompt({ ...fill, call: true }), /# You are answering on a call\nWhat you are answering now was asked on a voice call[\s\S]*goes to that bot, with message_bot\.\n- Everything else that needs doing or looking up, however small, goes to a subagent/)
+  assert.match(masterPrompt({ ...fill, call: true, can_message: false }), /- What fits another bot goes to that bot\.\n/)
   // How a bot reaches the others depends on where it is, and on whether the owner lets bots message each other.
   assert.match(told, /To give one of them something to do, or to tell it something, call message_bot with its bot_id\.[\s\S]*A message from another bot arrives as a <bot_message>\./)
   assert.match(masterPrompt({ ...fill, can_message: false }), /books\nMessages between bots are switched off, so you cannot pass work to them\./)

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { ProviderInfo } from '@openkumi/shared'
+import type { CallsInfo, ProviderInfo } from '@openkumi/shared'
 import { HOME, emit } from '../config.ts'
 import { SUMMARISE } from '../history.ts'
 import { CHOOSE_LOOK } from '../look.ts'
@@ -20,7 +20,8 @@ import type { ModelEvent, ModelRequest, Provider } from './types.ts'
  * the model was sent, "!seen" how many pictures of the conversation it was shown, "!bounce a b" starts
  * two bots writing back and forth, anything else is
  * echoed, with the files that came with it and how many of them it was shown. A command in a
- * message from another bot is carried out like one from the user. Asked for a summary, it gives the start of everything the user said in what it
+ * message from another bot, or in what the user asked on a call, is carried out like one from the user.
+ * Asked to go over a call that ended, it finds something to do when the user said "remember" on it. Asked for a summary, it gives the start of everything the user said in what it
  * was to summarise; asked for a look, always the same one.
  */
 const mock: Provider = {
@@ -50,7 +51,7 @@ const mock: Provider = {
       const ask = req.items.findLast((i) => i.type === 'message' && i.role === 'user')
       const raw = ask?.type === 'message' ? ask.text : ''
       // A message from another bot is read for the command in it, so that a test can have the bot that gets it do something.
-      const inner = /^<bot_message[^>]*>\n([\s\S]*)\n<\/bot_message>$/.exec(raw)?.[1]
+      const inner = (/^<bot_message[^>]*>\n([\s\S]*)\n<\/bot_message>$/.exec(raw) ?? /^<call_request>\n[\s\S]*?The user asks, on the call:\n([\s\S]*)\n<\/call_request>$/.exec(raw))?.[1]
       const text = inner?.startsWith('!') ? inner : raw
       const files = ask?.type === 'message' && ask.role === 'user' ? (ask.attachments ?? []) : []
       const attached = files.length ? ` [${files.map((a) => a.path).join(', ')}; ${req.show?.(files).length ?? 0} shown]` : ''
@@ -79,6 +80,12 @@ const mock: Provider = {
       if (text === '!sent') {
         const lines = req.items.map((i) => (i.type === 'message' ? `${i.role}: ${i.text.replace(/\s+/g, ' ').slice(0, 160)}` : i.type))
         yield { type: 'item', item: { type: 'message', role: 'assistant', text: lines.join('\n') } }
+        return
+      }
+      // Going over what was said on a call that ended (calls.ts): it does what the user asked it to remember, and nothing else.
+      if (text.startsWith('A voice call between you and the user has just ended.')) {
+        const kept = /^User: .*remember (.*)$/im.exec(text)?.[1]
+        yield { type: 'item', item: { type: 'message', role: 'assistant', text: kept ? `Noted after the call: ${kept}` : 'Nothing to do.' } }
         return
       }
       if (text.startsWith('!slow')) await sleep(4000)
@@ -132,8 +139,23 @@ export function providerInfos(): ProviderInfo[] {
   return providers.map((p) => ({ ...p.info(), enabled: !off.includes(p.id) }))
 }
 
+/**
+ * Whether bots can be called. The voice on a call is a speech model of the owner's ChatGPT plan,
+ * which only Codex reaches, and only when it is signed in with ChatGPT: a call needs it whatever
+ * the bot itself runs on.
+ */
+export function callsInfo(): CallsInfo {
+  const info = codex.info()
+  const no = (reason: string): CallsInfo => ({ available: false, reason })
+  if (settings().disabledProviders.includes(codex.id)) return no('Calls use your ChatGPT plan through Codex, which is switched off in Settings, under Providers.')
+  if (!info.path) return no(info.detail === 'Checking…' ? 'Checking whether Codex is installed…' : 'Calls use your ChatGPT plan through Codex. Install the Codex CLI on the computer running OpenKumi, then run “codex login” there.')
+  if (!info.connected) return no('Calls use your ChatGPT plan through Codex, which is not signed in. Run “codex login” on the computer running OpenKumi.')
+  if (!/chatgpt/i.test(info.detail)) return no('Calls need Codex to be signed in with a ChatGPT plan, not an API key. Run “codex login” on the computer running OpenKumi and choose ChatGPT.')
+  return { available: true, reason: '' }
+}
+
 export function announceProviders() {
-  emit({ type: 'providers', providers: providerInfos() })
+  emit({ type: 'providers', providers: providerInfos(), calls: callsInfo() })
 }
 
 /** Looks again at the providers that depend on a program installed on this computer, and tells the UI. */

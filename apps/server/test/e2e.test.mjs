@@ -2161,6 +2161,289 @@ test('browser: a bot asks the owner to take over, and waits until they hand it b
   await api('POST', `/api/bots/${bot.id}/browser/stop`)
 })
 
+test('calls: a bot is called through Codex; the voice hands what is asked to the bot, and says what it answers', async () => {
+  await api('POST', '/api/providers/check')
+  // Calls need Codex signed in with ChatGPT, whatever the bot itself runs on.
+  const before = await api('GET', '/api/state')
+  assert.deepEqual([before.calls, before.call], [{ available: true, reason: '' }, null])
+  assert.deepEqual(await api('GET', '/api/calls/voices'), { voices: ['juniper', 'maple', 'cove'], usual: 'cove' })
+
+  const caller = await api('POST', '/api/bots', { name: 'Caller', provider: 'mock', description: 'Answers the phone.' })
+  assert.equal(caller.voice, '')
+  const thread = await fresh(caller.id)
+  await say(thread, '!say We spoke before.')
+
+  const watcher = await openSocket()
+  const events = []
+  watcher.addEventListener('message', (e) => {
+    const event = typeof e.data === 'string' ? JSON.parse(e.data) : null
+    if (event?.type === 'call' || event?.type === 'call.words') events.push(event)
+  })
+  const words = () => events.filter((e) => e.type === 'call.words' && e.done).map((e) => `${e.role}: ${e.text}`)
+  /** What the stand-in for Codex was started with, which it sends back in its half of the connection. */
+  const startedWith = (sdp) => JSON.parse(Buffer.from(sdp.match(/^s=(.+)$/m)[1], 'base64').toString())
+  const offer = (...lines) => ['v=0', ...lines, ''].join('\r\n')
+
+  try {
+    // The app sends its half of the connection, and gets the other half back.
+    const { call, sdp } = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=chat:Hello there', 'a=says:!say Tomorrow is free.') })
+    assert.deepEqual([call.botId, call.state], [caller.id, 'live'])
+    assert.equal((await api('GET', '/api/state')).call.id, call.id)
+    const started = startedWith(sdp)
+    // The voice is told who it is and what it hands over, in what the call starts with (where the speech model
+    // reads it), followed by what the two were just talking about.
+    const [instructions, ...opening] = started.initialItems
+    assert.equal(instructions.role, 'developer')
+    assert.match(instructions.text, /^# Who you are on this call\n\nYour name is Caller\. You are one of the user's AI bots in OpenKumi[^\n]*What you are for: Answers the phone\./)
+    assert.match(instructions.text, /Do not introduce yourself as ChatGPT/)
+    assert.match(instructions.text, /# You can only talk\. Everything else is delegated\.[\s\S]*Saying "I'll remember that" without delegating is untrue/)
+    assert.equal(started.prompt, instructions.text)
+    assert.deepEqual(opening.map((item) => `${item.role}: ${item.text}`), [
+      'developer: For what the two of you were last talking about, this is the end of your written conversation with the user, from before this call:',
+      'user: !say We spoke before.',
+      'assistant: We spoke before.',
+      'developer: The call begins now.',
+    ])
+    assert.equal(started.voice, null, 'a bot without a voice of its own gets the usual one')
+    // The Codex behind a call has nothing to do and nothing to do it with: what the voice hands over is the bot's.
+    assert.deepEqual([started.clientManagedHandoffs, started.includeStartupContext, started.opened.ephemeral, started.opened.sandbox], [true, false, true, 'read-only'])
+    assert.match(started.instructions, /reply with exactly: ok$/)
+    assert.ok(started.disabled.includes('shell_tool') && started.config['mcp_servers.calendar.enabled'] === false && started.config['mcp_servers.openkumi.url'] === undefined)
+
+    // What the caller asked for is in the bot's conversation, as said on a call; the bot answered it as itself, and the voice said the answer.
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken:')))
+    const items = await settle(thread)
+    const asked = items.find((d) => d.via === 'call')
+    assert.deepEqual([asked.source, asked.text, asked.before], ['user', '!say Tomorrow is free.', 'User: Hello there\nYou: You said: Hello there'])
+    assert.equal(lastText(items), 'Tomorrow is free.')
+    assert.deepEqual(words(), [
+      'user: Hello there',
+      'assistant: You said: Hello there',
+      'user: !say Tomorrow is free.',
+      'assistant: On it.',
+      'assistant: Spoken: What came back for “!say Tomorrow is free.”:\n\nTomorrow is free.',
+    ])
+    assert.ok(events.some((e) => e.type === 'call' && e.call?.working === 1), 'while the bot works on it, the call says so')
+    assert.equal((await api('GET', '/api/state')).call.working, 0)
+
+    // The app says it is still there; hanging up leaves a record of what was said in the conversation.
+    assert.deepEqual(await api('POST', `/api/calls/${call.id}/alive`), { ok: true })
+    await api('DELETE', `/api/calls/${call.id}`)
+    const record = (await settle(thread)).at(-1)
+    assert.equal(record.type, 'call')
+    assert.deepEqual(record.lines.map((line) => `${line.role}: ${line.text}`), words())
+    assert.ok(record.seconds >= 1)
+    assert.equal((await api('GET', '/api/state')).call, null)
+    assert.equal(events.at(-1).call, null)
+    await assert.rejects(api('POST', `/api/calls/${call.id}/alive`), /That call is over/)
+
+    // The bot's model reads a request made on a call as one, with what was said just before it; the record of the call is not sent to it.
+    const second = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=chat:One more thing', 'a=says:!sent') })
+    await until(() => words().filter((line) => line.startsWith('assistant: Spoken:')).length === 2)
+    const sent = lastText(await settle(thread))
+    assert.match(sent, /user: <call_request> Said on the call just before: User: One more thing You: You said: One more thing The user asks, on the call: !sent <\/call_request>$/)
+    assert.doesNotMatch(sent, /^call$/m)
+    assert.match(await told('!system', caller.id), /arrives as a <call_request>, with what was said on the call just before it/)
+
+    // On a call a bot does not do the work itself: in a turn that answers a call it has only the tools to pass work on
+    // (to another bot, to a subagent of its own, to an automation), and is told so.
+    const spokenFor = (request) => words().find((line) => line.startsWith(`assistant: Spoken: What came back for “${request}`))?.split(':\n\n').slice(1).join(':\n\n')
+    // (A subagent the bot was asked for in writing, before the call, is still at work when the call is made.)
+    const written = (await conversationOf(caller.id)).id
+    await say(written, '!tool spawn_subagent {"name":"Earlier","task":"!slow"}')
+    events.length = 0
+    const passing = await api('POST', `/api/bots/${caller.id}/call`, {
+      sdp: offer(
+        'a=says:!tools',
+        'a=says:!system',
+        'a=says:!tool write_file {"path":"files/said.md","content":"On a call"}',
+        'a=says:!tool create_automation {"title":"Watch","prompt":"Say so.","watch":{"url":"https://example.com/"}}',
+        'a=says:!tool create_automation {"title":"Later","prompt":"Say hello.","in_minutes":600}',
+        'a=says:!tool spawn_subagent {"name":"Weather","task":"!say Sunny all day."}',
+      ),
+    })
+    // (And the owner writes to the bot while the call is on, which has it start one more.)
+    await api('POST', `/api/threads/${written}/messages`, { text: '!tool spawn_subagent {"name":"Typed","task":"!say Typed result."}' })
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken: A result has come in')))
+    assert.equal(spokenFor('!tools'), 'list_bots message_bot spawn_subagent list_subagents read_subagent message_subagent cancel_subagent list_automations create_automation update_automation delete_automation')
+    // (All of what it is told is too long to be said: it is read where the bot wrote it.)
+    const answers = await settle((await conversationOf(caller.id)).id)
+    const system = answers[answers.findIndex((d) => d.via === 'call' && d.text === '!system') + 1].text
+    assert.match(system, /# You are answering on a call\nWhat you are answering now was asked on a voice call[\s\S]*goes to that bot, with message_bot\.[\s\S]*goes to a subagent, with spawn_subagent/)
+    assert.match(spokenFor('!system'), /\(There is more: it is in the conversation, in the app\.\)$/)
+    // A tool it has otherwise is not there to be called.
+    assert.equal(spokenFor('!tool write_file'), 'Tool result: Error: there is no tool named "write_file".')
+    assert.ok(!fs.existsSync(path.join(home, 'bots', caller.id, 'workspace', 'files', 'said.md')))
+    // An automation made on a call starts at a time. A watch would look at a page then and there: that is a subagent's to set up.
+    assert.match(spokenFor('!tool create_automation {"title":"Watch"'), /^Tool result: Error: On a call an automation can only be made or changed when it starts at a time\./)
+    assert.match(spokenFor('!tool create_automation {"title":"Later"'), /^Tool result: (?!Error)/)
+    const made = (await api('GET', '/api/automations')).filter((a) => a.botId === caller.id)
+    assert.deepEqual(made.map((a) => a.title), ['Later'])
+    await api('DELETE', `/api/automations/${made[0].id}`)
+    // Work it started in the background comes back to its conversation, where it has all its tools again; what it says of it there, the voice says too.
+    assert.match(spokenFor('!tool spawn_subagent'), /^Tool result: \{"id":"[^"]+","name":"Weather","status":"running"\}$/)
+    assert.match(words().find((line) => line.startsWith('assistant: Spoken: A result has come in')), /^assistant: Spoken: A result has come in for something that was under way\. Tell the user what it says:\n\nEcho: <subagent_notification>\nSubagent "Weather" \(id: [^)]+\) — completed\nSunny all day\.\n<\/subagent_notification>$/)
+    assert.ok(events.some((e) => e.type === 'call' && e.call?.id === passing.call.id && e.call.working > 0))
+    await until(async () => (await api('GET', '/api/state')).call?.working === 0)
+    // What comes back from work that was not passed on from the call (the subagent from before it, and the one the owner
+    // wrote for during it) is answered in the conversation as ever, and is not the call's to say.
+    await until(async () => {
+      const answered = (await settle(written)).filter((d) => d.role === 'assistant').map((d) => d.text)
+      return answered.some((text) => text.includes('Subagent "Earlier"')) && answered.some((text) => text.includes('Subagent "Typed"'))
+    })
+    assert.deepEqual(words().filter((line) => line.startsWith('assistant: Spoken: A result has come in')).map((line) => /Subagent "(\w+)"/.exec(line)[1]), ['Weather'])
+    await api('DELETE', `/api/calls/${passing.call.id}`)
+    // Written to, not called, the bot has everything it has.
+    assert.match(await told('!tools', caller.id), /\bwrite_file\b[\s\S]*\bwait_subagents\b[\s\S]*\bbrowser_navigate\b/)
+    assert.doesNotMatch(await told('!system', caller.id), /# You are answering on a call/)
+
+    // The voice does not always hand over what it should. When a call ends, the bot itself goes over the part of it that
+    // never reached it, in the background, and the conversation hears of it only when there was something to do.
+    // (Asking what the bot is told started its conversation afresh.)
+    const now = (await conversationOf(caller.id)).id
+    const beneath = async () => (await api('GET', '/api/state')).threads.filter((t) => t.parentId === now && t.title === 'After the call')
+    const idle = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=chat:How are you doing today') })
+    await until(() => words().includes('assistant: You said: How are you doing today'))
+    await api('DELETE', `/api/calls/${idle.call.id}`)
+    await until(async () => (await beneath()).length === 1 && (await beneath())[0].status === 'idle')
+    const [looked] = await beneath()
+    const went = (await api('GET', `/api/threads/${looked.id}`)).items.map((i) => i.data)
+    assert.match(went[0].text, /^A voice call between you and the user has just ended\.[^\n]*Nothing was passed on to you during this call\. This is what was said on it:\n\nUser: How are you doing today\nYou: You said: How are you doing today\n\n/)
+    assert.equal(went.at(-1).text, 'Nothing to do.')
+    assert.equal((await settle(now)).at(-1).type, 'call', 'nothing was passed to the conversation')
+    // Here the voice said it would remember something, and handed nothing over: the bot does it after the call, and says so.
+    const kept = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=says:!say Noted.', 'a=chat:Please remember that I take my tea without sugar', 'a=chat:Bye') })
+    await until(() => words().includes('assistant: You said: Bye'))
+    await api('DELETE', `/api/calls/${kept.call.id}`)
+    await until(async () => (await settle(now)).some((d) => d.source === 'subagent'))
+    const report = (await settle(now)).find((d) => d.source === 'subagent')
+    assert.match(report.text, /^<subagent_notification>\nSubagent "After the call" \(id: [^)]+\) — completed\nNoted after the call: that I take my tea without sugar\n<\/subagent_notification>$/)
+    // It was told what the voice did hand over, so as not to do that again, and shown what came after the last of it.
+    const after = (await beneath()).find((t) => t.id !== looked.id)
+    assert.match(
+      (await api('GET', `/api/threads/${after.id}`)).items[0].data.text,
+      /none of them is to be done again:\n- !say Noted\.\n\nThis part of the call, after the last of them, was not passed on to you:\n\nYou: On it\.\n[\s\S]*\nUser: Please remember that I take my tea without sugar\n/,
+    )
+    // A few words are gone over too, in whatever language; a call on which the user said nothing more after the last thing handed over is not.
+    const short = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=chat:誕生日を覚えて') })
+    await until(() => words().includes('assistant: You said: 誕生日を覚えて'))
+    await api('DELETE', `/api/calls/${short.call.id}`)
+    await until(async () => (await beneath()).length === 3)
+    // What the user says after a hand-over is not taken for the request that was handed over when only its marks differ.
+    const marks = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=says:राम को याद रखना', 'a=chat:रीम को याद रखना') })
+    await until(() => words().includes('assistant: You said: रीम को याद रखना'))
+    await api('DELETE', `/api/calls/${marks.call.id}`)
+    await until(async () => (await beneath()).length === 4)
+    const none = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=chat:Hello', 'a=says:!say Done.') })
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken: What came back for “!say Done.”')))
+    await api('DELETE', `/api/calls/${none.call.id}`)
+    await until(async () => (await api('GET', '/api/state')).call === null)
+    assert.equal((await beneath()).length, 4)
+
+    // There is one call at a time: a new one ends the one under way.
+    const third = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer() })
+    await assert.rejects(api('POST', `/api/calls/${second.call.id}/alive`), /That call is over/)
+    assert.equal((await api('GET', '/api/state')).call.id, third.call.id)
+    await api('DELETE', `/api/calls/${third.call.id}`)
+
+    // A bot that is stopped, or fails, while the caller waits: the voice says so.
+    events.length = 0
+    const fourth = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=says:!slow') })
+    const current = (await conversationOf(caller.id)).id
+    await until(async () => (await api('GET', `/api/threads/${current}`)).thread.status === 'running')
+    await api('POST', `/api/threads/${current}/stop`)
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken:')))
+    assert.match(words().at(-1), /What came back for “!slow”:\n\nThat did not work\. It was stopped before it was done\.$/)
+    await api('DELETE', `/api/calls/${fourth.call.id}`)
+
+    // The owner chooses a bot's voice from the ones Codex offers.
+    assert.equal((await api('PATCH', `/api/bots/${caller.id}`, { voice: 'maple' })).voice, 'maple')
+    assert.match(fs.readFileSync(path.join(home, 'bots', caller.id, 'bot.md'), 'utf8'), /^voice: maple$/m)
+    const fifth = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer() })
+    assert.equal(startedWith(fifth.sdp).voice, 'maple')
+    await api('DELETE', `/api/calls/${fifth.call.id}`)
+    // One Codex does not offer (any more) is said in words the owner can act on, and no call is left behind.
+    await api('PATCH', `/api/bots/${caller.id}`, { voice: 'marin' })
+    await assert.rejects(api('POST', `/api/bots/${caller.id}/call`, { sdp: offer() }), /The voice chosen for this bot is not one Codex offers any more/)
+    assert.equal((await api('PATCH', `/api/bots/${caller.id}`, { voice: 'Not a voice!' })).voice, '')
+
+    // So is a plan that cannot make calls, and a connection that is not one.
+    await assert.rejects(api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=refuse:realtime conversation requires API key auth') }), /Calls need Codex to be signed in with a ChatGPT plan/)
+    await assert.rejects(api('POST', `/api/bots/${caller.id}/call`, { sdp: 'hello' }), /not a connection a call can be made with/)
+    assert.equal((await api('GET', '/api/state')).call, null)
+
+    // What another bot writes back, when the call asked it for a reply, is said too. What that bot writes of its own
+    // accord meanwhile is answered in the conversation, and is not the call's to say.
+    events.length = 0
+    const peer = await fresh(bot.id)
+    const reply = `!tool message_bot ${JSON.stringify({ bot_id: caller.id, message: 'The peer answers.' })}`
+    const asking = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer(`a=says:!tool message_bot ${JSON.stringify({ bot_id: bot.id, message: reply, reply_wanted: true })}`) })
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken: A result has come in')))
+    await say(peer, `!tool message_bot ${JSON.stringify({ bot_id: caller.id, message: 'Unasked.' })}`)
+    const talk = (await conversationOf(caller.id)).id
+    await until(async () => (await settle(talk)).some((d) => d.role === 'assistant' && d.text.includes('Unasked.')))
+    const came = (await settle(talk)).filter((d) => d.source === 'bot')
+    assert.deepEqual(came.map((d) => [d.text, typeof d.answers]), [['The peer answers.', 'string'], ['Unasked.', 'undefined']], 'a reply names the message it answers')
+    const results = words().filter((line) => line.startsWith('assistant: Spoken: A result has come in'))
+    assert.equal(results.length, 1)
+    assert.match(results[0], /Echo: <bot_message from="Tester"[^>]*>\nThe peer answers\.\n<\/bot_message>$/)
+    await api('DELETE', `/api/calls/${asking.call.id}`)
+
+    // An answer that is also to something the owner wrote meanwhile, and had the bot read at once as it worked, is theirs
+    // to read: the voice only says where it is. (A bot on Codex takes a message into the turn that is running.)
+    const steered = await api('POST', '/api/bots', { name: 'Taken in', provider: 'codex' })
+    events.length = 0
+    const both = await api('POST', `/api/bots/${steered.id}/call`, { sdp: offer('a=says:!slow') })
+    await until(async () => (await conversationOf(steered.id))?.status === 'running')
+    const mixed = (await conversationOf(steered.id)).id
+    await api('POST', `/api/threads/${mixed}/messages`, { text: 'Written meanwhile' })
+    // The engine's program has to be up and at work on the turn.
+    await new Promise((r) => setTimeout(r, 700))
+    await api('POST', `/api/queue/${(await waitingIn(mixed))[0].id}/now`)
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken: What came back for “!slow”:')))
+    assert.match(lastText(await settle(mixed)), /^Echo \(turn 1\): !slow \[told as it worked: Written meanwhile\]$/)
+    assert.match(words().find((line) => line.startsWith('assistant: Spoken: What came back for “!slow”:')), /:\n\nThe answer is in the conversation, where it also answers something that was written there meanwhile\.$/)
+    await api('DELETE', `/api/calls/${both.call.id}`)
+    await api('DELETE', `/api/bots/${steered.id}`)
+
+    // Something asked on a call that the bot's engine never got to hear (it was switched off) reaches it with whatever the
+    // owner writes next. The turn that then answers both is still one in which the bot only passes work on.
+    const engine = await api('POST', '/api/bots', { name: 'Engine', provider: 'claude-code' })
+    const { settings: usual } = await api('GET', '/api/state')
+    await api('PATCH', '/api/settings', { disabledProviders: [...usual.disabledProviders, 'claude-code'] })
+    events.length = 0
+    const unheard = await api('POST', `/api/bots/${engine.id}/call`, { sdp: offer('a=says:Said on the call') })
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken: What came back for “Said on the call”:\n\nThat did not work. Claude Code is switched off')))
+    await api('DELETE', `/api/calls/${unheard.call.id}`)
+    await api('PATCH', '/api/settings', { disabledProviders: usual.disabledProviders })
+    const later = await say((await conversationOf(engine.id)).id, '!system')
+    assert.match(lastText(later), /# You are answering on a call\n/)
+    assert.match(await told('!system', engine.id), /^(?![\s\S]*# You are answering on a call)/)
+    await api('DELETE', `/api/bots/${engine.id}`)
+
+    // A bot at work on something else gets to what was asked on a call after that, and the voice says so. When its
+    // conversation is deleted with the request still waiting, the voice says that nothing came of it.
+    events.length = 0
+    const busy = (await conversationOf(caller.id)).id
+    await api('POST', `/api/threads/${busy}/messages`, { text: '!slow' })
+    const waited = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=says:!say Hello again.') })
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken: About “!say Hello again.”: you are still in the middle of something else')))
+    assert.equal((await api('GET', '/api/state')).call.working, 1)
+    await api('DELETE', `/api/threads/${busy}`)
+    await until(() => words().some((line) => line.startsWith('assistant: Spoken: What came back for “!say Hello again.”:\n\nThat did not work. ')))
+    assert.equal((await api('GET', '/api/state')).call.working, 0)
+    await api('DELETE', `/api/calls/${waited.call.id}`)
+
+    // A call ends with its bot.
+    const last = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer() })
+    await api('DELETE', `/api/bots/${caller.id}`)
+    await assert.rejects(api('POST', `/api/calls/${last.call.id}/alive`), /That call is over/)
+  } finally {
+    watcher.close()
+    await api('DELETE', `/api/bots/${caller.id}`).catch(() => {})
+  }
+})
+
 test('settings: changes are checked, kept in settings.json, and take effect', async () => {
   const { settings, defaults, about } = await api('GET', '/api/state')
   assert.deepEqual(settings, defaults)

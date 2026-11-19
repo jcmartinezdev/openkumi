@@ -37,8 +37,8 @@ function tell(s: Session, event: DictationEvent) {
   if (!s.to.isDestroyed()) s.to.send('desktop:dictation', event)
 }
 
-/** Asks the person, the first time, whether the app may use the microphone. */
-async function microphone() {
+/** Asks the person, the first time, whether the app may use the microphone. Also asked before a call (main.ts). */
+export async function microphone() {
   if (process.platform !== 'darwin') return true
   const status = systemPreferences.getMediaAccessStatus('microphone')
   if (status === 'not-determined') return systemPreferences.askForMediaAccess('microphone')

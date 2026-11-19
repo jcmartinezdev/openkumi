@@ -700,6 +700,77 @@ const webTools: Tool[] = [
   },
 ]
 
+/**
+ * What a bot has when it answers something asked on a call (see calls.ts), out of what it has
+ * otherwise. On a call a bot only passes work on, so that the call stays free and nothing is done
+ * on the strength of a few spoken words alone: to another bot, to a subagent of its own, which
+ * works in the background with all its tools, or to a later time, as an automation. It reads no
+ * file, opens no page and uses none of its apps there. Waiting for a subagent is left out too:
+ * its result comes back by itself, and is said on the call then.
+ */
+const ON_A_CALL = new Set([
+  'list_bots', 'message_bot', 'create_bot',
+  'spawn_subagent', 'list_subagents', 'read_subagent', 'message_subagent', 'cancel_subagent',
+  'list_automations', 'create_automation', 'update_automation', 'delete_automation',
+])
+
+/**
+ * What bots passed on from turns that answered a call, and when: a subagent or an automation by
+ * its id, a message to another bot as "message:<its key>". A call says only what comes back from
+ * these (calls.ts), so that nothing else that reaches a conversation meanwhile is said, or sent
+ * to the speech model.
+ */
+const passedOn = new Map<string, number>()
+/** When it was passed on, or 0 if it was not. */
+export const passedOnAt = (what: string) => passedOn.get(what) ?? 0
+
+function note(what: string) {
+  const now = Date.now()
+  // No call lasts a day.
+  for (const [key, at] of passedOn) if (now - at > 24 * 3600_000) passedOn.delete(key)
+  passedOn.set(what, now)
+}
+
+/**
+ * The tools a bot has for a turn that answers a call, out of all of its tools, each noting what
+ * it passes on. An automation made or changed there is one that starts at a time: setting up a
+ * watch, or turning one on again or moving it, looks at a page or calls one of the bot's apps
+ * then and there, and one that starts when an app calls is tied to that app. Those are work for
+ * a subagent.
+ */
+export function onACall(tools: Tool[]): Tool[] {
+  return tools
+    .filter((tool) => ON_A_CALL.has(tool.name))
+    .map((tool) => ({
+      ...tool,
+      run: async (a, ctx) => {
+        const automation = tool.name === 'create_automation' || tool.name === 'update_automation'
+        if (automation) {
+          const existing = tool.name === 'update_automation' ? db.getAutomation(String(a.id)) : undefined
+          // Given as automations.ts takes it: a model may fill what it does not use with nothing.
+          const given = (value: unknown) => value != null && value !== ''
+          if (given(a.watch) || given(a.hook) || (existing && existing.trigger.kind !== 'time')) {
+            throw new Error('On a call an automation can only be made or changed when it starts at a time. Have a subagent see to one that starts on a watch or when an app calls.')
+          }
+        }
+        const running = tool.run(a, ctx)
+        // message_bot has done its work by the time it returns, so the newest record of a message in the conversation
+        // is this one's, whatever else is called in the same moment. The reply will name its key.
+        const sent = tool.name === 'message_bot' ? db.pageOf(ctx.thread.id).items.findLast(({ data }) => data.type === 'sent')?.data : undefined
+        const output = await running
+        if (tool.name === 'spawn_subagent') note(String(JSON.parse(output).id))
+        // One that had finished starts again, and reports again.
+        else if (tool.name === 'message_subagent') note(String(a.id))
+        else if (sent?.type === 'sent') note(`message:${sent.key}`)
+        else if (automation) {
+          const id = tool.name === 'update_automation' ? String(a.id) : /"id":\s*"([^"]+)"/.exec(output)?.[1]
+          if (id) note(id)
+        }
+        return output
+      },
+    }))
+}
+
 /** Everything a thread's bot can call right now, and why any of its superpowers' services cannot be used. */
 export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problems: Record<string, string> }> {
   const canSpawn = agent.depthOf(thread) < settings().maxDepth

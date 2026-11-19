@@ -9,10 +9,10 @@ import type { DesktopState, Link } from '@openkumi/shared/desktop'
 import os from 'node:os'
 import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresses'
 import { pair, parseAddress } from '@openkumi/client/pair'
-import { canDictate, cancelDictation, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
+import { canDictate, cancelDictation, microphone, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
 import { askToUpdate, config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
-import { ASSUME_YES, CATCH_SIGN_INS, HIDDEN, PRELOAD } from './paths.ts'
+import { ASSUME_YES, CATCH_SIGN_INS, FAKE_MICROPHONE, HIDDEN, PRELOAD } from './paths.ts'
 import { APP_URL, keepPage, serveInterface } from './protocol.ts'
 import { checkForUpdate, installUpdate, onUpdateChange, startUpdates, updateState } from './updates.ts'
 
@@ -259,6 +259,8 @@ answer('desktop:can-dictate', () => canDictate())
 answer('desktop:dictate-stop', () => stopDictation())
 answer('desktop:dictate-cancel', () => cancelDictation())
 answer('desktop:microphone-settings', () => openMicrophoneSettings())
+// Before a call: the person is asked, the first time, whether the app may use the microphone.
+answer('desktop:microphone', () => FAKE_MICROPHONE || microphone())
 // What is said goes back to the window that asked to listen.
 ipcMain.handle('desktop:dictate', (event, locale) => {
   if (!fromApp(event)) throw new Error('Not allowed.')
@@ -311,10 +313,13 @@ function createWindow() {
     outside(url)
     return { action: 'deny' }
   })
-  // Copying to the clipboard is all the interface asks for. Pages in it get nothing.
-  pages.session.setPermissionRequestHandler((contents, permission, allow, details) =>
-    allow(contents === pages && permission === 'clipboard-sanitized-write' && 'requestingUrl' in details && details.requestingUrl.startsWith(APP_URL)),
-  )
+  // The interface asks for two things: copying to the clipboard, and the microphone for a call
+  // (never the camera). Pages in it get nothing.
+  pages.session.setPermissionRequestHandler((contents, permission, allow, details) => {
+    const own = contents === pages && 'requestingUrl' in details && details.requestingUrl.startsWith(APP_URL)
+    const sound = permission === 'media' && 'mediaTypes' in details && details.mediaTypes?.length === 1 && details.mediaTypes[0] === 'audio'
+    allow(own && (permission === 'clipboard-sanitized-write' || sound))
+  })
   void created.loadURL(APP_URL)
 }
 

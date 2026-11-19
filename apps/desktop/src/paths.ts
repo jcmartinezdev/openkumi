@@ -56,5 +56,7 @@ export const HIDDEN = process.env.OPENKUMI_DESKTOP_HIDDEN === '1'
 export const ASSUME_YES = !!process.env.OPENKUMI_DESKTOP_YES
 /** Tests have dictation hear a recording instead of the microphone (the program reads it from its environment). */
 export const RECORDING = !!process.env.OPENKUMI_DICTATION_RECORDING
+/** Tests call with Chromium's made-up microphone, which the system has no say about. */
+export const FAKE_MICROPHONE = app.commandLine.hasSwitch('use-fake-device-for-media-stream')
 /** Tests have the app say it catches sign-ins, which only an installed app really can. */
 export const CATCH_SIGN_INS = process.env.OPENKUMI_DESKTOP_CATCH_SIGN_INS === '1'

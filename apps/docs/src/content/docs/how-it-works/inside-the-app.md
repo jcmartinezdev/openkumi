@@ -12,6 +12,7 @@ The app is not a web page in a window. Its work is spread out so that no part ca
 | The window | the interface, loaded from the app itself (`openkumi://app/`), talking straight to the environment it shows |
 | A worker thread in the window | the connection to the environment: it reads what arrives, hands changes to the window at most once per frame, and draws the pictures of a bot's browser straight onto the page |
 | A program of its own (`dictation`), while you dictate | listening, and writing down what is said, on the Mac; the app passes its words to the window |
+| A Codex process of its own, while you are on a call | setting the call up with your ChatGPT sign-in, and reporting what is said. The sound itself goes between the window and OpenAI directly, never through the server ([Calls](/calls/)) |
 
 Two things follow for speed. Text that streams in is collected on the worker and applied once per
 frame, and a reply being written is drawn piece by piece, so only its last paragraph is worked out

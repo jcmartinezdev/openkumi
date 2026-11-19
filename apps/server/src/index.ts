@@ -3,6 +3,7 @@ import path from 'node:path'
 import * as agent from './agent.ts'
 import { createBot, importLegacyBots, listBots, moveOffChatGPTSignIn } from './bots.ts'
 import { stopAllBrowsers } from './browser.ts'
+import { endCalls } from './calls.ts'
 import { workspaceDir } from './config.ts'
 import { closeAll } from './mcp.ts'
 import * as db from './db.ts'
@@ -60,6 +61,8 @@ async function shutdown(code = 0) {
   closing = true
   server.close()
   closeHooks()
+  // A call is hung up, and what was said on it kept, while the database is still open.
+  endCalls()
   // Replies being written are stopped first, so that what they had is saved before the database closes.
   await agent.stopAll()
   await Promise.all([stopAllBrowsers(), closeAll()])

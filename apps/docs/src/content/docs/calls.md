@@ -1,0 +1,115 @@
+---
+title: Calls
+description: "Talking with a bot out loud: what a call needs, what the voice does itself and what it hands to the bot, and where the sound goes."
+---
+
+A call is a conversation with a bot out loud: you talk, it talks back at once, and you can
+interrupt it as you would a person. The phone button at the top of a bot's conversation starts
+one. While it lasts, a small panel stays over the window with who is on the line, what is being
+said, a way to mute your microphone and a way to hang up; the call goes on while you look at
+another bot or at the settings.
+
+Calls are made from the desktop app, on any computer that has a microphone.
+
+## What a call needs
+
+**Codex, signed in with a ChatGPT plan**, on the computer that runs OpenKumi. The voice on a call
+is a speech model that comes with the plan, and Codex is the program that reaches it. There is no
+API key, and nothing more to pay for or set up: if a bot can run on Codex there, a bot can be
+called there.
+
+That holds whatever the bot itself runs on. A bot on Claude Code, Grok or a local model is called
+the same way: the voice is ChatGPT's, the work is still done by the bot's own engine.
+
+When calls are not available, the phone button says what is missing: Codex is not installed, is
+not signed in, is signed in with an API key instead of a plan, or is switched off in Settings.
+
+The way Codex reaches the speech model is one OpenAI marks experimental. A new version of Codex
+may change it; if calls stop working after Codex was updated, update OpenKumi.
+
+## Who is on the line
+
+The voice speaks as the bot, by name, and knows what the two of you were last talking about.
+Small talk, thinking out loud and anything it can answer from the call, it answers itself, at
+once.
+
+Everything else it hands to the bot: anything about your own things (your calendar, mail, files,
+notes, accounts), anything that needs the web, anything to be done. What it hands over arrives in
+the bot's conversation as a message from you, marked **On a call**, and the bot answers it on its
+own engine. A bot that is at work on something else gets to it right after, and the voice says so.
+
+### What a bot can do on a call
+
+Only pass the work on. In the turn that answers something asked on a call, the bot has none of
+its usual tools (no files, no memory, no browser, no web search, no superpowers), only these:
+
+- **Other bots.** It can see who the other bots are and write to one (`list_bots`,
+  `message_bot`); the main assistant can also make a new bot (`create_bot`).
+- **Background tasks.** It can start a subagent (`spawn_subagent`), and look at, write to or stop
+  the ones it started. A subagent is the bot itself at work in the background, in a thread of its
+  own, with all the bot's tools: that is where something is looked up, a file is written, or
+  something is remembered. It cannot wait for one; the result comes back by itself.
+- **Automations.** It can make, change and delete automations that start at a time, for what is
+  to happen later or again ("remind me at five"). One that starts on a watch or when an app calls
+  is a subagent's to set up, because setting it up looks at a page or an app there and then.
+
+So the bot's first answer on a call is usually that something is under way, and the voice says
+that. When the work comes back to the conversation (the subagent's report, the other bot's reply,
+the automation's result), the bot answers there as it always does, with all its tools again, and
+the voice reads that out too, for as long as the call lasts. The panel says **Working on it…**
+meanwhile, and you can go on talking. Only what was started on the call is read out: something
+else that happens to come in meanwhile, from work you asked for in writing or from another bot,
+stays in the conversation and is not sent to the speech model.
+
+This keeps the call free, and it means nothing is done on a few spoken words alone: what you
+asked for, what was started for it and what came of it are all in the conversation, to read
+afterwards. It also costs time. Something the bot would look up in a few seconds when you write
+to it takes fifteen or more on a call, because a subagent has to be started and report back. A
+bot's reply to something asked on a call is written to be said aloud: short, the answer first.
+When there is more than can be said (a table, a document, a page), the bot puts it in the
+conversation and says that it is there.
+
+When the call ends, the conversation gets a record of it: how long it lasted, and everything that
+was said, to unfold.
+
+### When the voice keeps something to itself
+
+What to hand over is the voice's own choice, and it does not always choose right: it may say
+"I'll remember that" and hand nothing over. Two things catch that. Every request the bot gets
+from a call comes with what was said just before it, and the bot is told to do what was asked or
+promised there too. And when a call ends, the bot itself goes over what you said after the last
+thing the voice handed over, in the background (a subagent called **After the call**), and does
+what it finds: keeps what was to be remembered, sets up what was to be scheduled. It is told what
+was handed over during the call, so that nothing is done twice. You hear of it in the
+conversation only when there was something to do. A call on which you said nothing more after
+the last thing handed over is not gone over at all.
+
+## The bot's voice
+
+A bot's settings have **Voice**, under Calls: the voices Codex offers, by name. A bot that was not
+given one has the usual voice.
+
+## Where the sound goes
+
+Between your computer and OpenAI, directly. The app makes one half of the connection and the
+OpenKumi server passes it to Codex, which sets the call up with your ChatGPT sign-in and hands
+back the other half. The server never carries the sound, and no recording is kept anywhere by
+OpenKumi: only the words, as the speech model wrote them down.
+
+What OpenAI receives is what a call is made of: your voice, the bot's name and one-line
+description (in the instructions the voice is given), the last few messages of your conversation
+with it (so that the voice knows what you were talking about), and the bot's answers to what you
+asked on the call. The bot's own instructions, memory and files are not sent; they stay with the
+bot.
+
+## When a call ends by itself
+
+- Nothing was said for five minutes, and the bot is not at work on anything you asked. A call
+  left open would only use up your plan.
+- The app that made it went away (it was closed, or lost its connection for more than about half
+  a minute).
+- Another call was started. There is one call at a time.
+- Your plan does not allow more voice use for now. The panel says what Codex said.
+
+What the bot was asked to do before the call ended, it still does: the answer is in the
+conversation.
