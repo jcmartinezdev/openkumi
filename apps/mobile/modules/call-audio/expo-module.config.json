@@ -1,0 +1,7 @@
+{
+  "platforms": ["apple"],
+  "apple": {
+    "modules": ["CallAudioModule"],
+    "podspecPath": "apple/OpenKumiCallAudio.podspec"
+  }
+}

@@ -71,7 +71,7 @@ npm run pair       # a code for pairing one more computer with it
 ## On an iPhone
 
 There is an iPhone app (`apps/mobile`, Expo and React Native) for chatting with your bots,
-watching and steering their browsers, and looking after them: its Settings (the gear on the list
+[calling them](/calls/#on-the-iphone), watching and steering their browsers, and looking after them: its Settings (the gear on the list
 of bots) change each bot's name, rules, model, browser and superpowers, switch providers on and off,
 set what new bots start with, and choose light or dark and the size of messages on the phone.
 Automations are at the bottom of the list of bots, as on the computer: turn them on and off,

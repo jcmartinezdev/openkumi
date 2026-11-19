@@ -5,7 +5,7 @@
 // what is here is how a window opens the microphone and plays the bot's voice.
 import { useEffect, useRef, useState } from 'react'
 import type { Bot, CallLine } from '@openkumi/shared'
-import { Denied, call, callLength, callTime, dismissCallError, endCall, hangUp, mute, useCalling, usePhone } from '@openkumi/client/calls'
+import { Denied, call, callLength, callTime, dismissCallError, endCall, hangUp, mute, useCallShown, useCalling, usePhone } from '@openkumi/client/calls'
 import { desktop, inDesktopApp } from './desktop'
 import { Icon } from './Icon'
 import { BotHead } from './Mascot'
@@ -96,16 +96,9 @@ function Words({ lines, saying, name }: { lines: CallLine[]; saying: { user: str
 
 /** Over the window while a call is on, and after one that ended by itself until that is dismissed. */
 export function CallPanel() {
-  const calling = useCalling()
-  const call = useStore((s) => s.call)
-  const bots = useStore((s) => s.bots)
+  const { calling, call, mine, elsewhere, bot, status } = useCallShown()
   const lines = useStore((s) => s.callLines)
   const saying = useStore((s) => s.callSaying)
-  const mine = calling.phase !== 'off'
-  // A call made from another device is under way: it can be seen here, and ended. Not the one
-  // this window just hung up, which the server is still ending.
-  const elsewhere = !mine && !!call && call.id !== calling.last
-  const bot = bots.find((b) => b.id === (mine ? calling.botId : call?.botId))
 
   if (!mine && !elsewhere) {
     if (!calling.error) return null
@@ -127,13 +120,6 @@ export function CallPanel() {
   }
   if (!bot) return null
 
-  const status =
-    elsewhere ? 'On a call on another device'
-    : calling.phase === 'asking' ? 'Waiting for the microphone…'
-    : calling.phase === 'connecting' ? 'Calling…'
-    : call?.id === calling.id && call.working > 0 ? 'Working on it…'
-    : calling.muted ? 'Muted'
-    : 'On a call'
   return (
     <div className="call-panel" role="group" aria-label={`Call with ${bot.name}`}>
       <div className="call-head">

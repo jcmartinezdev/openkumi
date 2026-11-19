@@ -60,8 +60,8 @@ that stays logged in.
   the device itself, with Apple's speech models (macOS 26 or iOS 26 and later), so no sound leaves
   it, and the words go to the bot only when you send them, like anything typed. Esc (or ×) gives
   up and leaves the message as it was; Enter while it listens sends once the last words are in.
-- **Call your bot.** The phone button in a bot's conversation starts a call: you talk, it talks
-  back at once, and you can interrupt it. The voice comes with your ChatGPT plan, through Codex,
+- **Call your bot.** The phone button in a bot's conversation, on the computer and on the iPhone,
+  starts a call: you talk, it talks back at once, and you can interrupt it. The voice comes with your ChatGPT plan, through Codex,
   with no API key, and it works for a bot on any engine: whatever needs the bot is handed to the
   bot itself, which on a call only passes work on, to another bot or to a background task of its
   own, and what comes back is read out. What was asked and what was said is kept in the

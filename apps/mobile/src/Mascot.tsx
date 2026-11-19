@@ -90,6 +90,23 @@ export function Bobbing({ children }: { children: ReactNode }) {
   return <Animated.View style={{ transform: [{ translateY }, { rotate }] }}>{children}</Animated.View>
 }
 
+/** Rocks the bot from side to side while its voice is talking, and lets it come to rest when it stops. */
+export function Talking({ on, children }: { on: boolean; children: ReactNode }) {
+  const swing = useRef(new Animated.Value(0)).current
+  useEffect(() => {
+    if (!on) {
+      Animated.timing(swing, { toValue: 0, duration: 260, easing: Easing.out(Easing.quad), useNativeDriver: true }).start()
+      return
+    }
+    const to = (toValue: number) => Animated.timing(swing, { toValue, duration: 430, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
+    const loop = Animated.loop(Animated.sequence([to(1), to(-1)]))
+    loop.start()
+    return () => loop.stop()
+  }, [on])
+  const rotate = swing.interpolate({ inputRange: [-1, 1], outputRange: ['-4deg', '4deg'] })
+  return <Animated.View style={{ transformOrigin: 'bottom', transform: [{ rotate }] }}>{children}</Animated.View>
+}
+
 const styles = StyleSheet.create({
   emoji: { position: 'absolute', textAlign: 'center' },
   // The edge keeps the sign apart from a pale head or screen.

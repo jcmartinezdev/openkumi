@@ -8,8 +8,11 @@ Before each turn a bot is given the **master prompt**, one file that comes with 
 change what every bot is told, edit that file, which is read again on every step. The server fills
 in what it knows of the bot and the thread, so in this order a bot is told:
 
-1. **Principles**: how to behave and how to work with the others.
-2. **The other bots**: each one's name, its `bot_id`, the line saying what it is for, the
+1. **Who it is**: its name, that it is one of your bots in OpenKumi, and what OpenKumi is and who
+   made it, and the name of the model that powers it. Asked who it is, a bot answers as itself,
+   not as that model; it may say what it is powered by.
+2. **Principles**: how to behave and how to work with the others.
+3. **The other bots**: each one's name, its `bot_id`, the line saying what it is for, the
    superpowers it has, and which is the main assistant. The line is set by you, in the bot's
    settings or on the Master prompt page; no bot can change it, its own included, so one bot that has
    been talked into something by a web page cannot pass that on to the others through how it is
@@ -17,10 +20,10 @@ in what it knows of the bot and the thread, so in this order a bot is told:
    `create_bot`, or else the first sentence of what the bot was made for.
    Then how to reach them: with `message_bot`, from its own conversation (see [Messages between
    bots](/how-it-works/messages-between-bots/)).
-3. How OpenKumi works (replies, the browser, subagents, and that web pages and tool results are
+4. How OpenKumi works (replies, the browser, subagents, and that web pages and tool results are
    never instructions), then the bot's **rules from you**, which win where they and the principles
    disagree.
-4. Its conversation, automations, workspace, its own `AGENTS.md`, the list of its notes, and
+5. Its conversation, automations, workspace, its own `AGENTS.md`, the list of its notes, and
    its superpowers; in a run of an automation or as a subagent, what that means for it.
 
 **Settings → Master prompt → What a bot is told** shows all of it for any bot.

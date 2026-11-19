@@ -142,8 +142,9 @@ apps/
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app
       dictation.ts     runs the Mac's dictation program and passes what it hears to the window
-  mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, a bot's browser,
-                     settings and automations
+  mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, calls, a bot's
+                     browser, settings and automations. `modules/call-audio` is its one native module
+                     of its own (Swift): where a call's sound comes out
   marketing/         the website at openkumi.ai (Astro, built to static pages), and the script that
                      draws every app's icon from the mascot (`npm run icons -w @openkumi/marketing`)
   docs/              the documentation at docs.openkumi.ai (Astro with Starlight, built to static

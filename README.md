@@ -52,9 +52,9 @@ buy, and nothing passes through a server of ours, because there is none.
   every such message.
 - **Talk instead of typing.** Dictation is written down on the device itself (macOS 26 or later),
   so no sound leaves it.
-- **Call your bot.** Talk with a bot out loud, and it talks back at once. The voice comes with
-  your ChatGPT plan, through Codex, with no API key; the work is still done by the bot itself,
-  whatever it runs on.
+- **Call your bot.** Talk with a bot out loud, from the computer or the iPhone, and it talks back
+  at once. The voice comes with your ChatGPT plan, through Codex, with no API key; the work is
+  still done by the bot itself, whatever it runs on.
 - **From your other computers and your phone.** Pair a laptop or an iPhone with a one-time code,
   at home directly and anywhere else over Tailscale.
 - **Yours.** A bot is a folder of plain files on your disk that you can read, edit and back up.

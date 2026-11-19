@@ -13,7 +13,8 @@ and nearly everything we change is the JavaScript. So there are two ways a chang
 
 Which of the two a change needs is not left to anyone's judgment. The app has a **fingerprint**: a
 hash of everything native about it (its native packages and their versions, the settings in
-`app.json`, the dictation module in `packages/dictation`). A build remembers the fingerprint it was
+`app.json`, the dictation module in `packages/dictation`, the call sound module in
+`apps/mobile/modules/call-audio`). A build remembers the fingerprint it was
 made with, and an update over the air is only offered to builds with the same one. It cannot land
 on an app it does not fit.
 

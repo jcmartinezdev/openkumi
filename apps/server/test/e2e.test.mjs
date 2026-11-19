@@ -550,6 +550,8 @@ test('a bot is a folder: bot.md holds the owner\'s settings and rules', async ()
 test('master prompt: every bot is told the one OpenKumi comes with, filled in, and nothing in the app changes it', async () => {
   const prompt = await told()
   assert.match(prompt, /^You are Tester, an AI bot running locally on the user's own computer inside OpenKumi\. Today is /)
+  // Who it is, and who made what it is part of: what it says when it is asked.
+  assert.match(prompt, /# Who you are\nYou are Tester, one of the user's bots in OpenKumi\. OpenKumi is a free, open-source app, created by Juan Cruz Martinez/)
   assert.match(prompt, /\n# Principles\nThese hold for every bot here, and you cannot change them\.[\s\S]*\*\*Work as a team\.\*\*/)
   // In the file's order, with its comment left out and every part filled in.
   const at = ['# Principles', '# The other bots', '# Working in OpenKumi', '# Your conversation', '# Automations', '# Your workspace', '# Your instructions (AGENTS.md)', '# Your notes (memory/)'].map((h) => prompt.indexOf(`\n${h}\n`))
@@ -2195,6 +2197,8 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
     const [instructions, ...opening] = started.initialItems
     assert.equal(instructions.role, 'developer')
     assert.match(instructions.text, /^# Who you are on this call\n\nYour name is Caller\. You are one of the user's AI bots in OpenKumi[^\n]*What you are for: Answers the phone\./)
+    assert.match(instructions.text, /say you are Caller, the user's bot in OpenKumi, and what you are for\. OpenKumi is a free, open-source app, created by Juan Cruz Martinez/)
+    assert.match(instructions.text, /Caller is powered by Mock 1, and you can say so/)
     assert.match(instructions.text, /Do not introduce yourself as ChatGPT/)
     assert.match(instructions.text, /# You can only talk\. Everything else is delegated\.[\s\S]*Saying "I'll remember that" without delegating is untrue/)
     assert.equal(started.prompt, instructions.text)
@@ -2451,6 +2455,41 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
   } finally {
     watcher.close()
     await api('DELETE', `/api/bots/${caller.id}`).catch(() => {})
+  }
+})
+
+test('calls: a voice is tried out by having it say a line as the bot, and gives way to a call', async () => {
+  const bot = await api('POST', '/api/bots', { name: 'Singer', provider: 'mock' })
+  const startedWith = (sdp) => JSON.parse(Buffer.from(sdp.match(/^s=(.+)$/m)[1], 'base64').toString())
+  const offer = 'v=0\r\n'
+  try {
+    // The app's half of a connection goes in, as for a call, with the voice to hear.
+    const sample = await api('POST', `/api/bots/${bot.id}/voice-sample`, { voice: 'maple', sdp: offer })
+    const started = startedWith(sample.sdp)
+    assert.equal(started.voice, 'maple')
+    assert.match(started.initialItems[0].text, /^This is a sound check, not a conversation\. You are the voice of Singer[\s\S]*Say exactly that line, once/)
+    assert.equal(started.initialItems.length, 1, 'nothing of the conversation is given to a voice that is only tried out')
+    // It is no call: nothing shows as one, and the bot's conversation gets no record of it.
+    assert.equal((await api('GET', '/api/state')).call, null)
+    // Once the sound can reach the app, it asks for the line, and is told what was said.
+    assert.deepEqual(await api('POST', `/api/calls/samples/${sample.id}/say`), { words: "Hi, I'm Singer. This is how I sound when you call me." })
+
+    // Another voice takes the place of the one before, which is then gone.
+    const next = await api('POST', `/api/bots/${bot.id}/voice-sample`, { voice: '', sdp: offer })
+    assert.equal(startedWith(next.sdp).voice, null, 'the usual voice is the one Codex has when none is named')
+    await assert.rejects(api('POST', `/api/calls/samples/${sample.id}/say`), /no longer on the line/)
+
+    // A voice Codex does not have is refused as it is for a call, and one being tried out gives way to a call.
+    await assert.rejects(api('POST', `/api/bots/${bot.id}/voice-sample`, { voice: 'marin', sdp: offer }), /not one Codex offers any more/)
+    const again = await api('POST', `/api/bots/${bot.id}/voice-sample`, { voice: 'cove', sdp: offer })
+    const { call } = await api('POST', `/api/bots/${bot.id}/call`, { sdp: offer })
+    await assert.rejects(api('POST', `/api/calls/samples/${again.id}/say`), /no longer on the line/)
+    await assert.rejects(api('POST', `/api/bots/${bot.id}/voice-sample`, { voice: 'cove', sdp: offer }), /A call is under way/)
+    await api('DELETE', `/api/calls/${call.id}`)
+    // Ending one that is gone is nothing to complain about.
+    await api('DELETE', `/api/calls/samples/${again.id}`)
+  } finally {
+    await api('DELETE', `/api/bots/${bot.id}`)
   }
 })
 
