@@ -20,3 +20,6 @@ export const TELEMETRY_CHOICE = 'Send how OpenKumi is used and what goes wrong'
 
 /** Everything that can be sent, event by event. */
 export const TELEMETRY_URL = 'https://docs.openkumi.ai/telemetry/'
+
+/** What OpenKumi and its website do with data (apps/marketing/src/pages/privacy). Apple wants it in the app too. */
+export const PRIVACY_POLICY_URL = 'https://openkumi.ai/privacy'

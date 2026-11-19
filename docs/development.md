@@ -103,8 +103,8 @@ brings older data up to it; a new table, or a column older versions can ignore, 
 number.
 
 The iPhone app is released by the same tag, once the release is published: over the air when
-only its JavaScript changed, through TestFlight when its native side did. It needs the
-`EXPO_TOKEN` secret; without it everything else is still released. See
+only its JavaScript changed, through TestFlight and its public beta when its native side did. It
+needs the `EXPO_TOKEN` secret; without it everything else is still released. See
 [Releasing the iPhone app](mobile-releases.md).
 
 ## Where the code is

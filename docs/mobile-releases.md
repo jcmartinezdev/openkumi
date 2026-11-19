@@ -8,8 +8,8 @@ and nearly everything we change is the JavaScript. So there are two ways a chang
   and the app that is already installed fetches it and runs it from its next start. This takes
   minutes and involves no review. Apple allows it as long as the app stays the app it was.
 - **A build.** A change to the native side (a new native package, a new version of Expo, a new
-  permission, the icon) needs a new app, built and sent to TestFlight, and from there to the App
-  Store when you choose.
+  permission, the icon) needs a new app, built and sent to TestFlight, where people get it once
+  Apple's beta review has passed it.
 
 Which of the two a change needs is not left to anyone's judgment. The app has a **fingerprint**: a
 hash of everything native about it (its native packages and their versions, the settings in
@@ -28,14 +28,16 @@ can actually install, and a release is when those change. The last job a release
 | The fingerprint | What happens |
 | --- | --- |
 | has a finished build | the JavaScript is published to the `production` channel, and the phones with that build fetch it |
+| has a finished build, 75 days old or more | the same, and a new build is made too (below, "The public beta") |
 | has a build still being made | nothing; send the update by hand once the build is done (below) |
-| has no build, or one that failed | a build is started and sent to TestFlight |
+| has no build, or one that failed | a build is started, sent to TestFlight, and handed to the public beta |
 
 So a release that only changes the app's JavaScript is on the phones minutes after the desktop
-app and the server are out. One that changes the native app goes through TestFlight, and to the
-people who have it from the App Store once Apple has reviewed it. In the meantime their app keeps
-working with the new server, unless the release changed how the two talk
-(`packages/shared/src/protocol.ts`): then the app says it needs the update.
+app and the server are out. One that changes the native app goes through TestFlight: the team
+has it as soon as Apple has processed it, and the public beta once Apple's beta review has passed
+it, usually within a day. In the meantime their app keeps working with the new server, unless the
+release changed how the two talk (`packages/shared/src/protocol.ts`): then the app says it needs
+the update.
 
 By hand, from `apps/mobile` on a computer signed in to Expo (`npx eas-cli login`), with the
 released code checked out:
@@ -43,7 +45,40 @@ released code checked out:
 ```sh
 npx eas-cli update --channel production --environment production --platform ios   # send the JavaScript over the air
 npx eas-cli build --platform ios --profile production --auto-submit                # make a build and send it to TestFlight
+node scripts/testflight.mjs send 0.0.3 --wait 60                                   # hand it to the public beta, once it is there
 ```
+
+## The public beta
+
+The app is not in the App Store. Apple keeps betas out of it (guideline 2.2), and the app says it
+is an alpha. People get it through TestFlight instead, from the public link of the group
+**Public beta**: <https://testflight.apple.com/join/dvcBQvNu>. Up to 10,000 people can join, and
+they send feedback with a screenshot from the TestFlight app.
+
+A build reaches that group only after two steps, which `apps/mobile/scripts/testflight.mjs` takes
+(Expo's own submit can only reach the team's group):
+
+1. `send <version>` waits until Apple has processed the version's build, writes what to test (a
+   link to the release's notes), adds it to the group, and sends it to Apple's beta review. The
+   testers are told once the review has passed it. The first build of each version is reviewed,
+   usually within a day; a later build of a version Apple has seen may be passed without one. A
+   release does this by itself for each build it makes. `--hold` does all but send it to the
+   review, to try the build on your own phone first.
+2. `texts` sends what testers and the reviewer read: `apps/mobile/testflight/description.txt` and
+   `review-notes.txt`, with the website and the privacy policy. Apple wants the feedback address
+   and the reviewer's contact beside them, and those come from the environment
+   (`TESTFLIGHT_FEEDBACK_EMAIL`, `TESTFLIGHT_CONTACT_FIRST_NAME`, `_LAST_NAME`, `_EMAIL`, `_PHONE`),
+   since a phone number does not belong here. Run it when those words change. The feedback
+   address is support@gotolcs.com, and the reviewer's contact is the one goto LCS's other apps
+   give Apple.
+
+Both sign in with the App Store Connect key in `EXPO_ASC_API_KEY_PATH`, `EXPO_ASC_KEY_ID` and
+`EXPO_ASC_ISSUER_ID`, as the release does.
+
+TestFlight stops opening a build 90 days after it was uploaded, and an update over the air does
+not change that. So when the newest build is 75 days old, the next release makes a new one, with
+the same native app, and hands it to the group too. Without a release in those last two weeks
+the testers' app stops opening until there is one.
 
 ## Before a change is merged
 
@@ -91,16 +126,17 @@ Everything is set up; this is where it is, for when something has to be renewed 
   certificate and an App Store provisioning profile, which Expo made with the Apple key).
   `npx eas-cli credentials -p ios` shows and renews them.
 - **Apple:** the identifier `ai.openkumi.mobile` and the app "OpenKumi" in App Store Connect. Its
-  number is in `apps/mobile/eas.json` (`ascAppId`); builds sent to TestFlight land there.
+  number is in `apps/mobile/eas.json` (`ascAppId`); builds sent to TestFlight land there. Its
+  TestFlight groups are **Team (Expo)**, which gets every build, for the team, and **Public beta**,
+  with the public link.
 - **GitHub secrets:** `EXPO_TOKEN` (an access token of the Expo user `jarvisaimini`, limited to
   the organisation `goto-lcs-ug` with the Release Manager role; without it a release leaves the
   iPhone app out), and the App Store Connect key the Mac app is notarized with
   (`APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`), which also sends builds to
   TestFlight.
 
-The first build is made by the first release, since no build exists before it. It arrives in
-TestFlight, where your own team can install it at once; testers outside the team, and the App
-Store, wait for Apple's review.
+A build arrives in TestFlight, where the team can install it at once; the public beta waits for
+Apple's beta review.
 
 To try that the app still builds on Expo's computers without releasing anything:
 `npx eas-cli build --platform ios --profile simulator` makes one for the simulator only.

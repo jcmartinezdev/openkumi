@@ -5,7 +5,8 @@
 #     2. Server: build the archives, then install and start one on each kind of computer
 #        Desktop app: build for Mac, Windows and Linux, then install each, open it and use it
 #     3. Publish the release: desktop app and server      (the GitHub release people download from)
-#     4. Release the iPhone app                           (over the air, or a build for TestFlight)
+#     4. Release the iPhone app                           (over the air, or a build for TestFlight
+#                                                          and its public beta)
 #
 # Each step is a job below with that name, and a later one only runs when the ones before it
 # passed. Nothing else releases anything: not a merge, not a pull request. How to make the tag is
@@ -330,12 +331,14 @@ jobs:
   # native app, built and sent to TestFlight. Which of the two is decided by the app's
   # fingerprint, a hash of everything native about it: an update over the air only reaches builds
   # with the same fingerprint, so it never lands on an app it does not fit.
+  # A build is also handed to the public beta (apps/mobile/scripts/testflight.mjs), which means
+  # waiting for Expo to make it and Apple to process it: most of this job's time.
   release-iphone-app:
     name: 4. Release the iPhone app
     if: github.ref_type == 'tag'
     needs: [check, publish-desktop-and-server]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 100
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
@@ -404,13 +407,29 @@ jobs:
           # What happens depends on whether an app with this fingerprint has been built.
           builds="$(eas build:list --platform ios --build-profile production --fingerprint-hash "$hash" --limit 20 --json --non-interactive)"
           count() { jq "[.[] | select($1)] | length" <<<"$builds"; }
+          build=false
           if [ "$(count '.status == "FINISHED"')" -gt 0 ]; then
             eas update --channel production --environment production --platform ios --message "OpenKumi $VERSION" --non-interactive
             echo ":white_check_mark: OpenKumi $VERSION was sent to the phones over the air (fingerprint \`$hash\`)." >> "$GITHUB_STEP_SUMMARY"
+            # TestFlight stops opening a build 90 days after it was uploaded, and an update over
+            # the air does not change that. So before the newest gets there, the release makes a
+            # new one, with the same native app.
+            newest="$(jq -r '[.[] | select(.status == "FINISHED") | .createdAt] | max' <<<"$builds")"
+            days=$(( ($(date +%s) - $(date -d "$newest" +%s)) / 86400 ))
+            if [ "$days" -ge 75 ]; then
+              build=true
+              echo ":hourglass: The newest build is $days days old, and TestFlight stops opening it at 90, so a new one was started too." >> "$GITHUB_STEP_SUMMARY"
+            fi
           elif [ "$(count '.status == "NEW" or .status == "IN_QUEUE" or .status == "IN_PROGRESS"')" -gt 0 ]; then
             echo ":hourglass: A build for fingerprint \`$hash\` is still being made. Release the iPhone app by hand once it is done (docs/mobile-releases.md)." >> "$GITHUB_STEP_SUMMARY"
           else
             # None, or one that failed: this release changes the native app, or is the first.
+            build=true
+            echo ":building_construction: This release changes the native app (fingerprint \`$hash\` has no build), so a build was started." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ "$build" = true ]; then
             eas build --platform ios --profile production --auto-submit --non-interactive --no-wait
-            echo ":building_construction: This release changes the native app (fingerprint \`$hash\` has no build), so a build was started. It goes to TestFlight when it is done." >> "$GITHUB_STEP_SUMMARY"
+            # Expo makes it and uploads it to TestFlight, where the team gets it; Apple then
+            # processes it. Once it has, it goes to the public beta and to Apple's beta review.
+            node scripts/testflight.mjs send "$VERSION" --wait 80
           fi

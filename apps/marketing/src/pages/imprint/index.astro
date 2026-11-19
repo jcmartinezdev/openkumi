@@ -1,0 +1,83 @@
+---
+// The imprint a German company's website must have (§ 5 DDG), set out as on goto LCS's other sites.
+import Layout from '../../layouts/Layout.astro'
+import { COMPANY } from '../../lib/site'
+---
+
+<Layout title="Imprint · OpenKumi" description="Who makes OpenKumi and runs openkumi.ai: goto LCS UG (haftungsbeschränkt), Munich.">
+  <article class="container legal">
+    <h1>Imprint</h1>
+    <p class="lead">Information pursuant to § 5 of the German Digital Services Act (DDG).</p>
+
+    <section>
+      <h2>Service provider</h2>
+      <p>
+        {COMPANY.name}<br />
+        {COMPANY.address.map((line) => <>{line}<br /></>)}
+      </p>
+    </section>
+
+    <section>
+      <h2>Represented by</h2>
+      <p>Managing Director {COMPANY.director}</p>
+    </section>
+
+    <section>
+      <h2>Contact</h2>
+      <p>Email: <a href={`mailto:${COMPANY.email}`}>{COMPANY.email}</a></p>
+    </section>
+
+    <section>
+      <h2>Commercial register</h2>
+      <p>Registered with {COMPANY.register}</p>
+    </section>
+
+    <section>
+      <h2>VAT identification number</h2>
+      <p>VAT ID pursuant to § 27a of the German VAT Act: {COMPANY.vat}</p>
+    </section>
+
+    <section>
+      <p>OpenKumi is developed and published by {COMPANY.name}.</p>
+      <p class="fine">
+        Claude is a trademark of Anthropic, ChatGPT of OpenAI, and Grok of xAI. Apple, iPhone and Mac
+        are trademarks of Apple Inc. OpenKumi works with them but is independent, and is not affiliated
+        with or endorsed by any of them.
+      </p>
+    </section>
+  </article>
+</Layout>
+
+<style>
+  .legal {
+    max-width: 760px;
+    padding-top: 72px;
+    padding-bottom: 112px;
+  }
+  h1 {
+    font-size: clamp(38px, 6vw, 56px);
+    margin-bottom: 16px;
+  }
+  .lead {
+    color: var(--muted);
+    font-size: 19px;
+  }
+  section {
+    margin-top: 32px;
+  }
+  h2 {
+    font-size: 20px;
+    margin-bottom: 6px;
+  }
+  section p + p {
+    margin-top: 12px;
+  }
+  .fine {
+    color: var(--muted);
+    font-size: 15px;
+  }
+  a {
+    color: var(--sky);
+    text-underline-offset: 2px;
+  }
+</style>
