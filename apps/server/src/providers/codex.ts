@@ -151,6 +151,8 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
   let thread = ''
   let turnId = ''
   let finished = false
+  /** The model Codex says it runs, and its count of tokens for the conversation before this turn and now. */
+  const used: { model: string; before?: { input: number; cached: number; output: number }; now?: { input: number; cached: number; output: number } } = { model: '' }
   let failure: Error | undefined
   let winding: NodeJS.Timeout | undefined
   const stop = () => {
@@ -172,6 +174,7 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
     const opened = req.session ? await ask('thread/resume', { threadId: req.session, excludeTurns: true, ...settings }) : await ask('thread/start', settings)
     thread = String(opened?.thread?.id ?? '')
     if (!thread) throw new Error('Codex did not open a conversation.')
+    used.model = typeof opened?.model === 'string' ? opened.model : ''
     const begun = await ask('turn/start', { threadId: thread, input: said(req.input, req.files) })
     turnId = String(begun?.turn?.id ?? '')
     // From here on Codex takes one more message into the turn; it says no while it is compacting or reviewing.
@@ -224,9 +227,24 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
           yield { type: 'item', item: { type: 'web_search_call', action: action.url ? { url: action.url } : { query: action.query ?? action.queries?.[0] ?? item.query } } }
         }
         // Calls to OpenKumi's own tools are recorded where they are carried out (tool-endpoint.ts).
+      } else if (method === 'thread/tokenUsage/updated' && params?.tokenUsage?.total) {
+        // Codex counts for the whole conversation, and says what the last request to the model added.
+        // A conversation carried on begins by saying again where it stood after its last turn: that
+        // is where this turn starts from. Without it, that is the count less the turn's first request.
+        const { total, last } = params.tokenUsage
+        const stands = { input: total.inputTokens ?? 0, cached: total.cachedInputTokens ?? 0, output: total.outputTokens ?? 0 }
+        if (!turnId || params.turnId !== turnId) used.before = stands
+        else {
+          used.before ??= { input: stands.input - (last?.inputTokens ?? 0), cached: stands.cached - (last?.cachedInputTokens ?? 0), output: stands.output - (last?.outputTokens ?? 0) }
+          used.now = stands
+        }
       } else if (method === 'error' && !params?.willRetry) {
         failure = new Error(String(params?.error?.message ?? 'Codex reported an error').slice(0, 600))
       } else if (method === 'turn/completed') {
+        if (used.before && used.now && !finished) {
+          const sum = { input: Math.max(0, used.now.input - used.before.input), cached: Math.max(0, used.now.cached - used.before.cached), output: Math.max(0, used.now.output - used.before.output) }
+          if (sum.input || sum.output) yield { type: 'usage', model: used.model, ...sum }
+        }
         finished = true
         if (req.steering) req.steering.deliver = undefined
         const ended = params?.turn ?? {}

@@ -97,7 +97,9 @@ async function run({ message, uuid }) {
   print({ type: 'assistant', uuid: crypto.randomUUID(), message: { id: 'msg_1', content: [{ type: 'thinking', thinking: '' }] } })
   print({ type: 'assistant', uuid: crypto.randomUUID(), message: { id: 'msg_1', content: [{ type: 'text', text: reply }] } })
   for (const done of mine.uuids) lifecycle(done, 'completed')
-  print({ type: 'result', subtype: 'success', is_error: false, result: reply })
+  // Counted for the whole conversation, as the real program does: every turn is sent 100 tokens, 60 of them from the cache, and writes 10.
+  const modelUsage = { 'claude-test-1[cloud]': { inputTokens: 40 * turns(), cacheReadInputTokens: 60 * turns(), cacheCreationInputTokens: 0, outputTokens: 10 * turns(), canonicalModel: 'claude-test-1' } }
+  print({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: session, modelUsage })
 }
 
 // Each line of input is a message. One that arrives while a turn runs is taken into it; any other is a turn of its own, in the order they came.

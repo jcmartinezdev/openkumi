@@ -56,7 +56,7 @@ export default defineConfig({
         },
         {
           label: 'Security',
-          items: [{ label: 'Overview', slug: 'security' }, 'security/access', 'security/bots', 'security/outside', 'security/limits'],
+          items: [{ label: 'Overview', slug: 'security' }, 'security/access', 'security/bots', 'security/outside', 'security/limits', { label: 'Usage and error reports', slug: 'telemetry' }],
         },
         {
           label: 'Reference',

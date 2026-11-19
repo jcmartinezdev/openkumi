@@ -24,6 +24,8 @@ const HELP = `
   openkumi status             whether it runs, which version, and what the bots can run on
   openkumi pair               a code for the OpenKumi app on another computer or phone
   openkumi lan on|off         whether other computers on your network can reach it
+  openkumi telemetry on|off   whether it tells OpenKumi's makers how it is used and what goes wrong
+                              (never what you or your bots write); without on or off, how that stands
   openkumi update             fetch the newest version and start it once no bot is working
                               --now    do not wait for the bots
                               --check  only say whether there is a newer version
@@ -101,6 +103,25 @@ if (command === 'start' || command === 'serve') {
     // A running server takes the change at once. With none running, it is written where the next start reads it.
     if (!(await ask('PATCH', '/api/settings', { lan: on }))) (await import('./settings.ts')).updateSettings({ lan: on })
     console.log(on ? '\n  Other computers on your network can now reach OpenKumi here. Each still needs a code: openkumi pair\n' : '\n  Only this computer can reach OpenKumi here now.\n')
+  } else if (command === 'telemetry') {
+    const telemetry = await import('./telemetry.ts')
+    const { settings, updateSettings } = await import('./settings.ts')
+    const state = await ask<AppState>('GET', '/api/state')
+    // The server that runs knows whether it would send anything. With none running, this is asked of the program itself.
+    const { can, why } = state?.about.telemetry ?? telemetry.telemetryInfo()
+    const READ = 'What is sent, all of it: https://docs.openkumi.ai/telemetry/'
+    if (rest[0] === 'on' || rest[0] === 'off') {
+      const on = rest[0] === 'on'
+      // A running server takes the answer at once. With none running, it is written where the next start reads it.
+      if (!state || !(await ask('PATCH', '/api/settings', { telemetry: on }))) updateSettings({ telemetry: on })
+      console.log(on ? `\n  Thank you. OpenKumi here now sends how it is used and what goes wrong, and nothing you or your bots write.\n  ${READ}${can ? '' : `\n  For now it sends nothing all the same: ${why}`}\n` : '\n  OpenKumi here sends nothing about how it is used, and its id is thrown away.\n')
+    } else if (rest.length) {
+      stop('Say which: “openkumi telemetry on” or “openkumi telemetry off”. Without either, it says how things stand.')
+    } else {
+      const answer = state ? state.settings.telemetry : settings().telemetry
+      const said = answer === true ? 'On: it sends how it is used and what goes wrong, and nothing you or your bots write.' : answer === false ? 'Off: it sends nothing.' : 'Not answered yet, so nothing is sent. Answer in the app, or with “openkumi telemetry on” or “openkumi telemetry off”.'
+      console.log(`\n  ${said}${can || answer === false ? '' : `\n  Whatever the answer, it sends nothing: ${why}`}\n  ${READ}\n`)
+    }
   } else if (command === 'update') {
     const running = await ask<ServerUpdate>('GET', '/api/update')
     if (flag('--check')) {

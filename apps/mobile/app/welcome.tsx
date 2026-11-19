@@ -11,6 +11,7 @@ import { Canvas, Circle, RadialGradient, vec } from '@shopify/react-native-skia'
 import type { Look } from '@openkumi/shared'
 import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import { BODY_COLORS, describeLook, surprise } from '@openkumi/client/mascot'
+import { note } from '@openkumi/client/telemetry'
 import { AlphaBadge } from '../src/Alpha'
 import { Glyph, type GlyphName } from '../src/icons'
 import { Mascot } from '../src/Mascot'
@@ -202,7 +203,7 @@ export default function Welcome() {
             accessibilityLabel={start.title}
             accessibilityHint={start.detail}
             style={({ pressed }) => [styles.start, { borderColor: theme.border, backgroundColor: pressed ? theme.bubble : theme.card }]}
-            onPress={() => router.push(start.to)}
+            onPress={() => (note({ event: 'welcome answered', choice: 'pair' }), router.push(start.to))}
           >
             <View style={[styles.icon, { backgroundColor: theme.bubble }]}>
               <Glyph name={start.icon} size={24} color={theme.text} weight={1.7} />

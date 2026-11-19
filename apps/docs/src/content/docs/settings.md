@@ -20,6 +20,7 @@ its top finds any setting by name. Each page has **Restore defaults**.
 | **Browser** | the browser program the bots drive, whether the live view opens when a bot starts browsing, and which bots have a browser running now |
 | **Environments** | the local environment, remote environments, **Let other computers connect**, **Pair a computer**, and the paired computers. See [Other computers and your phone](/environments/). |
 | **Advanced** | **Steps per turn**, **Subagents at once**, **Subagent levels**, **Size of a bot's own instructions**, **Length of a conversation**, **Log what the engines print**, the data folder, **Delete all conversations** |
+| **Privacy** | **Send how OpenKumi is used and what goes wrong**, this computer's id, and everything that was sent. See [Usage and error reports](/telemetry/). |
 | **About** | the version of the app and of the environment it shows, their updates, **Update by itself** for a server installed alone, and a note on the alpha |
 
 **Appearance**, **Chat** and **Confirm before deleting a conversation** belong to the device: each
@@ -54,6 +55,8 @@ wins.
 | `OPENKUMI_DEBUG` | from Settings | `1` logs everything an engine prints |
 | `OPENKUMI_RELEASES_URL` | this project's releases on GitHub | where a server installed alone, and its installer, look for versions |
 | `OPENKUMI_DESKTOP_UPDATES_URL` | this project's releases on GitHub | another place for the desktop app to look for versions of itself |
+| `OPENKUMI_TELEMETRY` | from Settings | `0` stops the server telling OpenKumi's makers anything, whatever Settings says (see [Usage and error reports](/telemetry/)); `DO_NOT_TRACK=1` does the same |
+| `OPENKUMI_TELEMETRY_URL`, `OPENKUMI_TELEMETRY_KEY` | PostHog in the EU, OpenKumi's project | another place and project for those reports to go, for testing; with these set a server run from the source sends too |
 | `OPENKUMI_MOCK` | unset | `1` turns on the scripted offline provider the tests use |
 
 The desktop app also reads `OPENKUMI_PORT`, to find or start the local server.

@@ -5,7 +5,8 @@ import { createBot, getBot, listBots } from './bots.ts'
 import { browserFor, byRef, isWebPage, snapshot } from './browser.ts'
 import { PORT } from './config.ts'
 import { settings } from './settings.ts'
-import { serviceTools } from './mcp.ts'
+import { serviceTools, superpowerOfTool } from './mcp.ts'
+import { track, whereOf } from './telemetry.ts'
 import * as db from './db.ts'
 import { PAGE_GUIDE, makePage } from './pages.ts'
 import * as automations from './automations.ts'
@@ -153,7 +154,7 @@ function createBotTool(firstMessage: boolean): Tool {
     ),
     run: async (a, ctx) => {
       if (!agent.basisOf(ctx.thread).owner) throw new Error('A bot can only be created when the user has just asked you for one. Ask them first.')
-      const bot = await createBot({ name: a.name, description: a.description, purpose: a.instructions, emoji: a.emoji })
+      const bot = await createBot({ name: a.name, description: a.description, purpose: a.instructions, emoji: a.emoji }, 'bot')
       const made = `Created bot ${JSON.stringify(botSummary(bot))}`
       const first = firstMessage && typeof a.first_message === 'string' ? a.first_message.trim() : ''
       if (!first) return made
@@ -802,6 +803,9 @@ export async function runTool(tools: Tool[], call: Extract<ItemData, { type: 'fu
     return output.length > MAX_OUTPUT ? output.slice(0, MAX_OUTPUT) + '\n… [output truncated]' : output
   } catch (e: any) {
     if (ctx.signal.aborted) return 'Error: stopped by the user.'
+    // Which tool, and where in the code: a superpower's tool is named only by its superpower.
+    const superpower = superpowerOfTool(ctx.bot.id, tool.name)
+    track('tool failed', superpower ? { tool: 'service', superpower, error: whereOf(e) } : { tool: tool.name, error: whereOf(e) })
     return `Error: ${String(e?.message ?? e).split('\n').slice(0, 4).join('\n')}`
   }
 }

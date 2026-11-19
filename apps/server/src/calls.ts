@@ -38,6 +38,7 @@ import { codexProgram, sealed } from './providers/codex.ts'
 import { callsInfo, getProvider, learnModels, modelName } from './providers/index.ts'
 import { settings } from './settings.ts'
 import { TIME_ZONE } from './automations.ts'
+import { track } from './telemetry.ts'
 import { passedOnAt } from './tools.ts'
 
 /** How long Codex is given to answer with the other half of the connection. */
@@ -526,6 +527,7 @@ function finish(session: Live, error?: string) {
   session.codex.close()
   const current = live === session
   if (current) live = null
+  if (!closing) track('call ended', { seconds: (Date.now() - session.call.startedAt) / 1000, failed: !!error })
   if (session.lines.length && getBot(session.call.botId)) {
     const seconds = Math.max(1, Math.round((Date.now() - session.call.startedAt) / 1000))
     try {

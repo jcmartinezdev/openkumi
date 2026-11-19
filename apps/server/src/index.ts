@@ -10,7 +10,10 @@ import * as db from './db.ts'
 import { closeHooks, listen as openHooks } from './hooks.ts'
 import { startServer } from './http.ts'
 import { refreshProviders } from './providers/index.ts'
-import { moveToSuperpowers } from './superpowers.ts'
+import { enabledSuperpowers, moveToSuperpowers } from './superpowers.ts'
+import { crashed, engineName, failed, startTelemetry, stopTelemetry } from './telemetry.ts'
+import { listComputers } from './clients.ts'
+import { settings } from './settings.ts'
 import { startAutomations } from './automations.ts'
 import { RESTART, startUpdates } from './update.ts'
 import { commit, scaffold } from './workspace.ts'
@@ -39,7 +42,7 @@ if (!listBots().length) {
     description: 'Everyday questions and tasks, and the first stop for anything new.',
     look: { creature: 'bear', color: 'sky', hat: 'headphones', extra: 'none', clothes: 'orange' },
     purpose: 'A capable general-purpose assistant. Concise, and researches before answering when facts matter.',
-  })
+  }, 'server')
 }
 
 const server = startServer()
@@ -54,6 +57,27 @@ agent.resumeQueues()
 // Whether Claude Code and Codex are installed and signed in; found out in the background.
 void refreshProviders()
 
+// What its makers are told of how it is used, once its owner has agreed (telemetry.ts): counts, never names.
+startTelemetry({
+  summary: () => {
+    const bots = listBots()
+    const automations = db.listAutomations()
+    const started = (kind: string) => automations.filter((a) => a.trigger.kind === kind).length
+    return {
+      bots: bots.length,
+      conversations: db.listThreads().filter((t) => t.kind === 'chat').length,
+      automations_time: started('time'),
+      automations_watch: started('watch'),
+      automations_hook: started('hook'),
+      superpowers: [...new Set(bots.flatMap((bot) => enabledSuperpowers(bot.id)))].sort(),
+      engines: [...new Set(bots.map((bot) => engineName(bot.provider)))].sort(),
+      paired: listComputers().length,
+      lan: settings().lan,
+      public_address: !!settings().hookAddress,
+    }
+  },
+})
+
 let closing = false
 /** Stops cleanly. `code` is what the process ends with: RESTART asks whatever runs it to start it again. */
 async function shutdown(code = 0) {
@@ -65,7 +89,7 @@ async function shutdown(code = 0) {
   endCalls()
   // Replies being written are stopped first, so that what they had is saved before the database closes.
   await agent.stopAll()
-  await Promise.all([stopAllBrowsers(), closeAll()])
+  await Promise.all([stopAllBrowsers(), closeAll(), stopTelemetry()])
   db.closeDb()
   process.exit(code)
 }
@@ -76,4 +100,14 @@ process.on('SIGTERM', () => shutdown())
 startUpdates({ working: agent.working, restart: () => void shutdown(RESTART) })
 
 // A failed tool or a browser that went away must not take the whole server down.
-process.on('unhandledRejection', (e) => console.error('Unhandled rejection:', e))
+process.on('unhandledRejection', (e) => {
+  console.error('Unhandled rejection:', e)
+  failed(e, 'background')
+})
+// An error nothing caught ends the server, as it would have without this. Where it happened is
+// written down first, to be reported the next time the server starts.
+process.on('uncaughtException', (e) => {
+  console.error(e)
+  crashed(e)
+  process.exit(1)
+})

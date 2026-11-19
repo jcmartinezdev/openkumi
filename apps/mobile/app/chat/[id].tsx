@@ -6,6 +6,7 @@ import { LegendList, type LegendListRef } from '@legendapp/list/react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Attachment, Bot, BotRef, CallLine, Item, Thread } from '@openkumi/shared'
+import { note } from '@openkumi/client/telemetry'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { moment, runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
@@ -430,6 +431,8 @@ export default function Chat() {
   const startDictating = () => {
     Keyboard.dismiss()
     const { start, end } = selection.current
+    // That it was used, which the server cannot tell: only the words ever reach it, as a message like any other.
+    note({ event: 'dictation started' })
     dictating.start(text, Math.min(start, text.length), Math.min(end, text.length))
   }
 

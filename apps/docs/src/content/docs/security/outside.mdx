@@ -1,15 +1,16 @@
 ---
 title: What leaves your computer
-description: "Every place OpenKumi sends data, what goes there and on whose account: your AI plan, the apps of superpowers, the web, calls, updates. And what never leaves."
+description: "Every place OpenKumi sends data, what goes there and on whose account: your AI plan, the apps of superpowers, the web, calls, updates, and what its makers are told if you agree. And what never leaves."
 ---
 
 import { Aside } from '@astrojs/starlight/components'
 import DataLeaves from '../../../components/diagrams/DataLeaves.astro'
 import WebhookPath from '../../../components/diagrams/WebhookPath.astro'
 
-OpenKumi has no server of its own in between: no account, no cloud, nothing about you or your use
-sent to its makers. What leaves the computer that runs your bots goes to services you chose, on
-your accounts or the bots' own.
+OpenKumi has no server of its own in between: no account and no cloud. What leaves the computer
+that runs your bots goes to services you chose, on your accounts or the bots' own. One thing goes
+to OpenKumi's makers, and only if you agree when it asks: how OpenKumi is used and where it
+breaks, never what you or your bots write.
 
 <DataLeaves caption="What goes where. A bot on a local model sends nothing to an AI plan at all." />
 
@@ -23,6 +24,7 @@ your accounts or the bots' own.
 | **OpenAI, on a call** | your voice; the bot's name and the line saying what it is for; the date; the last eight messages, cut short; the bot's answers | your ChatGPT plan, through Codex |
 | **GitHub** | a look for a newer version (the app every 4 hours, a server alone every 6), and the download | — |
 | **Apple** | on first use of dictation in a language, the speech model is downloaded; no sound is sent | — |
+| **PostHog**, for OpenKumi's makers | only if you agreed when asked: which features are used and how often, how many tokens each model used, and where in OpenKumi's own code something went wrong. Never a message, a file, or the name of a bot. All of it is listed in [Usage and error reports](/telemetry/). | a random id for the computer |
 | **jsDelivr**, on the phone | a request for the diagram and formula libraries when one is drawn | — |
 
 What never leaves: your keys, the bots' tokens, their browser profiles, and the files in their

@@ -5,6 +5,7 @@ import { type CSSProperties, type ComponentProps, type RefObject, useEffect, use
 import type { Look } from '@openkumi/shared'
 import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import { BODY_COLORS, describeLook, surprise } from '@openkumi/client/mascot'
+import { note, screen } from '@openkumi/client/telemetry'
 import { desktop, reason } from './desktop'
 import { Icon } from './Icon'
 import { Mascot } from './Mascot'
@@ -255,6 +256,7 @@ export function Welcome() {
   const { busy, error, change } = useChange()
   const crew = useRef<HTMLDivElement>(null)
   useWatching(crew, still || pairing)
+  useEffect(() => screen('welcome'), [])
   // Once OpenKumi is turned on here, or another computer is paired, the window moves on by itself.
   if (pairing) return <Pairing back={() => setPairing(false)} />
 
@@ -295,7 +297,7 @@ export function Welcome() {
                 type="button"
                 className="welcome-start"
                 disabled={busy}
-                onClick={() => (start.key === 'pair' ? setPairing(true) : void change(() => desktop.setLocal(true)))}
+                onClick={() => (note({ event: 'welcome answered', choice: start.key }), start.key === 'pair' ? setPairing(true) : void change(() => desktop.setLocal(true)))}
               >
                 <span className="welcome-start-icon"><Icon name={start.icon} size={22} /></span>
                 <span className="grow">

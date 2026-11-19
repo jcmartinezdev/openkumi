@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import type { DesktopState } from '@openkumi/shared/desktop'
 import { keepCopies, keepOnlyCopies, saveCopyNow } from '@openkumi/client/copies'
+import { note, wentWrong } from '@openkumi/client/telemetry'
 import { App } from './App'
 import { desktop, desktopState, inDesktopApp, onDesktopState } from './desktop'
 import { shelf } from './shelf'
@@ -46,6 +47,18 @@ if (!inDesktopApp) {
     follow(state.connection)
     tidy(state)
   })
+  // What the app records about itself, for the server it reaches to send if its owner agrees
+  // (@openkumi/client/telemetry): that it was opened, and what goes wrong in this window.
+  let first = false
+  try {
+    first = !localStorage.getItem('openkumi.opened')
+    localStorage.setItem('openkumi.opened', '1')
+  } catch {
+    // Nowhere to note it: every opening would look like the first, so none is called that.
+  }
+  note({ event: 'app opened', first })
+  addEventListener('error', (e) => wentWrong(e.error))
+  addEventListener('unhandledrejection', (e) => wentWrong(e.reason))
   // A superpower's sign-in in this computer's own browser comes back by way of the app.
   desktop.onSignIn?.(passSignIn)
   createRoot(root).render(<App />)

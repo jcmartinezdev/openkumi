@@ -17,10 +17,11 @@ import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
 import { api, closeSettings, navigate, openSettings, saveSettings, useStore } from './store'
 import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
+import { PrivacyPage } from './Telemetry'
 import { UpdatesSection } from './Updates'
 import { BotHead } from './Mascot'
 
-type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'prompt' | 'browser' | 'environments' | 'advanced' | 'about'
+type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'prompt' | 'browser' | 'environments' | 'advanced' | 'privacy' | 'about'
 type IconName = Parameters<typeof Icon>[0]['name']
 
 const PAGES: Record<PageId, { label: string; icon: IconName }> = {
@@ -34,6 +35,7 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   browser: { label: 'Browser', icon: 'globe' },
   environments: { label: 'Environments', icon: 'monitor' },
   advanced: { label: 'Advanced', icon: 'wrench' },
+  privacy: { label: 'Privacy', icon: 'eye' },
   about: { label: 'About', icon: 'info' },
 }
 
@@ -41,7 +43,7 @@ const NAV: { heading: string | null; pages: PageId[] }[] = [
   { heading: null, pages: ['general', 'appearance', 'chat'] },
   { heading: 'Agents', pages: ['providers', 'bots', 'superpowers', 'prompt', 'browser'] },
   { heading: 'Network', pages: ['environments'] },
-  { heading: null, pages: ['advanced', 'about'] },
+  { heading: null, pages: ['advanced', 'privacy', 'about'] },
 ]
 
 /** Every setting the search can find: the page it is on, the row to bring into view, and what it is called. */
@@ -82,6 +84,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'advanced', id: 'debug-engines', title: 'Log what the engines print', also: 'debug troubleshooting' },
   { page: 'advanced', id: 'data-folder', title: 'Data folder', also: 'files location' },
   { page: 'advanced', id: 'delete-chats', title: 'Delete all conversations', also: 'chats history' },
+  { page: 'privacy', id: 'telemetry', title: 'Send how OpenKumi is used and what goes wrong', also: 'telemetry analytics usage errors crash reports tracking data posthog privacy id' },
   { page: 'about', id: 'version', title: 'Version' },
   { page: 'about', id: 'alpha', title: 'Alpha', also: 'early preview beta report problem bug issue feedback github' },
   { page: 'about', id: 'app-update', title: 'Updates', also: 'update check new version restart upgrade download app server' },
@@ -237,6 +240,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           {page === 'browser' && <BrowserPage />}
           {page === 'environments' && <Environments />}
           {page === 'advanced' && <Advanced />}
+          {page === 'privacy' && <PrivacyPage />}
           {page === 'about' && <AboutPage />}
         </div>
       </div>

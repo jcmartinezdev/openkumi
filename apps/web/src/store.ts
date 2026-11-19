@@ -2,7 +2,8 @@
 // are shared with the phone app (packages/client); what is added here is what only a window has:
 // the connection on its own thread, saving files, the canvas for a bot's browser, and the address bar.
 import { useEffect, useState } from 'react'
-import { receive, request, useTransport } from '@openkumi/client/store'
+import { receive, request, useApp, useTransport } from '@openkumi/client/store'
+import { desktopState } from './desktop'
 import type { WorkerCommand, WorkerReport } from './connection.worker'
 
 export * from '@openkumi/client/store'
@@ -12,6 +13,9 @@ export * from '@openkumi/client/store'
 const worker = new Worker(new URL('./connection.worker.ts', import.meta.url), { type: 'module' })
 const tell = (command: WorkerCommand, transfer: Transferable[] = []) => worker.postMessage(command, transfer)
 useTransport(tell)
+// Which app this is, for the server to count: the desktop app, its version and what it runs on.
+const SYSTEMS = { darwin: 'macos', win32: 'windows', linux: 'linux' } as const
+if (desktopState().version) useApp({ app: 'desktop', version: desktopState().version, os: SYSTEMS[desktopState().platform as keyof typeof SYSTEMS] ?? 'other' })
 worker.onmessage = ({ data }: MessageEvent<WorkerReport>) => (data.type === 'frame' ? void watching.get(data.key)?.(data) : receive(data))
 
 /** Saves a file from the environment onto this computer, through the app's usual "save as". */

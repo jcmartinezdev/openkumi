@@ -9,7 +9,7 @@ import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { base64 } from '../attachments.ts'
 import { type Exit, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
-import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
+import { type ModelEvent, type Provider, type TurnRequest, efforts, usedSince } from './types.ts'
 
 const bin = () => findBinary('grok', 'OPENKUMI_GROK_BIN', settings().grokPath)
 const base = { id: 'grok', name: 'Grok', kind: 'cli' as const }
@@ -146,6 +146,8 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
         }
       } else if (ev.type === 'result') {
         finished = true
+        // What the turn used, when the program says so in the way Claude Code does.
+        yield* usedSince(String(ev.session_id ?? ''), !!req.session, ev.modelUsage)
         if (ev.is_error) throw new Error(String(ev.result || ev.subtype || 'Grok reported an error').slice(0, 600))
       }
     }
