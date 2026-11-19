@@ -147,7 +147,8 @@ apps/
   marketing/         the website at openkumi.ai (Astro, built to static pages), and the script that
                      draws every app's icon from the mascot (`npm run icons -w @openkumi/marketing`)
   docs/              the documentation at docs.openkumi.ai (Astro with Starlight, built to static
-                     pages); its pages are the Markdown files in `src/content/docs`
+                     pages); its pages are the Markdown files in `src/content/docs`, and its
+                     diagrams are drawn at build time from `src/components/diagram` (see below)
 packages/
   shared/            the types every app agrees on
   client/            what every app needs to talk to a server: the connection, the state
@@ -155,6 +156,24 @@ packages/
   dictation/         dictation on the device (Swift, Apple's speech models): one engine, run by the
                      desktop app as a small program on a Mac and built into the phone app as an Expo module
 ```
+
+## Diagrams in the documentation
+
+The diagrams on docs.openkumi.ai are plain SVG drawn when the site is built, so they need nothing
+in the reader's browser and follow its light and dark colours. They are made of a few components
+in `apps/docs/src/components/diagram`:
+
+- `Figure` holds a diagram and its caption; inside it go `Box` (a part, with a `kind`: `ours`,
+  `plain`, `outside`, `secret` or `danger`), `Zone` (a dashed area round boxes), `Arrow` (a line
+  through any corners, with a label; `both`, `dashed`, `blocked`) and `Note` or `Lines` (loose
+  words).
+- `Sequence` lays out a sequence diagram from a list of actors and steps, so a page only says what
+  happens: `{ from, to, text }`, `{ note, over }` and `{ section }`.
+
+The diagrams used on more than one page are in `apps/docs/src/components/diagrams`; sequence
+diagrams are written in the page itself. Diagrams are drawn 680 units wide, about the width of the
+text, and scroll sideways on a narrow screen. Words in SVG do not wrap: the build prints a
+`[diagram]` warning when a line is wider than its box.
 
 ## Trying a call without a microphone
 

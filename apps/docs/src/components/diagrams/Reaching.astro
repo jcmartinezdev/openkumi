@@ -1,0 +1,19 @@
+---
+// The addresses a device tries, in order, to reach the computer that runs the bots.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Note from '../diagram/Note.astro'
+
+const { caption } = Astro.props as { caption?: string }
+---
+
+<Figure width={680} height={292} title="A laptop or phone tries each of the server's addresses in turn: the home network, then Tailscale, then any public address" caption={caption}>
+  <Box x={8} y={100} w={150} h={70} kind="ours" title="Laptop or phone" lines={['tries each address,', 'uses the first']} />
+  <Box x={522} y={100} w={150} h={70} kind="ours" title="The server" lines={['the computer that', 'runs your bots']} />
+
+  <Arrow points={[[158, 118], [200, 118], [200, 44], [480, 44], [480, 118], [522, 118]]} label="1 · home network: plain http" at={0.5} />
+  <Arrow points={[[158, 135], [522, 135]]} label="2 · Tailscale: encrypted by Tailscale" />
+  <Arrow points={[[158, 152], [200, 152], [200, 226], [480, 226], [480, 152], [522, 152]]} label="3 · a public address: https only" at={0.5} />
+  <Note x={340} y={272} align="middle" lines={['Before any key is sent, whatever answers has to prove it is that server.']} />
+</Figure>

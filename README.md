@@ -54,7 +54,7 @@ buy, and nothing passes through a server of ours, because there is none.
   so no sound leaves it.
 - **Call your bot.** Talk with a bot out loud, and it talks back at once. The voice comes with
   your ChatGPT plan, through Codex, with no API key; the work is still done by the bot itself,
-  whatever it runs on.
+  whatever it runs on. See [Calls](https://docs.openkumi.ai/calls/).
 - **From your other computers and your phone.** Pair a laptop or an iPhone with a one-time code,
   at home directly and anywhere else over Tailscale.
 - **Yours.** A bot is a folder of plain files on your disk that you can read, edit and back up.
@@ -194,7 +194,7 @@ Bots can run on one computer of yours while you talk to them from another, or fr
 At home they connect directly. Away from home they connect over [Tailscale](https://tailscale.com)
 when it is on for both. The iPhone app is in this repository (`apps/mobile`) and is built from
 the source for now; it is not in the App Store yet. More in
-[Where bots run, and reaching them](https://docs.openkumi.ai/environments/).
+[Other computers and your phone](https://docs.openkumi.ai/environments/).
 
 ## Documentation
 
@@ -203,14 +203,13 @@ Markdown files in `apps/docs/src/content/docs`.
 
 | | |
 | --- | --- |
+| [Installing and updating](https://docs.openkumi.ai/install/) | the app, the server on a computer with no screen, and how both update |
+| [Your first bot](https://docs.openkumi.ai/getting-started/) | from the first launch to a bot that works for you every morning |
 | [What OpenKumi does](https://docs.openkumi.ai/features/) | every feature, at more length |
-| [Installing and updating](https://docs.openkumi.ai/install/) | the app, the server on its own, and how both update |
-| [Where bots run, and reaching them](https://docs.openkumi.ai/environments/) | environments, pairing, several addresses, the iPhone app |
-| [Settings and configuration](https://docs.openkumi.ai/settings/) | what each settings page holds, and the environment variables |
-| [Automations](https://docs.openkumi.ai/automations/) | bots that work at set times, when something changes, or when an app calls |
-| [Superpowers](https://docs.openkumi.ai/superpowers/) | what a bot can do beyond its own tools, and how it signs in |
-| [How it works](https://docs.openkumi.ai/how-it-works/where-everything-lives/) | where everything lives, what a bot is told, the conversation, tools, engines |
-| [Security notes](https://docs.openkumi.ai/security/) | what is trusted, what is not, and why |
+| [Setting up](https://docs.openkumi.ai/setup/providers/) | what bots run on, making a bot, other computers and the phone, superpowers, automations, webhooks, calls |
+| [How it works](https://docs.openkumi.ai/how-it-works/) | the parts and how they talk, how a bot works, engines, tools, calls, with diagrams |
+| [Security](https://docs.openkumi.ai/security/) | what is trusted and what is not, keys and pairing, what a bot can reach, what leaves your computer, known limits |
+| [Reference](https://docs.openkumi.ai/settings/) | settings and environment variables, the `openkumi` command, troubleshooting |
 | [Working on OpenKumi](docs/development.md) | running it from the source, the tests, and making a release |
 | [Releasing the iPhone app](docs/mobile-releases.md) | how a release reaches the phones: over the air, or through TestFlight |
 

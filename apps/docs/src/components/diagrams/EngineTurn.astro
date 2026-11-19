@@ -1,0 +1,27 @@
+---
+// A turn on an engine (claude, codex, grok) beside a turn on OpenKumi's own loop.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Note from '../diagram/Note.astro'
+import Zone from '../diagram/Zone.astro'
+
+const { caption } = Astro.props as { caption?: string }
+---
+
+<Figure width={680} height={356} title="A turn on an engine, and a turn on OpenKumi's own loop" caption={caption}>
+  <Zone x={4} y={8} w={332} h={340} label="On an engine" />
+  <Box x={24} y={40} w={292} h={56} kind="ours" title="OpenKumi server" lines={['what the bot is told · its tools']} />
+  <Box x={24} y={160} w={292} h={56} title="The engine program" lines={['claude, codex or grok, its own tools off']} />
+  <Box x={24} y={280} w={292} h={56} kind="outside" title="Your AI plan" lines={['Claude, ChatGPT or Grok']} />
+  <Arrow points={[[90, 96], [90, 160]]} label="starts it" />
+  <Arrow points={[[250, 160], [250, 96]]} kind="ours" label={['tool calls, at', 'its /mcp address']} />
+  <Arrow points={[[170, 216], [170, 280]]} both kind="secret" label="your sign-in" />
+
+  <Zone x={344} y={8} w={332} h={340} label="On OpenKumi’s own loop" />
+  <Box x={364} y={40} w={292} h={56} kind="ours" title="OpenKumi server" lines={['runs the loop, one step at a time']} />
+  <Box x={364} y={160} w={292} h={56} title="The model" lines={['Ollama, LM Studio, or an API']} />
+  <Arrow points={[[430, 96], [430, 160]]} label={['the conversation', 'and the tools']} />
+  <Arrow points={[[590, 160], [590, 96]]} label={['text, or a', 'tool to call']} />
+  <Note x={510} y={262} align="middle" lines={['The server runs each tool and asks again,', 'until the model only answers.']} />
+</Figure>

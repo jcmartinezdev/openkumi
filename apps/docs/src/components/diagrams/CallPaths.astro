@@ -1,0 +1,25 @@
+---
+// The two paths of a call: the sound, straight between the app and OpenAI; and the words, through
+// Codex and the server to the bot and back.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Note from '../diagram/Note.astro'
+
+const { caption } = Astro.props as { caption?: string }
+---
+
+<Figure width={680} height={330} title="A call: sound goes straight between the app and OpenAI; what the voice hands over goes through Codex and the server to the bot" caption={caption}>
+  <Box x={8} y={30} w={180} h={64} kind="ours" title="Desktop app" lines={['your microphone', 'and speaker']} />
+  <Box x={492} y={30} w={180} h={64} kind="outside" title="OpenAI" lines={['the speech model,', 'on your ChatGPT plan']} />
+  <Box x={8} y={160} w={180} h={64} kind="ours" title="OpenKumi server" lines={['sets the call up,', 'passes work on']} />
+  <Box x={250} y={160} w={180} h={64} title="Codex" lines={['signed in with', 'your ChatGPT plan']} />
+  <Box x={8} y={262} w={180} h={56} kind="ours" title="The bot" lines={['on its own engine']} />
+
+  <Arrow points={[[188, 62], [492, 62]]} both kind="ours" label="sound, directly (WebRTC)" />
+  <Arrow points={[[98, 94], [98, 160]]} both label="sets up the call" />
+  <Arrow points={[[188, 192], [250, 192]]} both />
+  <Arrow points={[[430, 192], [582, 192], [582, 94]]} both kind="secret" label={['set-up, hand-offs,', 'words to say']} at={0.8} />
+  <Arrow points={[[98, 224], [98, 262]]} both />
+  <Note x={210} y={282} lines={['What the voice hands over arrives in the bot’s', 'conversation; the bot’s answer is read out.']} />
+</Figure>

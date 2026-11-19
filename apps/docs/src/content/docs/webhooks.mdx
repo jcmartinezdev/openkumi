@@ -1,0 +1,89 @@
+---
+title: Webhooks
+description: "Letting an app call OpenKumi the moment something happens, so an automation starts at once: setting up the public address, a bot's webhook, and what is checked."
+---
+
+import { Aside, Steps } from '@astrojs/starlight/components'
+import WebhookPath from '../../components/diagrams/WebhookPath.astro'
+
+A webhook lets an app call OpenKumi the moment something happens there ("an issue was assigned"),
+so an automation starts at once instead of at a [watch](/automations/#a-watch)'s next look. Linear
+can, for now: a superpower says whether its app can, and how, in its `superpower.json` under
+`hooks`.
+
+Calls come from the internet, which OpenKumi otherwise refuses. So webhooks take a little setting
+up, once, and a door of their own.
+
+<WebhookPath caption="Linear calls your tunnel, which passes the call to a door that is open on this computer only. A call is taken only when it was signed with the secret; the run is told what happened by id, and the bot reads the rest with its own sign-in." />
+
+## Before you start
+
+- The bot has the **Linear** superpower, signed in.
+- The computer that runs the bots is awake when Linear calls. Linear tries again after a minute,
+  an hour and six hours, then gives up and may switch the webhook off. For what must not be
+  missed, a [watch](/automations/#a-watch) is the safer choice.
+- You can make a tunnel from the internet to that computer: [Tailscale
+  Funnel](https://tailscale.com/kb/1223/funnel) is the easiest, or any tunnel or proxy of your own
+  that serves `https`.
+
+## Setting it up
+
+<Steps>
+
+1. **Open the door to the internet.** Webhooks are taken on a port of their own: the server's port
+   plus one, `4318` unless `OPENKUMI_HOOKS_PORT` says otherwise. It listens on this computer only,
+   and takes `POST /hooks/…` and nothing else. Point a tunnel at it, for example:
+
+   ```sh
+   tailscale funnel 4318
+   ```
+
+2. **Give OpenKumi the public address.** On Linear's page under **Settings → Superpowers**, enter
+   the address your tunnel has under **Public address**. OpenKumi suggests this computer's
+   Tailscale name (`https://my-mac.example.ts.net`); any `https` address works. One address serves
+   every webhook.
+
+3. **Set up the bot's webhook.** On the same page, choose **Set up webhook** beside the bot.
+   OpenKumi gives it an address nobody can guess, and shows the steps for Linear:
+
+   - In Linear, open **Settings → API**, and under **Webhooks** choose **New webhook**. Only an
+     admin of the workspace can.
+   - Give it a name, and enter the address OpenKumi shows as its URL.
+   - Under **Data change events** tick **Issues** and **Comments**, and choose the team it is for,
+     or all public teams.
+   - Create it, open it, copy its **signing secret**, and give it to OpenKumi.
+
+4. **Make an automation that starts on it.** In the automation form, **Starts** offers "When
+   Linear calls" for a bot whose webhook is set up, with what to run on (an issue is created,
+   changed or removed; a comment is written). Or ask the bot: it makes one with
+   `create_automation` and `hook`, though it cannot set a webhook up itself.
+
+</Steps>
+
+## What is checked, and what is passed on
+
+- **A call is taken only when Linear signed it** with the secret (an HMAC of the body, in the
+  `Linear-Signature` header). Any other call gets the same answer as an address nobody set up.
+- **The same call is taken once.** A call that comes again is recognised and dropped.
+- **The secret stays on the server.** It is kept in OpenKumi's database and never sent anywhere.
+- **A run is told what happened by id alone**: the kind of event, the ids and numbers in it, and
+  for a change the names of the fields that changed. Nothing anyone wrote in Linear is passed on
+  (no titles, no comments, no descriptions), so text in an issue cannot reach the bot through the
+  webhook. The bot reads the issue itself, with its own sign-in, as it would anything else there,
+  and treats what it reads as material, not instructions.
+- **Calls are gathered.** Calls that come within five minutes of a run wait and are answered
+  together in the next one, up to 50 at a time. While an automation is paused, its calls are kept,
+  and it is given them when it is turned on again.
+
+## Taking it down
+
+**Remove webhook** on Linear's page stops its address working at once and pauses the automations
+that start on its calls. Deactivating the superpower for that bot does the same. Remove the webhook
+in Linear too.
+
+<Aside type="caution">
+  Point this tunnel at the webhook port (4318). The server's own port (4317) is a different door:
+  it takes your devices, not webhooks. Putting it on the internet too is possible, behind an
+  `https` address of its own, but Tailscale is the safer way to reach your bots from anywhere. See
+  [Servers and addresses](/connections/#a-public-address).
+</Aside>

@@ -1,0 +1,39 @@
+---
+title: "One app, several processes and threads"
+description: "How the desktop app spreads its work over processes and a worker thread so that no part holds up another, and what the server starts."
+---
+
+import AppProcesses from '../../../components/diagrams/AppProcesses.astro'
+
+The app is not a web page in a window. Its work is spread out so that no part can hold up another.
+
+<AppProcesses caption="The window talks straight to the server, through a worker thread. The main process only starts and stops the server and answers what the window may ask. The server starts a Chrome for each bot that browses, an engine for each turn, and Codex while you are on a call." />
+
+| Where | What runs there |
+| --- | --- |
+| The app's main process | the window, the menu, the list of environments and their keys, updates. It does no work of its own, and only answers the app's own page |
+| A process of its own (`OpenKumi Server`) | the server, when the local environment is on. If it stops unexpectedly after running a while, the app starts it again once |
+| The window | the interface, loaded from the app itself (`openkumi://app/`), talking straight to the environment it shows |
+| A worker thread in the window | the connection to the environment: it reads what arrives, hands changes to the window at most once per frame, and draws the pictures of a bot's browser straight onto the page |
+| A program of its own (`dictation`), while you dictate | listening, and writing down what is said, on the Mac; the app passes its words to the window |
+| Chrome, one per bot that browses | started by the server, with the bot's own profile |
+| An engine, one per turn | `claude`, `codex app-server` or `grok`, started by the server for a turn of a bot and gone when it ends |
+| A Codex process of its own, while you are on a call | setting the call up with your ChatGPT sign-in, and reporting what is said. The sound itself goes between the window and OpenAI directly, never through the server ([How a call works](/how-it-works/calls/)) |
+
+When the app starts with the local environment on, it first looks for an OpenKumi server already
+running on this computer. If one answers and shows it is the real thing (it signs a value the app
+made up with the access code in the data folder), the app uses it and leaves it running when you
+quit. Otherwise it starts its own, waits for it to say it is ready, and stops it when you quit
+(asking first when bots are at work).
+
+## Speed
+
+Two things follow for speed. Text that streams in is collected on the worker and applied once per
+frame, and a reply being written is drawn piece by piece, so only its last paragraph is worked out
+again as it grows. Pictures of a bot's browser arrive as bytes and are decoded and drawn by the
+worker; they never pass through the window's own thread. A slow connection gets fewer pictures
+rather than a growing backlog of old ones.
+
+Measured on the packaged app (M-series Mac): the app is usable about 0.6 s after it starts, server
+included, and while a 6,000-word reply streamed in beside a browser page that changed on every
+frame, the window kept drawing 60 frames a second with no frame longer than 19 ms.

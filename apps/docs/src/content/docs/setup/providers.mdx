@@ -1,0 +1,112 @@
+---
+title: What bots run on
+description: "Setting up Codex, Claude Code, Grok, local models and OpenAI-compatible APIs for your bots, and choosing which a bot uses."
+---
+
+import { Aside, Steps, Tabs, TabItem } from '@astrojs/starlight/components'
+
+A bot needs a model to think with. OpenKumi does not sell one or hold an API key of its own: it
+uses what you already have, on the computer that runs the bots. There are two kinds.
+
+- **Engines**: the Codex, Claude Code and Grok programs, signed in with your own plan. OpenKumi
+  starts the program for each turn of a bot and lets it run the model, with the bot's tools in
+  place of the program's own. Usage counts against your plan, as if you used the program yourself.
+- **Models OpenKumi asks itself**: a local model in Ollama or LM Studio, or any OpenAI-compatible
+  API. OpenKumi runs the bot's loop itself, one step at a time.
+
+[Engines and models](/how-it-works/engines/) explains the difference in depth. Here is how to set
+each one up.
+
+## Setting one up
+
+Everything here is done on **the computer that runs the bots**, which is not always the one in front
+of you. Install the program, sign in in a terminal, then open **Settings → Providers** and press
+**Check again**.
+
+<Tabs>
+  <TabItem label="Codex (ChatGPT)">
+    <Steps>
+    1. Install the Codex CLI from OpenAI.
+    2. Run `codex login` and sign in with your ChatGPT account.
+    3. **Settings → Providers** shows "Codex: Signed in with ChatGPT".
+    </Steps>
+    Codex can also be signed in with an OpenAI API key; bots work either way, but
+    [calls](/calls/) need the ChatGPT plan. The model a bot on "Default" uses is the default in
+    your own Codex config file.
+  </TabItem>
+  <TabItem label="Claude Code">
+    <Steps>
+    1. Install Claude Code.
+    2. Run `claude` once and sign in with your Claude account.
+    3. **Settings → Providers** shows Claude Code as connected.
+    </Steps>
+    Claude Code is the only engine that reads PDFs you send a bot; every engine reads pictures.
+  </TabItem>
+  <TabItem label="Grok">
+    <Steps>
+    1. Install Grok Build.
+    2. Run `grok login`.
+    3. **Settings → Providers** shows Grok as connected.
+    </Steps>
+    Grok only takes tools from a settings file in a folder it trusts, so each bot gets a folder of
+    its own for that (`private/grok/` inside the bot), and Grok's own list of trusted folders
+    (`~/.grok/trusted_folders.toml`) gains an entry per bot.
+  </TabItem>
+  <TabItem label="Local models">
+    <Steps>
+    1. Start [Ollama](https://ollama.com) (port 11434) or [LM Studio](https://lmstudio.ai)'s
+       server (port 1234) on the computer that runs the bots, with at least one model.
+    2. It shows up under **Settings → Providers → Local models**, with its models. For another
+       program or port, enter its address there.
+    </Steps>
+    Bots need a model that can call tools, and small models are often poor at it: expect a bot on
+    one to be less capable than on an engine. Local models have no web search of their own; the
+    bot still has its browser and `web_fetch`.
+  </TabItem>
+  <TabItem label="An API">
+    <Steps>
+    1. Under **Settings → Providers → Other models**, enter the **Base URL** of any
+       OpenAI-compatible API (OpenAI, OpenRouter, a server of your own) and its **API key**.
+    2. Its models are offered to bots.
+    </Steps>
+    The key is kept in `~/.openkumi/auth.json`, which only your account can read. Leaving the
+    key field empty when you change the address keeps the key you gave before.
+  </TabItem>
+</Tabs>
+
+## Choosing what a bot runs on
+
+- **New bots** run on what **Settings → General → New bots run on** says. When that is not
+  connected, a new bot gets the first one that is, in this order: Codex, Claude Code, Grok, local
+  models, an API.
+- **One bot**: its settings have **Runs on**, **Model** and, where the model has one,
+  **Reasoning effort**. **Default** means the engine's own default model.
+- **One subagent**: a bot can give a subagent another model for a part of the job.
+
+A bot can move from one to another at any time. Its conversation stays, and the new engine is
+told what was said most recently (with a summary of the older part, when there is one).
+
+## Switching one off
+
+Each provider in **Settings → Providers** has a switch, **Use … for bots**. Off, it is not offered
+to bots, and a bot set to run on it stops with an error until you choose another. Codex switched
+off also turns calls off.
+
+## When it says "not connected"
+
+| It says | What to do |
+| --- | --- |
+| Not installed | Install the program on the computer that runs the bots, then **Check again**. |
+| Installed, not signed in | Run its sign-in in a terminal there (`codex login`, `claude`, `grok login`). |
+| Not found | A **Program path** was set and nothing is there. Correct it, or clear it to have the program looked up. |
+| A launcher script OpenKumi cannot follow | On Windows, npm installs some programs as launcher scripts. Give the path of the program it starts under **Program path**. |
+| No local model server is running | Start Ollama or LM Studio, or enter its address. |
+
+OpenKumi never sees your credentials: you sign in to each program yourself, and it keeps its own
+sign-in. **Settings → Advanced → Log what the engines print** writes everything an engine says to
+the log, for when something goes wrong.
+
+<Aside title="Where the programs are looked for">
+  On the `PATH`, then in the usual places for each system. **Program path** in Settings, or
+  `OPENKUMI_CODEX_BIN`, `OPENKUMI_CLAUDE_BIN` and `OPENKUMI_GROK_BIN`, name one exactly.
+</Aside>

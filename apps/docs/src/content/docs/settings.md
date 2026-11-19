@@ -1,38 +1,59 @@
 ---
 title: Settings and configuration
-description: "What each settings page holds, and the environment variables the server reads."
+description: "What each settings page holds, which settings belong to the device and which to the server, and the environment variables the server reads."
 ---
 
 ## Settings
 
-Everything is set from the Settings page, which saves each change as you make it:
+Everything is set from the Settings page, which saves each change as you make it. The search box at
+its top finds any setting by name. Each page has **Restore defaults**.
 
 | Page | What it holds |
 | --- | --- |
-| General | what a new bot starts with; sidebar and confirmation preferences |
-| Appearance, Chat | theme, text size, how Enter behaves, how much detail a step shows (kept per device) |
-| Providers | Codex and Claude Code (status, program path), other models; switch any of them off |
-| Bots | every bot: what it is for, its rules, model, superpowers and files; whether bots may message each other |
-| Superpowers | what bots can do beyond their own tools: what each does, and which bots have it |
-| Master prompt | what each bot is for; everything a bot is told, to read |
-| Browser | which browser program the bots drive, and which bots have one running |
-| Environments | the local environment (on or off) and remote ones; letting other computers connect to the one being shown, its link and access code |
-| Advanced | limits (steps per turn, subagents), troubleshooting, the data folder |
-| About | the version of the app and of the environment it shows, and their updates |
+| **General** | **New bots**: what they run on, whether they have web search, whether their browser window is shown. **Confirm before deleting a conversation**. |
+| **Appearance** | theme (light, dark or the system's), message text size, a wide conversation |
+| **Chat** | whether **Enter sends the message**, suggestions in a new chat, how much detail a step shows |
+| **Providers** | Codex, Claude Code, Grok, local models and other models: whether each is connected, its program path or address, and **Use … for bots**. See [What bots run on](/setup/providers/). |
+| **Bots** | every bot, and each bot's page: what it is for, its rules, model, web search, browser, voice, look, superpowers, automations and workspace. **Bots can message each other**. See [Making and shaping a bot](/setup/bots/). |
+| **Superpowers** | every superpower, what each does, which bots have it, and webhooks. See [Superpowers](/superpowers/). |
+| **Master prompt** | what each bot is for, and everything a bot is told, to read. See [What every bot is told](/how-it-works/what-a-bot-is-told/). |
+| **Browser** | the browser program the bots drive, whether the live view opens when a bot starts browsing, and which bots have a browser running now |
+| **Environments** | the local environment, remote environments, **Let other computers connect**, **Pair a computer**, and the paired computers. See [Other computers and your phone](/environments/). |
+| **Advanced** | **Steps per turn**, **Subagents at once**, **Subagent levels**, **Size of a bot's own instructions**, **Length of a conversation**, **Log what the engines print**, the data folder, **Delete all conversations** |
+| **About** | the version of the app and of the environment it shows, their updates, **Update by itself** for a server installed alone, and a note on the alpha |
 
-App-wide settings are stored in `~/.openkumi/settings.json` (only values that differ from the
-defaults). Preferences marked "this device" stay in the app on that computer.
+**Appearance**, **Chat** and **Confirm before deleting a conversation** belong to the device: each
+computer and phone keeps its own. Everything else belongs to the environment, and is the same from
+every device connected to it. The environment keeps its settings in `~/.openkumi/settings.json`,
+which holds only the values that differ from the defaults.
 
-## Configuration
+### The limits in Advanced
+
+| Setting | Default | Range | What it limits |
+| --- | --- | --- | --- |
+| Steps per turn | 80 | 5 to 500 | steps a bot on a local model or an API takes in one turn |
+| Subagents at once | 8 | 1 to 16 | subagents one thread can have at work at the same time |
+| Subagent levels | 2 | 0 to 3 | how deep subagents can nest beneath a conversation |
+| Size of a bot's own instructions | 12,000 characters | 2,000 to 60,000 | how much of `AGENTS.md` a bot is told each step |
+| Length of a conversation | 60,000 tokens | 2,000 to 1,000,000 | how much conversation a local model or an API is sent before the older part is summarised |
+
+## Environment variables
+
+The server reads these when it starts. Where one names something Settings also sets, the variable
+wins.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `OPENKUMI_PORT` | `4317` | the server's port |
+| `OPENKUMI_HOOKS_PORT` | the server's port plus one | the port webhook calls are taken on, on this computer only |
 | `OPENKUMI_LAN` | unset | `1` lets other computers on the network connect whatever Settings says (same as `--lan`) |
-| `OPENKUMI_HOME` | `~/.openkumi` | data directory |
-| `OPENKUMI_BROWSER_CHANNEL` | from Settings | Playwright browser channel (`chrome`, `msedge`, …); overrides Settings |
-| `OPENKUMI_MOCK` | unset | set to `1` to enable the scripted offline provider used by tests |
-| `OPENKUMI_CLAUDE_BIN`, `OPENKUMI_CODEX_BIN`, `OPENKUMI_GROK_BIN` | from Settings, else found on `PATH` | where the `claude`, `codex` and `grok` programs are; overrides Settings |
-| `OPENKUMI_DEBUG` | from Settings | set to `1` to log everything an engine prints |
-| `OPENKUMI_RELEASES_URL` | this project's releases on GitHub | where a server installed on its own, and its installer, look for versions |
+| `OPENKUMI_HOME` | `~/.openkumi` | the data folder |
+| `OPENKUMI_BROWSER_CHANNEL` | from Settings | the browser program: `chrome`, `msedge`, or `chromium` for the one that comes with OpenKumi |
+| `OPENKUMI_CLAUDE_BIN`, `OPENKUMI_CODEX_BIN`, `OPENKUMI_GROK_BIN` | from Settings, else found on `PATH` | where the `claude`, `codex` and `grok` programs are |
+| `OPENKUMI_TAILSCALE_BIN` | the Tailscale app, else `tailscale` on `PATH` | the Tailscale program, asked for this computer's name on Tailscale |
+| `OPENKUMI_DEBUG` | from Settings | `1` logs everything an engine prints |
+| `OPENKUMI_RELEASES_URL` | this project's releases on GitHub | where a server installed alone, and its installer, look for versions |
 | `OPENKUMI_DESKTOP_UPDATES_URL` | this project's releases on GitHub | another place for the desktop app to look for versions of itself |
+| `OPENKUMI_MOCK` | unset | `1` turns on the scripted offline provider the tests use |
+
+The desktop app also reads `OPENKUMI_PORT`, to find or start the local server.

@@ -9,7 +9,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'OpenKumi',
-      description: 'How to install OpenKumi, what its bots can do, and how it works.',
+      description: 'How to install and set up OpenKumi, what its bots can do, how it works, and how it keeps you safe.',
       logo: { src: './src/assets/kumi.svg', alt: '' },
       favicon: '/favicon.svg',
       head: [
@@ -20,33 +20,48 @@ export default defineConfig({
       ],
       social: [{ icon: 'github', label: 'OpenKumi on GitHub', href: GITHUB_URL }],
       editLink: { baseUrl: `${GITHUB_URL}/edit/main/apps/docs/` },
-      customCss: ['@fontsource-variable/inter', '@fontsource-variable/bricolage-grotesque', './src/styles/brand.css'],
+      customCss: ['@fontsource-variable/inter', '@fontsource-variable/bricolage-grotesque', './src/styles/brand.css', './src/styles/diagrams.css'],
       components: { SocialIcons: './src/components/HeaderLinks.astro' },
       // The pages, in the order someone new reads them. A page is a Markdown file in src/content/docs.
       sidebar: [
         {
           label: 'Start here',
-          items: [{ label: 'Welcome', slug: 'index' }, 'install', 'features'],
+          items: [{ label: 'Welcome', slug: 'index' }, 'install', 'getting-started', 'features'],
         },
         {
-          label: 'Using OpenKumi',
-          items: ['environments', 'automations', 'superpowers', 'calls', 'settings'],
+          label: 'Setting up',
+          items: ['setup/providers', 'setup/bots', 'environments', 'connections', 'superpowers', 'automations', 'webhooks', 'calls'],
+        },
+        {
+          label: 'Everyday use',
+          items: ['using/conversation', 'using/browser'],
         },
         {
           label: 'How it works',
           items: [
+            { label: 'The big picture', slug: 'how-it-works' },
+            'how-it-works/a-bot',
             'how-it-works/where-everything-lives',
             'how-it-works/what-a-bot-is-told',
             'how-it-works/conversation',
             'how-it-works/queue',
+            'how-it-works/subagents',
             'how-it-works/messages-between-bots',
-            'how-it-works/replies-and-pages',
             'how-it-works/tools',
             { label: 'Engines and models', slug: 'how-it-works/engines' },
+            'how-it-works/replies-and-pages',
+            'how-it-works/calls',
             { label: 'Processes and threads', slug: 'how-it-works/inside-the-app' },
           ],
         },
-        { label: 'Security notes', slug: 'security' },
+        {
+          label: 'Security',
+          items: [{ label: 'Overview', slug: 'security' }, 'security/access', 'security/bots', 'security/outside', 'security/limits'],
+        },
+        {
+          label: 'Reference',
+          items: ['settings', 'reference/cli', 'troubleshooting'],
+        },
       ],
     }),
   ],

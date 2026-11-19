@@ -22,6 +22,9 @@ turn of its own before the next goes in. A bot that is idle takes a message up a
 - **At most ten messages wait** for a bot. One more is refused: you are told the bot is busy and
   keep what you wrote; a bot is told to try later or tell you. What the bot's own work reports, and
   a reply it asked another bot for, always get in.
+- **Files go in with their message.** Files sent with a message wait with it, out of the bot's
+  sight; the bot gets its copies in `files/inbox/` when the message goes in. Taking the message back
+  throws them away.
 - **Stop means stop.** A bot that is stopped, or fails, does not start again by itself on what was
   waiting: those messages are held back until you write to it, press **Resume**, or send one of
   them now. What its own subagents and automations had to report is put in the conversation as

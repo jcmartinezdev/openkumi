@@ -1,0 +1,25 @@
+---
+// A diagram: an SVG drawn at build time, with a caption. On a narrow screen it scrolls sideways
+// rather than shrinking its words past reading. Put Box, Zone, Arrow and Note inside it.
+interface Props {
+  width: number
+  height: number
+  /** What the diagram shows, in a sentence: read out by screen readers. */
+  title: string
+  caption?: string
+  /** Below this width the figure scrolls instead of shrinking. */
+  minWidth?: number
+}
+const { width, height, title, caption, minWidth = 560 } = Astro.props
+const id = `dg-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}`
+---
+
+<figure class="dg not-content">
+  <div class="dg-scroll" tabindex="0" aria-label={`Diagram: ${title}`}>
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-labelledby={`${id}-t`} style={`min-width:${Math.min(minWidth, width)}px;max-width:${width}px`}>
+      <title id={`${id}-t`}>{title}</title>
+      <slot />
+    </svg>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>

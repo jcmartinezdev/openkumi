@@ -1,0 +1,28 @@
+---
+// Lines of a list inside a box: file names in the monospace face, and a few words about each.
+//   items={[{ code: 'bot.md' }, 'name, model, rules']}
+interface Props {
+  x: number
+  y: number
+  items: (string | { code: string })[]
+  /** Space between lines. */
+  gap?: number
+}
+const { x, y, items, gap = 15 } = Astro.props
+---
+
+<g class="dg-lines">
+  {
+    items.map((item, i) =>
+      typeof item === 'string' ? (
+        <text x={x} y={y + i * gap} class="dg-sub">
+          {item}
+        </text>
+      ) : (
+        <text x={x} y={y + i * gap} class="dg-code dg-code-ink">
+          {item.code}
+        </text>
+      ),
+    )
+  }
+</g>
