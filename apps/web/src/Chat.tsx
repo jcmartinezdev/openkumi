@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Attachment, Bot, Item, ItemData, Thread } from '@openkumi/shared'
+import { note } from '@openkumi/client/telemetry'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
@@ -448,6 +449,8 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
   const speaking = dictating.phase !== 'off'
   const startDictating = () => {
     const el = input.current
+    // That it was used, which the server cannot tell: only the words ever reach it, as a message like any other.
+    note({ event: 'dictation started' })
     dictating.start(draft, el?.selectionStart ?? draft.length, el?.selectionEnd ?? draft.length)
     el?.focus()
   }

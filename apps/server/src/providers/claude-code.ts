@@ -12,7 +12,7 @@ import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { type Shown, base64 } from '../attachments.ts'
 import { type Exit, type Pipe, capture, cleanEnv, end, findBinary, lastError, lines, start, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
-import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
+import { type ModelEvent, type Provider, type TurnRequest, efforts, usedSince } from './types.ts'
 
 const bin = () => findBinary('claude', 'OPENKUMI_CLAUDE_BIN', settings().claudePath)
 const base = { id: 'claude-code', name: 'Claude Code', kind: 'cli' as const }
@@ -261,6 +261,8 @@ async function* turn(req: TurnRequest): AsyncGenerator<ModelEvent> {
       } else if (ev.type === 'result') {
         finished = true
         busy = false
+        // What the turn used, said whether it went well or not.
+        yield* usedSince(String(ev.session_id ?? ''), !!req.session, ev.modelUsage)
         if (ev.is_error) throw new Error(String(ev.result || ev.errors?.join?.('; ') || ev.subtype || 'Claude Code reported an error').slice(0, 600))
         settle()
       }

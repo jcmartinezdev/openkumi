@@ -1,6 +1,7 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { browsingThread, control, windowOf } from '@openkumi/client/browser'
+import { screen } from '@openkumi/client/telemetry'
 import { BrowserPane, BrowserPip } from './BrowserPane'
 import { CallPanel } from './Call'
 import { Chat } from './Chat'
@@ -11,6 +12,7 @@ import { NewBot } from './Modals'
 import { usePrefs } from './prefs'
 import { SettingsView } from './Settings'
 import { Sidebar } from './Sidebar'
+import { TelemetryQuestion } from './Telemetry'
 import { Automations } from './Automations'
 import { type Route, loadThread, mainThread, navigate, openSettings, useRoute, useStore } from './store'
 
@@ -63,6 +65,11 @@ export function App() {
   // The bot whose pane the user just opened by hand; only that one starts its browser by itself.
   const [autoStart, setAutoStart] = useState<string | null>(null)
   const [modal, setModal] = useState<Modal>(null)
+  // Which screen is showing, by its name and never by what it shows, for the app's own telemetry.
+  const showing = current.settings ? `settings/${current.settings[0] ?? 'general'}` : current.automations ? 'automations' : 'chat'
+  useEffect(() => {
+    if (loaded) screen(showing)
+  }, [loaded, showing])
   // The sidebar is a slide-out drawer on narrow screens.
   const [navOpen, setNavOpen] = useState(false)
   useEffect(() => setNavOpen(false), [route.botId, route.threadId])
@@ -130,6 +137,7 @@ export function App() {
     if (!bot) return
     setPane(bot.id, showPane ? undefined : { full: false, threadId: null })
     setAutoStart(showPane ? null : bot.id)
+    if (!showPane) screen('browser')
   }
   const pipThread = bot && !route.automations ? pips[bot.id] : undefined
   const showPip = !!bot && !!pipThread && !(pane && paneThread === pipThread) && !!windowOf(browsers[bot.id], pipThread)
@@ -209,6 +217,8 @@ export function App() {
       {current.settings && <SettingsView path={current.settings} newBot={() => setModal({ kind: 'new-bot' })} />}
       {/* A bot made from the settings is opened there, ready to be set up; otherwise its chat opens. */}
       {modal?.kind === 'new-bot' && <NewBot close={() => setModal(null)} created={(made) => ((current.settings ? openSettings('bots', made.id) : navigate(made.id)), setModal(null))} />}
+      {/* The one question a server has for its owner, put once (see Telemetry.tsx). */}
+      {!modal && <TelemetryQuestion />}
       {/* A call goes on whatever the window shows. */}
       <CallPanel />
       {!connected && <div className="toast">Reconnecting…</div>}

@@ -440,7 +440,46 @@ export interface Settings {
    * working. Off, it only updates when asked. One inside the desktop app updates with the app.
    */
   autoUpdate: boolean
+  /**
+   * Whether this server tells OpenKumi's makers how it is used and what goes wrong in it
+   * (apps/server/src/telemetry.ts). Null until its owner has been asked: nothing is sent before.
+   */
+  telemetry: boolean | null
 }
+
+/** One thing a server sent to OpenKumi's makers, as it was sent. */
+export interface TelemetryEvent {
+  event: string
+  /** When it happened, as an ISO date. */
+  at: string
+  properties: Record<string, unknown>
+}
+
+/** What a server shows its owner about what it sends: its id (null while it sends nothing), what went last (newest first), and how much waits. */
+export interface TelemetryReport {
+  id: string | null
+  sent: TelemetryEvent[]
+  waiting: number
+}
+
+/** What an app says about itself when it connects, for the server to count which apps are in use. */
+export interface AppInfo {
+  app: 'desktop' | 'iphone'
+  version: string
+  os: 'macos' | 'windows' | 'linux' | 'ios' | 'android' | 'other'
+}
+
+/**
+ * What an app records about itself, for the server it is connected to to send (never what a
+ * screen shows, only that it was opened). The server has the list of what each may carry
+ * (apps/server/src/telemetry-events.ts) and leaves out anything else; a test holds the two together.
+ */
+export type AppEvent =
+  | { event: 'app opened'; first: boolean }
+  | { event: 'welcome answered'; choice: 'local' | 'pair' }
+  | { event: 'screen opened'; screen: string }
+  | { event: 'dictation started' }
+  | { event: 'app error'; type: string; position: string }
 
 /** How a server stands with its own updates (apps/server/src/update.ts). */
 export interface ServerUpdate {
@@ -488,6 +527,12 @@ export interface About {
   hooksPort: number
   /** The number the apps compare with their own (packages/shared/src/protocol.ts). */
   protocol: number
+  /**
+   * Whether this server would send anything to OpenKumi's makers if its owner agreed, and why not
+   * when it would not (it runs from its source, say). Only a server that can is asked about.
+   * A server from before there was any of this says nothing here.
+   */
+  telemetry?: { can: boolean; why: string }
 }
 
 export interface ProviderInfo {

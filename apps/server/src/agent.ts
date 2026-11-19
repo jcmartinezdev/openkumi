@@ -19,6 +19,7 @@ import { getProvider } from './providers/index.ts'
 import type { ModelEvent, Steering } from './providers/types.ts'
 import { settings } from './settings.ts'
 import { superpowerIndex, superpowerNames } from './superpowers.ts'
+import { failed, modelName, track, whereOf } from './telemetry.ts'
 import { TIME_ZONE, finishRun, isMain } from './automations.ts'
 import { type ToolEndpoint, openToolEndpoint } from './tool-endpoint.ts'
 import { onACall, runTool, toolsFor } from './tools.ts'
@@ -46,6 +47,11 @@ interface Run {
   cutShort: boolean
   /** Fires when the owner wants a message read now, so that a tool that only waits gives way. A new one is made each time. */
   hurry: AbortController
+  /** When the loop began, and how many times the model was asked in it: what is said of the run when it is over (telemetry.ts). */
+  startedAt: number
+  steps: number
+  /** The tokens the run used so far, by model as the engine names it ('' for the model the bot was set to). */
+  used: Map<string, { input: number; cached: number; output: number }>
 }
 
 const running = new Map<string, Run>()
@@ -227,6 +233,7 @@ function letIn(waiting: Queued, thread: Thread): Item {
   const item = db.addItem(thread.id, message)
   db.removeQueued(waiting.id)
   emptied(thread.id)
+  track('message sent', { from: message.source, engine: getBot(thread.botId)?.provider, attachments: message.attachments?.length ?? 0, on_call: message.via === 'call' })
   const answer = awaited.get(waiting.id)
   if (answer) {
     awaited.delete(waiting.id)
@@ -369,7 +376,7 @@ export function run(threadId: string) {
   if (running.has(threadId) || closing) return
   const thread = db.getThread(threadId)
   if (!thread || !next(thread)) return
-  const state: Run = { abort: new AbortController(), partial: { text: '', reasoning: '' }, asked: [], cutShort: false, hurry: new AbortController() }
+  const state: Run = { abort: new AbortController(), partial: { text: '', reasoning: '' }, asked: [], cutShort: false, hurry: new AbortController(), startedAt: Date.now(), steps: 0, used: new Map() }
   running.set(threadId, state)
   db.updateThread(threadId, { status: 'running' })
   state.done = loop(threadId, state)
@@ -401,6 +408,8 @@ async function loop(threadId: string, state: Run) {
   let status: Thread['status'] = 'idle'
   /** The bot was stopped or failed: what still waits for it is held back. */
   let broken = false
+  /** Where it failed, when it did: a place in the code, never what the error said. */
+  let error: string | undefined
   try {
     for (;;) {
       const thread = db.getThread(threadId)
@@ -424,11 +433,20 @@ async function loop(threadId: string, state: Run) {
       db.addItem(threadId, { type: 'notice', level: 'info', text: 'Stopped.' })
     } else {
       status = 'error'
+      error = whereOf(e)
+      failed(e, 'run')
       db.addItem(threadId, { type: 'notice', level: 'error', text: String(e?.message ?? e) })
     }
     answered(threadId, state.asked, signal.aborted ? 'It was stopped before it was done.' : String(e?.message ?? e))
   } finally {
     running.delete(threadId)
+    // The server stopping is not the run's own end.
+    if (!closing) {
+      const engine = getBot(db.getThread(threadId)?.botId ?? '')?.provider
+      track('run finished', { engine, outcome: status === 'error' ? 'failed' : broken ? 'stopped' : 'done', seconds: (Date.now() - state.startedAt) / 1000, steps: state.steps, error })
+      // What it cost in tokens, whether it finished or not: counted by model, never by conversation.
+      for (const [model, sum] of state.used) track('tokens used', { engine, model: modelName(engine ?? '', model), input_tokens: sum.input, cached_tokens: sum.cached, output_tokens: sum.output, total_tokens: sum.input + sum.output })
+    }
     // Stopped or failed, the bot does not start again by itself on what was waiting: that is held
     // back for the owner to let go, except what its own work came back with, which is put in the
     // conversation as it is. Not so when it is only the server shutting down.
@@ -472,6 +490,7 @@ async function turn(threadId: string, state: Run) {
     const { tools: all, problems } = await toolsFor(thread)
     const tools = call ? onACall(all) : all
     signal.throwIfAborted()
+    state.steps++
     // What the owner asked to be read now goes in before the model is asked again.
     for (const waiting of db.queueOf(threadId)) if (waiting.now) state.asked.push(letIn(waiting, thread))
     let items = db.listItems(threadId)
@@ -480,7 +499,10 @@ async function turn(threadId: string, state: Run) {
     const calls: Extract<ItemData, { type: 'function_call' }>[] = []
     /** Stores a finished item, or passes streaming text on to whoever is watching. */
     const record = (ev: ModelEvent) => {
-      if (ev.type === 'item') {
+      if (ev.type === 'usage') {
+        const sum = state.used.get(ev.model) ?? { input: 0, cached: 0, output: 0 }
+        state.used.set(ev.model, { input: sum.input + ev.input, cached: sum.cached + ev.cached, output: sum.output + ev.output })
+      } else if (ev.type === 'item') {
         if (ev.item.type === 'message') state.partial.text = ''
         if (ev.item.type === 'reasoning') state.partial.reasoning = ''
         db.addItem(threadId, ev.item)
@@ -536,7 +558,7 @@ async function turn(threadId: string, state: Run) {
         })
         for await (const ev of events) {
           if (ev.type === 'session') sessionId = ev.id
-          else produced = true
+          else if (ev.type !== 'usage') produced = true
           record(ev)
         }
       } catch (e) {

@@ -15,6 +15,7 @@ import { announce } from './bots.ts'
 import { HOME, ROOT, botDir, emit, privateDir, readSecrets, writeSecret } from './config.ts'
 import { remove as removeHook } from './hooks.ts'
 import * as mcp from './mcp.ts'
+import { track } from './telemetry.ts'
 
 /** Where a superpower's tools come from: a service on the web, or a program run on this computer. */
 export interface Service {
@@ -212,6 +213,7 @@ export async function setSuperpower(botId: string, id: string, on: boolean) {
   const now = enabledSuperpowers(botId)
   if (on === now.includes(id)) return
   record(botId, on ? [...now, id] : now.filter((other) => other !== id))
+  track('superpower switched', { superpower: id, on })
   if (on) mcp.wake(botId, id)
   else {
     await mcp.forget(botId, id)

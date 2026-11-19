@@ -31,7 +31,8 @@ export const RESTART = 75
 /** Which of the published archives runs on this computer. */
 export const TARGET = `${process.platform}-${process.arch}`
 
-const how: ServerUpdate['how'] = (process as { parentPort?: unknown }).parentPort ? 'app' : RUNTIME ? 'installed' : 'source'
+/** How this server runs: inside the desktop app, installed on its own, or from the repository. */
+export const HOW: ServerUpdate['how'] = (process as { parentPort?: unknown }).parentPort ? 'app' : RUNTIME ? 'installed' : 'source'
 
 /** Why a server that cannot update itself cannot. */
 export const WHY_NOT: Record<Exclude<ServerUpdate['how'], 'installed'>, string> = {
@@ -47,7 +48,7 @@ let restart: (() => void) | null = null
 /** Asked to update without waiting for the bots. */
 let hurried = false
 
-export const updateInfo = (): ServerUpdate => ({ how, ...state, staged: staged(), working: working() })
+export const updateInfo = (): ServerUpdate => ({ how: HOW, ...state, staged: staged(), working: working() })
 
 function set(patch: Partial<typeof state>) {
   state = { ...state, ...patch }
@@ -175,7 +176,7 @@ export function update(install: boolean): Promise<ServerUpdate> {
       const release = await latestRelease()
       set({ latest: release.version, checkedAt: Date.now() })
       const wanted = newer(release.version, VERSION)
-      if (!wanted || !install || how !== 'installed') return set({ state: staged() ? 'ready' : 'idle' })
+      if (!wanted || !install || HOW !== 'installed') return set({ state: staged() ? 'ready' : 'idle' })
       set({ state: 'downloading' })
       await fetchVersion(release)
       pointAt(release.version)
@@ -202,7 +203,7 @@ function settle() {
 
 /** What POST /api/update does: fetch the newest version now, and start it at once (`now`) or when the bots are done. */
 export async function updateNow(now: boolean): Promise<ServerUpdate> {
-  if (how !== 'installed') throw new Error(WHY_NOT[how])
+  if (HOW !== 'installed') throw new Error(WHY_NOT[HOW])
   // A look that is under way may be one that only looks: this one is made after it, so that
   // being asked to install always installs.
   while (busy) await busy.catch(() => {})
@@ -223,7 +224,7 @@ const HOUR = 3_600_000
  */
 export function startUpdates(server: { working: () => number; restart: () => void }) {
   working = server.working
-  if (how !== 'installed') return
+  if (HOW !== 'installed') return
   restart = server.restart
   tidy()
   const look = () => void update(settings().autoUpdate)

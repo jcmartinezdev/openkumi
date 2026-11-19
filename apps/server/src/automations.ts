@@ -10,6 +10,7 @@ import * as agent from './agent.ts'
 import { getBot, listBots } from './bots.ts'
 import * as db from './db.ts'
 import * as hooks from './hooks.ts'
+import { track } from './telemetry.ts'
 import * as watching from './watch.ts'
 
 /** The shortest time, in minutes, between two runs of an automation that repeats. */
@@ -178,6 +179,7 @@ export async function createAutomation(input: Record<string, any>, by: string): 
   // One that starts on a webhook's calls is for the calls from now on.
   if (saved.trigger.kind === 'hook') db.setCursor(saved.id, db.lastHookEvent())
   plan()
+  track('automation created', { trigger: saved.trigger.kind, by: by === 'user' ? 'user' : 'bot' })
   return saved
 }
 
@@ -408,6 +410,7 @@ export function finishRun(thread: Thread) {
   if (automation && automation.lastThreadId === thread.id) {
     db.saveAutomation({ ...automation, lastStatus: status, lastError: status === 'failed' ? body.replace(/^Error: /, '') : null })
   }
+  if (automation && status !== 'stopped') track('automation ran', { trigger: automation.trigger.kind, outcome: status === 'failed' ? 'failed' : 'done' })
   // Stopped by the owner, or already passed on (the owner wrote in the run afterwards).
   if (thread.reported || status === 'stopped') return
   db.updateThread(thread.id, { reported: true })

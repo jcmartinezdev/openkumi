@@ -11,6 +11,7 @@ import { CHOOSE_LOOK, cleanLook, lookFrom, lookQuestion, readChoice, readLook, w
 import { askOnce, getProvider, providerInfos } from './providers/index.ts'
 import { settings as appSettings, updateSettings } from './settings.ts'
 import { enabledSuperpowers } from './superpowers.ts'
+import { track } from './telemetry.ts'
 import { scaffold } from './workspace.ts'
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
@@ -157,7 +158,7 @@ function newBotProvider(): string {
  * without a look gets one from its own model, which chooses from its name and purpose once it
  * exists (and the emoji on its sign too, when none was given).
  */
-export async function createBot(input: Record<string, unknown>): Promise<Bot> {
+export async function createBot(input: Record<string, unknown>, by: 'user' | 'bot' | 'server' = 'user'): Promise<Bot> {
   const { look, ...patch } = clean(input)
   const name = patch.name?.trim()
   if (!name) throw new Error('A bot needs a name')
@@ -184,6 +185,7 @@ export async function createBot(input: Record<string, unknown>): Promise<Bot> {
   fs.mkdirSync(privateDir(made.id), { recursive: true })
   await scaffold(made.id, name, purpose)
   if (!look) void dress(id, purpose, !patch.emoji)
+  track('bot created', { by, engine: made.provider })
   return announce(made.id)!
 }
 
@@ -250,6 +252,7 @@ export async function pickLook(input: Record<string, unknown>): Promise<{ look: 
 export function deleteBot(id: string) {
   if (!readSettings(id)) return
   fs.rmSync(botDir(id), { recursive: true, force: true })
+  track('bot deleted')
   emit({ type: 'bot.delete', id })
 }
 

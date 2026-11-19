@@ -24,6 +24,7 @@ export default function Settings() {
   const automations = useStore((s) => s.automations)
   const version = useStore((s) => s.about.version)
   const botMessages = useStore((s) => s.settings.botMessages)
+  const telemetry = useStore((s) => s.settings.telemetry)
   const connected = providers.filter((p) => p.connected && p.enabled !== false).length
   const name = server?.name ?? 'the server'
 
@@ -65,6 +66,7 @@ export default function Settings() {
           <Row icon="cpu" label="Providers" value={`${connected} connected`} opens onPress={() => router.push('/settings/providers')} />
           <Row icon="sliders" label="New bots" opens onPress={() => router.push('/settings/new-bots')} />
           <Row icon="clock" label="Automations" value={automations.length ? String(automations.length) : 'None'} opens onPress={() => router.push('/automations')} />
+          <Row icon="eye" label="Privacy" value={telemetry === true ? 'Sends usage' : telemetry === false ? 'Sends nothing' : undefined} opens onPress={() => router.push('/settings/privacy')} />
         </Section>
       )}
 

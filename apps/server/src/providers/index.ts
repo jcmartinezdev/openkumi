@@ -101,6 +101,8 @@ const mock: Provider = {
       yield { type: 'text_delta', delta: word }
     }
     yield { type: 'item', item: { type: 'message', role: 'assistant', text: reply } }
+    // What a real model would say it used, at the end of its reply.
+    yield { type: 'usage', model: '', input: 12, cached: 0, output: 3 }
   },
 }
 

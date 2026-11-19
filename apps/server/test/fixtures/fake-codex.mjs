@@ -62,9 +62,14 @@ function say(turnId, text) {
   print({ method: 'item/completed', params: { threadId: thread, turnId, item: { type: 'agentMessage', id: itemId, text, phase: 'final_answer' } } })
 }
 
+/** The conversation's count of tokens after so many turns. */
+const usedAfter = (turns) => ({ inputTokens: 200 * turns, cachedInputTokens: 50 * turns, outputTokens: 20 * turns })
+
 function finish(turn, status) {
   if (active !== turn) return
   active = null
+  // Counted for the whole conversation, with what the last request added: every turn is sent 200 tokens, 50 of them from the cache, and writes 20.
+  print({ method: 'thread/tokenUsage/updated', params: { threadId: thread, turnId: turn.id, tokenUsage: { total: usedAfter(JSON.parse(fs.readFileSync(file(thread), 'utf8')).turn), last: usedAfter(1), modelContextWindow: 1000 } } })
   print({ method: 'turn/completed', params: { threadId: thread, turn: { id: turn.id, status, error: null } } })
 }
 
@@ -200,6 +205,9 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
     instructions = params.developerInstructions
     opened = { sandbox: params.sandbox, approvalPolicy: params.approvalPolicy, model: params.model ?? null, cwd: params.cwd, ...(params.ephemeral ? { ephemeral: true } : {}) }
     answer(id, { thread: { id: session }, model: params.model ?? 'fake-model' })
+    // A conversation carried on says again where its count stood after its last turn, as the real program does.
+    const before = JSON.parse(fs.readFileSync(file(session), 'utf8')).turn
+    if (method === 'thread/resume' && before) print({ method: 'thread/tokenUsage/updated', params: { threadId: session, turnId: 'an-earlier-turn', tokenUsage: { total: usedAfter(before), last: usedAfter(before), modelContextWindow: 1000 } } })
     if (method === 'thread/start') print({ method: 'thread/started', params: { thread: { id: session } } })
   } else if (method === 'turn/start') {
     active = { id: crypto.randomUUID(), told: [], steerable: !params.input.some((part) => part.type === 'text' && part.text.startsWith('!busy')) }

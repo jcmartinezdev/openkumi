@@ -63,7 +63,7 @@ export async function modelsAt(c: Config, timeoutMs = 4000): Promise<string[] | 
 
 /** One conversation step against a server that speaks the Chat Completions API. */
 export async function* chat(c: Config, req: ModelRequest): AsyncGenerator<ModelEvent> {
-    const ask = (messages: unknown[]) =>
+    const ask = (messages: unknown[], counted = true) =>
       fetch(`${c.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: { ...authHeaders(c), 'Content-Type': 'application/json' },
@@ -73,17 +73,25 @@ export async function* chat(c: Config, req: ModelRequest): AsyncGenerator<ModelE
           tools: req.tools.length ? req.tools.map((t) => ({ type: 'function', function: t })) : undefined,
           reasoning_effort: req.effort || undefined,
           stream: true,
+          // Asks for the count of tokens, which comes at the end of the reply.
+          ...(counted ? { stream_options: { include_usage: true } } : {}),
         }),
         signal: req.signal,
       })
     const messages = toMessages(req.instructions, req.items, req.show)
     let res = await ask(messages)
+    let why = res.ok ? '' : await errorText(res)
+    // A server that will not have that option, and says so, is asked again without it.
+    const counted = !/stream_options|include_usage/i.test(why)
+    if (!counted) {
+      res = await ask(messages, false)
+      why = res.ok ? '' : await errorText(res)
+    }
     if (!res.ok) {
-      const why = await errorText(res)
       // Not every model sees pictures. One that says so is asked again, with the pictures only named.
       const pictured = messages.some((m) => Array.isArray(m.content))
       if (!pictured || !/image|vision|multi-?modal|modalit/i.test(why)) throw new Error(`Request failed (${res.status}): ${why}`)
-      res = await ask(toMessages(req.instructions, req.items))
+      res = await ask(toMessages(req.instructions, req.items), counted)
       if (!res.ok) throw new Error(`Request failed (${res.status}): ${await errorText(res)}`)
     }
 
@@ -92,6 +100,9 @@ export async function* chat(c: Config, req: ModelRequest): AsyncGenerator<ModelE
     const calls: { id: string; name: string; arguments: string }[] = []
     for await (const ev of sse(res)) {
       if (ev.error) throw new Error(ev.error.message ?? JSON.stringify(ev.error))
+      if (ev.usage && typeof ev.usage.prompt_tokens === 'number') {
+        yield { type: 'usage', model: '', input: ev.usage.prompt_tokens, cached: Number(ev.usage.prompt_tokens_details?.cached_tokens) || 0, output: Number(ev.usage.completion_tokens) || 0 }
+      }
       const delta = ev.choices?.[0]?.delta
       if (!delta) continue
       const thought = delta.reasoning_content ?? delta.reasoning

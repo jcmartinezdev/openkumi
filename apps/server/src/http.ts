@@ -25,6 +25,7 @@ import * as calls from './calls.ts'
 import * as hooks from './hooks.ts'
 import { handleToolEndpoint } from './tool-endpoint.ts'
 import { PROTOCOL } from './protocol.ts'
+import * as telemetry from './telemetry.ts'
 import { VERSION, updateInfo, updateNow } from './update.ts'
 import * as ws from './workspace.ts'
 
@@ -172,13 +173,20 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     home: HOME_LABEL,
     settings: settings(),
     defaults: DEFAULTS,
-    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT, protocol: PROTOCOL },
+    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT, protocol: PROTOCOL, telemetry: telemetry.telemetryInfo() },
     update: updateInfo(),
   }
 })
 
 // ---- settings for the whole app
 route('PATCH', '/api/settings', (_, body) => updateSettings(body))
+
+// ---- what this server tells OpenKumi's makers (telemetry.ts)
+// Whether it does is one of the settings. These show its owner what was sent, and give it a new id.
+route('GET', '/api/telemetry', () => telemetry.report())
+route('POST', '/api/telemetry/id', () => telemetry.newIdentity())
+// What an app recorded about itself, for this server to check and send (telemetry.fromApp).
+route('POST', '/api/telemetry/events', (_, body) => (telemetry.fromApp(body.app, body.events), {}))
 
 // ---- this server's own updates (update.ts)
 // These two, and /api/hello, are what an app asks of a server it cannot otherwise work with, so
@@ -578,6 +586,8 @@ function createServer() {
     if (!who) return socket.destroy()
     wss.handleUpgrade(req, socket, head, (ws) => {
       owners.set(ws, who)
+      // An app says which app it is as it connects, to be counted (telemetry.ts).
+      telemetry.appConnected(who, { app: url!.searchParams.get('app'), version: url!.searchParams.get('appVersion'), os: url!.searchParams.get('os') }, who === 'owner')
       wss.emit('connection', ws)
     })
   })

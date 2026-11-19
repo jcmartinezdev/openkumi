@@ -2,7 +2,7 @@
 // the server's events. Shared by the desktop app's window and the phone app; each brings its own
 // connection (see connection.ts) and hands it over with `useTransport`.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { AppState, CallLine, ClientEvent, FileEntry, HistoryEntry, Item, Partial, ServerEvent, Settings, Thread } from '@openkumi/shared'
+import type { AppInfo, AppState, CallLine, ClientEvent, FileEntry, HistoryEntry, Item, Partial, ServerEvent, Settings, Thread } from '@openkumi/shared'
 import type { Link } from '@openkumi/shared/desktop'
 import { reach } from './addresses'
 import type { Command, Report } from './connection'
@@ -293,6 +293,13 @@ export function send(event: ClientEvent) {
   tell({ type: 'send', event })
 }
 
+let app: AppInfo | null = null
+/** Says which app this is. It is passed on with each connection, for the server to count the apps in use (it never sends more than that on). */
+export function useApp(info: AppInfo) {
+  app = info
+}
+export const appInfo = () => app
+
 let learn: (id: string, learned: { serverId?: string; addresses?: string[] }) => void = () => {}
 /**
  * `fn` is told what was learned about the environment being shown: its server's id, once an
@@ -373,7 +380,8 @@ let again: ReturnType<typeof setTimeout> | undefined
 function connectTo(url: string) {
   at = url
   set({ address: url })
-  tell({ type: 'connect', epoch, url: `${url.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(link!.token)}` })
+  const who = app ? `&app=${app.app}&appVersion=${encodeURIComponent(app.version)}&os=${app.os}` : ''
+  tell({ type: 'connect', epoch, url: `${url.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(link!.token)}${who}` })
   arrived(url)
 }
 

@@ -29,7 +29,9 @@ browser that stays signed in.
 
 The bots run on your own computer, or on another computer of yours, using the Claude, ChatGPT or
 Grok plan you already pay for, or a local model. There is no account to make and no API key to
-buy, and nothing passes through a server of ours, because there is none.
+buy, and nothing you say to a bot passes through a server of ours. The one thing OpenKumi asks to
+send its makers is how it is used and where it breaks, never what you or your bots write, and
+only if you agree: [all of it is listed](https://docs.openkumi.ai/telemetry/).
 
 ## What you get
 

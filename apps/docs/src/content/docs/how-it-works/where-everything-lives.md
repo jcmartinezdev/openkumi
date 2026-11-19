@@ -26,6 +26,8 @@ screens only read and write these files, so you can also edit them by hand.
   settings.json              app-wide settings that differ from the defaults
   auth.json                  API keys and the access code (owner-readable only)
   clients.json               the computers paired with this one (owner-readable only)
+  telemetry.json             the random id usage and error reports go under, while they are on
+  logs/telemetry.ndjson      each report that was sent, as it went (see Usage and error reports)
   runtime/                   only for a server installed on its own: the program, not your data
     versions/<version>/      that version's server, with the Node it runs on
     current                  a link to the version that is started

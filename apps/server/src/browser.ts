@@ -9,6 +9,7 @@ import { type BrowserContext, type CDPSession, type Page, type Request, chromium
 import type { BrowserInput, BrowserState } from '@openkumi/shared'
 import { PORT, emit, privateDir } from './config.ts'
 import { settings } from './settings.ts'
+import { track } from './telemetry.ts'
 import { incoming, resolve } from './workspace.ts'
 
 const VIEWPORT = { width: 1280, height: 800 }
@@ -382,6 +383,7 @@ class BotBrowser {
   take(windowId: string, viewer: string) {
     const win = this.windows.get(windowId)
     if (!win) return
+    if (win.controller !== viewer) track('browser taken over')
     win.controller = viewer
     win.touched = true
     if (win.request) win.request.taken = true

@@ -432,6 +432,9 @@ export async function serviceTools(botId: string): Promise<{ tools: Tool[]; prob
   return { tools, problems }
 }
 
+/** The superpower a tool of one of the bot's services belongs to, or undefined for any other tool. */
+export const superpowerOfTool = (botId: string, name: string): string | undefined => services(botId).find((id) => name.startsWith(toolName(id, '')))
+
 /**
  * One of a bot's service tools, by the name the bot calls it by, for a watch to call without a
  * model. Undefined when the bot has no such tool; an error when its service cannot be asked.

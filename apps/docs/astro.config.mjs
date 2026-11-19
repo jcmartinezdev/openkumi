@@ -47,6 +47,7 @@ export default defineConfig({
           ],
         },
         { label: 'Security notes', slug: 'security' },
+        { label: 'Usage and error reports', slug: 'telemetry' },
       ],
     }),
   ],

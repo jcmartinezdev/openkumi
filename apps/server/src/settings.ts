@@ -25,6 +25,7 @@ export const DEFAULTS: Settings = {
   historyLimit: 60_000,
   debugEngines: false,
   autoUpdate: true,
+  telemetry: null,
 }
 
 const FILE = path.join(HOME, 'settings.json')
@@ -57,6 +58,8 @@ const ACCEPT: { [K in keyof Settings]: (v: unknown) => Settings[K] | undefined }
   historyLimit: whole(2000, 1_000_000),
   debugEngines: bool,
   autoUpdate: bool,
+  // Answered once, it is yes or no from then on: there is no going back to not having been asked.
+  telemetry: bool,
 }
 
 function clean(input: Record<string, unknown>): Partial<Settings> {

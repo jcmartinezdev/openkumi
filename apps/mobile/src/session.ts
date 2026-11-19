@@ -3,14 +3,15 @@
 // home network, on Tailscale, or ones put in by hand. The connection and the state kept from it
 // are the same code the desktop app uses (packages/client); here the connection runs where the app does.
 import { useSyncExternalStore } from 'react'
-import { AppState } from 'react-native'
+import { AppState, Platform } from 'react-native'
+import Constants from 'expo-constants'
 import * as Crypto from 'expo-crypto'
 import * as SecureStore from 'expo-secure-store'
 import { type SavedAddress, checkNew, ordered, refusal, useRandom, withFound } from '@openkumi/client/addresses'
 import { type Picture, createConnection } from '@openkumi/client/connection'
 import { forgetCopy, keepCopies, saveCopyNow } from '@openkumi/client/copies'
 import { pair, parseAddress } from '@openkumi/client/pair'
-import { follow, onLearn, receive, recheck, send, useStore, useTransport } from '@openkumi/client/store'
+import { follow, onLearn, receive, recheck, send, useApp, useStore, useTransport } from '@openkumi/client/store'
 import { shelf } from './shelf'
 
 export interface Server {
@@ -111,6 +112,9 @@ export function watch(botId: string, tabId: string, fn: (picture: Picture) => vo
     send({ type: 'browser.unsubscribe', botId, tabId })
   }
 }
+
+// Which app this is, for the server to count: the phone app, its version and what it runs on.
+useApp({ app: 'iphone', version: Constants.expoConfig?.version ?? '', os: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'other' })
 
 useTransport(
   createConnection(receive, (picture) => {

@@ -33,6 +33,8 @@ const env = {
   OPENKUMI_PORT: String(LOCAL_PORT),
   OPENKUMI_MOCK: '1',
   OPENKUMI_SUPERPOWERS: `${tmp}/superpowers`,
+  // The servers these tests start tell OpenKumi's makers nothing, and have no question to ask. The test of that says otherwise for itself.
+  OPENKUMI_TELEMETRY: '0',
   // The app run from the source cannot be what the computer opens sign-ins with; the tests hand it them.
   OPENKUMI_DESKTOP_CATCH_SIGN_INS: '1',
   // Scripted stand-ins for the Claude Code, Codex and Grok programs, so the tests do not depend on what is installed here.
@@ -1564,5 +1566,126 @@ test('updates: the app finds a newer version of itself, and an environment this 
   } finally {
     far.close()
     far.closeAllConnections()
+  }
+})
+
+test('telemetry: the server’s question is put once with its box ticked, nothing is sent before the answer, and the Privacy page shows what went and switches it off', async () => {
+  // A stand-in for PostHog, which keeps what it is sent.
+  const received = []
+  const posthog = http.createServer((req, res) => {
+    let body = ''
+    req.on('data', (d) => (body += d))
+    req.on('end', () => {
+      if (req.url === '/batch/') received.push(...JSON.parse(body).batch)
+      res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"status":1}')
+    })
+  })
+  await new Promise((resolve) => posthog.listen(0, '127.0.0.1', resolve))
+  const before = { ...env }
+  delete env.OPENKUMI_TELEMETRY
+  const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
+  try {
+    fs.mkdirSync(`${tmp}/app`, { recursive: true })
+    fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+    let win
+    if (!packaged) {
+      // The app as someone working on OpenKumi starts it, from the repository: its server sends nothing, and there is no question.
+      win = await launch()
+      await showsBot(win, 'Assistant')
+      const { telemetry } = (await state()).about
+      assert.equal(telemetry.can, false)
+      assert.match(telemetry.why, /from its source/)
+      await new Promise((r) => setTimeout(r, 500))
+      assert.equal(await win.getByRole('dialog', { name: 'Help make OpenKumi better' }).count(), 0)
+      await app.close()
+      await until(async () => !(await up(LOCAL_PORT)), 15_000)
+    }
+    // From here on the server is told where to send, and it is the stand-in.
+    env.OPENKUMI_TELEMETRY_URL = `http://127.0.0.1:${posthog.address().port}`
+    env.OPENKUMI_TELEMETRY_KEY = 'phc_test'
+    win = await launch()
+    const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
+    await showsBot(win, 'Assistant')
+
+    // Asked as soon as the environment shows, with the box ticked. Until it is answered nothing has gone.
+    let question = win.getByRole('dialog', { name: 'Help make OpenKumi better' })
+    await question.waitFor()
+    const box = question.getByLabel('Send how OpenKumi is used and what goes wrong')
+    assert.equal(await box.isChecked(), true)
+    assert.deepEqual(await question.locator('.telemetry-lists h3').allInnerTexts(), ['Sent', 'Never sent'])
+    await shot('telemetry-question')
+    assert.equal((await state()).settings.telemetry, null)
+    assert.deepEqual(received, [])
+
+    // Closed without an answer, it is no answer: it is put again the next time the app is opened.
+    await win.keyboard.press('Escape')
+    await question.waitFor({ state: 'detached' })
+    assert.equal((await state()).settings.telemetry, null)
+    await app.close()
+    await until(async () => !(await up(LOCAL_PORT)), 15_000)
+    assert.deepEqual(received, [])
+    // This time the app starts at its welcome, as it does when it is new: what it records there
+    // waits in the app until there is a server to hand it to.
+    fs.rmSync(`${tmp}/app/desktop.json`)
+    win = await launch()
+    await win.locator('.welcome-start', { hasText: 'Run them on this computer' }).click()
+    await showsBot(win, 'Assistant')
+    question = win.getByRole('dialog', { name: 'Help make OpenKumi better' })
+    await question.getByRole('button', { name: 'Continue' }).click()
+    await question.waitFor({ state: 'detached' })
+    await until(() => received.length > 0, 10_000)
+    assert.equal((await state()).settings.telemetry, true)
+    // The server says how it runs, and which app is connected to it; that is all it knows of the app.
+    const connected = received.find((e) => e.event === 'app connected')?.properties
+    assert.deepEqual([connected?.app, connected?.local, connected?.how], ['desktop', true, 'app'])
+    assert.match(connected.app_version, /^\d+\.\d+\.\d+/)
+    // What the app records about itself goes the same way: handed to the server, which sends it.
+    const fromApp = (event) => received.filter((e) => e.event === event && e.properties.app === 'desktop').map((e) => e.properties)
+    await until(() => fromApp('screen opened').some((p) => p.screen === 'chat'), 10_000)
+    assert.deepEqual(fromApp('screen opened').map((p) => p.screen), ['welcome', 'chat'])
+    assert.deepEqual(fromApp('welcome answered').map((p) => p.choice), ['local'])
+    // The app was opened before, when the question was closed without an answer.
+    assert.deepEqual(fromApp('app opened').map((p) => p.first), [false])
+
+    // The Privacy page: found from the search, shows the id and each thing that went.
+    await win.evaluate(() => (location.hash = '/settings/general'))
+    await win.getByLabel('Search settings').fill('telemetry')
+    await win.locator('.set-results button', { hasText: 'Send how OpenKumi is used' }).click()
+    const toggle = win.locator('#telemetry .switch')
+    await toggle.waitFor()
+    assert.equal(await toggle.isChecked(), true)
+    const id = received[0].distinct_id
+    await win.locator('#telemetry-id code', { hasText: id }).waitFor()
+    const first = win.locator('.telemetry-sent details', { hasText: 'server started' }).first()
+    await first.locator('summary').click()
+    assert.match(await first.locator('dl').innerText(), /how\s*app/)
+    await shot('telemetry-privacy')
+    // Which pages of the settings were opened, by name.
+    await until(() => fromApp('screen opened').some((p) => p.screen === 'settings/privacy'), 10_000)
+    assert.deepEqual(fromApp('screen opened').map((p) => p.screen), ['welcome', 'chat', 'settings/general', 'settings/privacy'])
+
+    // A new id, then off: the id is thrown away and what was sent is no longer listed.
+    await win.getByRole('button', { name: 'New id' }).click()
+    await until(async () => (await win.locator('#telemetry-id code').innerText()) !== id, 10_000)
+    await toggle.click()
+    await until(async () => (await state()).settings.telemetry === false, 10_000)
+    await win.locator('#telemetry-id').waitFor({ state: 'detached' })
+    assert.equal(JSON.parse(fs.readFileSync(`${tmp}/local-home/telemetry.json`, 'utf8')).id, undefined)
+    await shot('telemetry-off')
+
+    // Answered, the question is not put again.
+    await app.close()
+    await until(async () => !(await up(LOCAL_PORT)), 15_000)
+    win = await launch()
+    await showsBot(win, 'Assistant')
+    await new Promise((r) => setTimeout(r, 500))
+    assert.equal(await win.getByRole('dialog', { name: 'Help make OpenKumi better' }).count(), 0)
+    await app.close()
+    await until(async () => !(await up(LOCAL_PORT)), 15_000)
+  } finally {
+    for (const key of Object.keys(env)) delete env[key]
+    Object.assign(env, before)
+    posthog.close()
+    posthog.closeAllConnections()
   }
 })

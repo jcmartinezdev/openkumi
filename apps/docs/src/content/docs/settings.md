@@ -18,6 +18,7 @@ Everything is set from the Settings page, which saves each change as you make it
 | Browser | which browser program the bots drive, and which bots have one running |
 | Environments | the local environment (on or off) and remote ones; letting other computers connect to the one being shown, its link and access code |
 | Advanced | limits (steps per turn, subagents), troubleshooting, the data folder |
+| Privacy | whether the computer that runs your bots tells OpenKumi's makers how it is used and what goes wrong, and everything it sent (see [Usage and error reports](/telemetry/)) |
 | About | the version of the app and of the environment it shows, and their updates |
 
 App-wide settings are stored in `~/.openkumi/settings.json` (only values that differ from the
@@ -36,3 +37,5 @@ defaults). Preferences marked "this device" stay in the app on that computer.
 | `OPENKUMI_DEBUG` | from Settings | set to `1` to log everything an engine prints |
 | `OPENKUMI_RELEASES_URL` | this project's releases on GitHub | where a server installed on its own, and its installer, look for versions |
 | `OPENKUMI_DESKTOP_UPDATES_URL` | this project's releases on GitHub | another place for the desktop app to look for versions of itself |
+| `OPENKUMI_TELEMETRY` | from Settings | `0` stops the server telling OpenKumi's makers anything, whatever Settings says (see [Usage and error reports](/telemetry/)); `DO_NOT_TRACK=1` does the same |
+| `OPENKUMI_TELEMETRY_URL`, `OPENKUMI_TELEMETRY_KEY` | PostHog in the EU, OpenKumi's project | another place and project for those reports to go, for testing; with these set a server run from the source sends too |
