@@ -1406,8 +1406,9 @@ test('calls: a bot is called from its conversation, what is said shows as it is 
   await showsBot(win, 'Assistant')
   const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Caller', provider: 'mock' })
   await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
-  // Calls need Codex, signed in with ChatGPT: the server has found it by now, or is about to.
+  // Calls need Codex, signed in with ChatGPT: the server has found it by now, or is about to, and the window hears of it.
   await until(async () => (await state()).calls.available)
+  await win.locator('header button[aria-label="Call Caller"][title="Call Caller"]').waitFor()
 
   await win.getByRole('button', { name: 'Call Caller' }).click()
   const panel = win.locator('.call-panel')
@@ -1453,6 +1454,8 @@ test('calls: a bot is called from its conversation, what is said shows as it is 
   await ask(LOCAL_PORT, 'local-home', 'PATCH', '/api/settings', { disabledProviders: [...settings.disabledProviders, 'codex'] })
   await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
   await until(async () => !(await state()).calls.available)
+  // (Once the window has heard of it too: pointing at the button then says why.)
+  await win.locator('header button[aria-label="Call Caller"][title^="Calls use your ChatGPT plan through Codex, which is switched off"]').waitFor()
   await win.getByRole('button', { name: 'Call Caller' }).click()
   await win.locator('.notice.error', { hasText: 'Calls use your ChatGPT plan through Codex, which is switched off in Settings' }).waitFor()
   assert.equal(await panel.count(), 0)

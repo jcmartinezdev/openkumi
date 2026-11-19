@@ -57,7 +57,8 @@ export function CallButton({ bot, setError }: { bot: Bot; setError: (message: st
     void call(bot.id)
   }
   return (
-    <button className="icon" title={`Call ${bot.name}`} aria-label={`Call ${bot.name}`} onClick={start}>
+    // Where bots cannot be called, pointing at the button says why, as a press on it does.
+    <button className="icon" title={calls?.available === false && calls.reason ? calls.reason : `Call ${bot.name}`} aria-label={`Call ${bot.name}`} onClick={start}>
       <Icon name="phone" size={16} />
     </button>
   )
