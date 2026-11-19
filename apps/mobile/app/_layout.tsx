@@ -7,6 +7,9 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments }
 import '../src/prefs'
 import { AppTitle } from '../src/Alpha'
 import { useUpdateChecks } from '../src/appUpdates'
+import { CALL_BAR, CallBar, useCallBar } from '../src/CallBar'
+// Gives the app its way of making calls.
+import '../src/calls'
 import { restore, useSession } from '../src/session'
 import { useTelemetryQuestion } from '../src/Telemetry'
 import { useAppearance, useTheme } from '../src/theme'
@@ -44,6 +47,9 @@ export default function Layout() {
     if (ready) screen(showing)
   }, [ready, showing])
 
+  // A call under way has a bar across the top, under the title: every screen starts below it, so it covers nothing.
+  const callBar = useCallBar() && !!server
+
   useEffect(() => void restore(), [])
   useUpdateChecks()
   useTelemetryQuestion()
@@ -64,7 +70,7 @@ export default function Layout() {
           const background = grouped(route.name) ? theme.group : theme.bg
           // Said outright: each screen sets the status bar, and would go by the phone's setting rather than the app's.
           const statusBarStyle = appearance === 'dark' ? 'light' : 'dark'
-          return { headerStyle: { backgroundColor: background }, headerTintColor: theme.text, headerShadowVisible: false, contentStyle: { backgroundColor: background }, headerBackButtonDisplayMode: 'minimal', statusBarStyle }
+          return { headerStyle: { backgroundColor: background }, headerTintColor: theme.text, headerShadowVisible: false, contentStyle: { backgroundColor: background, paddingTop: callBar ? CALL_BAR : 0 }, headerBackButtonDisplayMode: 'minimal', statusBarStyle }
         }}
       >
         {/* The title is still the name, for the menu of the back button; what shows is the name and that it is an alpha. */}
@@ -74,6 +80,8 @@ export default function Layout() {
         <Stack.Screen name="scan" options={{ title: 'Scan the code', presentation: 'modal' }} />
         <Stack.Screen name="chat/[id]" options={{ title: '' }} />
         <Stack.Screen name="browser/[botId]" options={{ title: 'Browser' }} />
+        {/* A call, over everything; pulled down it is put away, and the call goes on. */}
+        <Stack.Screen name="call" options={{ presentation: 'modal', headerShown: false, contentStyle: { backgroundColor: theme.bg } }} />
         {/* A sheet over the chat that stops halfway, and goes up the whole way when pulled or scrolled. */}
         <Stack.Screen name="model/[botId]" options={{ presentation: 'formSheet', headerShown: false, sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, contentStyle: { backgroundColor: theme.card } }} />
         {/* Where a bot signs in to a superpower's app, and why one could not be reached: sheets over the superpower's page. */}
@@ -84,6 +92,8 @@ export default function Layout() {
         {/* A picture from a conversation, on black, whatever the app's appearance. */}
         <Stack.Screen name="picture" options={{ presentation: 'fullScreenModal', animation: 'fade', headerShown: false, statusBarStyle: 'light', contentStyle: { backgroundColor: '#000' } }} />
       </Stack>
+      {/* A call under way, small, over whatever screen is showing. */}
+      {!!server && <CallBar />}
     </ThemeProvider>
   )
 }

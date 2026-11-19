@@ -6,6 +6,7 @@ import { Alert, Pressable, StyleSheet, Text } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import type { Bot } from '@openkumi/shared'
 import { windowCount } from '@openkumi/client/browser'
+import { useVoiceChoices } from '@openkumi/client/calls'
 import { api, useFiles, useStore } from '@openkumi/client/store'
 import { triggerLabel } from '@openkumi/client/automations'
 import { inShort, summarize } from '@openkumi/client/workspace'
@@ -30,6 +31,8 @@ export default function BotSettings() {
   const statuses = useStatuses(botId)
   const { entries } = useFiles(botId)
   const allAutomations = useStore((s) => s.automations)
+  const calls = useStore((s) => s.calls)
+  const voices = useVoiceChoices(stored?.voice ?? '')
   /** What was just changed, shown at once instead of when the server has said so. */
   const [changed, setChanged] = useState<Partial<Bot> | null>(null)
   // Nothing connects until it is needed, so how the bot's services stand is asked for here.
@@ -83,6 +86,10 @@ export default function BotSettings() {
       <Section title="Model" inset={ICON_INSET}>
         <ModelRow bot={bot} open={() => router.push({ pathname: '/model/[botId]', params: { botId: bot.id } })} />
         <SwitchRow label="Web search" detail="Use the model’s built-in search." value={bot.webSearch} onChange={(webSearch) => save({ webSearch })} />
+      </Section>
+
+      <Section title="Calls" footer={calls?.available === false && calls.reason ? calls.reason : `The voice on a call comes with your ChatGPT plan, through Codex, whatever ${bot.name} itself runs on.`}>
+        <Row label="Voice" value={voices?.find(([voice]) => voice === (bot.voice ?? ''))?.[1] ?? (bot.voice || 'Usual')} disabled={!voices} opens onPress={() => router.push({ pathname: '/settings/voice/[botId]', params: { botId: bot.id } })} />
       </Section>
 
       {/* Only the ones the bot has; the others are a tap away, so the page does not list every superpower there is. */}

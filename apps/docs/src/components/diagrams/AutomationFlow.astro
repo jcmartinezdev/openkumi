@@ -1,0 +1,24 @@
+---
+// What starts an automation, where its run happens, and where the result goes.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Note from '../diagram/Note.astro'
+
+const { caption } = Astro.props as { caption?: string }
+---
+
+<Figure width={680} height={262} title="Three things start an automation; its run reports back into the bot's conversation" caption={caption}>
+  <Box x={8} y={12} w={196} h={60} title="A time" lines={['once, daily, every so often']} />
+  <Box x={8} y={100} w={196} h={60} title="A watch" lines={['looks every few minutes;', 'starts a run on a change']} />
+  <Box x={8} y={188} w={196} h={60} title="An app’s call" lines={['a webhook, signed']} />
+
+  <Box x={256} y={80} w={176} h={100} kind="ours" title="A run" lines={['a thread of its own,', 'beneath the conversation,', 'with the bot’s tools']} />
+  <Box x={492} y={80} w={180} h={100} kind="ours" title="The conversation" lines={['the result arrives;', 'the bot tells you', 'what came of it']} />
+
+  <Arrow points={[[204, 42], [230, 42], [230, 130], [256, 130]]} />
+  <Arrow points={[[204, 130], [256, 130]]} />
+  <Arrow points={[[204, 218], [230, 218], [230, 130], [256, 130]]} />
+  <Arrow points={[[432, 130], [492, 130]]} label="result" />
+  <Note x={582} y={206} align="middle" lines={['“Nothing to report.”', 'is not passed on']} />
+</Figure>

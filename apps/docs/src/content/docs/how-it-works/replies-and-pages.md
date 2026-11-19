@@ -1,6 +1,6 @@
 ---
 title: Replies and pages
-description: "How replies are drawn, and the pages a bot can show in the conversation."
+description: "How replies are drawn, the pages a bot can show in the conversation, and the frame those pages run in."
 ---
 
 Replies are GitHub Markdown, drawn the same way in the desktop app and on the phone: code in
@@ -10,16 +10,32 @@ diagrams from ```` ```mermaid ```` blocks (with their code a tap away), and form
 digit is a price, not a formula. A long run of steps between two messages is folded into one line
 once it is over ("12 steps · 1m 04s").
 
-When a picture says more than words, a bot calls `show_page` with a self-contained HTML page: a
-chart, a dashboard, a timeline, a mockup. It appears in the conversation where the bot's reply is,
-fitted to its height, and opens full size. The page is written against the app's colours as CSS
-variables (`--foreground`, `--card`, `--chart-1` to `--chart-8`, chosen to stay apart for
-colour-blind readers, and so on), so it follows light and dark mode. Pictures from the bot's
-workspace are put into the page, so it keeps working when the files change. An ```` ```html ````
-block in a reply can be previewed the same way.
+## Pages
 
-A page runs in a frame that is a site of its own (`openkumi://page/` on the computer, a separate web
-view on the phone). Its scripts run, and it may load scripts, styles, fonts and pictures from the
-web (a chart library from a CDN), but it cannot reach the app or its keys, fetch or send anything,
-or go to another site. Links in it open in your browser when you click them, and only then. On the
-phone, Mermaid and KaTeX are loaded from jsDelivr when a diagram or formula is drawn.
+When a picture says more than words, a bot calls `show_page` with a self-contained HTML page (up
+to 1 MB): a chart, a dashboard, a timeline, a mockup. It appears in the conversation where the
+bot's reply is, fitted to its height, and opens full size.
+
+- **It follows light and dark.** The page is written against the app's colours as CSS variables
+  (`--foreground`, `--card`, `--chart-1` to `--chart-8`, chosen to stay apart for colour-blind
+  readers, and so on).
+- **It keeps working.** Pictures from the bot's workspace are put into the page itself when it is
+  shown, so it keeps working when the files change or move.
+- **Previews too.** An ```` ```html ```` block in a reply can be previewed the same way.
+
+## The frame a page runs in
+
+A page is written by a bot, which may have read something written to mislead it, so a page is kept
+away from everything that matters.
+
+- **A site of its own.** On the computer, a page runs in a sandboxed frame at `openkumi://page/`,
+  which is not the app's own address; on the phone, in a separate web view. It cannot reach the app,
+  its keys, or the server.
+- **It cannot make requests.** Its scripts run, but it cannot fetch anything, open a connection,
+  send a form, or go to another site.
+- **It may load from the web.** It may load scripts, styles, fonts, pictures and media from `https`
+  addresses (a chart library from a CDN, say). Like any address, one it loads could carry something
+  in it; a page only knows what the bot put into it, never your keys or your other conversations.
+- **Links open in your browser** when you click them, and only then.
+
+On the phone, Mermaid and KaTeX are loaded from jsDelivr when a diagram or formula is drawn.

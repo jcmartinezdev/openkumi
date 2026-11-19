@@ -416,7 +416,7 @@ export function fromApp(sender: unknown, events: unknown) {
  * it, so of those only "local" and "other" are said. So is anything that does not look like a
  * model's plain name (one at a cloud provider can be named with the account it is in).
  */
-export function modelName(provider: string, reported: string): string {
+export function modelSent(provider: string, reported: string): string {
   if (provider === 'local') return 'local'
   if (!['codex', 'claude-code', 'grok'].includes(provider)) return 'other'
   return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(reported) ? reported : reported ? 'other' : 'default'

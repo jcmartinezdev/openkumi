@@ -1,0 +1,174 @@
+---
+// A sequence diagram: who talks to whom, in order, top to bottom. Laid out from the steps given,
+// so a page only says what happens:
+//
+//   <Sequence title="…" actors={[{ id: 'app', label: 'The app' }, …]} steps={[
+//     { from: 'app', to: 'server', text: 'GET /api/hello' },
+//     { from: 'server', to: 'app', text: 'signed value', reply: true },
+//     { note: 'Checks the signature', over: ['app'] },
+//     { section: 'Later' },
+//   ]} />
+import { asLines, head, round, textWidth } from './geometry.ts'
+
+type Kind = 'plain' | 'ours' | 'secret' | 'danger' | 'muted'
+interface Actor {
+  id: string
+  label: string
+  sub?: string
+  kind?: 'ours' | 'plain' | 'outside' | 'secret' | 'danger'
+}
+type Step =
+  | { from: string; to: string; text: string | string[]; reply?: boolean; kind?: Kind; blocked?: boolean }
+  | { note: string | string[]; over: string[]; kind?: 'plain' | 'secret' | 'danger' | 'ours' }
+  | { section: string }
+interface Props {
+  title: string
+  caption?: string
+  actors: Actor[]
+  steps: Step[]
+  width?: number
+  /** Number each message, so the text around the diagram can refer to it. */
+  numbered?: boolean
+  minWidth?: number
+}
+const { title, caption, actors, steps, width = 680, numbered = false, minWidth = 560 } = Astro.props
+
+const MARGIN = 16
+const column = (width - MARGIN * 2) / actors.length
+const xOf = new Map(actors.map((a, i) => [a.id, MARGIN + column * i + column / 2]))
+const x = (id: string) => xOf.get(id) ?? fail(id)
+function fail(id: string): never {
+  throw new Error(`Sequence "${title}": no actor called "${id}"`)
+}
+const HEAD = 48
+const boxW = Math.min(column - 14, 190)
+
+let y = HEAD + 26
+let n = 0
+type Drawn =
+  | { type: 'message'; x1: number; x2: number; y: number; lines: string[]; kind: Kind; reply: boolean; blocked: boolean; self: boolean; textY: number }
+  | { type: 'note'; x: number; w: number; y: number; h: number; lines: string[]; kind: string }
+  | { type: 'section'; y: number; text: string }
+const drawn: Drawn[] = []
+for (const step of steps) {
+  if ('section' in step) {
+    drawn.push({ type: 'section', y: y + 8, text: step.section })
+    y += 34
+  } else if ('note' in step) {
+    const lines = asLines(step.note)
+    const xs = step.over.map(x)
+    const widest = Math.max(...lines.map((l) => textWidth(l, 12))) + 24
+    const left = Math.min(...xs) - (step.over.length > 1 ? column * 0.42 : 0)
+    const right = Math.max(...xs) + (step.over.length > 1 ? column * 0.42 : 0)
+    const w = Math.max(right - left, widest)
+    const cx = (left + right) / 2
+    const h = 12 + lines.length * 15
+    drawn.push({ type: 'note', x: Math.max(4, Math.min(width - w - 4, cx - w / 2)), w, y, h, lines, kind: step.kind ?? 'plain' })
+    y += h + 14
+  } else {
+    n += 1
+    const lines = asLines(step.text).map((line, i) => (numbered && i === 0 ? `${n}. ${line}` : line))
+    const self = step.from === step.to
+    const textY = y + 11
+    const arrowY = y + lines.length * 15 + 4
+    drawn.push({ type: 'message', x1: x(step.from), x2: x(step.to), y: arrowY, lines, kind: step.kind ?? (step.reply ? 'plain' : 'plain'), reply: !!step.reply, blocked: !!step.blocked, self, textY })
+    y = arrowY + (self ? 34 : 20)
+  }
+}
+const height = y + 8
+/** A section's label is set in capitals, spaced out: wider than the same words as written. */
+const sectionWidth = (text: string) => textWidth(text.toUpperCase(), 10.5) + text.length * 0.84 + 22
+const cross = 5.5
+---
+
+<figure class="dg not-content">
+  <div class="dg-scroll" tabindex="0" aria-label={`Diagram: ${title}`}>
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title} style={`min-width:${Math.min(minWidth, width)}px;max-width:${width}px`}>
+      <title>{title}</title>
+      {
+        actors.map((a) => (
+          <g>
+            <line x1={x(a.id)} y1={HEAD} x2={x(a.id)} y2={height - 6} class="dg-lifeline" />
+            <g class={`dg-box dg-${a.kind ?? 'plain'}`}>
+              <rect x={round(x(a.id) - boxW / 2)} y="4" width={round(boxW)} height={HEAD - 4} rx="9" />
+              <text x={x(a.id)} y={a.sub ? 22 : 30} text-anchor="middle" class="dg-title">
+                {a.label}
+              </text>
+              {a.sub && (
+                <text x={x(a.id)} y="38" text-anchor="middle" class="dg-sub">
+                  {a.sub}
+                </text>
+              )}
+            </g>
+          </g>
+        ))
+      }
+      {
+        drawn.map((d) => {
+          if (d.type === 'section')
+            return (
+              <g class="dg-section">
+                <line x1="8" y1={d.y} x2={width - 8} y2={d.y} />
+                <rect x={round(width / 2 - sectionWidth(d.text) / 2)} y={d.y - 9} width={round(sectionWidth(d.text))} height="18" rx="9" />
+                <text x={width / 2} y={d.y + 4} text-anchor="middle">
+                  {d.text.toUpperCase()}
+                </text>
+              </g>
+            )
+          if (d.type === 'note')
+            return (
+              <g class={`dg-seqnote dg-seqnote-${d.kind}`}>
+                <rect x={round(d.x)} y={d.y} width={round(d.w)} height={d.h} rx="6" />
+                {d.lines.map((line, i) => (
+                  <text x={round(d.x + d.w / 2)} y={d.y + 17 + i * 15} text-anchor="middle">
+                    {line}
+                  </text>
+                ))}
+              </g>
+            )
+          const kind = d.blocked ? 'danger' : d.kind
+          if (d.self) {
+            const sx = d.x1
+            const pts = `M${sx} ${d.y} L${sx + 34} ${d.y} L${sx + 34} ${d.y + 18} L${sx + 7} ${d.y + 18}`
+            return (
+              <g class={`dg-arrow dg-k-${kind}`}>
+                <path d={pts} class="dg-line" stroke-dasharray={d.reply ? '5 4' : undefined} />
+                <polygon points={head([sx + 34, d.y + 18], [sx, d.y + 18])} class="dg-head" />
+                {d.lines.map((line, i) => (
+                  <g>
+                    <rect x={sx + 3} y={d.textY - 11 + i * 15} width={round(textWidth(line, 12) + 10)} height="15" rx="3" class="dg-label-bg" />
+                    <text x={sx + 8} y={d.textY + i * 15} class="dg-label">
+                      {line}
+                    </text>
+                  </g>
+                ))}
+              </g>
+            )
+          }
+          const dir = d.x2 > d.x1 ? 1 : -1
+          const end = d.blocked ? d.x2 : d.x2 - dir * 7
+          const mid = (d.x1 + d.x2) / 2
+          return (
+            <g class={`dg-arrow dg-k-${kind}`}>
+              <path d={`M${round(d.x1)} ${d.y} L${round(end)} ${d.y}`} class="dg-line" stroke-dasharray={d.reply ? '5 4' : undefined} />
+              {d.blocked ? (
+                <path d={`M${d.x2 - cross} ${d.y - cross} L${d.x2 + cross} ${d.y + cross} M${d.x2 + cross} ${d.y - cross} L${d.x2 - cross} ${d.y + cross}`} class="dg-cross" />
+              ) : (
+                <polygon points={head([d.x1, d.y], [d.x2, d.y])} class="dg-head" />
+              )}
+              {d.lines.map((line, i) => (
+                <g>
+                  <rect x={round(mid - textWidth(line, 12) / 2 - 5)} y={d.textY - 11 + i * 15} width={round(textWidth(line, 12) + 10)} height="15" rx="3" class="dg-label-bg" />
+                  <text x={round(mid)} y={d.textY + i * 15} text-anchor="middle" class="dg-label">
+                    {line}
+                  </text>
+                </g>
+              ))}
+            </g>
+          )
+        })
+      }
+    </svg>
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>

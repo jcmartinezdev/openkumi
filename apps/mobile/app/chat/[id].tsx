@@ -5,13 +5,13 @@ import { ActionSheetIOS, ActivityIndicator, Alert, Keyboard, KeyboardAvoidingVie
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { Attachment, Bot, BotRef, Item, Thread } from '@openkumi/shared'
+import type { Attachment, Bot, BotRef, CallLine, Item, Thread } from '@openkumi/shared'
 import { note } from '@openkumi/client/telemetry'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { moment, runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
-import { callLength } from '@openkumi/client/calls'
+import { callLength, useCalling } from '@openkumi/client/calls'
 import { type Report, parseReport, reportWord } from '@openkumi/client/reports'
 import { describe } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
@@ -19,6 +19,8 @@ import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
 import { Glyph } from '../../src/icons'
 import { FileLinks, Markdown, copy } from '../../src/Markdown'
 import { BrowserPip } from '../../src/BrowserPip'
+import { useCallBarRoom } from '../../src/CallBar'
+import { startCall } from '../../src/calls'
 import { ListeningBar, MicButton, listener, useDictationChecks } from '../../src/Dictation'
 import { ModelChip } from '../../src/ModelChip'
 import { PageSheet, PageView, Sheet } from '../../src/PageView'
@@ -29,12 +31,14 @@ import { Bobbing, BotHead, Mascot } from '../../src/Mascot'
 
 /** What one line of the chat shows. Tool results and the bot's private reasoning are left out on a phone. */
 type Row =
-  | { key: string; kind: 'user' | 'bot' | 'notice'; text: string; error?: boolean; attachments?: Attachment[]; threadId?: string }
+  | { key: string; kind: 'user' | 'bot' | 'notice'; text: string; error?: boolean; attachments?: Attachment[]; threadId?: string; onCall?: boolean }
   /** What the bot did between two messages, folded into one line. */
   | { key: string; kind: 'steps'; steps: string[] }
   | { key: string; kind: 'page'; title: string; html: string; height: number }
   /** What a subagent or a run of an automation came to, and when it said so. */
   | { key: string; kind: 'report'; report: Report; at: number }
+  /** A call that ended: how long it lasted, and what was said on it. */
+  | { key: string; kind: 'call'; seconds: number; lines: CallLine[]; at: number }
   /** A message between bots: one that came from another bot (`from`), or one this bot sent (`to`). */
   | { key: string; kind: 'between'; from?: string; to?: BotRef; text: string; replyWanted: boolean; messageKey?: string; attachments?: Attachment[]; threadId?: string }
 
@@ -60,7 +64,7 @@ function rows(items: Item[]): Row[] {
     const report = d.type === 'message' && d.role === 'user' && (d.source === 'subagent' || d.source === 'automation') ? parseReport(d.text) : null
     if (report) out.push({ key, kind: 'report', report, at: item.createdAt })
     else if (d.type === 'message' && d.role === 'user' && d.source === 'bot') out.push({ key, kind: 'between', from: d.bot?.name ?? 'another bot', text: d.text, replyWanted: !!d.replyWanted, messageKey: d.key, attachments: d.attachments, threadId: item.threadId })
-    else if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId } : { key, kind: 'notice', text: `${FROM[d.source as keyof typeof FROM]}: ${d.source === 'trigger' ? brief(d.text) : d.text}` })
+    else if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId, onCall: d.via === 'call' } : { key, kind: 'notice', text: `${FROM[d.source as keyof typeof FROM]}: ${d.source === 'trigger' ? brief(d.text) : d.text}` })
     else if (d.type === 'sent') out.push({ key, kind: 'between', to: d.to, text: d.text, replyWanted: d.replyWanted, messageKey: d.key, attachments: d.attachments, threadId: d.threadId })
     // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
     else if (d.type === 'function_call' && ((d.name !== 'show_page' && d.name !== 'message_bot') || failed.has(d.call_id))) step(key, describe(d))
@@ -68,8 +72,8 @@ function rows(items: Item[]): Row[] {
     else if (d.type === 'page') out.push({ key, kind: 'page', title: d.title, html: d.html, height: d.height })
     else if (d.type === 'notice') out.push({ key, kind: 'notice', text: d.text, error: d.level === 'error' })
     else if (d.type === 'summary') out.push({ key, kind: 'notice', text: 'The conversation has grown long: the bot now works from a summary of its older part.' })
-    // A call made from the computer: that it took place, and how long. What was asked on it is here as messages.
-    else if (d.type === 'call') out.push({ key, kind: 'notice', text: `Call · ${callLength(d.seconds)}` })
+    // What was asked on a call is here as messages of its own; this is the call itself.
+    else if (d.type === 'call') out.push({ key, kind: 'call', seconds: d.seconds, lines: d.lines, at: item.createdAt })
   }
   return out
 }
@@ -92,6 +96,9 @@ function Steps({ steps, theme }: { steps: string[]; theme: Theme }) {
     </Pressable>
   )
 }
+
+/** What the bot of the conversation is called, for the lines that name it. */
+const BotName = createContext('the bot')
 
 /** Opens a subagent's or a run's thread from its report. */
 const OpenRun = createContext<(id: string) => void>(() => {})
@@ -135,6 +142,37 @@ function ReportCard({ row, theme, scale }: { row: Row & { kind: 'report' }; them
   )
 }
 
+/** A call that ended: how long it was, and what was said on it, to unfold. */
+function CallCard({ row, theme, scale }: { row: Row & { kind: 'call' }; theme: Theme; scale: number }) {
+  const name = useContext(BotName)
+  const [shown, setShown] = useState(false)
+  const folds = row.lines.length > 0
+  return (
+    <View style={[styles.report, { borderColor: theme.border }]}>
+      <Pressable accessibilityRole="button" accessibilityState={folds ? { expanded: shown } : undefined} disabled={!folds} style={styles.reportFold} onPress={() => setShown(!shown)}>
+        <View style={styles.reportKind}>
+          <Glyph name="handset" size={12} color={theme.faint} />
+          <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>Call · {moment(row.at).replace(/^today /, '')}</Text>
+        </View>
+        <Text style={{ color: theme.text, fontSize: 15 * scale, lineHeight: 21 * scale }}>
+          Talked with {name} for {callLength(row.seconds).replace(/ /g, '\u00a0')}
+          {folds && <Text style={{ color: theme.faint }}>{`\u00a0${shown ? '⌃' : '⌄'}`}</Text>}
+        </Text>
+      </Pressable>
+      {shown && folds && (
+        <View style={[styles.reportBody, styles.callLines, { borderTopColor: theme.border }]}>
+          {row.lines.map((line, i) => (
+            <View key={i}>
+              <Text style={[styles.eyebrow, { color: theme.faint }]}>{line.role === 'user' ? 'You' : name}</Text>
+              <Text selectable style={{ color: line.role === 'user' ? theme.muted : theme.text, fontSize: 15 * scale, lineHeight: 21 * scale }}>{line.text}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  )
+}
+
 /** Under a reply: copy it. A reply is not pressable itself, which would stop its tables and code from scrolling sideways. */
 function CopyReply({ text, theme }: { text: string; theme: Theme }) {
   const [copied, setCopied] = useState(false)
@@ -165,6 +203,13 @@ function Said({ row, theme, scale }: { row: Row & { kind: 'user' }; theme: Theme
   return (
     <View style={styles.said}>
       {!!row.attachments?.length && <SentFiles threadId={row.threadId!} files={row.attachments} show={show} />}
+      {/* Said out loud, on a call: the voice passed it on, and read the answer out. */}
+      {row.onCall && (
+        <View style={styles.onCall}>
+          <Glyph name="handset" size={11} color={theme.faint} />
+          <Text style={[styles.eyebrow, { color: theme.faint }]}>On a call</Text>
+        </View>
+      )}
       {!!row.text && (
         <Pressable onLongPress={() => offerCopy(row.text)} style={[styles.user, { backgroundColor: theme.bubble }]}>
           <Text style={{ color: theme.text, fontSize: 16 * scale, lineHeight: 22 * scale }}>{row.text}</Text>
@@ -255,6 +300,7 @@ const Line = memo(function Line({ row, theme, scale }: { row: Row; theme: Theme;
   if (row.kind === 'steps') return <Steps steps={row.steps} theme={theme} />
   if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
   if (row.kind === 'report') return <ReportCard row={row} theme={theme} scale={scale} />
+  if (row.kind === 'call') return <CallCard row={row} theme={theme} scale={scale} />
   return <Text style={[styles.notice, { color: row.error ? theme.err : theme.faint }]}>{row.text}</Text>
 })
 
@@ -262,6 +308,8 @@ export default function Chat() {
   const theme = useTheme()
   const router = useRouter()
   const insets = useSafeAreaInsets()
+  // A call under way takes room at the top of the screen, which what stays above the keyboard reckons with.
+  const callBarRoom = useCallBarRoom()
   const { id, item } = useLocalSearchParams<{ id: string; item?: string }>()
   // "bot:<bot>" is that bot's conversation, which does not exist until its first message is sent
   // and is another thread after its owner starts fresh. Anything else is a thread, such as a subagent's.
@@ -273,6 +321,10 @@ export default function Chat() {
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
   const connected = useStore((s) => s.connected)
   const threads = useStore((s) => s.threads)
+  const calls = useStore((s) => s.calls)
+  const calling = useCalling()
+  /** This phone is on a call with this bot. */
+  const onCall = calling.phase !== 'off' && calling.botId === bot?.id
   const automation = useStore((s) => (thread?.automationId ? s.automations.find((a) => a.id === thread.automationId) : undefined))
   const scale = useTextScale()
   // Lines take the theme and the text size as props, and the list draws them again only when its data or
@@ -369,6 +421,13 @@ export default function Chat() {
   const speaking = dictating.phase !== 'off'
   const selection = useRef({ start: 0, end: 0 })
   useDictationChecks(dictating)
+  // A bot is called from its own conversation. The microphone is the call's from then on.
+  const callBot = () => {
+    if (!bot) return
+    Keyboard.dismiss()
+    if (speaking) dictating.cancel()
+    void startCall(bot.id, { calls, calling, show: () => router.push('/call') })
+  }
   const startDictating = () => {
     Keyboard.dismiss()
     const { start, end } = selection.current
@@ -419,11 +478,12 @@ export default function Chat() {
   )
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 44}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={insets.top + 44 + callBarRoom}>
       {/* A subagent's thread says whose it is, as on the computer; a bot's conversation says when the bot is at work. */}
-      <ScreenTitle title={(forBot ? bot?.name : thread?.title) ?? ''} subtitle={forBot ? (running ? 'Working…' : undefined) : bot?.name} buttons={forBot ? 2 : 1} />
+      <ScreenTitle title={(forBot ? bot?.name : thread?.title) ?? ''} subtitle={forBot ? (running ? 'Working…' : undefined) : bot?.name} buttons={forBot ? 3 : 1} />
       {bot && (
         <Stack.Toolbar placement="right">
+          {forBot && <Stack.Toolbar.Button icon={onCall ? 'phone.fill' : 'phone'} accessibilityLabel={onCall ? `Show the call with ${bot.name}` : `Call ${bot.name}`} onPress={callBot} />}
           <Stack.Toolbar.Button icon="globe" accessibilityLabel={`${bot.name}’s browser`} onPress={() => router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId: thread?.id ?? '' } })} />
           {forBot && (
             <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="More">
@@ -450,6 +510,7 @@ export default function Chat() {
         <ShowText.Provider value={showText}>
         <OpenOtherEnd.Provider value={otherEnd}>
         <OpenRun.Provider value={openRun}>
+        <BotName.Provider value={bot?.name ?? 'the bot'}>
         <LegendList
           ref={list}
           data={shown}
@@ -479,6 +540,7 @@ export default function Chat() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12 }}
           keyboardDismissMode="interactive"
         />
+        </BotName.Provider>
         </OpenRun.Provider>
         </OpenOtherEnd.Provider>
         </ShowText.Provider>
@@ -533,7 +595,8 @@ export default function Chat() {
                 )}
                 <View style={{ flex: 1 }} />
                 {bot && <ModelChip bot={bot} onPress={() => (Keyboard.dismiss(), router.push({ pathname: '/model/[botId]', params: { botId: bot.id } }))} />}
-                {bot && listener && <MicButton onPress={startDictating} />}
+                {/* On a call the microphone is the call's. */}
+                {bot && listener && calling.phase === 'off' && <MicButton onPress={startDictating} />}
                 {running && (
                   <Pressable accessibilityRole="button" accessibilityLabel="Stop" style={[styles.send, { backgroundColor: theme.bubble }]} onPress={() => api('POST', `/api/threads/${thread!.id}/stop`).catch((e) => setError(e.message))}>
                     <View style={{ width: 12, height: 12, borderRadius: 2.5, backgroundColor: theme.text }} />
@@ -576,6 +639,8 @@ const styles = StyleSheet.create({
   reportKind: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   reportOpen: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   reportBody: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  callLines: { gap: 10 },
+  onCall: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   working: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 6 },
   between: { maxWidth: '86%', marginVertical: 6, paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16 },

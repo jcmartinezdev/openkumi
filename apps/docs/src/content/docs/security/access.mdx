@@ -1,0 +1,158 @@
+---
+title: Keys, pairing and the network
+description: "Who can connect to an OpenKumi server and from where, how a device is paired without the code crossing the network, how it knows it reached your server before sending its key, and where keys are kept."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import Sequence from '../../../components/diagram/Sequence.astro'
+
+An OpenKumi server can drive browsers that hold your sign-ins, so it lets nobody in on trust. This
+page covers the keys, the network, pairing, and how a device makes sure it is talking to your
+server before it hands over anything.
+
+## Keys
+
+Every request to the server carries a key, in its `Authorization` header (a WebSocket, which
+cannot send one, carries it in its address). Nothing is trusted for where it comes from, and there
+are no cookies, so a web page open in a browser has no way in; only the app's own pages
+(`openkumi://app`) may even read the server's answers.
+
+| Who | Holds | What the server keeps |
+| --- | --- | --- |
+| The app on the computer that runs the bots | the server's **access code**, read from `~/.openkumi/auth.json` | the code itself, in that file. It is accepted only from this computer, and never through a proxy |
+| Every other computer and phone | a **key of its own** (24 random bytes), given when it was paired | only a SHA-256 hash of the key, in `clients.json` |
+| An engine, for one turn | the turn's **tools address**, with a random token in it | the token, in memory, until the turn ends |
+| An app that calls a webhook | the webhook's **signing secret** | the secret, in the database |
+
+A bot holds none of these. Neither does anything it reads.
+
+**Only the computer that runs the bots** can pair a new device, remove one, or open a folder in the
+file manager. A paired device cannot let another in.
+
+## The network
+
+By default the server listens on `127.0.0.1` only: this computer, nothing else. **Let other
+computers connect** (or `openkumi lan on`, or `OPENKUMI_LAN=1`) makes it listen on every network
+the computer is on, and then closes at once, before reading anything, every connection that does
+not come from:
+
+- this computer;
+- a private home or office network (`10.x`, `172.16–31.x`, `192.168.x`, link-local addresses, and
+  their IPv6 equivalents);
+- Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`).
+
+A connection from anywhere else on the internet never gets an answer. Over the internet, plain
+`http` would show every device's key to whoever is in between.
+
+| From | The API, port 4317 | A turn's tools, `/mcp/…` | Webhooks, port 4318 |
+| --- | --- | --- | --- |
+| This computer | the access code, or a paired key | the turn's address only | signed calls only |
+| Home network, Tailscale | a paired key, with **Let other computers connect** on | refused | not listening |
+| The internet | closed at once | closed at once | only through a tunnel you set up, signed calls only |
+| A proxy or tunnel on this computer | a paired key, never the access code | refused | signed calls only |
+
+The last row matters: a tunnel or web server on this computer connects from this computer too, but
+says it passes requests on from elsewhere, and such a request is never taken for this computer.
+
+## Pairing
+
+A new device is let in with a code from the computer that runs the bots: 12 letters and digits
+from an alphabet of 30 (about 59 bits), shown as `ABCD-EFGH-JKMN` and as a QR code. It works once,
+for ten minutes; asking for a new one replaces it, and five wrong tries use it up.
+
+The code never crosses the network. Each side proves it has it by signing values made up for the
+occasion with it (HMAC-SHA256), so neither can be fooled by something else at the address.
+
+<Sequence
+  title="Pairing a new device with the computer that runs the bots"
+  numbered
+  actors={[
+    { id: 'device', label: 'The new device', sub: 'you typed the code here' },
+    { id: 'server', label: 'The server', sub: 'it showed the code', kind: 'ours' },
+  ]}
+  steps={[
+    { note: ['Pair a computer: a code that works', 'once, for ten minutes'], over: ['server'], kind: 'ours' },
+    { from: 'device', to: 'server', text: 'begin, with a value it made up: A' },
+    { from: 'server', to: 'device', text: ['its own made-up value B, and', '“server:A:B” signed with the code'], reply: true },
+    { note: ['Wrong signature? Stop: this is not the server', 'that showed the code. Nothing more is sent.'], over: ['device'], kind: 'danger' },
+    { from: 'device', to: 'server', text: ['“computer:A:B”', 'signed with the code'] },
+    { note: ['Right? The code is used up.', 'Wrong five times? It is gone.'], over: ['server'] },
+    { from: 'server', to: 'device', text: ['a new key for this device,', 'and the server’s id'], reply: true, kind: 'secret' },
+    { note: ['Keeps only a hash of the key'], over: ['server'], kind: 'secret' },
+    { note: ['Keeps the key and the id'], over: ['device'], kind: 'secret' },
+  ]}
+  caption="The server learns that the device was given the code; the device learns that this is the server the code came from. Someone listening learns neither the code nor anything to work it out from."
+/>
+
+**Settings → Environments → Paired computers**, on the computer that runs the bots, lists every
+device, with when it was paired and last seen. **Remove** deletes its key's hash and ends its open
+connections at once.
+
+## Before a key is sent anywhere
+
+A paired device keeps several addresses for its server (home network, Tailscale, any you added),
+and an address can come to point at something else: another device that got the same home address
+on another network, or another OpenKumi server. So before a device sends its key to an address,
+whatever answers there has to prove it is the server the key came from, without the key being
+sent.
+
+<Sequence
+  title="How a device checks an address before it sends its key"
+  numbered
+  actors={[
+    { id: 'device', label: 'Your laptop or phone', sub: 'holds a key', kind: 'ours' },
+    { id: 'addr', label: 'Whatever answers', sub: 'at a saved address' },
+  ]}
+  steps={[
+    { from: 'device', to: 'addr', text: ['hello: a value it made up, and a tag', 'made from its key’s hash (not the key)'] },
+    { from: 'addr', to: 'device', text: ['its server id, and the value signed', 'with that key’s hash, if it knows it'], reply: true },
+    { note: ['The server id it was paired with?', 'A signature only that server could make?'], over: ['device'] },
+    { section: 'Yes: it is your server' },
+    { from: 'device', to: 'addr', text: 'requests, each with the key', kind: 'secret' },
+    { section: 'No, or not sure' },
+    { from: 'device', to: 'addr', text: 'the key is not sent', blocked: true },
+  ]}
+  caption="Only your server and your device know the key's hash, so nothing else can make the signature, and neither the tag nor the signature gives the key away."
+/>
+
+The details: the tag is a SHA-256 of the key's hash, and the signature is an HMAC-SHA256 of the
+server's id and the made-up value, keyed with the key's hash. The check is made for every address,
+every time the device connects or moves to another address. A redirect, or an answer from another
+origin, counts as no answer. Addresses a server tells its devices about are kept only when they are
+on a home network or Tailscale, eight at most; an address where something else answers cannot be
+added at all.
+
+**Plain `http`** is used only on this computer, home networks (including names ending in `.local`,
+`.lan` or `.home`, and names without dots) and Tailscale, which encrypts the connection itself.
+Any other address has to be `https`.
+
+[Servers and addresses](/connections/) explains in what order a device tries a server's
+addresses, and how it learns new ones.
+
+### The app on the computer that runs the bots
+
+The app there reads the access code from the data folder, but first asks the server to sign a value
+it made up with that code, and only then uses it. The server says where its data folder is, and
+signs, only when it is asked by the name `localhost`, `127.0.0.1` or `[::1]` from this computer, so a
+web page that has pointed a name of its own at this computer learns nothing.
+
+## Where keys are kept
+
+| What | Where | Readable by |
+| --- | --- | --- |
+| The access code, the server's id, API keys | `~/.openkumi/auth.json` | your account only |
+| Hashes of paired devices' keys | `~/.openkumi/clients.json` | your account only |
+| A bot's tokens for its apps | `bots/<id>/private/superpowers/<id>.json` | your account only |
+| A bot's cookies and sign-ins | `bots/<id>/private/browser-profile/` | as Chrome keeps them |
+| Webhook signing secrets | `~/.openkumi/openkumi.db` | as your system makes new files (see [Known limits](/security/limits/)) |
+| The keys of remote environments, on a computer | `desktop.json` in the app's data folder | your account only |
+| The key of the environment, on an iPhone | the iPhone's keychain | the app |
+
+There are no user accounts in OpenKumi itself: anyone who can use your account on a computer can
+read these files and use what they open.
+
+<Aside type="caution" title="On a home network, keys travel in plain http">
+  Pairing does not give its code away to someone listening, but a paired device's key travels with
+  each request. Someone who can watch your home network could copy it. Use OpenKumi on networks you
+  trust, prefer Tailscale (which encrypts) when you are away, and remove devices you no longer use.
+</Aside>

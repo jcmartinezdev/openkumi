@@ -7,6 +7,7 @@
 // How a device makes such a connection is up to each app (the desktop window has WebRTC built in,
 // the phone brings its own): each hands over a `Phone`. This is the part they share.
 import { useEffect, useState, useSyncExternalStore } from 'react'
+import type { Bot, Call } from '@openkumi/shared'
 import { ApiError, api, onEnvironmentChange, onState, useStore } from './store'
 
 /** A microphone, or the other side's voice. */
@@ -73,6 +74,41 @@ export function useCalling(): Calling {
   )
 }
 
+/** Whether this app is on a call, or making one, right now: for what must not cut one off. */
+export const onCall = () => calling.phase !== 'off'
+
+/** The call an app shows: its own, or one under way on another device, which can be seen and ended from here. */
+export interface CallShown {
+  calling: Calling
+  /** The call as the server tells of it. */
+  call: Call | null
+  /** This app is making the call, or is on it. */
+  mine: boolean
+  /** A call made from another device is under way. Not the one this app just hung up, which the server is still ending. */
+  elsewhere: boolean
+  /** The bot on the line. */
+  bot: Bot | undefined
+  /** How the call stands, in a few words. */
+  status: string
+}
+
+export function useCallShown(): CallShown {
+  const calling = useCalling()
+  const call = useStore((s) => s.call)
+  const bots = useStore((s) => s.bots)
+  const mine = calling.phase !== 'off'
+  const elsewhere = !mine && !!call && call.id !== calling.last
+  const bot = bots.find((b) => b.id === (mine ? calling.botId : call?.botId))
+  const status =
+    elsewhere ? 'On a call on another device'
+    : calling.phase === 'asking' ? 'Waiting for the microphone…'
+    : calling.phase === 'connecting' ? 'Calling…'
+    : call?.id === calling.id && call.working > 0 ? 'Working on it…'
+    : calling.muted ? 'Muted'
+    : 'On a call'
+  return { calling, call, mine, elsewhere, bot, status }
+}
+
 let phone: Phone | null = null
 /** Gives the app's way of making calls. Without one, the app cannot call. */
 export function usePhone(given: Phone) {
@@ -121,6 +157,8 @@ let moves = 0
 export async function call(botId: string) {
   if (!phone) return
   const move = ++moves
+  // A voice being tried out gives way to a call.
+  stopHearing()
   if (calling.phase !== 'off') await end()
   // Overtaken while the call before was being hung up: by a newer call, which goes ahead in its place, or by the
   // person hanging up. Taking the place regardless would leave the other's microphone open with nothing to close it.
@@ -227,7 +265,7 @@ export function callLength(seconds: number) {
 
 // ---- the voice a bot has on a call
 
-interface Voices {
+export interface Voices {
   voices: string[]
   /** The one a bot has when none was chosen for it. */
   usual: string
@@ -236,7 +274,36 @@ interface Voices {
 let voices: Promise<Voices> | null = null
 onEnvironmentChange(() => (voices = null))
 
-const voiceName = (voice: string) => voice.charAt(0).toUpperCase() + voice.slice(1)
+/** A voice's name as people read it: "Maple". */
+export const voiceName = (voice: string) => voice.charAt(0).toUpperCase() + voice.slice(1)
+
+/** The voices the Codex of this environment offers, once they are known and while bots can be called. Null until then. */
+export function useVoices(): Voices | null {
+  const available = useStore((s) => !!s.calls?.available)
+  const connected = useStore((s) => s.connected)
+  const [known, setKnown] = useState<Voices | null>(null)
+  // Counted up to ask again after an answer that did not come.
+  const [tries, setTries] = useState(0)
+  useEffect(() => {
+    if (!available || !connected || known) return
+    let showing = true
+    let again: ReturnType<typeof setTimeout> | undefined
+    voices ??= api<Voices>('GET', '/api/calls/voices')
+    voices.then(
+      (list) => showing && setKnown(list),
+      () => {
+        voices = null
+        // The server was restarting, or Codex was slow to say: asked again shortly, and when the connection is back.
+        if (showing) again = setTimeout(() => setTries((n) => n + 1), 3000)
+      },
+    )
+    return () => {
+      showing = false
+      clearTimeout(again)
+    }
+  }, [available, connected, tries])
+  return available ? known : null
+}
 
 /**
  * The voices a bot can be given, as choices for a picker: the usual one first (kept as ""), then
@@ -244,24 +311,130 @@ const voiceName = (voice: string) => voice.charAt(0).toUpperCase() + voice.slice
  * while bots cannot be called.
  */
 export function useVoiceChoices(current: string): (readonly [string, string])[] | null {
-  const available = useStore((s) => !!s.calls?.available)
-  const [known, setKnown] = useState<Voices | null>(null)
-  useEffect(() => {
-    if (!available) return
-    let showing = true
-    voices ??= api<Voices>('GET', '/api/calls/voices')
-    voices.then(
-      (list) => showing && setKnown(list),
-      () => (voices = null),
-    )
-    return () => {
-      showing = false
-    }
-  }, [available])
-  if (!available || !known) return null
+  const known = useVoices()
+  if (!known) return null
   return [
     ['', known.usual ? `Usual (${voiceName(known.usual)})` : 'Usual'] as const,
     ...known.voices.map((voice) => [voice, voiceName(voice)] as const),
     ...(current && !known.voices.includes(current) ? [[current, `${voiceName(current)} (no longer offered)`] as const] : []),
   ]
 }
+
+// ---- hearing a voice before choosing it
+// A voice is tried out the way it will be heard: on the line, saying a short line as the bot. The
+// app makes a connection as for a call, and the server has Codex put the voice on it
+// (apps/server/src/calls.ts, `startSample`). One voice at a time, and none while a call is on.
+
+export interface Hearing {
+  /** The microphone was refused, so the error is one the device's settings put right. */
+  denied?: boolean
+  /** The voice being heard ("" is the usual one), or null when none is. */
+  voice: string | null
+  /** Getting the voice on the line, then hearing it say its line. */
+  phase: 'off' | 'connecting' | 'speaking'
+  /** Why the last voice could not be heard, until another is tried. */
+  error: string
+}
+
+const QUIET: Hearing = { voice: null, phase: 'off', error: '' }
+let hearing = QUIET
+const listeners = new Set<() => void>()
+function tell(next: Hearing) {
+  hearing = next
+  listeners.forEach((fn) => fn())
+}
+
+export function useHearing(): Hearing {
+  return useSyncExternalStore(
+    (fn) => (listeners.add(fn), () => void listeners.delete(fn)),
+    () => hearing,
+  )
+}
+
+/** What the app holds of the voice it is hearing. */
+interface Heard {
+  sound?: Sound
+  line?: Line
+  silence?: () => void
+  id?: string
+  done?: ReturnType<typeof setTimeout>
+}
+let heard: Heard | null = null
+
+/** How long the sound is given to reach the app once both halves of the connection are there. */
+const REACHED_WITHIN = 15_000
+
+/** Has a voice say a short line as the bot, for the owner to hear. A voice being heard stops first. */
+export async function hearVoice(botId: string, voice: string) {
+  if (!phone) return
+  stopHearing()
+  if (calling.phase !== 'off') return tell({ ...QUIET, error: 'Hang up to hear another voice.' })
+  const mine: Heard = {}
+  heard = mine
+  /** Stopped, or replaced by another voice, while this one was being put on the line. */
+  const dropped = () => heard !== mine
+  tell({ voice, phase: 'connecting', error: '' })
+  try {
+    // The speech model only runs while it is sent sound, so the microphone is opened as for a call, and kept
+    // switched off: what it sends is silence, and nothing said in the room reaches the voice.
+    mine.sound = await phone.microphone()
+    if (dropped()) return void mine.sound.getTracks().forEach((track) => track.stop())
+    const line = (mine.line = phone.line())
+    for (const track of mine.sound.getTracks()) {
+      track.enabled = false
+      line.addTrack(track, mine.sound)
+    }
+    line.createDataChannel('oai-events')
+    line.addEventListener('track', (event) => {
+      if (dropped() || mine.silence) return
+      mine.silence = phone!.play(event.streams?.[0])
+    })
+    const reached = new Promise<void>((resolve, reject) => {
+      const late = setTimeout(() => reject(new Error('The voice could not be reached.')), REACHED_WITHIN)
+      line.addEventListener('connectionstatechange', () => {
+        if (line.connectionState === 'connected') (clearTimeout(late), resolve())
+        else if (line.connectionState === 'failed' || line.connectionState === 'closed') (clearTimeout(late), reject(new Error('The voice could not be reached.')))
+      })
+    })
+    // One that is given up on is not waited for by anyone.
+    reached.catch(() => {})
+    const offer = await line.createOffer({ offerToReceiveAudio: true })
+    await line.setLocalDescription(offer)
+    if (dropped()) return
+    const sample = await api<{ id: string; sdp: string }>('POST', `/api/bots/${encodeURIComponent(botId)}/voice-sample`, { voice, sdp: offer.sdp })
+    if (dropped()) return void api('DELETE', `/api/calls/samples/${sample.id}`).catch(() => {})
+    mine.id = sample.id
+    await line.setRemoteDescription({ type: 'answer', sdp: sample.sdp })
+    // The voice is asked for its line once the sound can get here, or its first words would be lost.
+    await reached
+    if (dropped()) return
+    tell({ voice, phase: 'speaking', error: '' })
+    await api('POST', `/api/calls/samples/${sample.id}/say`)
+    if (dropped()) return
+    // The server answers when the line has been said; its last sound is still on its way here.
+    mine.done = setTimeout(() => !dropped() && stopHearing(), 600)
+  } catch (e: any) {
+    if (!dropped()) stopHearing(String(e?.message ?? e), e instanceof Denied)
+  }
+}
+
+/** Stops the voice being heard. `error` is why, when it could not be heard. */
+export function stopHearing(error = '', denied = false) {
+  const was = heard
+  heard = null
+  if (was) {
+    clearTimeout(was.done)
+    was.silence?.()
+    was.sound?.getTracks().forEach((track) => track.stop())
+    try {
+      was.line?.close()
+    } catch {
+      // Closed already.
+    }
+    if (was.id) api('DELETE', `/api/calls/samples/${was.id}`).catch(() => {})
+  }
+  if (hearing !== QUIET || error) tell(error ? { ...QUIET, error, denied } : QUIET)
+}
+
+// A voice is heard in the environment it comes from.
+onEnvironmentChange(() => stopHearing())

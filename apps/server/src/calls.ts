@@ -35,7 +35,7 @@ import { HOME, VERSION, emit } from './config.ts'
 import * as db from './db.ts'
 import { cleanEnv, end, start } from './providers/cli.ts'
 import { codexProgram, sealed } from './providers/codex.ts'
-import { callsInfo } from './providers/index.ts'
+import { callsInfo, getProvider, learnModels, modelName } from './providers/index.ts'
 import { settings } from './settings.ts'
 import { TIME_ZONE } from './automations.ts'
 import { track } from './telemetry.ts'
@@ -171,11 +171,17 @@ const NOTHING_TO_DO =
 /** The voice's instructions: who it is on this call, and what it does itself and what it hands over. */
 function voiceInstructions(bot: Bot): string {
   const main = listBots()[0]?.id === bot.id
+  // The model the bot itself runs on, which does the work: the voice is only how it speaks here.
+  const powered = modelName(bot)
   return [
     '# Who you are on this call',
     `Your name is ${bot.name}. You are ${main ? "the user's main assistant" : "one of the user's AI bots"} in OpenKumi, an app that runs on the user's own computer, and you are on a voice call with the user: the one person you work for.` +
       (bot.description ? ` What you are for: ${bot.description}` : ''),
-    `On this call you are ${bot.name} and nobody else. When asked who or what you are, say you are ${bot.name}, the user's bot. Do not introduce yourself as ChatGPT, as an OpenAI model or as a general assistant.`,
+    `On this call you are ${bot.name} and nobody else. When asked who or what you are, say you are ${bot.name}, the user's bot in OpenKumi${bot.description ? ', and what you are for' : ''}. ` +
+      'OpenKumi is a free, open-source app, created by Juan Cruz Martinez, in which a person keeps their own crew of AI bots on their own computer, each with its own memory, its own files and its own web browser: when asked who made you, or what OpenKumi is, say that. ' +
+      'Do not introduce yourself as ChatGPT, as an OpenAI model or as a general assistant. ' +
+      (powered ? `What powers you is no secret, though. ${bot.name} is powered by ${powered}, and you can say so, as in "I'm ${bot.name}, your bot in OpenKumi, powered by ${powered}". ` : 'What powers you is no secret, though. ') +
+      `Asked what is behind your voice on this call, say that the voice comes with the user's ChatGPT plan, and that you are still ${bot.name}.`,
     '# How you speak',
     'The way one speaks on the phone: warm, natural and brief. A sentence or two at a time, unless they ask for more. Speak the language the user speaks.',
     '# You can only talk. Everything else is delegated.',
@@ -270,6 +276,8 @@ export async function startCall(botId: string, offer: unknown): Promise<{ call: 
   const info = callsInfo()
   if (!info.available) throw new CallError(info.reason)
   if (live) endCall(live.call.id)
+  // A voice being tried out gives way to a call.
+  if (sample) endSample(sample.id)
 
   // The call takes its place before anything is waited for, so that of two started at once the first is ended, not left behind.
   const codex = startCodex()
@@ -299,6 +307,20 @@ export async function startCall(botId: string, offer: unknown): Promise<{ call: 
 
 /** Sets a call up with Codex, and gives the other half of the connection. */
 async function connect(session: Live, bot: Bot, offer: string): Promise<string> {
+  // What the bot's own model is called, for the voice to say what powers it.
+  await learnModels(getProvider(bot.provider)).catch(() => {})
+  return setUp(session, offer, { voice: bot.voice ?? '', prompt: voiceInstructions(bot), items: opening(bot) })
+}
+
+/** A voice on the line: what a call and a sample of a voice both have of Codex. */
+interface Line {
+  codex: AppServer
+  /** Codex's conversation behind it. */
+  thread: string
+}
+
+/** Has Codex put a voice on the line, with what it is told, and gives the other half of the connection. */
+async function setUp(session: Line, offer: string, { voice, prompt, items }: { voice: string; prompt: string; items: Opening[] }): Promise<string> {
   const { codex } = session
   await greet(codex)
   const opened = await codex.ask('thread/start', { cwd: path.join(HOME, 'calls', 'workspace'), approvalPolicy: 'never', sandbox: 'read-only', developerInstructions: NOTHING_TO_DO, ephemeral: true })
@@ -320,11 +342,11 @@ async function connect(session: Live, bot: Bot, offer: string): Promise<string> 
     transport: { type: 'webrtc', sdp: offer },
     // The only version a ChatGPT sign-in is let use over WebRTC.
     version: 'v3',
-    ...(bot.voice ? { voice: bot.voice } : {}),
+    ...(voice ? { voice } : {}),
     // Its instructions go where it reads them, in what the call starts with (see `opening`), and
     // here too, for a speech model that does take them from here.
-    prompt: voiceInstructions(bot),
-    initialItems: opening(bot),
+    prompt,
+    initialItems: items,
     // Codex would add what it knows of the user's own work with it, which is none of a bot's business.
     includeStartupContext: false,
     // What the voice hands over is not answered by Codex: the server passes it to the bot, and has the voice say what the bot answered.
@@ -492,6 +514,7 @@ let closing = false
 export function endCalls() {
   closing = true
   if (live) finish(live)
+  if (sample) endSample(sample.id)
 }
 
 /** The call is over: Codex is let go, and the conversation keeps a record of what was said. `error` is why, when it did not end by being hung up. */
@@ -560,6 +583,116 @@ function lookBack(session: Live) {
     },
     (e: Error) => console.error('The bot could not go over what was said on a call:', e.message),
   )
+}
+
+// ---- hearing a voice before choosing it
+// A voice is tried out the way it will be heard: on the line, saying a line as the bot. It is a
+// call in small, set up the same way through Codex, in which nobody is listened to and nothing is
+// kept: the voice says its one line and the app hangs up. There is one at a time, and none while
+// a call is on. (Found by trying, 2026-11: on a connection that only listens the voice never
+// speaks, so the app sends the silence of a microphone that is switched off.)
+
+/** A sample that nobody ended is ended after this long. */
+const SAMPLE_FOR = 30_000
+/** How long the voice is given to say its line. */
+const SAID_WITHIN = 15_000
+/** A voice that has not begun its line after this long is asked for it again. */
+const ASK_AGAIN_AFTER = 3500
+
+interface Sample extends Line {
+  id: string
+  /** The line the voice says. */
+  words: string
+  /** It has begun to say it. */
+  speaking: boolean
+  over: boolean
+  /** Called when the voice has said its line. */
+  said: () => void
+  late: NodeJS.Timeout
+}
+
+let sample: Sample | null = null
+
+/** What the voice is told when it is only being tried out. */
+const SAMPLE_INSTRUCTIONS = (bot: Bot) =>
+  [
+    `This is a sound check, not a conversation. You are the voice of ${bot.name}, the user's bot in OpenKumi, and the user wants to hear what you sound like.`,
+    'You will be given one line. Say exactly that line, once, warmly and naturally, as one says hello on the phone. Say nothing before it and nothing after it, do not answer anything you hear, and do not offer help.',
+  ].join('\n')
+
+/**
+ * Puts one voice on the line for the app to hear. `offer` is the app's half of the connection, as
+ * for a call; what comes back is the other half. The voice says nothing until `saySample` asks it
+ * to, which the app does once the sound can reach it.
+ */
+export async function startSample(botId: string, voice: unknown, offer: unknown): Promise<{ id: string; sdp: string }> {
+  const bot = getBot(botId)
+  if (!bot) throw new CallError('No such bot')
+  if (typeof offer !== 'string' || !offer.startsWith('v=0') || offer.length > 20_000) throw new CallError('That is not a connection a voice can be heard over.')
+  if (typeof voice !== 'string' || voice.length > 60) throw new CallError('That is not a voice.')
+  const info = callsInfo()
+  if (!info.available) throw new CallError(info.reason)
+  if (live) throw new CallError('A call is under way. Hang up to hear another voice.')
+  if (sample) endSample(sample.id)
+
+  const codex = startCodex()
+  const mine: Sample = {
+    id: `sample_${crypto.randomBytes(9).toString('base64url')}`,
+    codex,
+    thread: '',
+    words: `Hi, I'm ${bot.name}. This is how I sound when you call me.`,
+    speaking: false,
+    over: false,
+    said: () => {},
+    late: setTimeout(() => endSample(mine.id), SAMPLE_FOR),
+  }
+  mine.late.unref()
+  sample = mine
+  try {
+    const sdp = await within(ANSWER_WITHIN, 'The voice did not come on the line in time.', setUp(mine, offer, { voice, prompt: SAMPLE_INSTRUCTIONS(bot), items: [{ role: 'developer', text: SAMPLE_INSTRUCTIONS(bot) }] }))
+    if (mine.over) throw new Error('Another voice was asked for.')
+    codex.heard = (method, params) => {
+      if (method === 'thread/realtime/transcript/delta' && params.role !== 'user') mine.speaking = true
+      else if (method === 'thread/realtime/transcript/done' && params.role !== 'user') ((mine.speaking = true), mine.said())
+      else if (method === 'thread/realtime/error' || method === 'thread/realtime/closed') endSample(mine.id)
+    }
+    codex.gone = () => endSample(mine.id)
+    return { id: mine.id, sdp }
+  } catch (e: any) {
+    const why = mine.over ? 'Another voice was asked for.' : readable(String(e?.message ?? e))
+    endSample(mine.id)
+    throw new CallError(why)
+  }
+}
+
+/** Has the voice say its line. Answers once it has (or has had time to), with the line, so the app can tell how long it takes to hear. */
+export async function saySample(id: string): Promise<{ words: string }> {
+  const mine = sample
+  if (!mine || mine.id !== id || mine.over || !mine.thread) throw new CallError('That voice is no longer on the line.')
+  const said = new Promise<void>((resolve) => (mine.said = resolve))
+  const ask = () => mine.codex.ask('thread/realtime/appendSpeech', { threadId: mine.thread, text: `Say exactly this line, and nothing else: ${mine.words}` })
+  await ask()
+  // The speech model only runs while sound is coming in from the app (silence will do), and what it is
+  // given before that is lost. So it is asked again when it has not begun to speak after a while.
+  for (let again = 0; again < 2; again++) {
+    const done = await Promise.race([said.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ASK_AGAIN_AFTER).unref())])
+    if (done || mine.over || mine.speaking) break
+    await ask().catch(() => {})
+  }
+  await within(SAID_WITHIN, '', said).catch(() => {})
+  return { words: mine.words }
+}
+
+/** Lets the voice go: it was heard, or another was asked for. */
+export function endSample(id: string) {
+  const mine = sample
+  if (!mine || mine.id !== id || mine.over) return
+  mine.over = true
+  sample = null
+  clearTimeout(mine.late)
+  mine.said()
+  if (mine.thread) mine.codex.ask('thread/realtime/stop', { threadId: mine.thread }).catch(() => {})
+  mine.codex.close()
 }
 
 // ---- the voices a bot can have

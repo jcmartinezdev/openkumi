@@ -1,0 +1,83 @@
+---
+title: Security overview
+description: "What OpenKumi trusts and what it does not, the walls between you, the server, the bots and everything they read, and what to be careful with."
+---
+
+import { Aside, CardGrid, LinkCard } from '@astrojs/starlight/components'
+import TrustMap from '../../../components/diagrams/TrustMap.astro'
+
+OpenKumi runs bots on your computer that hold real sign-ins: a browser logged in to your accounts,
+apps they can write to, files they keep. So it is built round two questions. **Who may use the
+server?** Only you, from devices you paired. **What may a bot do?** Only what you gave it, with
+its own tools, and nothing it reads counts as your word.
+
+<TrustMap caption="You are the only one trusted. The server checks every key and keeps each bot to its own tools. The bots act for you and can be misled, so whatever they read (pages, mail, other bots, files, webhook calls) is material, never an instruction." />
+
+## The walls, in short
+
+**Getting in** ([Keys, pairing and the network](/security/access/))
+
+- Every request to the server carries a key. Nothing is trusted for where it comes from, and there
+  are no cookies, so a web page open in a browser has no way in.
+- The server answers only this computer, your home network and Tailscale. A connection from
+  anywhere else on the internet is closed before anything is read from it.
+- Pairing never sends its code over the network, and a device makes the server prove who it is
+  before it sends its key to any address.
+- Only the computer that runs the bots can let a new device in, or shut one out.
+
+**What a bot can do** ([What a bot can reach](/security/bots/))
+
+- A bot's file tools reach its own workspace and nothing else. Its rules, its superpowers and its
+  sign-ins sit outside it, so it cannot grant itself anything.
+- There is no tool for running commands. Claude Code, Codex and Grok run with their own tools for
+  commands and files switched off.
+- A bot holds no key to the server, and the address its engine reaches its tools at works for one
+  turn, from this computer only.
+- Bots are told that pages, files, tool results and other bots' messages are material, never
+  instructions, and to ask you before buying, sending or deleting anything.
+- Pages a bot shows run in a frame of their own that cannot reach the app or its keys.
+
+**What leaves your computer** ([What leaves your computer](/security/outside/))
+
+- There is no OpenKumi server in between. Your conversations go to the AI plan the bot runs on,
+  and nowhere else of ours.
+- OpenKumi asks before it tells its makers anything, and then only how it is used and where it
+  breaks ([Usage and error reports](/telemetry/)).
+- A bot signs in to an app with an account of its own. The sign-in finishes only the way it was
+  started, and its tokens never leave the computer that runs it.
+- Webhooks come in through a door of their own, are taken only when signed, and pass the bot ids,
+  never text anyone wrote.
+
+<Aside type="caution" title="What this does not do">
+  Instructions to a bot are not locks. A bot that reads a page written to mislead it can still be
+  talked into something within what its tools and sign-ins allow; the rules and confirmations make
+  that less likely, not impossible. [Known limits](/security/limits/) lists this and the other gaps
+  plainly.
+</Aside>
+
+## Good habits
+
+- **Give a bot only the sign-ins you are comfortable with it using.** A bot with your bank in its
+  browser can be asked, or tricked, into using it. Separate bots for separate kinds of work keep
+  each one's reach small.
+- **Put what must hold in its rules, not in a conversation.** Rules in `bot.md` are out of the
+  bot's reach; its own instructions are not. Read **Workspace → Changes** now and then, and undo
+  what you did not want.
+- **Pair over networks you trust**, and use Tailscale away from home rather than opening a port to
+  the internet. Remove devices you no longer use.
+- **Keep your computer account to yourself.** There are no user accounts in OpenKumi: whoever can
+  use your account on the computer that runs it can use your bots.
+- **Keep OpenKumi up to date.** It updates itself unless you switched that off.
+
+## Read more
+
+<CardGrid>
+  <LinkCard title="Keys, pairing and the network" description="Who can connect, how a device is paired, and how it knows it reached your server." href="/security/access/" />
+  <LinkCard title="What a bot can reach" description="Its workspace, its browser, its accounts, and the walls round them." href="/security/bots/" />
+  <LinkCard title="What leaves your computer" description="Every place data goes, what goes there, and on whose account." href="/security/outside/" />
+  <LinkCard title="Known limits" description="What OpenKumi does not protect against, said plainly." href="/security/limits/" />
+</CardGrid>
+
+Found a security problem? Please report it privately through the repository's
+[security page on GitHub](https://github.com/jcmartinezdev/openkumi/security), rather than in a
+public issue.

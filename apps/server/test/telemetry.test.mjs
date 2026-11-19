@@ -377,7 +377,7 @@ test('the tokens a run used are counted by model, as each engine reports them, a
 
 test('what a turn used is what its engine added to its own count, and a name that is not a model’s plain name is not sent', async () => {
   const { usedSince } = await import('../src/providers/types.ts')
-  const { modelName } = await import('../src/telemetry.ts')
+  const { modelSent } = await import('../src/telemetry.ts')
   const at = (input, read, output) => ({ 'claude-x': { inputTokens: input, cacheReadInputTokens: read, cacheCreationInputTokens: 5, outputTokens: output } })
   // A new conversation: all of it. Then only what was added.
   assert.deepEqual(usedSince('s1', false, at(10, 20, 3)), [{ type: 'usage', model: 'claude-x', input: 35, cached: 20, output: 3 }])
@@ -390,9 +390,9 @@ test('what a turn used is what its engine added to its own count, and a name tha
   assert.deepEqual(usedSince('s2', true, at(1010, 0, 501)), [{ type: 'usage', model: 'claude-x', input: 10, cached: 0, output: 1 }])
   assert.deepEqual(usedSince('s3', false, undefined), [])
 
-  assert.equal(modelName('claude-code', 'claude-opus-5-5'), 'claude-opus-5-5')
-  assert.equal(modelName('claude-code', 'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude'), 'other')
-  assert.equal(modelName('codex', ''), 'default')
-  assert.equal(modelName('local', 'my-secret-model'), 'local')
-  assert.equal(modelName('openai-compatible', 'gpt-4o'), 'other')
+  assert.equal(modelSent('claude-code', 'claude-opus-5-5'), 'claude-opus-5-5')
+  assert.equal(modelSent('claude-code', 'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude'), 'other')
+  assert.equal(modelSent('codex', ''), 'default')
+  assert.equal(modelSent('local', 'my-secret-model'), 'local')
+  assert.equal(modelSent('openai-compatible', 'gpt-4o'), 'other')
 })

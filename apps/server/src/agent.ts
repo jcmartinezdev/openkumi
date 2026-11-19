@@ -15,11 +15,11 @@ import { emit, workspaceDir } from './config.ts'
 import * as db from './db.ts'
 import { heard, isOverflow, prepare, shorten, tokens, transcript } from './history.ts'
 import { masterPrompt } from './prompt.ts'
-import { getProvider } from './providers/index.ts'
+import { getProvider, learnModels, modelName } from './providers/index.ts'
 import type { ModelEvent, Steering } from './providers/types.ts'
 import { settings } from './settings.ts'
 import { superpowerIndex, superpowerNames } from './superpowers.ts'
-import { failed, modelName, track, whereOf } from './telemetry.ts'
+import { failed, modelSent, track, whereOf } from './telemetry.ts'
 import { TIME_ZONE, finishRun, isMain } from './automations.ts'
 import { type ToolEndpoint, openToolEndpoint } from './tool-endpoint.ts'
 import { onACall, runTool, toolsFor } from './tools.ts'
@@ -100,6 +100,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
   const by = automation?.createdBy ?? ''
   return masterPrompt({
     bot_name: bot.name,
+    model: modelName(bot, thread.model ?? ''),
     today: new Date().toDateString(),
     other_bots: team(bot),
     main: isMain(bot),
@@ -445,7 +446,7 @@ async function loop(threadId: string, state: Run) {
       const engine = getBot(db.getThread(threadId)?.botId ?? '')?.provider
       track('run finished', { engine, outcome: status === 'error' ? 'failed' : broken ? 'stopped' : 'done', seconds: (Date.now() - state.startedAt) / 1000, steps: state.steps, error })
       // What it cost in tokens, whether it finished or not: counted by model, never by conversation.
-      for (const [model, sum] of state.used) track('tokens used', { engine, model: modelName(engine ?? '', model), input_tokens: sum.input, cached_tokens: sum.cached, output_tokens: sum.output, total_tokens: sum.input + sum.output })
+      for (const [model, sum] of state.used) track('tokens used', { engine, model: modelSent(engine ?? '', model), input_tokens: sum.input, cached_tokens: sum.cached, output_tokens: sum.output, total_tokens: sum.input + sum.output })
     }
     // Stopped or failed, the bot does not start again by itself on what was waiting: that is held
     // back for the owner to let go, except what its own work came back with, which is put in the
@@ -486,6 +487,8 @@ async function turn(threadId: string, state: Run) {
     const provider = getProvider(bot.provider)
     if (disabledProviders.includes(provider.id)) throw new Error(`${provider.info().name} is switched off in Settings.`)
     const model = thread.model || bot.model || (await provider.models())[0]?.id
+    // What the model is called, for the bot to say what powers it.
+    await learnModels(provider)
     if (!model) throw new Error(`No model is available from ${provider.info().name}. Check Settings.`)
     const { tools: all, problems } = await toolsFor(thread)
     const tools = call ? onACall(all) : all

@@ -1,0 +1,34 @@
+---
+// What a bot's tools can reach, and what they cannot.
+import Arrow from '../diagram/Arrow.astro'
+import Box from '../diagram/Box.astro'
+import Figure from '../diagram/Figure.astro'
+import Zone from '../diagram/Zone.astro'
+
+const { caption } = Astro.props as { caption?: string }
+const can = [
+  ['Its workspace', 'its notes and files'],
+  ['Its browser', 'its own Chrome profile'],
+  ['Its superpowers', 'with its own account'],
+  ['The web', 'browse, fetch, search'],
+  ['Other bots', 'by message, as a teammate'],
+]
+const cannot = [
+  ['Other bots’ files', 'no way in'],
+  ['Its own rules', 'bot.md, superpowers.json'],
+  ['Its private folder', 'sign-ins, history'],
+  ['OpenKumi’s API', 'it holds no key'],
+  ['Files elsewhere', 'outside its workspace'],
+]
+const y = (i: number) => 40 + i * 72
+---
+
+<Figure width={680} height={410} title="What a bot's tools can reach, and what they cannot" caption={caption}>
+  <Zone x={4} y={8} w={212} h={394} label="Can reach" kind="trusted" />
+  <Zone x={464} y={8} w={212} h={394} label="Cannot" kind="outside" side="right" />
+  <Box x={268} y={176} w={144} h={72} kind="ours" title="A bot" lines={['its tools, in a turn']} />
+  {can.map(([title, line], i) => <Box x={18} y={y(i)} w={186} h={56} title={title} lines={[line]} />)}
+  {cannot.map(([title, line], i) => <Box x={476} y={y(i)} w={188} h={56} kind="danger" title={title} lines={[line]} />)}
+  {can.map((_, i) => <Arrow points={[[268, 188 + i * 12], [204, y(i) + 28]]} kind="ours" />)}
+  {cannot.map((_, i) => <Arrow points={[[412, 188 + i * 12], [476, y(i) + 28]]} blocked />)}
+</Figure>

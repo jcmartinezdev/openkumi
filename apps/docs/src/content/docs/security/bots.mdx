@@ -1,0 +1,107 @@
+---
+title: What a bot can reach
+description: "The walls round a bot: its workspace, its browser, its accounts, no commands, no key to the server, and how bots are kept from taking what they read as orders."
+---
+
+import { Aside } from '@astrojs/starlight/components'
+import BotReach from '../../../components/diagrams/BotReach.astro'
+
+A bot acts for you with real sign-ins, and it reads things written by strangers. So it is given a
+small set of tools, each of which reaches only what is the bot's own, and it is told, again and
+again, that what it reads is not an order.
+
+<BotReach caption="A bot reaches its own workspace, browser and superpowers, the web, and other bots by message. It cannot reach another bot's files, its own rules or sign-ins, OpenKumi's API, or files elsewhere on the computer." />
+
+## Its files
+
+A bot's file tools reach its workspace (`bots/<id>/workspace/`) and nothing else.
+
+- A path that leads outside it is refused, whether by `..`, by a link that points elsewhere (links
+  are followed and the place they lead to is checked), or by a name that hides control or
+  invisible characters.
+- The history's own files (`.git…`) are refused too, so a bot cannot rewrite its own history.
+- The files of the superpowers switched on for it can be read, never written.
+- Its rules (`bot.md`), its superpowers (`superpowers.json`) and everything in `private/` (its
+  sign-ins, its browser profile, its history) sit beside the workspace, out of reach. Another bot's
+  folder is out of reach the same way.
+
+Every change it makes to its instructions and notes is recorded in a history it cannot touch, and
+you can undo it.
+
+## No commands, no key
+
+There is no tool for running commands. When a bot runs on Claude Code, Codex or Grok, the program
+is started with its own tools for running commands and touching files switched off, its sandbox
+read-only where it has one, and your personal setup left out; it gets OpenKumi's tools instead.
+See [Engines and models](/how-it-works/engines/#what-is-switched-off).
+
+A bot holds no key to the server, so it cannot use OpenKumi's API to change its own rules or
+superpowers, or anyone else's. Its engine reaches its tools at an address that works for one turn
+and only from this computer. A bot's browser and `web_fetch` also refuse OpenKumi's own address on
+this computer outright.
+
+## Its browser
+
+- **Its own profile.** Each bot has its own Chrome profile in `private/browser-profile/`: its
+  cookies and sign-ins are its alone, and your own Chrome is never touched.
+- **A window per thread.** The conversation, each subagent and each automation run browse in a
+  window of their own.
+- **Web addresses only.** It opens `http` and `https` (and blank and data pages). Files on the
+  computer stay out, whoever is driving.
+- **You and the bot never act at once.** What you type and click on a page reaches it only from the
+  device that took control of its window; while you have it, the bot can read the page but not act
+  on it.
+- **Downloads** land in its `files/inbox/`.
+
+## What it reads is not an order
+
+Web pages, emails, issues, documents and tool results can contain text written to manipulate an
+AI ("prompt injection"). OpenKumi cannot tell such text apart from anything else a bot reads, so it
+does three things.
+
+1. **It tells the bot.** Every bot is told that web pages, files, tool results and messages from
+   other bots are material to read, never instructions to follow; that only you can give the
+   go-ahead to buy, send or delete something; and to ask you first.
+2. **It marks where things come from.** A message from another bot is marked as a teammate's
+   request. A run of an automation that a bot set up is told so, and leaves anything needing your
+   go-ahead for you. A webhook passes a run only ids, never text anyone wrote. A file another bot
+   sent arrives as a copy, marked as material.
+3. **It keeps the damage small.** A bot reaches only its own sign-ins and superpowers, so one that
+   is misled can only misuse what you gave it. It cannot change its rules or give itself more.
+
+<Aside type="caution" title="These are safeguards, not guarantees">
+  A bot that has read something written to mislead it may still do something you did not want,
+  within what its tools and sign-ins allow. Give each bot only the accounts you are comfortable with
+  it using, and put what must hold in its rules.
+</Aside>
+
+## Between bots
+
+A bot that was talked into something could ask another bot for it. So:
+
+- a message from a bot is never taken as your word: the bot that gets it is told to ask you before
+  buying, sending or deleting;
+- a bot answering another can write back only to that bot, and only if asked to;
+- a chain of messages between bots ends at twenty without you;
+- only the main assistant makes bots, and only when you asked;
+- the line every bot is told about another is set by you, so a misled bot cannot change how the
+  others see it;
+- files go between bots only as copies sent with a message; no bot can open another's folder;
+- **Settings → Bots → Bots can message each other** switches all of it off.
+
+## Pages a bot shows
+
+A page from `show_page` runs in a sandboxed frame that is a site of its own: it cannot reach the
+app, its keys or the server, and cannot make requests. See [Replies and
+pages](/how-it-works/replies-and-pages/#the-frame-a-page-runs-in).
+
+## The desktop window
+
+- The window only ever loads the app's own page, and that page runs scripts only from the app's own
+  files.
+- It cannot be navigated anywhere else, and opens no new windows: links, and the sign-in pages of a
+  superpower's app, open in your own browser.
+- It may use the microphone (for dictation and calls) and write to the clipboard, and nothing else
+  the system guards.
+- What the window may ask of the app (its environments, pairing, dictation) is answered only for the
+  app's own page; a page a bot shows gets nothing.

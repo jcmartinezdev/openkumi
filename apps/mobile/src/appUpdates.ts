@@ -10,6 +10,7 @@
 import { useEffect, useRef } from 'react'
 import { AppState } from 'react-native'
 import * as Updates from 'expo-updates'
+import { onCall } from '@openkumi/client/calls'
 
 /** Back after this long in the background, the app asks whether there is a newer update. */
 const ASK_AGAIN_AFTER = 15 * 60_000
@@ -37,7 +38,8 @@ export function useUpdateChecks() {
       if (state !== 'active' || !left) return
       const away = Date.now() - left
       left = 0
-      if (pending.current && away >= START_AFTER) void Updates.reloadAsync().catch(() => {})
+      // A call goes on while the phone is locked, however long: starting the app again would cut it off.
+      if (pending.current && away >= START_AFTER && !onCall()) void Updates.reloadAsync().catch(() => {})
       // Offline, or nothing published for this build: there is nothing to say about either.
       else if (away >= ASK_AGAIN_AFTER) void fetchNewest().catch(() => {})
     })

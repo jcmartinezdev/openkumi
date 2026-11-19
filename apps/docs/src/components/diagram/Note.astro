@@ -1,0 +1,23 @@
+---
+// Loose words in a diagram, with no box: a remark beside something, or a heading.
+interface Props {
+  x: number
+  y: number
+  lines: string[]
+  align?: 'start' | 'middle' | 'end'
+  kind?: 'muted' | 'ink' | 'danger' | 'ours' | 'secret'
+  /** Monospace, for file names and commands. */
+  code?: boolean
+}
+const { x, y, lines, align = 'start', kind = 'muted', code = false } = Astro.props
+---
+
+<g class={`dg-note dg-note-${kind}`}>
+  {
+    lines.map((line, i) => (
+      <text x={x} y={y + i * 15} text-anchor={align} class={code ? 'dg-code' : undefined}>
+        {line}
+      </text>
+    ))
+  }
+</g>

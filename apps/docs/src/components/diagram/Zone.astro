@@ -1,0 +1,22 @@
+---
+// An area drawn round boxes that belong together: a computer, a process, what is trusted.
+//   plain     a place (a computer, a folder)
+//   trusted   what OpenKumi trusts
+//   outside   what it does not
+interface Props {
+  x: number
+  y: number
+  w: number
+  h: number
+  label: string
+  kind?: 'plain' | 'trusted' | 'outside'
+  /** Which corner the label sits in, to keep it clear of lines that cross the edge. */
+  side?: 'left' | 'right' | 'bottom-left' | 'bottom-right'
+}
+const { x, y, w, h, label, kind = 'plain', side = 'left' } = Astro.props
+---
+
+<g class={`dg-zone dg-zone-${kind}`}>
+  <rect x={x} y={y} width={w} height={h} rx="14" />
+  <text x={side.endsWith('left') ? x + 14 : x + w - 14} y={side.startsWith('bottom') ? y + h - 11 : y + 20} text-anchor={side.endsWith('left') ? 'start' : 'end'} class="dg-zone-label">{label.toUpperCase()}</text>
+</g>

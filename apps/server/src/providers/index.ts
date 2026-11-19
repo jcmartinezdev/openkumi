@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { CallsInfo, ProviderInfo } from '@openkumi/shared'
+import type { Bot, CallsInfo, ModelInfo, ProviderInfo } from '@openkumi/shared'
 import { HOME, emit } from '../config.ts'
 import { SUMMARISE } from '../history.ts'
 import { CHOOSE_LOOK } from '../look.ts'
@@ -134,6 +134,32 @@ export async function askOnce(provider: Provider, ask: { model: string; instruct
     else if (ev.type === 'item' && ev.item.type === 'message' && ev.item.role === 'assistant') said += ev.item.text
   }
   return (said || streamed).trim()
+}
+
+/** What each provider's models are called, as last heard: what a bot is told is put together without waiting for a list. */
+const named = new Map<string, { at: number; models: ModelInfo[] }>()
+
+/** Learns what a provider's models are called. It is waited for the first time only; after that the list is asked for again now and then, behind what goes on. */
+export async function learnModels(provider: Provider) {
+  const have = named.get(provider.id)
+  const ask = () => provider.models().then((models) => void named.set(provider.id, { at: Date.now(), models }), () => {})
+  if (!have) await ask()
+  else if (Date.now() - have.at > 10 * 60_000) {
+    have.at = Date.now()
+    void ask()
+  }
+}
+
+/**
+ * What the model a bot runs on is called, for people ("Claude Opus 5.5"), as far as it is known:
+ * the one chosen for it (or for the thread, with `chosen`), or its provider's usual one. Empty
+ * when the provider gives it no name of its own.
+ */
+export function modelName(bot: Pick<Bot, 'provider' | 'model'>, chosen = ''): string {
+  const models = named.get(bot.provider)?.models ?? []
+  const id = chosen || bot.model
+  const name = (id ? models.find((m) => m.id === id) : models[0])?.name ?? id
+  return /^default$/i.test(name) ? '' : name
 }
 
 export function providerInfos(): ProviderInfo[] {

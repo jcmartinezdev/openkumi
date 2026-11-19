@@ -1,38 +1,57 @@
 ---
 title: OpenKumi documentation
-description: "How to install OpenKumi, what its bots can do, and how it works."
+description: "How to install OpenKumi, set it up, what its bots can do, how it all works, and how it keeps you safe."
 ---
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components'
+import BigPicture from '../../components/diagrams/BigPicture.astro'
 
 OpenKumi is a free, open-source desktop app for AI bots that live on your computer. Each bot has
 its own memory, its own signed-in browser and only the powers you give it, and it runs on the
-Claude, ChatGPT or Grok plan you already have.
+Claude, ChatGPT or Grok plan you already have, or on a local model.
+
+There is no account to make and no server of ours in between. Everything a bot is and knows is a
+folder of plain files on a computer of yours.
+
+<BigPicture caption="The app is only a window. The server does the work, on the computer you choose, and reaches your AI plan, the web and the apps you sign the bots in to." />
 
 ## Start here
 
 <CardGrid>
-  <LinkCard title="Installing and updating" description="The desktop app, the server on its own, and how both update." href="/install/" />
-  <LinkCard title="What OpenKumi does" description="Everything a bot is and can do." href="/features/" />
+  <LinkCard title="Installing and updating" description="The desktop app, a server on a computer with no screen, and how both stay up to date." href="/install/" />
+  <LinkCard title="Your first bot" description="From the first launch to a bot that works for you every morning, in ten minutes." href="/getting-started/" />
+  <LinkCard title="What OpenKumi does" description="Everything a bot is and can do, in one page." href="/features/" />
 </CardGrid>
 
-## Using OpenKumi
+## Setting things up
 
 <CardGrid>
-  <LinkCard title="Where bots run, and reaching them" description="Environments, pairing another computer, and the iPhone app." href="/environments/" />
-  <LinkCard title="Automations" description="Bots that work at set times, when something changes, or when an app calls." href="/automations/" />
-  <LinkCard title="Superpowers" description="What a bot can do beyond chatting and browsing, and how it signs in." href="/superpowers/" />
-  <LinkCard title="Settings and configuration" description="What each settings page holds, and the environment variables." href="/settings/" />
+  <LinkCard title="What bots run on" description="Claude Code, Codex, Grok, local models and APIs: installing and checking each." href="/setup/providers/" />
+  <LinkCard title="Making and shaping a bot" description="Its purpose, rules, model, browser, voice, files and mascot." href="/setup/bots/" />
+  <LinkCard title="Other computers and your phone" description="Pairing, reaching your bots away from home, and the iPhone app." href="/environments/" />
+  <LinkCard title="Servers and addresses" description="Several servers in one app, and how each is reached: home network, Tailscale or a public address." href="/connections/" />
+  <LinkCard title="Superpowers" description="Giving a bot an app or some know-how, and signing it in." href="/superpowers/" />
+  <LinkCard title="Automations" description="Work at set times, when something changes, or when an app calls." href="/automations/" />
+  <LinkCard title="Calls" description="Talking with a bot out loud, on your ChatGPT plan." href="/calls/" />
 </CardGrid>
 
 ## How it works
 
 <CardGrid>
-  <LinkCard title="Where everything lives" description="The folder that holds your bots, and what in it is yours." href="/how-it-works/where-everything-lives/" />
-  <LinkCard title="What every bot is told" description="The master prompt and the rest of what a bot is given." href="/how-it-works/what-a-bot-is-told/" />
-  <LinkCard title="Tools available to a bot" description="Every tool a bot can call." href="/how-it-works/tools/" />
-  <LinkCard title="Security notes" description="What is trusted, what is not, and why." href="/security/" />
+  <LinkCard title="The big picture" description="The parts of OpenKumi, where each runs, and how they talk." href="/how-it-works/" />
+  <LinkCard title="How a bot works" description="What a bot is made of, and the life of one message from you to its reply." href="/how-it-works/a-bot/" />
+  <LinkCard title="Engines and models" description="How a bot runs on Claude Code, Codex, Grok or a model of your own." href="/how-it-works/engines/" />
+  <LinkCard title="Tools available to a bot" description="Every tool a bot can call, and where each is withheld." href="/how-it-works/tools/" />
 </CardGrid>
 
-OpenKumi is open source under the MIT License. The code, and the place to report a problem, is
-[on GitHub](https://github.com/jcmartinezdev/openkumi).
+## Security
+
+<CardGrid>
+  <LinkCard title="Security overview" description="What OpenKumi trusts, what it does not, and the rules that follow." href="/security/" />
+  <LinkCard title="Keys, pairing and the network" description="How a device gets in, and how it knows it reached your server." href="/security/access/" />
+  <LinkCard title="What a bot can reach" description="Its workspace, its browser and its accounts, and the walls round them." href="/security/bots/" />
+  <LinkCard title="What leaves your computer" description="Every place your data goes, and what goes there." href="/security/outside/" />
+</CardGrid>
+
+OpenKumi is open source under the MIT License, and an alpha: expect rough edges. The code, and the
+place to report a problem, is [on GitHub](https://github.com/jcmartinezdev/openkumi).
