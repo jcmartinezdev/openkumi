@@ -95,4 +95,4 @@ reaches the voice is one OpenAI marks experimental.
 - **Delete one bot:** its page, **Danger zone**. Its conversations, files, memory and saved logins
   go with it.
 - **Start completely fresh:** quit OpenKumi and move `~/.openkumi` somewhere else. The next start
-  makes a new one with **Assistant** in it. Paired devices will have to pair again.
+  makes a new one with **Kumi** in it. Paired devices will have to pair again.

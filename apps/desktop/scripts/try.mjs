@@ -152,11 +152,11 @@ const steps = [
   }],
   ['It starts its own server, in the version it came with', async () => {
     await win.locator('.welcome-start', { hasText: 'Run them on this computer' }).click()
-    await win.locator('.sidebar .item', { hasText: 'Assistant' }).first().waitFor({ timeout: 90_000 })
+    await win.locator('.sidebar .item', { hasText: 'Kumi' }).first().waitFor({ timeout: 90_000 })
     const hello = await (await fetch(`http://127.0.0.1:${port}/api/hello`)).json()
     assert.equal(hello.version, version)
     const state = await api('GET', '/api/state')
-    assert.deepEqual(state.bots.map((bot) => bot.name), ['Assistant'])
+    assert.deepEqual(state.bots.map((bot) => bot.name), ['Kumi'])
   }],
   ['The bot that comes with it answers in the window', async () => {
     await win.locator('.composer textarea').fill('Is anybody there?')

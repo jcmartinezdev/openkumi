@@ -138,7 +138,7 @@ used OpenKumi there day to day yet. If something is off,
 
 1. Open OpenKumi. It asks where your bots should run: choose **Run them on this computer**.
 2. Open **Settings → Providers** and check that at least one shows as connected.
-3. Say hello to **Assistant**, the bot that comes with it, or make a bot of your own with **+**.
+3. Say hello to **Kumi**, the bot that comes with it, or make a bot of your own with **+**.
 
 ### On a computer with no screen
 

@@ -184,7 +184,7 @@ after(async () => {
 
 test('seeds a default bot', async () => {
   const state = await api('GET', '/api/state')
-  assert.ok(state.bots.some((b) => b.name === 'Assistant'))
+  assert.ok(state.bots.some((b) => b.name === 'Kumi'))
 })
 
 test('every request needs the access code, also from this computer, and there are no pages', async () => {
@@ -450,7 +450,7 @@ test('a long conversation is shortened for the model: a summary stands in for it
 
 test('bots are created from chat by the main assistant alone, on the owner’s word, and can be started on a first message', async () => {
   const main = (await api('GET', '/api/state')).bots[0]
-  assert.equal(main.name, 'Assistant')
+  assert.equal(main.name, 'Kumi')
   await api('PATCH', `/api/bots/${main.id}`, { provider: 'mock' })
   // Only the main assistant is offered it, and only in its conversation with the owner.
   assert.doesNotMatch(await told('!tools'), /create_bot/)
@@ -473,8 +473,8 @@ test('bots are created from chat by the main assistant alone, on the owner’s w
     // The first message is in its own conversation, which is named after it, and it has set to work.
     const started = await until(() => conversationOf('researcher'))
     const said = await settle(started.id)
-    assert.deepEqual([said[0].source, said[0].bot, said[0].text], ['bot', { id: 'assistant', name: 'Assistant' }, 'find out about herons'])
-    assert.match(lastText(said), /^Echo \(turn 1\): <bot_message from="Assistant" bot_id="assistant" reply_wanted="no">\nfind out about herons\n<\/bot_message>$/)
+    assert.deepEqual([said[0].source, said[0].bot, said[0].text], ['bot', { id: 'kumi', name: 'Kumi' }, 'find out about herons'])
+    assert.match(lastText(said), /^Echo \(turn 1\): <bot_message from="Kumi" bot_id="kumi" reply_wanted="no">\nfind out about herons\n<\/bot_message>$/)
     assert.equal((await conversationOf('researcher')).title, 'find out about herons')
     // Without a description, the first sentence of what it is for stands in.
     await say(await fresh(main.id), '!tool create_bot {"name":"Plain","description":"","instructions":"Keeps lists. Likes order."}')
@@ -572,10 +572,10 @@ test('the other bots: each bot is told who the others are and what each is for',
   const prompt = await told()
   assert.match(prompt, /# The other bots\nYou are one of the user's bots\. These are the others, and what each is for:\n/)
   assert.match(prompt, /\n- 🧳 Travel \(bot_id: travel\): Plans trips and books travel\.\n/)
-  assert.match(prompt, /\n- 🤖 Assistant \(bot_id: assistant\), the main assistant: Everyday questions and tasks/)
+  assert.match(prompt, /\n- 🤖 Kumi \(bot_id: kumi\), the main assistant: Everyday questions and tasks/)
   assert.ok(!prompt.includes('(bot_id: tester)'), 'a bot is not listed among the others')
   assert.match(prompt, /To give one of them something to do, or to tell it something, call message_bot with its bot_id\./)
-  assert.match(await told('!system', 'assistant'), /# The other bots\nYou are the main assistant: the user comes to you first/)
+  assert.match(await told('!system', 'kumi'), /# The other bots\nYou are the main assistant: the user comes to you first/)
   // What a bot may use is listed with it, and a bot with no description is said to have none.
   await api('PUT', `/api/bots/travel/superpowers/field-guide`, { on: true })
   await api('PATCH', '/api/bots/travel', { description: '' })
@@ -635,7 +635,7 @@ test('messages between bots: one bot writes into another’s conversation, which
       return (await settle(conversation.id)).findLast((d) => d.type === 'function_call_output').output
     }
     assert.match(await answer('!tool message_bot {"bot_id":"tester","message":"thanks!"}', false), /^Error: You are answering a message from another bot that did not ask for a reply, so you cannot message a bot now\./)
-    assert.match(await answer('!tool message_bot {"bot_id":"assistant","message":"hello"}', true), /^Error: You are answering a message from another bot, so the only bot you can write to now is the one that asked you for a reply\./)
+    assert.match(await answer('!tool message_bot {"bot_id":"kumi","message":"hello"}', true), /^Error: You are answering a message from another bot, so the only bot you can write to now is the one that asked you for a reply\./)
     assert.match(await answer('!tool message_bot {"bot_id":"tester","message":"Lisbon is planned"}', true), /^Delivered\./)
     // The reply arrives in the asker's conversation as a message from that bot, and wakes it.
     const mine = await until(() => conversationOf(bot.id))
@@ -1479,7 +1479,7 @@ test('automations: run by hand, paused and resumed, checked, and quiet when ther
 
 test('automations: bots make them for themselves, and only the main assistant makes them for others or touches what it did not make', async () => {
   const main = (await api('GET', '/api/state')).bots[0]
-  assert.equal(main.name, 'Assistant', 'the first bot is the main assistant')
+  assert.equal(main.name, 'Kumi', 'the first bot is the main assistant')
   await api('PATCH', `/api/bots/${main.id}`, { provider: 'mock' })
   const other = await api('POST', '/api/bots', { name: 'Other', provider: 'mock' })
   const automations = async () => (await api('GET', '/api/automations'))
@@ -1489,7 +1489,7 @@ test('automations: bots make them for themselves, and only the main assistant ma
   assert.match(made, /^Scheduled\. It is now \w{3} \d{4}-\d\d-\d\d \d\d:\d\d \(.+\)\./)
   const own = (await automations()).find((t) => t.title === 'Water plants')
   assert.deepEqual([own.botId, own.createdBy, own.trigger], [bot.id, bot.id, { kind: 'time', schedule: { type: 'daily', time: '08:00', days: [1, 5] } }])
-  assert.match(await tool('create_automation', { title: 'X', prompt: 'x', in_minutes: 5, bot_id: main.id }), /^Error: Only the main assistant, Assistant, can make automations for other bots/)
+  assert.match(await tool('create_automation', { title: 'X', prompt: 'x', in_minutes: 5, bot_id: main.id }), /^Error: Only the main assistant, Kumi, can make automations for other bots/)
   assert.match(await tool('create_automation', { title: 'X', prompt: 'x', in_minutes: 5, every_minutes: 30 }), /^Error: Give only one of/)
   assert.match(await tool('create_automation', { title: 'X', prompt: 'x' }), /^Error: Say what starts it/)
 
@@ -1498,7 +1498,7 @@ test('automations: bots make them for themselves, and only the main assistant ma
   const seen = await list(bot.id)
   assert.match(seen.now, /\(.+\)$/)
   assert.deepEqual(seen.automations.map((t) => [t.title, t.made_by, t.you_can_change_it]), [['Water plants', 'you', true], ['Owner’s', 'the user', false]])
-  assert.match(await tool('update_automation', { id: owners.id, paused: true }), /^Error: You did not make the automation "Owner’s" \(the user did\), so you cannot change or delete it\. Only the main assistant, Assistant, can\./)
+  assert.match(await tool('update_automation', { id: owners.id, paused: true }), /^Error: You did not make the automation "Owner’s" \(the user did\), so you cannot change or delete it\. Only the main assistant, Kumi, can\./)
   assert.match(await tool('delete_automation', { id: owners.id }), /^Error: You did not make/)
   // Another bot does not see them at all.
   assert.deepEqual((await list(other.id)).automations, [])
@@ -1515,7 +1515,7 @@ test('automations: bots make them for themselves, and only the main assistant ma
   const forTester = (await automations()).find((t) => t.title === 'For Tester')
   assert.deepEqual([forTester.botId, forTester.createdBy, new Date(forTester.nextRunAt).getHours()], [bot.id, main.id, 9])
   // Tester sees it, as it is the one doing it, and cannot delete it.
-  assert.ok((await list(bot.id)).automations.some((t) => t.id === forTester.id && t.made_by === 'Assistant' && !t.you_can_change_it))
+  assert.ok((await list(bot.id)).automations.some((t) => t.id === forTester.id && t.made_by === 'Kumi' && !t.you_can_change_it))
   assert.match(await tool('delete_automation', { id: forTester.id }), /^Error: You did not make/)
 
   // Each bot is told what it may do.
