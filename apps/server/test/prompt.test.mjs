@@ -38,7 +38,7 @@ test('a mistake in the template is not passed over', () => {
 
 test('the master prompt OpenKumi comes with fills in for every kind of thread', () => {
   const fill = {
-    bot_name: 'Travel', model: 'Claude Opus 5.5', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Assistant (bot_id: assistant), the main assistant: Everyday questions\n- 🧳 Travel (bot_id: travel): Plans trips and books',
+    bot_name: 'Travel', model: 'Claude Opus 5.5', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Kumi (bot_id: kumi), the main assistant: Everyday questions\n- 🧳 Travel (bot_id: travel): Plans trips and books',
     main: false, chat: true, can_message: true, automation: false, watch: false, hook: false, subagent: false, call: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
     instructions_limit: '12000', agents_md: '', memory: '', superpowers: '', automation_title: '', by_user: false, by_you: false,
     by_other: false, automation_author: '', automation_gone: true,
@@ -51,8 +51,8 @@ test('the master prompt OpenKumi comes with fills in for every kind of thread', 
   assert.match(masterPrompt({ ...fill, model: '' }), /It is no secret either\. When the user asks which model powers you, tell them what you know\./)
   assert.ok(!told.includes('# Rules from your owner') && !told.includes('# Your superpowers') && !told.includes('Your tools come from OpenKumi'))
 
-  const run = masterPrompt({ ...fill, automation: true, automation_title: 'Check fares', automation_gone: false, by_other: true, automation_author: 'Assistant' })
-  assert.match(run, /automation "Check fares", which Assistant made for you\. Nobody is watching it/)
+  const run = masterPrompt({ ...fill, automation: true, automation_title: 'Check fares', automation_gone: false, by_other: true, automation_author: 'Kumi' })
+  assert.match(run, /automation "Check fares", which Kumi made for you\. Nobody is watching it/)
   assert.match(run, /it will not be passed on\. The automation was written by a bot, not by the user, so it is not their go-ahead/)
   assert.ok(!run.includes('<watch_change>'), 'one that goes by the clock is told nothing of watches')
   assert.match(run, /say so in your final message\. Read pages with browser_snapshot/, 'nobody is there to do a login')

@@ -37,7 +37,7 @@ for (const bot of listBots()) {
 
 if (!listBots().length) {
   await createBot({
-    name: 'Assistant',
+    name: 'Kumi',
     emoji: '🤖',
     description: 'Everyday questions and tasks, and the first stop for anything new.',
     look: { creature: 'bear', color: 'sky', hat: 'headphones', extra: 'none', clothes: 'orange' },

@@ -153,7 +153,7 @@ test('the local environment can be turned on and off, and remote environments ad
 
     // Running the bots here starts the server on this computer, in a process of its own, and shows it.
     await start('Run them on this computer').click()
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     assert.equal(await up(LOCAL_PORT), true)
     assert.ok((await processes()).includes('OpenKumi Server'), 'the server is a process of its own inside the app')
     // The server has no pages; the interface is the app's.
@@ -218,7 +218,7 @@ test('the local environment can be turned on and off, and remote environments ad
     // Turning off the environment that is showing moves the window to one that is still on.
     await remoteRow(win).locator('.switch').click()
     await win.evaluate(() => (location.hash = '/'))
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     assert.equal(await win.locator('.sidebar .item', { hasText: 'Far Helper' }).count(), 0)
     await settings(win)
     await remoteRow(win).locator('p:has-text("Turned off")').waitFor()
@@ -235,12 +235,12 @@ test('the local environment can be turned on and off, and remote environments ad
 
     // Quitting stops the server the app started; the next start brings back what was on.
     await start('Run them on this computer').click()
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     await app.close()
     await until(async () => !(await up(LOCAL_PORT)), 15_000)
     assert.equal(await up(REMOTE_PORT), true, 'another environment is never touched')
     win = await launch()
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     await app.close()
     await until(async () => !(await up(LOCAL_PORT)), 15_000)
 
@@ -249,7 +249,7 @@ test('the local environment can be turned on and off, and remote environments ad
     try {
       await until(() => up(LOCAL_PORT))
       win = await launch()
-      await showsBot(win, 'Assistant')
+      await showsBot(win, 'Kumi')
       assert.ok(!(await processes()).includes('OpenKumi Server'), 'the app does not start a second one')
       await settings(win)
       assert.match(await win.locator('#local-environment').innerText(), /started outside this app/)
@@ -268,7 +268,7 @@ test('the local environment can be turned on and off, and remote environments ad
 
 test('a reply is drawn as it is written, and a bot’s browser is drawn and driven through the worker', async () => {
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
   const bot = (await state()).bots[0]
 
@@ -287,7 +287,7 @@ test('a reply is drawn as it is written, and a bot’s browser is drawn and driv
   await win.waitForFunction(() => getComputedStyle(document.querySelector('.pane .view canvas')).visibility === 'visible', null, { timeout: 60_000 })
   // It is only watched until the owner takes control of it.
   assert.equal(await win.locator('.address').getAttribute('readonly'), '')
-  assert.match(await win.locator('.control-bar').innerText(), /Assistant has control\.\s+Take control/)
+  assert.match(await win.locator('.control-bar').innerText(), /Kumi has control\.\s+Take control/)
   await win.getByRole('button', { name: 'Take control' }).click()
   await win.locator('.control-bar.you').waitFor()
   // A page that is one big red link.
@@ -318,7 +318,7 @@ test('a reply is drawn as it is written, and a bot’s browser is drawn and driv
 
 test('a window the bot starts browsing in floats over the chat, docks beside it or fills the window, and is where the bot asks for help', async () => {
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
   const surfer = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Surfer', provider: 'mock' })
   await win.locator('.sidebar .row.bot', { hasText: 'Surfer' }).click()
@@ -380,7 +380,7 @@ test('a window the bot starts browsing in floats over the chat, docks beside it 
 
 test('replies are drawn with code in colour, diagrams, formulas and tables, and a page a bot shows runs in a frame that cannot reach the app', async () => {
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   // Links the app opens are noted instead of going to the computer's browser.
   await app.evaluate(({ shell }) => {
     globalThis.opened = []
@@ -462,7 +462,7 @@ test('replies are drawn with code in colour, diagrams, formulas and tables, and 
 
 test('files go up and come down, and another computer is paired and removed from the settings', async () => {
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   win.on('dialog', (dialog) => dialog.accept())
   const bot = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots[0]
 
@@ -517,7 +517,7 @@ test('files go up and come down, and another computer is paired and removed from
 
 test('files go with a message: picked or taken out in the composer, pictures made smaller, kept by the conversation and copied to the bot\'s inbox', async () => {
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Looker', provider: 'mock' })
   const files = `${tmp}/local-home/bots/${bot.id}/workspace/files`
   /** The names of the files waiting to go with a message, out of the bot's sight. */
@@ -598,7 +598,7 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
   await new Promise((resolve) => impostor.listen(LOCAL_PORT, '127.0.0.1', resolve))
   configure(localOnly)
   let win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   assert.ok((await processes()).includes('OpenKumi Server'))
   assert.ok(heard.length > 0 && !heard.some((line) => line.includes(tokenOf('local-home'))), 'the impostor was asked who it is, and never given the access code')
   await app.close()
@@ -608,11 +608,11 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
   const joined = spawn(process.execPath, [SERVER], { env, stdio: 'ignore' })
   await until(() => up(LOCAL_PORT))
   win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   assert.ok(!(await processes()).includes('OpenKumi Server'))
   joined.kill()
   await until(async () => (await processes()).includes('OpenKumi Server'), 30_000)
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   await win.locator('.toast').waitFor({ state: 'detached', timeout: 15_000 })
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
@@ -625,7 +625,7 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
     const given = await pairWith(REMOTE_PORT, 'far-home')
     configure({ local: { enabled: false }, environments: [{ id: 'remote-far', name: 'Far Mac', url: `http://127.0.0.1:${REMOTE_PORT}`, token: given.key, enabled: true }], current: 'remote-far' })
     win = await launch()
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     await ask(REMOTE_PORT, 'far-home', 'DELETE', `/api/computers/${given.id}`)
     await win.locator('.gate-head p', { hasText: 'Far Mac no longer lets this computer in.' }).waitFor({ timeout: 20_000 })
     // The list of environments is right there, to add it again with its new link.
@@ -736,7 +736,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     }
     for (const id of ['notion', 'linear']) pointAt(id, service.url)
     const win = await launch()
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     win.on('dialog', (dialog) => dialog.accept())
     await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Second bot', provider: 'mock' })
     const powersOf = async () => Object.fromEntries((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.map((b) => [b.name, b.superpowers]))
@@ -802,7 +802,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     await popup.locator('p', { hasText: 'Notion is active for Second bot.' }).waitFor()
     await popup.getByRole('button', { name: 'Done' }).click()
     await row.locator('p', { hasText: 'Signed in · 1 tool' }).waitFor({ timeout: 30_000 })
-    assert.deepEqual(await powersOf(), { Assistant: [], 'Second bot': ['notion'] }, 'only that bot gets it')
+    assert.deepEqual(await powersOf(), { Kumi: [], 'Second bot': ['notion'] }, 'only that bot gets it')
 
     // The bot's own settings have the same catalog, where what it has stands out in its groups. A superpower opened from
     // there is about that bot alone: its buttons are by the name, and no other bot is asked about.
@@ -850,7 +850,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
 test('a bot has one conversation: starting fresh sets it aside, and earlier ones are searched, read and continued', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   const solo = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Solo', provider: 'mock' })
   const here = () => win.evaluate(() => location.hash)
   const say = async (text) => {
@@ -919,7 +919,7 @@ test('what is said to a busy bot waits in view, to be taken back, sent now or le
   fs.mkdirSync(`${tmp}/app`, { recursive: true })
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   const busy = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Busy', provider: 'mock' })
   const other = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Other', provider: 'mock' })
   await ask(LOCAL_PORT, 'local-home', 'PATCH', '/api/settings', { maxSteps: 500 })
@@ -1001,7 +1001,7 @@ test('what is said to a busy bot waits in view, to be taken back, sent now or le
 test('automations: made on their page, run, and each run opened from beneath its automation', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   win.on('dialog', (dialog) => dialog.accept())
   const helper = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Helper', provider: 'mock' })
   const here = () => win.evaluate(() => location.hash)
@@ -1010,7 +1010,7 @@ test('automations: made on their page, run, and each run opened from beneath its
   // They have a place of their own in the sidebar, which says who may do what.
   await win.locator('.sidebar .automations-link').click()
   await win.locator('.heading', { hasText: 'Automations' }).waitFor()
-  assert.match(await win.locator('.set-intro').first().innerText(), /🤖 Assistant, your first bot, is the main assistant/)
+  assert.match(await win.locator('.set-intro').first().innerText(), /🤖 Kumi, your first bot, is the main assistant/)
   await win.locator('.set-row', { hasText: 'No automations yet' }).waitFor()
 
   // A new one: a bot, a prompt, and a time on chosen days.
@@ -1107,7 +1107,7 @@ test('automations: made on their page, run, and each run opened from beneath its
 
   // The main assistant is marked among the bots.
   await win.evaluate(() => (location.hash = '/settings/bots'))
-  await win.locator('.set-link', { hasText: 'Assistant' }).locator('.pill', { hasText: 'Main assistant' }).waitFor()
+  await win.locator('.set-link', { hasText: 'Kumi' }).locator('.pill', { hasText: 'Main assistant' }).waitFor()
 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
@@ -1131,7 +1131,7 @@ test('a webhook is set up on its app’s page, and an automation chosen in the f
     }),
   )
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   win.on('dialog', (dialog) => dialog.accept())
   const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
   const helper = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Helper') ?? (await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Helper', provider: 'mock' }))
@@ -1201,8 +1201,8 @@ test('a webhook is set up on its app’s page, and an automation chosen in the f
 test('the model picker offers every provider and its models, and picking one moves the bot to it', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()
-  await showsBot(win, 'Assistant')
-  const assistant = async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Assistant')
+  await showsBot(win, 'Kumi')
+  const kumi = async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Kumi')
   const open = async () => {
     await win.getByRole('button', { name: 'Model', exact: true }).click()
     await win.locator('.model-pop').waitFor()
@@ -1221,8 +1221,8 @@ test('the model picker offers every provider and its models, and picking one mov
   // The model a provider uses by itself leads its list and says so.
   assert.equal(await win.locator('.model-row', { has: win.locator('.model-tag', { hasText: 'Default' }) }).locator('.model-name').innerText(), 'grok-test')
   await win.locator('.model-row', { hasText: 'grok-test-fast' }).click()
-  await until(async () => (await assistant()).provider === 'grok', 10_000)
-  assert.equal((await assistant()).model, 'grok-test-fast')
+  await until(async () => (await kumi()).provider === 'grok', 10_000)
+  assert.equal((await kumi()).model, 'grok-test-fast')
   await win.locator('.model-button', { hasText: 'grok-test-fast' }).waitFor()
   // A click leaves the picker open, with the reasoning levels of the model just picked under it.
   await win.locator('.model-row[aria-selected=true]', { hasText: 'grok-test-fast' }).locator('+ .model-reasoning').waitFor()
@@ -1235,8 +1235,8 @@ test('the model picker offers every provider and its models, and picking one mov
   await win.locator('.model-row').first().waitFor()
   assert.deepEqual([await rows(), await win.locator('.model-row .model-of').allInnerTexts()], [['Claude Sonnet 9', 'Claude Sonnet 8'], ['Claude Code', 'Claude Code']])
   await win.keyboard.press('Enter')
-  await until(async () => (await assistant()).provider === 'claude-code', 10_000)
-  assert.equal((await assistant()).model, 'sonnet')
+  await until(async () => (await kumi()).provider === 'claude-code', 10_000)
+  assert.equal((await kumi()).model, 'sonnet')
   await win.locator('.model-button', { hasText: 'Claude Sonnet 9' }).waitFor()
   // ...and the bot really runs there now, in the same conversation, which the new engine is told about.
   await win.locator('.composer textarea').fill('hello')
@@ -1247,7 +1247,7 @@ test('the model picker offers every provider and its models, and picking one mov
   await open()
   assert.deepEqual(await win.locator('.model-row[aria-selected=true] + .model-reasoning [role=radio]').allInnerTexts(), ['Auto', 'Low', 'Medium', 'High', 'Extra High', 'Max'])
   await win.getByRole('radio', { name: 'Extra High' }).click()
-  await until(async () => (await assistant()).effort === 'xhigh', 10_000)
+  await until(async () => (await kumi()).effort === 'xhigh', 10_000)
   await win.locator('.model-button', { hasText: 'Extra High' }).waitFor()
   // Earlier models are folded away until asked for.
   assert.deepEqual(await rows(), ['Claude Opus 9', 'Claude Sonnet 9', 'Claude Haiku 9'])
@@ -1255,13 +1255,13 @@ test('the model picker offers every provider and its models, and picking one mov
   assert.deepEqual(await rows(), ['Claude Opus 9', 'Claude Sonnet 9', 'Claude Haiku 9', 'Claude Sonnet 8'])
   // A model that does not take the level the bot has is given the choice back.
   await win.locator('.model-row', { hasText: 'Claude Sonnet 8' }).click()
-  await until(async () => (await assistant()).model === 'claude-sonnet-8', 10_000)
-  assert.equal((await assistant()).effort, '')
+  await until(async () => (await kumi()).model === 'claude-sonnet-8', 10_000)
+  assert.equal((await kumi()).effort, '')
   await win.keyboard.press('Escape')
   // Command with a number takes the model in that place: the first is the provider's default.
   await open()
   await win.keyboard.press('Meta+1')
-  await until(async () => (await assistant()).model === '', 10_000)
+  await until(async () => (await kumi()).model === '', 10_000)
   await win.locator('.model-button', { hasText: 'Claude Opus 9' }).waitFor()
 
   // A model can be starred to keep it at hand.
@@ -1287,7 +1287,7 @@ test('the model picker offers every provider and its models, and picking one mov
   await win.locator('.prov-head h3', { hasText: 'Claude Code' }).waitFor()
   await win.locator('.prov-models li').first().waitFor()
   assert.deepEqual((await win.locator('.prov-models li').allInnerTexts()).map((text) => text.split('\n')[0]), ['Claude Opus 9', 'Claude Sonnet 9', 'Claude Haiku 9', 'Claude Sonnet 8'])
-  assert.deepEqual((await win.locator('.prov-bots a').allInnerTexts()).map((text) => text.split('\n').pop()), ['Assistant'])
+  assert.deepEqual((await win.locator('.prov-bots a').allInnerTexts()).map((text) => text.split('\n').pop()), ['Kumi'])
   assert.match(await win.locator('.prov-detail .set-row').innerText(), /Program path[\s\S]*Using .*fake-claude\.mjs/)
   // The switch in the list takes a provider away from the bots altogether.
   await win.getByRole('switch', { name: 'Use Grok for bots' }).click()
@@ -1301,7 +1301,7 @@ test('the model picker offers every provider and its models, and picking one mov
 test('master prompt: each bot’s line set from one page, and all a bot is told read there, with nothing to change it', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
   const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
 
@@ -1314,7 +1314,7 @@ test('master prompt: each bot’s line set from one page, and all a bot is told 
   await shot('master-prompt')
 
   // What each bot is for, which the others are told.
-  const line = win.getByLabel('What Assistant is for')
+  const line = win.getByLabel('What Kumi is for')
   assert.match(await line.inputValue(), /^Everyday questions and tasks/)
   await line.fill('Runs the household.')
   await line.blur()
@@ -1324,12 +1324,12 @@ test('master prompt: each bot’s line set from one page, and all a bot is told 
   await win.getByRole('button', { name: 'Show', exact: true }).click()
   const told = win.locator('.prompt-text')
   await told.waitFor()
-  assert.match(await told.innerText(), /^You are Assistant,[\s\S]*# Principles[\s\S]*\*\*Work as a team\.\*\*[\s\S]*# Working in OpenKumi/)
+  assert.match(await told.innerText(), /^You are Kumi,[\s\S]*# Principles[\s\S]*\*\*Work as a team\.\*\*[\s\S]*# Working in OpenKumi/)
   await shot('master-prompt-told')
   await win.keyboard.press('Escape')
 
   // A bot's own page has its line too.
-  await win.evaluate(() => (location.hash = '/settings/bots/assistant'))
+  await win.evaluate(() => (location.hash = '/settings/bots/kumi'))
   assert.equal(await win.getByLabel('What it is for', { exact: true }).inputValue(), 'Runs the household.')
 
   await app.close()
@@ -1350,7 +1350,7 @@ test('dictation: what is said goes into the message where the cursor was, and on
   t.after(() => delete env.OPENKUMI_DICTATION_RECORDING)
 
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Listener', provider: 'mock' })
   await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
   const message = win.locator('.composer textarea')
@@ -1405,7 +1405,7 @@ test('calls: a bot is called from its conversation, what is said shows as it is 
   const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
 
   const win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Caller', provider: 'mock' })
   await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
   // Calls need Codex, signed in with ChatGPT: the server has found it by now, or is about to, and the window hears of it.
@@ -1476,7 +1476,7 @@ test('updates: the app finds a newer version of itself, and an environment this 
   // Run from the repository it does not update itself, and says so where its version is.
   configure({ local: { enabled: true }, environments: [], current: 'local' })
   let win = await launch()
-  await showsBot(win, 'Assistant')
+  await showsBot(win, 'Kumi')
   await win.evaluate(() => (location.hash = '/settings/about'))
   if (packaged) {
     // An installed app can, and offers to look. (OPENKUMI_DESKTOP_APP tests that one instead of the source.)
@@ -1505,7 +1505,7 @@ test('updates: the app finds a newer version of itself, and an environment this 
   env.OPENKUMI_DESKTOP_UPDATES_URL = `http://127.0.0.1:${REMOTE_PORT + 2}`
   try {
     win = await launch()
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     await win.evaluate(() => {
       window.updates = []
       window.openkumiDesktop.onState((state) => window.updates.push(state.update))
@@ -1591,7 +1591,7 @@ test('telemetry: the server’s question is put once with its box ticked, nothin
     if (!packaged) {
       // The app as someone working on OpenKumi starts it, from the repository: its server sends nothing, and there is no question.
       win = await launch()
-      await showsBot(win, 'Assistant')
+      await showsBot(win, 'Kumi')
       const { telemetry } = (await state()).about
       assert.equal(telemetry.can, false)
       assert.match(telemetry.why, /from its source/)
@@ -1605,7 +1605,7 @@ test('telemetry: the server’s question is put once with its box ticked, nothin
     env.OPENKUMI_TELEMETRY_KEY = 'phc_test'
     win = await launch()
     const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
 
     // Asked as soon as the environment shows, with the box ticked. Until it is answered nothing has gone.
     let question = win.getByRole('dialog', { name: 'Help make OpenKumi better' })
@@ -1629,7 +1629,7 @@ test('telemetry: the server’s question is put once with its box ticked, nothin
     fs.rmSync(`${tmp}/app/desktop.json`)
     win = await launch()
     await win.locator('.welcome-start', { hasText: 'Run them on this computer' }).click()
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     question = win.getByRole('dialog', { name: 'Help make OpenKumi better' })
     await question.getByRole('button', { name: 'Continue' }).click()
     await question.waitFor({ state: 'detached' })
@@ -1677,7 +1677,7 @@ test('telemetry: the server’s question is put once with its box ticked, nothin
     await app.close()
     await until(async () => !(await up(LOCAL_PORT)), 15_000)
     win = await launch()
-    await showsBot(win, 'Assistant')
+    await showsBot(win, 'Kumi')
     await new Promise((r) => setTimeout(r, 500))
     assert.equal(await win.getByRole('dialog', { name: 'Help make OpenKumi better' }).count(), 0)
     await app.close()
