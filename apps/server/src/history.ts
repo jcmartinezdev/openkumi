@@ -5,7 +5,7 @@
 import type { Item, ItemData, Said } from '@openkumi/shared'
 import { isPicture, withFiles } from './attachments.ts'
 import * as db from './db.ts'
-import type { Provider } from './providers/types.ts'
+import type { ModelEvent, Provider } from './providers/types.ts'
 
 type Summary = Extract<ItemData, { type: 'summary' }>
 
@@ -143,9 +143,10 @@ function digest(items: Item[]): string {
 
 /**
  * Replaces the older part of a thread, for the model, by a summary written by the thread's own
- * model. Returns whether anything was replaced. `limit` is in tokens.
+ * model. Returns whether anything was replaced. `limit` is in tokens. What writing the summary
+ * used is handed to `used`.
  */
-export async function shorten(threadId: string, limit: number, ask: { provider: Provider; model: string; signal: AbortSignal }): Promise<boolean> {
+export async function shorten(threadId: string, limit: number, ask: { provider: Provider; model: string; signal: AbortSignal; used?: (ev: Extract<ModelEvent, { type: 'usage' }>) => void }): Promise<boolean> {
   const found = cut(db.listItems(threadId), limit)
   if (!found) return false
   const { older, summary } = found
@@ -168,6 +169,7 @@ export async function shorten(threadId: string, limit: number, ask: { provider: 
     for await (const ev of stream) {
       if (ev.type === 'text_delta') streamed += ev.delta
       else if (ev.type === 'item' && ev.item.type === 'message' && ev.item.role === 'assistant') text = ev.item.text
+      else if (ev.type === 'usage') ask.used?.(ev)
     }
     text ||= streamed
   } catch (e) {

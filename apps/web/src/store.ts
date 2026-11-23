@@ -58,7 +58,7 @@ export function watch(key: string, canvas: HTMLCanvasElement, onSize: (size: Pag
 
 // ---- routing: #/<botId> for a bot's conversation, #/<botId>/<threadId>[/<itemId>] for a subagent's
 // thread or an earlier conversation (and a message in it), #/automations[/<id> or /new[/<botId>]]
-// for the automations, #/settings/<page>/… for the settings
+// for the automations, #/-usage for what the models used, #/settings/<page>/… for the settings
 
 export interface Route {
   botId: string
@@ -69,13 +69,21 @@ export interface Route {
   settings: string[] | null
   /** The automations are showing: [] for all of them, or [an automation's id], or ['new'] and maybe the bot it is for. Null otherwise. */
   automations: string[] | null
+  /** What the models used is showing. */
+  usage: boolean
 }
+
+/** Where the usage page is. */
+const USAGE = '-usage'
+export const USAGE_ADDRESS = `#/${USAGE}`
 
 function parseHash(): Route {
   const parts = location.hash.replace(/^#\/?/, '').split('/').map((p) => decodeURIComponent(p))
-  if (parts[0] === 'settings') return { botId: '', threadId: '', itemId: 0, settings: parts.slice(1).filter(Boolean), automations: null }
-  if (parts[0] === 'automations') return { botId: '', threadId: '', itemId: 0, settings: null, automations: parts.slice(1, parts[1] === 'new' ? 3 : 2).filter(Boolean) }
-  return { botId: parts[0] ?? '', threadId: parts[1] ?? '', itemId: Number(parts[2]) || 0, settings: null, automations: null }
+  if (parts[0] === 'settings') return { botId: '', threadId: '', itemId: 0, settings: parts.slice(1).filter(Boolean), automations: null, usage: false }
+  if (parts[0] === 'automations') return { botId: '', threadId: '', itemId: 0, settings: null, automations: parts.slice(1, parts[1] === 'new' ? 3 : 2).filter(Boolean), usage: false }
+  // An address no bot can have: a bot's is the name of its folder, which never begins with a dash, and bots there already may be called "usage".
+  if (parts[0] === USAGE) return { botId: '', threadId: '', itemId: 0, settings: null, automations: null, usage: true }
+  return { botId: parts[0] ?? '', threadId: parts[1] ?? '', itemId: Number(parts[2]) || 0, settings: null, automations: null, usage: false }
 }
 
 /** The automations, or one of them ('new' for one being made, for `botId` when given). */

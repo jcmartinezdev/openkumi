@@ -27,7 +27,8 @@ if (args[0] === 'auth' && args[1] === 'status') {
   process.exit(0)
 }
 
-// Asked about itself instead of being given a message: it says which models it offers, as the real program does.
+// Asked about itself instead of being given a message: it says which models it offers, or how much
+// of its plan is used, as the real program does. A question it does not know is refused.
 if (args.includes('--input-format') && !args.includes('--system-prompt-file')) {
   const levels = ['low', 'medium', 'high', 'xhigh', 'max']
   const models = [
@@ -37,7 +38,22 @@ if (args.includes('--input-format') && !args.includes('--system-prompt-file')) {
     { value: 'haiku', resolvedModel: 'claude-haiku-9', displayName: 'Haiku 9', description: 'Fastest' },
     { value: 'claude-sonnet-8', resolvedModel: 'claude-sonnet-8', displayName: 'Sonnet 8', description: 'Efficient for routine tasks', supportedEffortLevels: ['low', 'medium', 'high'] },
   ]
-  print({ type: 'control_response', response: { subtype: 'success', request_id: 'models', response: { models } } })
+  // The week's allowance is partly used, one model has an allowance of its own, and no 5-hour session is under way.
+  const usage = {
+    subscription_type: 'pro',
+    rate_limits_available: true,
+    rate_limits: {
+      five_hour: null,
+      seven_day: { utilization: 25, resets_at: '2030-01-07T13:00:00.000+00:00' },
+      model_scoped: [{ display_name: 'Opus', utilization: 80.5, resets_at: '2030-01-07T13:00:00.000+00:00' }],
+    },
+  }
+  for await (const line of readline.createInterface({ input: process.stdin })) {
+    const { request_id, request } = JSON.parse(line)
+    const said = request.subtype === 'initialize' ? { models } : request.subtype === 'get_usage' && !process.env.OPENKUMI_FAKE_OLD_CLAUDE ? usage : null
+    print({ type: 'control_response', response: said ? { subtype: 'success', request_id, response: said } : { subtype: 'error', request_id, error: `Unsupported control request subtype: ${request.subtype}` } })
+    break
+  }
   process.exit(0)
 }
 
@@ -97,8 +113,8 @@ async function run({ message, uuid }) {
   print({ type: 'assistant', uuid: crypto.randomUUID(), message: { id: 'msg_1', content: [{ type: 'thinking', thinking: '' }] } })
   print({ type: 'assistant', uuid: crypto.randomUUID(), message: { id: 'msg_1', content: [{ type: 'text', text: reply }] } })
   for (const done of mine.uuids) lifecycle(done, 'completed')
-  // Counted for the whole conversation, as the real program does: every turn is sent 100 tokens, 60 of them from the cache, and writes 10.
-  const modelUsage = { 'claude-test-1[cloud]': { inputTokens: 40 * turns(), cacheReadInputTokens: 60 * turns(), cacheCreationInputTokens: 0, outputTokens: 10 * turns(), canonicalModel: 'claude-test-1' } }
+  // Counted for the whole conversation, as the real program does: every turn is sent 100 tokens, 60 of them from the cache, writes 10, and would cost a quarter of a dollar.
+  const modelUsage = { 'claude-test-1[cloud]': { inputTokens: 40 * turns(), cacheReadInputTokens: 60 * turns(), cacheCreationInputTokens: 0, outputTokens: 10 * turns(), costUSD: 0.25 * turns(), canonicalModel: 'claude-test-1' } }
   print({ type: 'result', subtype: 'success', is_error: false, result: reply, session_id: session, modelUsage })
 }
 

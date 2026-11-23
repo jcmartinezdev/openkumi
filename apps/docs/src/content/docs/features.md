@@ -72,6 +72,9 @@ that stays logged in.
   apps changes (OpenKumi looks, at no cost, and starts the bot only on a change), or the moment an
   app calls a webhook. It tells you in its conversation what came of it. See
   [Automations](/automations/).
+- **See what it all uses.** Usage, on the computer and the phone, shows how many tokens your bots'
+  models used by provider, model and bot, what that would have cost as API calls, and how much of
+  your Claude and ChatGPT plans is used up. See [Usage](/using/usage/).
 - **From anywhere.** Pair another computer or an iPhone with a one-time code, and reach your bots
   at home directly and away over Tailscale. See [Other computers and your phone](/environments/).
 - **Bots for everyone in the house.** One computer can run bots for several people: each gets a

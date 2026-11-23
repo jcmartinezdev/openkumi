@@ -28,7 +28,8 @@
     "./superpowers": "./src/superpowers.ts",
     "./dictation": "./src/dictation.ts",
     "./calls": "./src/calls.ts",
-    "./telemetry": "./src/telemetry.ts"
+    "./telemetry": "./src/telemetry.ts",
+    "./usage": "./src/usage.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

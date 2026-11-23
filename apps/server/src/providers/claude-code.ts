@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import readline from 'node:readline'
-import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
+import type { ModelInfo, ProviderInfo, UsageLimit } from '@openkumi/shared'
 import { type Shown, base64 } from '../attachments.ts'
 import { type Exit, type Pipe, capture, cleanEnv, end, findBinary, lastError, lines, start, versionOf } from './cli.ts'
 import { settings } from '../settings.ts'
@@ -40,10 +40,11 @@ interface Offered {
 }
 
 /**
- * Asks the program which models it offers, the way its own apps do: it is started as for a
- * conversation and sent a question about itself in place of a message. Nothing goes to a model.
+ * Asks the program something about itself, the way its own apps do: it is started as for a
+ * conversation and sent a question in place of a message. Nothing goes to a model. Gives what it
+ * answered, or null when it did not answer, or does not know the question (an older version).
  */
-function askModels(program: string): Promise<ModelInfo[] | null> {
+function askItself(program: string, question: string): Promise<Record<string, any> | null> {
   return new Promise((resolve) => {
     let proc: ReturnType<typeof start>
     try {
@@ -52,12 +53,12 @@ function askModels(program: string): Promise<ModelInfo[] | null> {
       return resolve(null)
     }
     let answered = false
-    const answer = (found: ModelInfo[] | null) => {
+    const answer = (said: Record<string, any> | null) => {
       if (answered) return
       answered = true
       clearTimeout(late)
       end(proc)
-      resolve(found)
+      resolve(said)
     }
     const late = setTimeout(() => answer(null), 20_000)
     proc.on('error', () => answer(null))
@@ -66,13 +67,37 @@ function askModels(program: string): Promise<ModelInfo[] | null> {
     readline.createInterface({ input: proc.stdout }).on('line', (line) => {
       try {
         const event = JSON.parse(line)
-        if (event.type === 'control_response') answer(named(event.response?.response?.models))
+        if (event.type === 'control_response') answer(event.response?.subtype === 'error' ? null : (event.response?.response ?? null))
       } catch {
         // Not a line of its protocol.
       }
     })
-    proc.stdin.write(JSON.stringify({ type: 'control_request', request_id: 'models', request: { subtype: 'initialize' } }) + '\n')
+    proc.stdin.write(JSON.stringify({ type: 'control_request', request_id: question, request: { subtype: question } }) + '\n')
   })
+}
+
+/** The models the program offers, or null when it could not be asked. */
+const askModels = (program: string) => askItself(program, 'initialize').then((said) => named(said?.models))
+
+/**
+ * How much of the plan is used, as the program's own usage screen has it: the allowance of the
+ * 5-hour session and of the week, and of the week for a model that has one of its own, each as a
+ * share used and the time it starts over.
+ */
+async function limits(): Promise<{ plan: string; limits: UsageLimit[]; note: string }> {
+  const program = bin()
+  if (!program) throw new Error('Claude Code is not installed on this computer.')
+  const said = await askItself(program, 'get_usage')
+  if (!said) throw new Error('Claude Code did not say how much of its plan is used. An older version cannot: update it.')
+  const kind = typeof said.subscription_type === 'string' ? said.subscription_type : ''
+  const plan = kind ? `${kind.replace(/^./, (c: string) => c.toUpperCase())} plan` : ''
+  const windows = said.rate_limits
+  if (!said.rate_limits_available || !windows) return { plan, limits: [], note: plan ? 'Claude Code reports no limits for this plan.' : 'Signed in with an API key, which is paid for by the token and has no plan to use up.' }
+  const one = (label: string, window: any): UsageLimit[] =>
+    typeof window?.utilization === 'number' ? [{ label, used: Math.min(100, Math.max(0, window.utilization)), resetsAt: Date.parse(window.resets_at) || null }] : []
+  const scoped: any[] = Array.isArray(windows.model_scoped) ? windows.model_scoped : []
+  const found = [...one('5-hour session', windows.five_hour), ...one('Week', windows.seven_day), ...scoped.flatMap((m) => (typeof m?.display_name === 'string' ? one(`Week, ${m.display_name} only`, m) : []))]
+  return { plan, limits: found, note: found.length ? '' : 'Claude Code reports nothing used of this plan yet.' }
 }
 
 /** Turns the program's own list into OpenKumi's: one entry per model, the default first, earlier models marked. */
@@ -283,4 +308,5 @@ export const claudeCode: Provider = {
   models: async () => (await asking, models),
   turn,
   refresh,
+  limits,
 }

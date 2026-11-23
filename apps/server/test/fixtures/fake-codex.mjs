@@ -179,6 +179,10 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
   if (method === 'initialize') {
     experimental = !!params.capabilities?.experimentalApi
     answer(id, { userAgent: 'fake-codex', platformOs: 'test' })
+  } else if (method === 'account/rateLimits/read') {
+    // A plan with one window, a week long, as some plans have; the allowance of a single model is not the plan's.
+    const codex = { limitId: 'codex', primary: { usedPercent: 3, windowDurationMins: 10080, resetsAt: 1893500000 }, secondary: null, planType: 'plus' }
+    answer(id, { rateLimits: codex, rateLimitsByLimitId: { codex, other: { limitId: 'other', primary: { usedPercent: 99, windowDurationMins: 300, resetsAt: 1893500000 }, secondary: null, planType: 'plus' } } })
   } else if (method === 'thread/realtime/listVoices') {
     if (!experimental) refuse(id, 'thread/realtime/listVoices requires experimentalApi capability')
     else answer(id, { voices: { v1: ['juniper', 'cove'], v2: ['marin'], v3: VOICES, defaultV1: 'cove', defaultV2: 'marin' } })

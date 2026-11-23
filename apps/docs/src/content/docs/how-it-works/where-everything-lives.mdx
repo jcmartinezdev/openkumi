@@ -29,7 +29,9 @@ starts: under the name you gave the app then, or after your account on the compu
         history.git/         the record of every change to AGENTS.md and memory/
         attachments/         the conversation's copies of files sent in it
         grok/                the settings Grok is given for each turn, on a bot that runs on Grok
-    openkumi.db              conversations, messages, the queue, automations and their runs, webhooks
+    openkumi.db              conversations, messages, the queue, automations and their runs, webhooks,
+                             and the count of tokens the models used
+    prices.json              the public list of model prices, as last fetched for the Usage page
     settings.json            app-wide settings that differ from the defaults
     auth.json                the access code, this server's id, API keys (readable only by you)
     clients.json             the computers and phones paired with this one (readable only by you)

@@ -27,6 +27,7 @@ import { handleToolEndpoint } from './tool-endpoint.ts'
 import { PROTOCOL } from './protocol.ts'
 import * as telemetry from './telemetry.ts'
 import { VERSION, updateInfo, updateNow } from './update.ts'
+import * as usage from './usage.ts'
 import * as ws from './workspace.ts'
 
 const SYSTEMS: Record<string, string> = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' }
@@ -187,6 +188,13 @@ route('GET', '/api/telemetry', () => telemetry.report())
 route('POST', '/api/telemetry/id', () => telemetry.newIdentity())
 // What an app recorded about itself, for this server to check and send (telemetry.fromApp).
 route('POST', '/api/telemetry/events', (_, body) => (telemetry.fromApp(body.app, body.events), {}))
+
+// ---- what the bots' models used (usage.ts)
+// How many tokens over the last days (7, when none is given), by the day, or over the last 24
+// hours by the hour, with what they would have cost as API calls.
+route('GET', '/api/usage', (_, __, { url }) => usage.usage(Math.min(366, Math.max(1, count(url, 'days') ?? 7))))
+// How much of each provider's plan is used. Asking starts their programs, so an answer is kept for a minute unless `fresh`.
+route('GET', '/api/usage/limits', (_, __, { url }) => usage.limits(url.searchParams.has('fresh')))
 
 // ---- this server's own updates (update.ts)
 // These two, and /api/hello, are what an app asks of a server it cannot otherwise work with, so

@@ -5,9 +5,10 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { ModelInfo, ProviderInfo } from '@openkumi/shared'
+import readline from 'node:readline'
+import type { ModelInfo, ProviderInfo, UsageLimit } from '@openkumi/shared'
 import type { Shown } from '../attachments.ts'
-import { type Exit, type Pipe, capture, cleanEnv, findBinary, lastError, lines, versionOf } from './cli.ts'
+import { type Exit, type Pipe, capture, cleanEnv, end, findBinary, lastError, lines, start, versionOf } from './cli.ts'
 import { VERSION } from '../config.ts'
 import { settings } from '../settings.ts'
 import { type ModelEvent, type Provider, type TurnRequest, efforts } from './types.ts'
@@ -318,6 +319,75 @@ function listed(): ModelInfo[] {
   }
 }
 
+/**
+ * Asks Codex's app server how much of the plan is used, as its own apps do. No conversation is
+ * opened for it and nothing goes to a model.
+ */
+function askLimits(program: string): Promise<Record<string, any>> {
+  return new Promise((resolve, reject) => {
+    const proc = start(program, ['app-server'], { cwd: os.tmpdir(), env: cleanEnv(), errors: 'ignore' })
+    let settled = false
+    const settle = (said: Record<string, any> | Error) => {
+      if (settled) return
+      settled = true
+      clearTimeout(late)
+      end(proc)
+      if (said instanceof Error) reject(said)
+      else resolve(said)
+    }
+    const late = setTimeout(() => settle(new Error('Codex did not say how much of its plan is used.')), 20_000)
+    proc.on('error', (e) => settle(e))
+    proc.on('close', () => settle(new Error('Codex stopped before it said how much of its plan is used.')))
+    proc.stdin.on('error', () => {})
+    const write = (message: Record<string, unknown>) => proc.stdin.write(JSON.stringify(message) + '\n')
+    readline.createInterface({ input: proc.stdout }).on('line', (line) => {
+      let message: any
+      try {
+        message = JSON.parse(line)
+      } catch {
+        return
+      }
+      if (message.method || (message.id !== 1 && message.id !== 2)) return
+      if (message.error) settle(new Error(String(message.error.message ?? 'Codex refused to say how much of its plan is used.').slice(0, 300)))
+      else if (message.id === 1) {
+        write({ method: 'initialized', params: {} })
+        write({ id: 2, method: 'account/rateLimits/read', params: null })
+      } else settle(message.result ?? {})
+    })
+    write({ id: 1, method: 'initialize', params: { clientInfo: { name: 'openkumi', title: 'OpenKumi', version: VERSION }, capabilities: { experimentalApi: false, requestAttestation: false } } })
+  })
+}
+
+/** What a window of a plan is called, by how long it is: Codex gives its length in minutes. */
+function windowName(minutes: unknown, usual: string): string {
+  if (typeof minutes !== 'number' || !(minutes > 0)) return usual
+  if (minutes === 300) return '5-hour session'
+  if (minutes === 7 * 1440) return 'Week'
+  if (minutes >= 28 * 1440 && minutes <= 31 * 1440) return 'Month'
+  if (minutes % 1440 === 0) return `${minutes / 1440} days`
+  return minutes % 60 === 0 ? `${minutes / 60} hours` : `${minutes} minutes`
+}
+
+/**
+ * How much of the ChatGPT plan is used: each of its windows (which ones a plan has differs: a
+ * 5-hour session, a week, a month) as a share used and the time it starts over.
+ */
+async function limits(): Promise<{ plan: string; limits: UsageLimit[]; note: string }> {
+  const program = bin()
+  if (!program) throw new Error('Codex is not installed on this computer.')
+  if (info.connected && !/chatgpt/i.test(info.detail)) return { plan: '', limits: [], note: 'Signed in with an API key, which is paid for by the token and has no plan to use up.' }
+  const said = await askLimits(program)
+  // The plan's own windows are the ones named "codex"; others are for single models or extras.
+  const own = said.rateLimitsByLimitId?.codex ?? said.rateLimits ?? {}
+  const plan = typeof own.planType === 'string' && own.planType ? `${own.planType.replace(/^./, (c: string) => c.toUpperCase())} plan` : ''
+  const one = (window: any, usual: string): UsageLimit[] =>
+    typeof window?.usedPercent === 'number'
+      ? [{ label: windowName(window.windowDurationMins, usual), used: Math.min(100, Math.max(0, window.usedPercent)), resetsAt: typeof window.resetsAt === 'number' ? window.resetsAt * 1000 : null }]
+      : []
+  const found = [...one(own.primary, '5-hour session'), ...one(own.secondary, 'Week')]
+  return { plan, limits: found, note: found.length ? '' : 'Codex reports no limits for this plan.' }
+}
+
 export const codex: Provider = {
   id: base.id,
   info: () => info,
@@ -330,4 +400,5 @@ export const codex: Provider = {
   },
   turn,
   refresh,
+  limits,
 }
