@@ -71,7 +71,9 @@ git grep -h "export const FORMAT" "$(gh release view --json tagName -q .tagName)
 
 If any of the first is higher, stop what runs on `~/.openkumi` and move it out of the way: to
 `~/.openkumi-dev`, where the repository goes on using it, or, when that is taken, to any other
-name, which `OPENKUMI_HOME` then points a repository run at. The release starts afresh.
+name, which `OPENKUMI_HOME` then points a repository run at. The release starts afresh. The
+moved folder's `people.json` still gives each person the port they had there, the first one
+4317, which is the installed server's: change them to 4417, 4427 and so on.
 
 Then install the release, as anyone would:
 
