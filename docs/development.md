@@ -62,12 +62,14 @@ data format newer than the latest release reads. That release would then refuse 
 So look before installing one:
 
 ```sh
-sqlite3 ~/.openkumi/openkumi.db 'PRAGMA user_version'      # the format of the data there
+# the format of the data there, one line per database
+find ~/.openkumi -maxdepth 3 -name openkumi.db -exec sqlite3 -readonly {} 'PRAGMA user_version' \;
+# the format the latest published release reads
 git fetch -q --tags origin
-git grep -h "export const FORMAT" "$(git describe --tags --abbrev=0 origin/main)" -- apps/server/src   # the latest release's
+git grep -h "export const FORMAT" "$(gh release view --json tagName -q .tagName)" -- apps/server/src
 ```
 
-If the first is higher, stop what runs on `~/.openkumi` and move it out of the way: to
+If any of the first is higher, stop what runs on `~/.openkumi` and move it out of the way: to
 `~/.openkumi-dev`, where the repository goes on using it, or, when that is taken, to any other
 name, which `OPENKUMI_HOME` then points a repository run at. The release starts afresh.
 
