@@ -62,7 +62,7 @@ if (command === 'serve') {
   // Ends by itself once they have: whatever they printed last is written out first.
   process.exitCode = await startServers(named ? [PERSON] : people().map((person) => person.name), rest)
 } else {
-  const { BASE, FIRST, PERSON, PORT, accessToken, people } = await import('./config.ts')
+  const { BASE, FIRST, FROM_REPOSITORY, PERSON, PORT, accessToken, people } = await import('./config.ts')
   const { RUNTIME, VERSION, WHY_NOT, newer, update } = await import('./update.ts')
   const service = await import('./service.ts')
 
@@ -194,6 +194,7 @@ if (command === 'serve') {
     }
   } else if (command === 'service') {
     const [what] = rest
+    if (FROM_REPOSITORY) stop('Run from the repository, OpenKumi has no background service. The one on this computer is the installed OpenKumi’s: “openkumi service …” looks after it. Start this one with “npm run server”.')
     try {
       if (what === 'install') {
         // A server started by hand would hold the port the service wants.

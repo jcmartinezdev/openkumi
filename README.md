@@ -172,6 +172,10 @@ npm install
 npm start
 ```
 
+Run this way, it keeps its data in `~/.openkumi-dev` and listens on port 4417, apart from an
+OpenKumi installed on the same computer (see
+[Beside an installed OpenKumi](docs/development.md#beside-an-installed-openkumi)).
+
 ## Updating
 
 You do not have to do anything.

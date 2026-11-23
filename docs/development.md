@@ -36,6 +36,60 @@ npm run openkumi -- pair --for ana      # a code for their app
 npm run openkumi -- start --for ana     # only their server
 ```
 
+## Beside an installed OpenKumi
+
+Run from the repository, OpenKumi keeps apart from an OpenKumi installed on the same computer.
+So you can use a release there as anyone does, updating itself as releases come out, while you
+work on the next one:
+
+| | Installed | From the repository |
+| --- | --- | --- |
+| Data | `~/.openkumi` | `~/.openkumi-dev` |
+| The first person's server, and its webhooks | ports 4317 and 4318 | ports 4417 and 4418 |
+| The desktop app's own data | `OpenKumi` (on a Mac in `~/Library/Application Support/`) | `OpenKumi Dev`, beside it |
+| Background service | `openkumi service install` | none: `npm run server` runs it in a terminal |
+
+`OPENKUMI_HOME` and `OPENKUMI_PORT` choose another folder and port either way, and
+`OPENKUMI_DESKTOP_DATA` another folder for the app's own data. A server counts as run from the
+repository when the repository's `.git` is there, unless an installed `openkumi` started it.
+
+The background services on the computer are the installed OpenKumi's. They are named after its
+people, and the people here often have the same names. So from the repository,
+`npm run openkumi -- service …` refuses, and renaming or removing a person leaves services alone.
+
+To install a release here, as anyone would:
+
+```sh
+curl -fsSL https://openkumi.ai/install.sh | sh   # the server, as a background service
+```
+
+Then add the desktop app from [openkumi.ai](https://openkumi.ai). It uses that server, and both
+update themselves. The installed OpenKumi and the one from the repository still share what is
+yours rather than OpenKumi's: the sign-ins of Claude Code and Codex, and your account on the
+computer. On an iPhone, a build of the phone app made here takes the place of the one from
+TestFlight, since both are the same app to the phone.
+
+What still reaches the installed OpenKumi:
+
+- **An app you package here** (`npm run dist`, `npm run dist:dir`) is an installed app: it uses
+  `~/.openkumi` and port 4317, and joins the installed server. Do not drag it into Applications,
+  where it would take the released app's place. A newer version can also bring the data up to a
+  format the release cannot read yet (`FORMAT`, under [Releasing](#releasing)), and the release
+  then refuses to start until a release that reads it is out. Try it with `try.mjs` (under
+  [Releasing](#releasing)), which gives it a temporary folder, or open it from `release/` with
+  places of its own:
+
+  ```sh
+  OPENKUMI_HOME=~/.openkumi-try OPENKUMI_PORT=4517 OPENKUMI_DESKTOP_DATA="$HOME/Library/Application Support/OpenKumi Try" \
+    release/mac-arm64/OpenKumi.app/Contents/MacOS/OpenKumi
+  ```
+
+  It still looks after services as an installed app does: renaming or removing a person in it
+  stops the installed OpenKumi's service of the same name.
+
+- **`OPENKUMI_HOME=~/.openkumi` from the repository** runs this code on the installed
+  OpenKumi's data, with the same risk.
+
 ## Releasing
 
 One tag releases everything. Nothing else does: not a merge, not a pull request.

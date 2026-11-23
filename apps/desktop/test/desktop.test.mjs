@@ -174,7 +174,8 @@ test('the local environment can be turned on and off, and remote environments ad
     await win.getByRole('button', { name: 'Start OpenKumi here' }).click()
     await showsBot(win, 'Kumi')
     assert.equal(await up(LOCAL_PORT), true)
-    assert.deepEqual(JSON.parse(fs.readFileSync(`${tmp}/local-home/people.json`, 'utf8')), [{ name: 'juan-cruz', port: 4317 }])
+    // Written down with the usual port: the one a server run from the repository has, unless this is the packaged app.
+    assert.deepEqual(JSON.parse(fs.readFileSync(`${tmp}/local-home/people.json`, 'utf8')), [{ name: 'juan-cruz', port: packaged ? 4317 : 4417 }])
     assert.ok(fs.existsSync(`${tmp}/local-home/people/juan-cruz/auth.json`))
     assert.ok((await processes()).includes('OpenKumi Server'), 'the server is a process of its own inside the app')
     // The server has no pages; the interface is the app's.

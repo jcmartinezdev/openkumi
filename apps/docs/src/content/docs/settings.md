@@ -46,11 +46,11 @@ wins.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPENKUMI_PORT` | `4317` | the first person's server's port. Everyone else's is written in `~/.openkumi/people.json` |
+| `OPENKUMI_PORT` | `4317`; `4417` run from a clone of the repository | the first person's server's port. Everyone else's is written in `~/.openkumi/people.json` |
 | `OPENKUMI_HOOKS_PORT` | the server's port plus one | the port webhook calls are taken on, on this computer only. Like `OPENKUMI_PORT`, it is about the first person's server |
 | `OPENKUMI_NAME` | your account's name | what the first person is called, when the first start on this computer makes them (the desktop app sets it to the name its welcome was given) |
 | `OPENKUMI_LAN` | unset | `1` lets other computers on the network connect whatever Settings says (same as `--lan`) |
-| `OPENKUMI_HOME` | `~/.openkumi` | the folder everything is kept in: each person's data folder is `people/<name>/` in it |
+| `OPENKUMI_HOME` | `~/.openkumi`; `~/.openkumi-dev` run from a clone of the repository | the folder everything is kept in: each person's data folder is `people/<name>/` in it |
 | `OPENKUMI_BROWSER_CHANNEL` | from Settings | the browser program: `chrome`, `msedge`, or `chromium` for the one that comes with OpenKumi |
 | `OPENKUMI_CLAUDE_BIN`, `OPENKUMI_CODEX_BIN`, `OPENKUMI_GROK_BIN` | from Settings, else found on `PATH` | where the `claude`, `codex` and `grok` programs are |
 | `OPENKUMI_TAILSCALE_BIN` | the Tailscale app, else `tailscale` on `PATH` | the Tailscale program, asked for this computer's name on Tailscale |
@@ -61,4 +61,6 @@ wins.
 | `OPENKUMI_TELEMETRY_URL`, `OPENKUMI_TELEMETRY_KEY` | PostHog in the EU, OpenKumi's project | another place and project for those reports to go, for testing; with these set a server run from the source sends too |
 | `OPENKUMI_MOCK` | unset | `1` turns on the scripted offline provider the tests use |
 
-The desktop app also reads `OPENKUMI_PORT`, to find or start the local server.
+The desktop app also reads `OPENKUMI_PORT` and `OPENKUMI_HOME`, to find or start the local server.
+Run from a clone of the repository, it keeps its own data apart as well: in an `OpenKumi Dev`
+folder beside the installed app's `OpenKumi`, unless `OPENKUMI_DESKTOP_DATA` names another.

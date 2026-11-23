@@ -12,7 +12,7 @@ import * as agent from './agent.ts'
 import { checkWaiting, isPicture, kept, stage, typeOf, unstage } from './attachments.ts'
 import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
 import { type Frame, browserFor, browserStates, isWebPage, letGo, stopBrowser } from './browser.ts'
-import { FIRST, HOME, HOME_LABEL, LAN, PERSON, PORT, ROOT, accessToken, botDir, onEvent, people, readSecrets, serverId, shown, writeSecret } from './config.ts'
+import { FIRST, FROM_REPOSITORY, HOME, HOME_LABEL, LAN, PERSON, PORT, ROOT, accessToken, botDir, onEvent, people, readSecrets, serverId, shown, writeSecret } from './config.ts'
 import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, proveTo, removeComputer } from './clients.ts'
 import * as mcp from './mcp.ts'
 import * as db from './db.ts'
@@ -703,6 +703,7 @@ export function startServer(): http.Server {
     // Made now rather than at the first request, so the app on this computer can read it.
     accessToken()
     console.log(`\n  The OpenKumi server is running at http://127.0.0.1:${PORT}`)
+    if (FROM_REPOSITORY) console.log(`  Run from the repository, with its data in ${HOME_LABEL}.`)
     console.log('  It has no page of its own: open the OpenKumi desktop app to use it.\n')
     describe()
     parent?.postMessage({ type: 'ready', port: PORT })

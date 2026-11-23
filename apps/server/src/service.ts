@@ -5,11 +5,15 @@
 //
 // Each person with bots on this computer (people.ts) has a server of their own, and so a service
 // of their own, named after them. `who` is that person's name everywhere here.
+//
+// Run from the repository, OpenKumi has no service. The services on this computer are the
+// installed OpenKumi's, under the same names as the people here: one set up, stopped or removed
+// from the repository would be that one's.
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { BASE, PERSON, homeOf, people } from './config.ts'
+import { BASE, FROM_REPOSITORY, PERSON, homeOf, people } from './config.ts'
 import { RUNTIME } from './update.ts'
 
 const label = (who: string) => `ai.openkumi.server.${who}`
@@ -24,7 +28,7 @@ const unitOf = (who: string) => path.join(os.homedir(), '.config', 'systemd', 'u
 const OLD = { label: 'ai.openkumi.server', unit: 'openkumi.service' }
 const oldFile = () => (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'LaunchAgents', `${OLD.label}.plist`) : path.join(os.homedir(), '.config', 'systemd', 'user', OLD.unit))
 /** Whether the service from before is what runs this person's server: only ever the first person's. */
-const onOld = (who: string) => who === people()[0]?.name && fs.existsSync(oldFile()) && !fs.existsSync(process.platform === 'darwin' ? plistOf(who) : unitOf(who))
+const onOld = (who: string) => !FROM_REPOSITORY && who === people()[0]?.name && fs.existsSync(oldFile()) && !fs.existsSync(process.platform === 'darwin' ? plistOf(who) : unitOf(who))
 /** Where the service's output goes. The service from before writes where it always did. */
 export const logOf = (who = PERSON) => path.join(onOld(who) ? BASE : homeOf(who), 'server.log')
 
@@ -123,6 +127,7 @@ function supported() {
 
 /** Whether the service is set up, and whether it is running right now. */
 export function serviceStatus(who = PERSON): { installed: boolean; running: boolean } {
+  if (FROM_REPOSITORY) return { installed: false, running: false }
   const [file, name] = onOld(who) ? [oldFile(), mac ? OLD.label : OLD.unit] : mac ? [plistOf(who), label(who)] : [unitOf(who), unitName(who)]
   if (mac) return { installed: fs.existsSync(file), running: fs.existsSync(file) && works('launchctl', ['print', `${domain()}/${name}`]) }
   return { installed: fs.existsSync(file), running: fs.existsSync(file) && works('systemctl', ['--user', 'is-active', '--quiet', name]) }
@@ -196,6 +201,7 @@ function stillRunning(who: string) {
  * that nothing looks after.
  */
 export function removeService(who = PERSON): boolean {
+  if (FROM_REPOSITORY) return false
   const file = mac ? plistOf(who) : unitOf(who)
   const old = who === people()[0]?.name && retire()
   if (!fs.existsSync(file)) return old

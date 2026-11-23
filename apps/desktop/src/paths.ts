@@ -1,10 +1,20 @@
 // Where the app finds its own parts, and the switches the tests use.
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { app } from 'electron'
 
+// Run from the repository, the app keeps apart from an OpenKumi installed on this computer: data
+// of its own, and a server of its own with the folder and port a server run from the repository
+// has (apps/server/src/config.ts). They are set here, so that every server and command the app
+// starts is told the same, and so that the server it looks for first is that one.
+if (!app.isPackaged) {
+  process.env.OPENKUMI_HOME ??= path.join(os.homedir(), '.openkumi-dev')
+  process.env.OPENKUMI_PORT ??= '4417'
+}
 // Tests keep the app's own data out of the user's. This has to happen before anything asks where it is.
 if (process.env.OPENKUMI_DESKTOP_DATA) app.setPath('userData', process.env.OPENKUMI_DESKTOP_DATA)
+else if (!app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'OpenKumi Dev'))
 else moveFromOpenBot()
 
 /**
