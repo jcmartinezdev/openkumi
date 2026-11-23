@@ -24,6 +24,8 @@ its own tools, and nothing it reads counts as your word.
 - Pairing never sends its code over the network, and a device makes the server prove who it is
   before it sends its key to any address.
 - Only the computer that runs the bots can let a new device in, or shut one out.
+- Each person with bots on a computer has a server of their own, with keys of its own: a device
+  paired with one person's server gets nothing from another's.
 
 **What a bot can do** ([What a bot can reach](/security/bots/))
 
@@ -66,7 +68,9 @@ its own tools, and nothing it reads counts as your word.
 - **Pair over networks you trust**, and use Tailscale away from home rather than opening a port to
   the internet. Remove devices you no longer use.
 - **Keep your computer account to yourself.** There are no user accounts in OpenKumi: whoever can
-  use your account on the computer that runs it can use your bots.
+  use your account on the computer that runs it can use your bots. Someone else in the house who
+  has bots on the same computer is kept apart in the apps, but not from that account (see
+  [Known limits](/security/limits/#your-computer-account-is-the-boundary)).
 - **Keep OpenKumi up to date.** It updates itself unless you switched that off.
 
 ## Read more

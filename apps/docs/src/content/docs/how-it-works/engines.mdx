@@ -20,7 +20,8 @@ For each turn, OpenKumi starts the `claude`, `codex` or `grok` program installed
 gives it the bot's instructions and what was said since it last ran, and serves the bot's tools to
 it over MCP at an address that exists only for that turn.
 
-- **The tools address** is `http://127.0.0.1:4317/mcp/<token>`, with a token made up for the turn
+- **The tools address** is `http://127.0.0.1:4317/mcp/<token>` (at the port of the bot's own
+  server, where several people have bots on the computer), with a token made up for the turn
   and kept only in memory. It answers this computer alone, and stops working the moment the turn
   ends.
 - **Codex** runs as its app server (`codex app-server`), the program its own apps talk to, which

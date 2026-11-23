@@ -46,6 +46,11 @@ leaves it running when you quit; that is how the app works with a server you ins
 same computer. If nothing answers there, the app starts its own server: on port 4317, or on a free
 port if 4317 is taken by something that is not an OpenKumi of yours.
 
+The local environment is the first person's server on this computer. Where others have bots there
+too, each on a server of their own, the app runs theirs while it runs yours, and they reach theirs
+from their own devices as a remote environment, on its own port
+([Bots for someone else in the house](/environments/#bots-for-someone-else-in-the-house)).
+
 ## Several addresses
 
 The same server can usually be reached in more than one way. A device keeps every address it knows
@@ -160,9 +165,9 @@ rather use an address of your own on the internet:
 <Steps>
 
 1. Put a reverse proxy or tunnel with a certificate in front of port 4317 on the computer that runs
-   the bots, so it answers at an `https` address, such as `https://kumi.example.com`. A plain
-   `http` address on the internet is refused ("Needs https"): whoever is in between could read the
-   device's key.
+   the bots (or the port of the person's server it is for), so it answers at an `https` address,
+   such as `https://kumi.example.com`. A plain `http` address on the internet is refused ("Needs
+   https"): whoever is in between could read the device's key.
 
 2. On each device, open **Settings → Environments**, press **N addresses** under the environment,
    type the address and press **Add address**.
@@ -190,7 +195,8 @@ keys alone, so prefer Tailscale where you can.
   keeps them up to date);
 - **Add address** takes another. Type it as you like: `mac-mini.tail1234.ts.net`,
   `192.168.1.20`, or `https://kumi.example.com`. When you leave them out, `http://` and the port
-  `4317` are added (no port is added to an `https` address).
+  `4317` are added (no port is added to an `https` address). Another person's server on that
+  computer has a port of its own: type it, as in `192.168.1.20:4327`.
 
 An address is checked when you add it. If something else answers there, it is refused and nothing
 is sent. If nothing answers yet, it is kept, and the key goes there only once the server answers
@@ -211,5 +217,6 @@ the order they are tried, with which one is in use, and **Add** takes another, t
 <Aside title="Troubleshooting">
   An environment never connects away from home: turn Tailscale on, on both, or add a public `https`
   address. Never at home: **Let other computers connect** has to be on, and a firewall must let
-  port 4317 in. See [When something is wrong](/troubleshooting/#the-app-cannot-connect).
+  port 4317 in (and 4327, 4337 and so on, for the other people with bots on that computer). See
+  [When something is wrong](/troubleshooting/#the-app-cannot-connect).
 </Aside>

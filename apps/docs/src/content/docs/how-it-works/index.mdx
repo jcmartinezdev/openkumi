@@ -16,12 +16,12 @@ There is no OpenKumi service in the cloud.
 
 | Part | What it does | Where it runs | In the code |
 | --- | --- | --- | --- |
-| **The server** | runs the bots: their queues, turns, tools, browsers, automations, webhooks and calls. Serves an API and a stream of events; has no pages. | the computer that runs your bots: inside the desktop app as a process of its own, or installed alone | `apps/server` (Node, run straight from TypeScript) |
+| **The server** | runs the bots: their queues, turns, tools, browsers, automations, webhooks and calls. Serves an API and a stream of events; has no pages. One for each person with bots on the computer. | the computer that runs your bots: inside the desktop app as a process of its own, or installed alone | `apps/server` (Node, run straight from TypeScript) |
 | **The desktop app** | the window you use. Starts the local server when the local environment is on; holds the list of environments and their keys. | Mac, Windows, Linux | `apps/desktop` (Electron) and `apps/web` (the interface, React) |
 | **The iPhone app** | chat, browsers, settings and automations, from anywhere | your phone | `apps/mobile` (Expo, React Native) |
 | **Engines** | Codex, Claude Code and Grok: run the model on your plan, one process for each turn of a bot | the computer that runs your bots, signed in as you | your own installed programs |
 | **The bots' browsers** | Chrome, one profile per bot, a window per thread | the computer that runs your bots | `apps/server/src/browser.ts` (Playwright) |
-| **The data folder** | bots as folders, the database, keys and settings | `~/.openkumi` on the computer that runs your bots | see [Where everything lives](/how-it-works/where-everything-lives/) |
+| **The data folder** | bots as folders, the database, keys and settings | `~/.openkumi/people/<name>/` on the computer that runs your bots, one for each person there | see [Where everything lives](/how-it-works/where-everything-lives/) |
 | **Superpowers** | apps and know-how a bot can be given | folders that ship with the server; the apps' own MCP servers elsewhere | `apps/server/superpowers` |
 | **Shared code** | the types every app agrees on; what every app needs to talk to a server | in every app | `packages/shared`, `packages/client` |
 | **Dictation** | turns speech into text on the device | the Mac or iPhone you speak to | `packages/dictation` (Swift) |

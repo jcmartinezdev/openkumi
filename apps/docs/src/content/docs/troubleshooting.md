@@ -1,6 +1,6 @@
 ---
 title: When something is wrong
-description: "Common problems with OpenKumi and what to do about each: providers, connecting, pairing, the browser, calls, automations and webhooks."
+description: "Common problems with OpenKumi and what to do about each: providers, connecting, pairing, people on one computer, the browser, calls, automations and webhooks."
 ---
 
 If your problem is not here, look at the log (below), and then
@@ -10,10 +10,11 @@ anything private.
 ## Where the logs are
 
 - **The desktop app's server:** `server.log` in the app's data folder (on a Mac,
-  `~/Library/Application Support/OpenKumi`).
+  `~/Library/Application Support/OpenKumi`). The servers it runs for the other people with bots on
+  the computer write `server-<name>.log` beside it.
 - **A server installed alone:** `openkumi logs`, or `server.log` in its data folder
-  (`~/.openkumi/people/<name>/`). A server started
-  with `openkumi start` prints in its own terminal.
+  (`~/.openkumi/people/<name>/`); `openkumi logs --for <name>` for someone else's. A server started
+  with `openkumi start` prints in its own terminal, each line marked with whose server it is.
 - **Everything an engine says:** turn on **Settings → Advanced → Log what the engines print**, try
   again, and look in the log above.
 
@@ -41,7 +42,7 @@ anything private.
 | **…answers at …, but no longer lets this device in. Pair them again.** | This device was removed on the computer that runs the bots, or that server's data was reset. Pair again. |
 | **The OpenKumi at … does not know this device, so it may be a different one. Its key was not sent there.** | Something else answers at that address, such as another OpenKumi server or a device that got the same home address. Check the address. |
 | A remote environment never connects away from home | Turn Tailscale on, on both. Or add an `https` address of your own under its addresses. See [Servers and addresses](/connections/). |
-| A remote environment never connects at home | **Let other computers connect** must be on, on the computer that runs the bots (`openkumi lan on`). Check that both are on the same network, and that a firewall lets port 4317 in. |
+| A remote environment never connects at home | **Let other computers connect** must be on, on the computer that runs the bots (`openkumi lan on`). Check that both are on the same network, and that a firewall lets port 4317 in (and the port of each other person's server there, 4327 and on). |
 
 ## Pairing fails
 
@@ -52,6 +53,19 @@ anything private.
   (or `openkumi pair`) first.
 - **Computers are paired and removed on the computer running OpenKumi.** Pairing and removing
   devices are only done there, not from a paired device.
+
+## People on one computer
+
+| What you see | What to do |
+| --- | --- |
+| **Nobody called "ana" has bots on this computer.** | `openkumi people` lists who does, under the names they have here. |
+| **OpenKumi from before this version is still running on this computer, with its data open.** | The first start of a version with a folder per person moves your data into `~/.openkumi/people/<name>/`, and does not move it from under a server that is still running. Stop that one as the message says (it gives the command for a background service), then start again. |
+| **…'s server is running, started by hand. Stop it…** | Someone's server was started in a terminal, so it cannot be stopped for removing or renaming them. Press Ctrl-C there (which stops every server started in that terminal) and run the command again. |
+| **OpenKumi was started outside this app on this computer, so its people are looked after there** | The app uses a server you installed alone, or started in a terminal, and leaves people to it: `openkumi people add <name>` there. |
+| **…people.json is not a list of the people with bots on this computer…** | The file in `~/.openkumi` that says who has bots, and on which port, is damaged, and nothing starts until it is put right. It is a list like `[{ "name": "sam", "port": 4317 }, { "name": "ana", "port": 4327 }]`, the first person first. |
+| **The data in ~/.openkumi was written by a newer version of OpenKumi** | An OpenKumi from before people had folders was started after a newer one had moved the data into them. Nothing was changed: update the older one. |
+| Someone's bots are not in the app on the computer that runs them | That app shows the first person's. Everyone else uses theirs from their own computer or phone, paired with their own server. |
+| A person's server does not start | **Settings → Environments → People on this computer**, on that computer, marks it **not running**, and its log says why (see above). With a server installed alone, `openkumi people` says whether each one runs, and `openkumi logs --for <name>` what it printed. |
 
 ## The browser
 
@@ -87,7 +101,8 @@ reaches the voice is one OpenAI marks experimental.
   gone, the bot's sign-in lapsed, the page answers "not found"). The bot said why in its
   conversation. Put it right, then turn the automation on again; it looks at once.
 - **A webhook never starts anything.** Check, in order: the computer is awake; the tunnel points
-  at the webhook port (4318), not 4317; the **Public address** under the superpower is the tunnel's
+  at the webhook port (4318, or the port after another person's server), not the server's own;
+  the **Public address** under the superpower is the tunnel's
   `https` address; the signing secret was copied from the app; the automation is turned on.
 
 ## Starting over
@@ -95,5 +110,8 @@ reaches the voice is one OpenAI marks experimental.
 - **Delete all conversations:** **Settings → Advanced**. Bots, their files and their settings stay.
 - **Delete one bot:** its page, **Danger zone**. Its conversations, files, memory and saved logins
   go with it.
-- **Start completely fresh:** quit OpenKumi and move `~/.openkumi` somewhere else. The next start
-  makes a new one with **Kumi** in it. Paired devices will have to pair again.
+- **Start completely fresh:** quit OpenKumi (for a server installed alone, `openkumi service
+  remove`) and move your own folder, `~/.openkumi/people/<name>/`, somewhere else. The next start
+  (`openkumi service install`) makes a new one under the same name, with **Kumi** in it, and leaves
+  everyone else's as it was. Paired devices will have to pair again. Moving all of `~/.openkumi`
+  would take everyone's bots with it, and the program of a server installed alone.

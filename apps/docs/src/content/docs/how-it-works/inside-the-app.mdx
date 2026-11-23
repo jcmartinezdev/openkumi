@@ -7,12 +7,13 @@ import AppProcesses from '../../../components/diagrams/AppProcesses.astro'
 
 The app is not a web page in a window. Its work is spread out so that no part can hold up another.
 
-<AppProcesses caption="The window talks straight to the server, through a worker thread. The main process only starts and stops the server and answers what the window may ask. The server starts a Chrome for each bot that browses, an engine for each turn, and Codex while you are on a call." />
+<AppProcesses caption="The window talks straight to the server, through a worker thread. The main process only starts and stops the server (and those of the other people with bots on this computer, which the diagram leaves out) and answers what the window may ask. The server starts a Chrome for each bot that browses, an engine for each turn, and Codex while you are on a call." />
 
 | Where | What runs there |
 | --- | --- |
 | The app's main process | the window, the menu, the list of environments and their keys, updates. It does no work of its own, and only answers the app's own page |
 | A process of its own (`OpenKumi Server`) | the server, when the local environment is on. If it stops unexpectedly after running a while, the app starts it again once |
+| A process for each other person (`OpenKumi Server (<name>)`) | the server of each other person with bots on this computer, started once the first person's runs, and started again if it stops unexpectedly after running a while. The window never talks to these: each person reaches theirs from their own devices. To add, rename or remove someone, the main process runs the server's own `openkumi people` command, so nothing about people goes over the network |
 | The window | the interface, loaded from the app itself (`openkumi://app/`), talking straight to the environment it shows |
 | A worker thread in the window | the connection to the environment: it reads what arrives, hands changes to the window at most once per frame, and draws the pictures of a bot's browser straight onto the page |
 | A program of its own (`dictation`), while you dictate | listening, and writing down what is said, on the Mac; the app passes its words to the window |
@@ -24,7 +25,11 @@ When the app starts with the local environment on, it first looks for an OpenKum
 running on this computer. If one answers and shows it is the real thing (it signs a value the app
 made up with the access code in the data folder), the app uses it and leaves it running when you
 quit. Otherwise it starts its own, waits for it to say it is ready, and stops it when you quit
-(asking first when bots are at work).
+(asking first when bots are at work). Then it starts the server of each other person with bots on
+this computer, unless one is already running (as a background service, say), and stops those it
+started when you quit too. A server found running, rather than started by the app, is left to
+look after its own people: the app lists them and makes pairing codes, but does not start or
+change them.
 
 ## Speed
 

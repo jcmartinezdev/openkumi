@@ -18,7 +18,7 @@ its top finds any setting by name. Each page has **Restore defaults**.
 | **Superpowers** | every superpower, what each does, which bots have it, and webhooks. See [Superpowers](/superpowers/). |
 | **Master prompt** | what each bot is for, and everything a bot is told, to read. See [What every bot is told](/how-it-works/what-a-bot-is-told/). |
 | **Browser** | the browser program the bots drive, whether the live view opens when a bot starts browsing, and which bots have a browser running now |
-| **Environments** | the local environment, remote environments, **Let other computers connect**, **Pair a computer**, and the paired computers. See [Other computers and your phone](/environments/). |
+| **Environments** | the local environment, remote environments, **Let other computers connect**, **Pair a computer**, the paired computers, and **People on this computer**. See [Other computers and your phone](/environments/). |
 | **Advanced** | **Steps per turn**, **Subagents at once**, **Subagent levels**, **Size of a bot's own instructions**, **Length of a conversation**, **Log what the engines print**, the data folder, **Delete all conversations** |
 | **Privacy** | **Send how OpenKumi is used and what goes wrong**, this computer's id, and everything that was sent. See [Usage and error reports](/telemetry/). |
 | **About** | the version of the app and of the environment it shows, their updates, **Update by itself** for a server installed alone, and a note on the alpha |
@@ -26,7 +26,8 @@ its top finds any setting by name. Each page has **Restore defaults**.
 **Appearance**, **Chat** and **Confirm before deleting a conversation** belong to the device: each
 computer and phone keeps its own. Everything else belongs to the environment, and is the same from
 every device connected to it. The environment keeps its settings in `settings.json` in its data folder
-(`~/.openkumi/people/<name>/`), which holds only the values that differ from the defaults.
+(`~/.openkumi/people/<name>/`), which holds only the values that differ from the defaults. Where
+several people have bots on one computer, each one's server has settings of its own.
 
 ### The limits in Advanced
 
@@ -45,8 +46,9 @@ wins.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `OPENKUMI_PORT` | `4317` | the server's port |
-| `OPENKUMI_HOOKS_PORT` | the server's port plus one | the port webhook calls are taken on, on this computer only |
+| `OPENKUMI_PORT` | `4317` | the first person's server's port. Everyone else's is written in `~/.openkumi/people.json` |
+| `OPENKUMI_HOOKS_PORT` | the server's port plus one | the port webhook calls are taken on, on this computer only. Like `OPENKUMI_PORT`, it is about the first person's server |
+| `OPENKUMI_NAME` | your account's name | what the first person is called, when the first start on this computer makes them (the desktop app sets it to the name its welcome was given) |
 | `OPENKUMI_LAN` | unset | `1` lets other computers on the network connect whatever Settings says (same as `--lan`) |
 | `OPENKUMI_HOME` | `~/.openkumi` | the folder everything is kept in: each person's data folder is `people/<name>/` in it |
 | `OPENKUMI_BROWSER_CHANNEL` | from Settings | the browser program: `chrome`, `msedge`, or `chromium` for the one that comes with OpenKumi |

@@ -52,16 +52,19 @@ says all of what that is.
   at the end of this page, and each value is checked against that list before it leaves.
 - **A random id, not you.** Each computer that agrees gets a random id, so that what it sends can be
   told apart from what another sends. It is not made from anything about you or the computer.
+  Where several people have bots on one computer, each one's server is asked, answers and has an
+  id on its own.
 - **It goes to PostHog**, a company that stores this kind of data, on its servers in the EU, which
   is set not to keep the address it came from. It is sent to \`pulse.openkumi.ai\`, an address of
   OpenKumi's that PostHog answers at.
 
 ## Switching it on or off
 
-- In the app: **Settings → Privacy**. It is a setting of the computer that runs your bots, so it is
+- In the app: **Settings → Privacy**. It is a setting of the server that runs your bots, so it is
   the same from every app that uses it.
 - On a computer without the app: \`openkumi telemetry on\` or \`openkumi telemetry off\`. Without
-  either word it says how things stand.
+  either word it says how things stand. \`--for <name>\` after it is about someone else's server
+  there.
 - Where the server is started: \`OPENKUMI_TELEMETRY=0\` or \`DO_NOT_TRACK=1\` in its environment
   switches it off whatever the setting says, and the apps then do not ask.
 
