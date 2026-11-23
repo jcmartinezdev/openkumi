@@ -125,7 +125,7 @@ function first(): Person {
  * this look has closed belongs to someone else. One left by a program that ended without closing
  * is taken up into the database by this look, and is gone after it.
  */
-function openElsewhere(file: string): boolean {
+export function openElsewhere(file: string): boolean {
   if (!fs.existsSync(`${file}-wal`)) return false
   try {
     const look = new DatabaseSync(file)
@@ -158,12 +158,14 @@ function isNote(file: string): boolean {
  * a server of that time that still has the database open: this stops then, and says so.
  */
 function moveIn(to: string) {
-  const here = new Set(['people', 'people.json', 'runtime'])
+  // What stays where it is: the people, the program, and what the one service from before prints, which it goes on writing there (service.ts).
+  const here = new Set(['people', 'people.json', 'runtime', 'server.log'])
   let found: string[] = []
   try {
     found = fs.readdirSync(BASE).filter((name) => !here.has(name) && !name.startsWith('people.json.') && path.join(BASE, name) !== process.env.OPENKUMI_RUNTIME)
-  } catch {
-    // No folder yet.
+  } catch (e) {
+    // No folder yet. One that is there and cannot be looked into is not taken for empty.
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') stop(`${BASE} could not be read (${(e as Error).message}). Nothing was changed.`)
   }
   // The note for versions from before stays where they look for it.
   if (found.includes('openkumi.db') && isNote(path.join(BASE, 'openkumi.db'))) found = found.filter((name) => !name.startsWith('openkumi.db'))

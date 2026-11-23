@@ -152,6 +152,18 @@ test('each person has a server of their own on the same computer, apart from the
   assert.equal(again.token, theirs.token)
   await again.stop()
 
+  // ---- nor while a program has their data open that does not answer on their port: a server still starting, or stopping, or run some other way
+  const file = folder('anna', 'openkumi.db')
+  const holding = spawn(process.execPath, ['-e', `const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(${JSON.stringify(file)}); db.exec('PRAGMA journal_mode = WAL; CREATE TABLE IF NOT EXISTS held (x); INSERT INTO held VALUES (1)'); console.log('open'); setInterval(() => {}, 1000)`], { stdio: ['ignore', 'pipe', 'inherit'] })
+  running.add(holding)
+  await new Promise((resolve) => holding.stdout.on('data', resolve))
+  assert.match(openkumi('people', 'rename', 'anna', 'hanna').said, /anna’s server is running: it still has their data open/)
+  assert.match(openkumi('people', 'remove', 'anna').said, /anna’s server is running: it still has their data open/)
+  assert.deepEqual([listed().map((p) => p.name), fs.existsSync(folder('anna', 'bots'))], [['juan', 'leo', 'anna'], true])
+  holding.kill('SIGKILL')
+  await new Promise((resolve) => holding.on('exit', resolve))
+  running.delete(holding)
+
   // ---- the first person stays: who a command with no name is about, and whose the ports given by hand are, does not pass to someone else
   assert.equal(openkumi('people', 'remove', 'leo').code, 0)
   const kept = openkumi('people', 'remove', 'juan')
@@ -299,5 +311,81 @@ test('a move into the first person’s folder that was cut short is carried on w
     assert.ok(!fs.existsSync(path.join(torn, 'people', name, 'openkumi.db')) && fs.existsSync(path.join(torn, 'openkumi.db')))
   } finally {
     fs.rmSync(torn, { recursive: true, force: true })
+  }
+})
+
+test('“start” runs everyone’s servers in one terminal, starts one again when it stops to update, and stops them all together', async () => {
+  // ---- two people, and one command: a server for each, what each prints under its person's name
+  const both = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-start-'))
+  const port = PORT + 8
+  const its = { ...env, OPENKUMI_HOME: both, OPENKUMI_PORT: String(port), OPENKUMI_HOOKS_PORT: '', OPENKUMI_NAME: 'juan' }
+  const answers = (at) => fetch(`http://127.0.0.1:${at}/api/hello`).then((r) => r.ok, () => false)
+  const until = async (check, what) => {
+    for (let tries = 0; tries < 300; tries++) {
+      if (await check()) return
+      await new Promise((r) => setTimeout(r, 100))
+    }
+    throw new Error(`Not in time: ${what}`)
+  }
+  /** Runs `openkumi start` with these words after it. What it printed so far is `said()`. */
+  const started = (more, words = []) => {
+    const run = spawn(process.execPath, ['src/cli.ts', 'start', ...words], { env: { ...its, ...more }, stdio: ['ignore', 'pipe', 'pipe'] })
+    running.add(run)
+    let said = ''
+    run.stdout.on('data', (d) => (said += d))
+    run.stderr.on('data', (d) => (said += d))
+    const ended = new Promise((resolve) => run.on('exit', (code) => (running.delete(run), resolve(code))))
+    return { run, ended, said: () => said }
+  }
+  try {
+    assert.equal(spawnSync(process.execPath, ['src/cli.ts', 'people', 'add', 'ana'], { env: its, encoding: 'utf8' }).status, 0)
+    const ana = JSON.parse(fs.readFileSync(path.join(both, 'people.json'), 'utf8'))[1]
+    const everyone = started()
+    await until(async () => (await answers(port)) && (await answers(ana.port)), 'both servers answer')
+    assert.match(everyone.said(), new RegExp(`^juan \\| +The OpenKumi server is running at http://127\\.0\\.0\\.1:${port}$`, 'm'))
+    assert.match(everyone.said(), new RegExp(`^ana \\| +The OpenKumi server is running at http://127\\.0\\.0\\.1:${ana.port}$`, 'm'))
+    // Asked to stop, it stops them both, and ends once they have closed their data.
+    everyone.run.kill('SIGTERM')
+    assert.equal(await everyone.ended, 0)
+    assert.deepEqual([await answers(port), await answers(ana.port)], [false, false])
+    assert.ok(!fs.existsSync(path.join(both, 'people', 'ana', 'openkumi.db-wal')) && !fs.existsSync(path.join(both, 'people', 'juan', 'openkumi.db-wal')), 'each closed its database')
+
+    // ---- with a name after it, only that person's, printing as a single server always has
+    const one = started({}, ['--for', 'ana'])
+    await until(() => answers(ana.port), 'her server answers')
+    assert.equal(await answers(port), false)
+    assert.match(one.said(), new RegExp(`^ +The OpenKumi server is running at http://127\\.0\\.0\\.1:${ana.port}$`, 'm'))
+    one.run.kill('SIGTERM')
+    assert.equal(await one.ended, 0)
+
+    // ---- an installed OpenKumi: a server that stops to update is started again, in the version that is current then
+    // A stand-in for the installed program: each start writes down whose it is, and the first start of each stops as a server does to update.
+    const runtime = path.join(both, 'installed')
+    fs.mkdirSync(path.join(runtime, 'current', 'server', 'src'), { recursive: true })
+    fs.symlinkSync(process.execPath, path.join(runtime, 'current', 'node'))
+    const starts = path.join(both, 'starts.txt')
+    fs.writeFileSync(
+      path.join(runtime, 'current', 'server', 'src', 'index.ts'),
+      `import fs from 'node:fs'
+       const who = process.argv[process.argv.indexOf('--for') + 1]
+       const before = fs.existsSync(${JSON.stringify(starts)}) ? fs.readFileSync(${JSON.stringify(starts)}, 'utf8').split('\\n').filter((line) => line === who).length : 0
+       fs.appendFileSync(${JSON.stringify(starts)}, who + '\\n')
+       if (!before) process.exit(75)
+       if (who === 'ana') process.exit(3)
+       process.on('SIGTERM', () => process.exit(0))
+       setInterval(() => {}, 1000)`,
+    )
+    const installed = started({ OPENKUMI_RUNTIME: runtime })
+    const count = (who) => (fs.existsSync(starts) ? fs.readFileSync(starts, 'utf8').split('\n').filter((line) => line === who).length : 0)
+    await until(() => count('juan') === 2 && count('ana') === 2, 'each was started again after it stopped to update')
+    // One that stops for another reason is not started again, and says so; the other goes on.
+    await until(() => /ana \| This server has stopped \(3\)\. The others go on\./.test(installed.said()), 'it says the one has stopped')
+    await new Promise((r) => setTimeout(r, 500))
+    assert.deepEqual([count('juan'), count('ana')], [2, 2])
+    installed.run.kill('SIGTERM')
+    assert.equal(await installed.ended, 3, 'it ends with what the one that stopped badly ended with')
+  } finally {
+    for (const run of running) run.kill('SIGKILL')
+    fs.rmSync(both, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
   }
 })

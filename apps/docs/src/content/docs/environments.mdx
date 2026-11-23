@@ -150,9 +150,10 @@ openkumi people remove anna     # stop it; what it held stays in its folder
 ```
 
 A command with no name after it is about the first person's server, which on a computer with one
-person is all there is to know. An app on that computer shows who has bots there and makes
-pairing codes, but leaves adding and removing to the terminal. From the source it is
-`npm run openkumi -- people add ana`, then `npm run openkumi -- start --for ana` to run it.
+person is all there is to know. The exception is `openkumi start`, which runs everyone's servers
+in one terminal; `openkumi start --for ana` runs only hers. An app on that computer shows who has
+bots there and makes pairing codes, but leaves adding and removing to the terminal. From the
+source it is `npm run openkumi -- people add ana`, and `npm run server` runs everyone's.
 
 <Aside type="caution" title="Apart in the app, not locked away at the computer">
   Everyone's server runs under the same account of that computer, so whoever can log in to it

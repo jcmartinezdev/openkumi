@@ -76,7 +76,8 @@ export function showing(): string | null {
  */
 export async function hello(url: string, timeoutMs = 6000, challenge = ''): Promise<{ app: string; version: string; protocol?: number; home?: string; proof?: string } | null> {
   try {
-    const res = await fetch(`${url}/api/hello${challenge ? `?challenge=${challenge}` : ''}`, { signal: AbortSignal.timeout(timeoutMs) })
+    // What answers is what is asked: an answer passed on from somewhere else is none.
+    const res = await fetch(`${url}/api/hello${challenge ? `?challenge=${challenge}` : ''}`, { signal: AbortSignal.timeout(timeoutMs), redirect: 'error' })
     const said = res.ok ? await res.json() : null
     return isServer(said) ? said : null
   } catch {

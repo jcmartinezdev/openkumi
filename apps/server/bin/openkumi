@@ -19,15 +19,7 @@ case "${1:-}" in
     shift
     exec "$here/node" "$here/server/src/index.ts" "$@"
     ;;
-  start)
-    # In a terminal: the server, started again here when it stops to update (it ends with 75 then).
-    shift
-    while :; do
-      current="$OPENKUMI_RUNTIME/current"
-      code=0
-      "$current/node" "$current/server/src/index.ts" "$@" || code=$?
-      [ "$code" = 75 ] || exit "$code"
-    done
-    ;;
 esac
+# Everything else, "start" among it: in a terminal, the servers of everyone here, each started
+# again when it stops to update (src/start.ts).
 exec "$here/node" "$here/server/src/cli.ts" "$@"

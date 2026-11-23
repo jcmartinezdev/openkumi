@@ -9,7 +9,7 @@ app. From a clone of the repository, the same commands run as `npm run openkumi 
 
 | Command | What it does |
 | --- | --- |
-| `openkumi start` | runs the server here, in this terminal. Ctrl-C stops it. |
+| `openkumi start` | runs the server here, in this terminal. Where several people have bots on this computer, it runs everyone's, each line marked with whose server printed it. Ctrl-C stops them all. |
 | `openkumi service install` | keeps it running in the background, also after a restart: a launchd agent on a Mac, a systemd unit of your user on Linux |
 | `openkumi service remove` | stops that, and removes the service. Your bots and data are untouched. |
 | `openkumi service status` | whether the background service is set up and running |

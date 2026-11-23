@@ -1,6 +1,6 @@
 // The `openkumi` command of a server installed on its own (openkumi.ai/install.sh): everything
 // its owner does at that computer without the app. From the repository it is "npm run openkumi --".
-// `start` and `serve` never get here when installed: bin/openkumi runs the server itself for those.
+// `serve` never gets here when installed: bin/openkumi runs the server itself for that, as a service's one process.
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -22,7 +22,8 @@ if (command === 'version' || command === '--version' || command === '-v') {
 }
 
 const HELP = `
-  openkumi start              run the server here, in this terminal
+  openkumi start              run the server here, in this terminal: everyone's, where
+                              several people have bots on this computer
   openkumi service install    keep it running in the background, also after a restart
   openkumi service remove     stop that
   openkumi status             whether it runs, which version, and what the bots can run on
@@ -52,8 +53,13 @@ if (command === 'help' || command === '--help' || command === '-h') {
   process.exit(0)
 }
 
-if (command === 'start' || command === 'serve') {
+if (command === 'serve') {
   await import('./index.ts')
+} else if (command === 'start') {
+  // The server of the person named, or of everyone here: each in a process of its own, started again when it stops to update (start.ts).
+  const { PERSON, people } = await import('./config.ts')
+  const { startServers } = await import('./start.ts')
+  process.exit(await startServers(named ? [PERSON] : people().map((person) => person.name), rest))
 } else {
   const { BASE, FIRST, PERSON, PORT, accessToken, people } = await import('./config.ts')
   const { RUNTIME, VERSION, WHY_NOT, newer, update } = await import('./update.ts')
@@ -271,7 +277,8 @@ if (command === 'start' || command === 'serve') {
         console.log(`  Its bots, conversations and settings are apart from everyone else’s, in ${where(person.name)}.`)
         console.log('  Its bots run on what this computer is signed in to (Claude Code, Codex, Grok), as everyone’s here do.')
         if (!RUNTIME) {
-          console.log(`\n  Start it with:              npm run openkumi -- start --for ${person.name}`)
+          console.log(`\n  It starts with everyone’s the next time “npm run server” is run. To start it by itself now:`)
+          console.log(`      npm run openkumi -- start --for ${person.name}`)
           console.log(`  Then a code for their app:  npm run openkumi -- pair --for ${person.name}\n`)
         } else {
           let notes: string[] = []
@@ -302,10 +309,17 @@ if (command === 'start' || command === 'serve') {
         // Whoever is first is the one a command with no name is about, the one this computer's own app shows, and the one the ports given by hand are for. That does not pass to someone else.
         if (person.name === people()[0].name) stop(`${person.name} is the first person here, whom a command with no name is about, and is not removed. They can be given another name: “openkumi people rename ${person.name} <new name>”. “openkumi uninstall” removes OpenKumi from this computer.`)
         // Not from under a server that nothing here can stop: it would go on with their data, off the list.
-        if (!service.serviceStatus(person.name).running && (await helloAt(person.port))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
-        // One that could not be stopped stays on the list, with its service: this throws then.
-        service.removeService(person.name)
-        forgetPerson(person.name)
+        const { installed } = service.serviceStatus(person.name)
+        if (!installed && (await helloAt(person.port))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
+        // A service is stopped first. One that could not be stopped stays set up, with its person on the list: this throws then.
+        if (installed) service.removeService(person.name)
+        try {
+          forgetPerson(person.name)
+        } catch (e) {
+          // Something else still has their data open (a server started by hand beside the service): they stay, and so does their service.
+          if (installed && RUNTIME) service.installService(person.name)
+          throw e
+        }
         done({ removed: person.name })
         console.log(`\n  ${person.name}’s server is stopped, and no longer starts by itself.`)
         console.log(`  What it held is still in ${where(person.name)}. Adding ${person.name} again carries on with it; deleting that folder removes it for good.\n`)
@@ -313,9 +327,9 @@ if (command === 'start' || command === 'serve') {
         if (!given || !other) stop('Say who, and what they are called from now on: “openkumi people rename <name> <new name>”.')
         const person = known()
         const first = person.name === people()[0].name
-        const { installed, running } = service.serviceStatus(person.name)
-        // Its folder cannot move while it is open. A service is stopped for it and set up again under the new name; one that nothing here can stop is left alone.
-        if (!running && (await helloAt(portOf(person)))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
+        const { installed } = service.serviceStatus(person.name)
+        // Its folder cannot move while it is open. A service is stopped for it and set up again under the new name; a server that nothing here can stop is left alone, and so is its folder (people.ts looks again once the service has stopped).
+        if (!installed && (await helloAt(portOf(person)))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
         if (installed) service.removeService(person.name)
         let now = person.name
         try {

@@ -12,7 +12,7 @@
 import fs from 'node:fs'
 import net from 'node:net'
 import path from 'node:path'
-import { NAME, PORT, type Person, homeOf, people, savePeople } from './config.ts'
+import { NAME, PORT, type Person, homeOf, openElsewhere, people, savePeople } from './config.ts'
 
 const WRONG = 'A name is up to 30 small letters, digits and dashes, such as “ana”: it becomes part of a folder’s name.'
 
@@ -61,8 +61,18 @@ export async function addPerson(given: string): Promise<Person> {
   return person
 }
 
-/** Takes a person off the list. Their data folder is left where it is. */
+/**
+ * Says so when a program still has a person's data open: their server, however it was started
+ * and whether or not it answers yet. Their folder is not renamed under it, and they are not taken
+ * off the list while it goes on with their data.
+ */
+function notInUse(name: string) {
+  if (openElsewhere(path.join(homeOf(name), 'openkumi.db'))) throw new Error(`${name}’s server is running: it still has their data open. Stop it (Ctrl-C in its terminal) and run this again.`)
+}
+
+/** Takes a person off the list, once their server has stopped. Their data folder is left where it is. */
 export function forgetPerson(name: string) {
+  notInUse(name)
   savePeople(people().filter((p) => p.name !== name))
 }
 
@@ -74,9 +84,16 @@ export function renamePerson(from: string, given: string): Person {
   if (list.some((p) => p.name === to)) throw new Error(`Someone here is called ${to} already.`)
   if (fs.existsSync(homeOf(to))) throw new Error(`${path.join('people', to)} holds what someone called ${to} left here. Move it away first, or choose another name.`)
   const person = list.find((p) => p.name === from)!
+  notInUse(from)
   fs.renameSync(homeOf(from), homeOf(to))
   person.name = to
-  savePeople(list)
+  try {
+    savePeople(list)
+  } catch (e) {
+    // The list still has the old name: the folder goes back under it, or a start would find it empty.
+    fs.renameSync(homeOf(to), homeOf(from))
+    throw e
+  }
   return person
 }
 

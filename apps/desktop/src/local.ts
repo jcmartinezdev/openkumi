@@ -302,13 +302,19 @@ export function peopleHere(): { name: string; port: number }[] {
 /** The person the local environment is: the one whose data folder its server has. */
 export const me = () => path.basename(local.home)
 
-/** The servers of the other people here that this app started, by the person's name. */
-const others = new Map<string, UtilityProcess>()
+/** A server of someone else here that this app started: its process, the port it listens on, and its data folder. */
+interface Other {
+  child: UtilityProcess
+  port: number
+  home: string
+}
+/** The servers of the other people here that this app started, by the person's name. One stays here until its process has ended. */
+const others = new Map<string, Other>()
 
 /** Whether this app runs any server at the moment, or is about to: what quitting has to stop first. */
 export const managing = () => !!local.child || others.size > 0 || !!starting
-/** The other people whose servers this app runs. */
-export const runHere = () => [...others.keys()]
+/** The servers of the other people here that this app runs: known from when each was started, whatever has become of the first person's since. */
+export const runHere = (): { port: number; home: string }[] => [...others.values()].map(({ port, home }) => ({ port, home }))
 
 /**
  * Starts the server of someone else here, and resolves once it listens. One this app already
@@ -322,7 +328,7 @@ export async function startOther(name: string): Promise<void> {
   if (others.has(name) || !local.child) return
   const log = fs.createWriteStream(path.join(USER_DATA, `server-${name}.log`), { mode: 0o600 })
   const child = utilityProcess.fork(SERVER, ['--for', name], { serviceName: `OpenKumi Server (${name})`, stdio: ['ignore', 'pipe', 'pipe'], env: serverEnv(local.port) })
-  others.set(name, child)
+  others.set(name, { child, port: person.port, home: path.join(path.dirname(local.home), name) })
   let said = ''
   for (const stream of [child.stdout, child.stderr]) {
     stream?.on('data', (chunk: Buffer) => {
@@ -331,11 +337,13 @@ export async function startOther(name: string): Promise<void> {
     })
   }
   const startedAt = Date.now()
+  /** It never said it listens, and was ended for it: not one to start again by itself. */
+  let gaveUp = false
   return new Promise<void>((resolve, reject) => {
-    // One that never says it listens is ended, not left behind.
+    // One that never says it listens is ended, not left behind: asked to stop, and made to if it does not. It counts as this app's until it is gone.
     const late = setTimeout(() => {
-      if (others.get(name) === child) others.delete(name)
-      child.kill()
+      gaveUp = true
+      void end(child)
       reject(new Error(`${name}’s server did not start in time.`))
     }, 40_000)
     child.on('message', (message) => message?.type === 'ready' && (clearTimeout(late), resolve()))
@@ -344,20 +352,21 @@ export async function startOther(name: string): Promise<void> {
       log.end()
       // Says nothing once it had started.
       reject(new Error(`${name}’s server could not start. ${said.trim().split('\n').slice(-3).join(' ')}`.trim()))
-      if (others.get(name) !== child) return
+      if (others.get(name)?.child !== child) return
       others.delete(name)
       // It was running and stopped by itself: put right once, as the first person's is.
-      if (wanted && local.child && Date.now() - startedAt > 30_000 && peopleHere().some((p) => p.name === name)) void startOther(name).catch(() => {})
+      if (!gaveUp && wanted && local.child && Date.now() - startedAt > 30_000 && peopleHere().some((p) => p.name === name)) void startOther(name).catch(() => {})
     })
   })
 }
 
 /** Stops the server of someone else here, if this app runs it. */
 export function stopOther(name: string): Promise<void> {
-  const child = others.get(name)
-  if (!child) return Promise.resolve()
+  const other = others.get(name)
+  if (!other) return Promise.resolve()
+  // Taken off the list here, so that its ending is not taken for a crash; a start of it waits for the port to be free.
   others.delete(name)
-  return end(child)
+  return end(other.child)
 }
 
 /** Starts the server of everyone here but the first person, whose is the local environment. One that will not start does not hold up the others. */

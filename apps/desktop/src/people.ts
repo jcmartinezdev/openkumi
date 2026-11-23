@@ -100,14 +100,18 @@ export async function removePerson(name: unknown): Promise<PersonHere[]> {
   return people()
 }
 
-/** A person's server's own access code, from its data folder, which only this computer's user can read. '' before its first start. */
-function codeOf(name: string): string {
+/** A server's own access code, from its data folder, which only this computer's user can read. '' before its first start. */
+function codeIn(home: string): string {
   try {
-    return JSON.parse(fs.readFileSync(path.join(path.dirname(local.home), name, 'auth.json'), 'utf8')).accessToken ?? ''
+    return JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken ?? ''
   } catch {
     return ''
   }
 }
+
+/** Asks a server on this computer with its access code. What answers is what was asked: an answer passed on from somewhere else is none. */
+const asked = (port: number, code: string, method: string, route: string, timeoutMs: number) =>
+  fetch(address(port) + route, { method, headers: { Authorization: `Bearer ${code}` }, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' })
 
 /**
  * A code that lets one computer or phone into someone's server, and where it can be reached. Their
@@ -117,10 +121,10 @@ function codeOf(name: string): string {
 export async function pairingFor(name: unknown): Promise<PersonPairing> {
   running()
   const person = known(name)
-  const [port, code] = [portOf(person), codeOf(person.name)]
+  const [port, code] = [portOf(person), codeIn(path.join(path.dirname(local.home), person.name))]
   if (!(await shows(port, code))) throw new Error(`${person.name}’s server is not running, so it cannot make a code.`)
   const ask = async (method: string, route: string) => {
-    const res = await fetch(address(port) + route, { method, headers: { Authorization: `Bearer ${code}` }, signal: AbortSignal.timeout(8000) }).catch(() => null)
+    const res = await asked(port, code, method, route, 8000).catch(() => null)
     if (!res?.ok) throw new Error(`${person.name}’s server did not answer.`)
     return res.json()
   }
@@ -130,14 +134,16 @@ export async function pairingFor(name: unknown): Promise<PersonPairing> {
 
 /**
  * How many bots are at work in the servers this app runs, everyone's: what quitting the app would
- * cut off. Null when one of them did not say, which is not the same as none.
+ * cut off. Null when one of them did not say, or could not show it is the server it was started
+ * as, which is not the same as none.
  */
 export async function workingHere(): Promise<number | null> {
-  const servers = [...(local.child ? [{ port: local.port, code: local.token }] : []), ...peopleHere().filter((p) => runHere().includes(p.name)).map((p) => ({ port: p.port, code: codeOf(p.name) }))]
+  const servers = [...(local.child ? [{ port: local.port, code: local.token }] : []), ...runHere().map(({ port, home }) => ({ port, code: codeIn(home) }))]
   const counts = await Promise.all(
     servers.map(async ({ port, code }) => {
       try {
-        const res = await fetch(`${address(port)}/api/update`, { headers: { Authorization: `Bearer ${code}` }, signal: AbortSignal.timeout(3000) })
+        if (!(await shows(port, code))) return null
+        const res = await asked(port, code, 'GET', '/api/update', 3000)
         const working = res.ok ? (await res.json()).working : null
         return typeof working === 'number' ? working : null
       } catch {
