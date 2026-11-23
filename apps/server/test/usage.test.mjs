@@ -144,7 +144,8 @@ test('what each bot’s model used is counted by provider and model, with what i
       ['mock', 'mock-1', 24, 0, 6, null],
     ])
     assert.deepEqual([...new Set(week.rows.map((r) => r.botId))].sort(), Object.values(bots).map((b) => b.id).sort())
-    assert.equal(week.since, hourOf(began), 'counting did not begin with the first turn')
+    // Counting began with the first turn: in the hour the turns began in, or one that has begun since.
+    assert.ok(week.since >= hourOf(began) && week.since <= hourOf(Date.now()), 'counting did not begin with the first turn')
     assert.ok(Date.now() - week.pricedAt < 60_000, 'the prices were not fetched just now')
 
     // The last 24 hours, by the hour, the last of them the one that is running: all of it in the hours the turns ran in.
