@@ -1524,6 +1524,15 @@ test('usage: what the bots’ models used by provider, model and bot, what it wo
   await win.mouse.move(plot.x + plot.width - 3, plot.y + plot.height / 2)
   assert.match(await win.locator('.usage-tip').innerText(), /Codex[\s\S]*Claude Code[\s\S]*Total/)
   await shot('usage')
+  // With the pointer still resting on that column, a shorter time is picked from the keyboard: the
+  // column pointed at is not in the chart that arrives, which is drawn without it.
+  await win.getByRole('button', { name: '7 days' }).focus()
+  await win.keyboard.press('Enter')
+  await until(async () => (await win.locator('.usage-column').count()) === 7, 10_000)
+  assert.equal(await win.locator('.usage-tip').count(), 0)
+  await win.getByRole('button', { name: '30 days' }).focus()
+  await win.keyboard.press('Enter')
+  await until(async () => (await win.locator('.usage-column').count()) === 30, 10_000)
   await win.mouse.move(5, 5)
   await win.getByRole('button', { name: 'Show as a table' }).click()
   assert.match(await win.locator('.usage-table').innerText(), /Day[\s\S]*Codex[\s\S]*Claude Code[\s\S]*Total/)

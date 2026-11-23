@@ -85,7 +85,10 @@ test('numbers are worded short, and the same way everywhere', () => {
   // A day is a date on the server's calendar, shown as that date wherever the app is.
   assert.equal(usage.stretch('2026-11-23', 'day'), '23 Nov')
   assert.equal(usage.stretch('2026-11-23', 'day', true), 'Mon 23 Nov')
-  assert.match(usage.stretch('2026-11-23T14:00:00.000Z', 'hour'), /^\d\d:00$/)
+  // An hour begins on the hour of the server's clock, which is the half hour in some time zones: it is shown as it is here.
+  const begins = new Date('2026-11-23T14:00:00.000Z')
+  assert.equal(usage.stretch('2026-11-23T14:00:00.000Z', 'hour'), `${String(begins.getHours()).padStart(2, '0')}:${String(begins.getMinutes()).padStart(2, '0')}`)
+  assert.match(usage.stretch('2026-11-23T14:00:00.000Z', 'hour', true), /^(Mon|Tue) \d\d:\d\d$/)
   assert.equal(usage.modelLabel('default'), 'Default model')
   assert.equal(usage.providerName('claude-code', []), 'Claude Code')
   assert.equal(usage.providerName('claude-code', [{ id: 'claude-code', name: 'Claude Code (work)' }]), 'Claude Code (work)')

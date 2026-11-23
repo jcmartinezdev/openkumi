@@ -45,8 +45,8 @@ The plan limits are the exception: those are the plan's own, and count everythin
 
 **The price list** is the public list of model prices that
 [LiteLLM](https://github.com/BerriAI/litellm) keeps on GitHub. OpenKumi fetches it when you open
-Usage, at most once a day, and keeps it in your data folder; nothing about you or your bots is
-sent for it. A model the list does not have shows a dash where its cost would be, and the total
+Usage and keeps it in your data folder: once it has the list, at most once a day, and when a fetch
+failed, again no sooner than ten minutes later. Nothing about you or your bots is sent for it. A model the list does not have shows a dash where its cost would be, and the total
 says how many tokens have no price. Prices are the plain list price: no discount for batches, and
 none of the surcharges some models have for very long requests.
 

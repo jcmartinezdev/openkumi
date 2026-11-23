@@ -1,6 +1,7 @@
 import type { Attachment, Effort, ItemData, ModelInfo, ProviderInfo, ProviderLimits } from '@openkumi/shared'
 import type { Shown } from '../attachments.ts'
 import * as db from '../db.ts'
+import { failed } from '../telemetry.ts'
 
 export interface ToolSpec {
   name: string
@@ -123,7 +124,15 @@ const heard = new Map<string, Record<string, Counted>>()
  */
 export function usedSince(session: string, resumed: boolean, modelUsage: unknown): Extract<ModelEvent, { type: 'usage' }>[] {
   if (!session || !modelUsage || typeof modelUsage !== 'object') return []
-  const before = heard.get(session) ?? db.getCounted<Record<string, Counted>>(session) ?? undefined
+  let before = heard.get(session)
+  // A database that cannot be read or written must not fail a turn that is over: the count goes on from memory.
+  if (!before) {
+    try {
+      before = db.getCounted<Record<string, Counted>>(session) ?? undefined
+    } catch (e) {
+      failed(e, 'background')
+    }
+  }
   const now: Record<string, Counted> = {}
   for (const [name, u] of Object.entries(modelUsage as Record<string, any>)) {
     const cached = count(u?.cacheReadInputTokens)
@@ -137,7 +146,11 @@ export function usedSince(session: string, resumed: boolean, modelUsage: unknown
   }
   heard.set(session, now)
   if (heard.size > 500) heard.delete(heard.keys().next().value!)
-  db.setCounted(session, now)
+  try {
+    db.setCounted(session, now)
+  } catch (e) {
+    failed(e, 'background')
+  }
   if (resumed && !before) return []
   const events: Extract<ModelEvent, { type: 'usage' }>[] = []
   for (const [model, total] of Object.entries(now)) {

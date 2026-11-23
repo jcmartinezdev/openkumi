@@ -155,7 +155,11 @@ export function share(part: number, whole: number): string {
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-/** A stretch of time by name: "Mon 23 Nov" for a day, "14:00" for an hour (`long` adds its day). */
+/**
+ * A stretch of time by name: "Mon 23 Nov" for a day, "14:00" for an hour (`long` adds its day).
+ * An hour is one of the server's clock, shown at the time it begins where the app is: on the half
+ * hour, in a time zone that is half an hour off.
+ */
 export function stretch(start: string, step: Usage['step'], long = false): string {
   if (step === 'day') {
     // A date of the server's calendar, shown as that date wherever the app is.
@@ -163,7 +167,7 @@ export function stretch(start: string, step: Usage['step'], long = false): strin
     return `${long ? `${DAYS[new Date(y, m - 1, d).getDay()]} ` : ''}${d} ${MONTHS[m - 1]}`
   }
   const at = new Date(start)
-  const hour = `${String(at.getHours()).padStart(2, '0')}:00`
+  const hour = `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
   return long ? `${DAYS[at.getDay()]} ${hour}` : hour
 }
 

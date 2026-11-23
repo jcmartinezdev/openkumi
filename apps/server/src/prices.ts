@@ -1,8 +1,9 @@
 // What models cost at their makers' list prices, so that the usage page can say what the tokens
 // the bots used would have cost as API calls. Claude Code says that itself with every turn; for the
 // rest (Codex, Grok, an API of your own) the prices come from the public list LiteLLM keeps on
-// GitHub. It is fetched at most once a day, only when the usage is asked for, and kept in the data
-// folder. Nothing is sent for it but the request for the file.
+// GitHub. It is fetched only when the usage is asked for, and kept in the data folder: at most once
+// a day once it is there, and after a fetch that failed, again no sooner than ten minutes later.
+// Nothing is sent for it but the request for the file.
 import fs from 'node:fs'
 import path from 'node:path'
 import { HOME } from './config.ts'

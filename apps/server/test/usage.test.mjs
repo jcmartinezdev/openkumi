@@ -91,9 +91,24 @@ async function say(server, bot, text) {
   await until(async () => (await server.api('GET', `/api/threads/${thread.id}`)).thread.status === 'idle')
 }
 
-/** The rows as [provider, model, sent, from the cache, written, dollars], in a fixed order. */
-const table = (usage) =>
-  usage.rows.map((r) => [r.provider, r.model, r.input, r.cached, r.output, r.cost === null ? null : Number(r.cost.toFixed(6))]).sort((a, b) => a[0].localeCompare(b[0]))
+const HOUR = 60 * 60_000
+/** When the hour a moment is counted under began, and the date of that on this computer's calendar, as the server has them. */
+const hourOf = (time) => Math.floor(time / HOUR) * HOUR
+const dateOf = (time) => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(time)
+
+/**
+ * What was used as [provider, model, sent, from the cache, written, dollars], in a fixed order,
+ * added up over the time shown: a test that runs as the hour or the day turns has its turns
+ * counted under two of them.
+ */
+function table(usage) {
+  const sums = new Map()
+  for (const r of usage.rows) {
+    const sum = sums.get(`${r.provider}\n${r.model}`) ?? [r.provider, r.model, 0, 0, 0, 0]
+    sums.set(`${r.provider}\n${r.model}`, [r.provider, r.model, sum[2] + r.input, sum[3] + r.cached, sum[4] + r.output, sum[5] === null || r.cost === null ? null : sum[5] + r.cost])
+  }
+  return [...sums.values()].map((sum) => [...sum.slice(0, 5), sum[5] === null ? null : Number(sum[5].toFixed(6))]).sort((a, b) => a[0].localeCompare(b[0]))
+}
 
 test('what each bot’s model used is counted by provider and model, with what it would cost as API calls', () =>
   withHome(async (home) => {
@@ -102,6 +117,7 @@ test('what each bot’s model used is counted by provider and model, with what i
     const before = await server.api('GET', '/api/usage')
     assert.deepEqual([before.rows, before.since], [[], null], 'something was counted before any bot ran')
 
+    const began = Date.now()
     const bots = {}
     for (const provider of ['mock', 'claude-code', 'codex']) {
       bots[provider] = await server.api('POST', '/api/bots', { name: `On ${provider}`, provider, look: { creature: 'cat', color: 'sky', hat: 'none', extra: 'none', clothes: 'navy' } })
@@ -114,8 +130,11 @@ test('what each bot’s model used is counted by provider and model, with what i
     assert.equal(week.starts.length, 7)
     for (const date of week.starts) assert.match(date, /^\d{4}-\d{2}-\d{2}$/)
     assert.deepEqual([...week.starts].sort(), week.starts, 'the days are not oldest first')
-    // Everything was used today, which is the last day.
-    assert.deepEqual([...new Set(week.rows.map((r) => r.at))], [6])
+    // Each turn is under the day its hour began in: the hour the turns began in, or one that has begun since.
+    // (Half an hour off the clock's hours, just after midnight, that is still the day before.)
+    const days = [began, Date.now()].map((time) => week.starts.indexOf(dateOf(hourOf(time))))
+    assert.ok(days.every((at) => at >= 5), 'the hour that is running is not in the last two days')
+    for (const row of week.rows) assert.ok(days.includes(row.at), `something was counted under ${week.starts[row.at]}`)
     assert.deepEqual(table(week), [
       // Claude Code says what its turns would cost itself: a quarter of a dollar each.
       ['claude-code', 'claude-test-1', 200, 120, 20, 0.5],
@@ -124,16 +143,17 @@ test('what each bot’s model used is counted by provider and model, with what i
       // The list has no such model.
       ['mock', 'mock-1', 24, 0, 6, null],
     ])
-    assert.deepEqual(week.rows.map((r) => r.botId).sort(), Object.values(bots).map((b) => b.id).sort())
-    assert.ok(Date.now() - week.since < 2 * 60 * 60_000, 'counting did not begin just now')
+    assert.deepEqual([...new Set(week.rows.map((r) => r.botId))].sort(), Object.values(bots).map((b) => b.id).sort())
+    assert.equal(week.since, hourOf(began), 'counting did not begin with the first turn')
     assert.ok(Date.now() - week.pricedAt < 60_000, 'the prices were not fetched just now')
 
-    // The last 24 hours, by the hour: all of it in the hour that is running.
+    // The last 24 hours, by the hour, the last of them the one that is running: all of it in the hours the turns ran in.
     const today = await server.api('GET', '/api/usage?days=1')
     assert.equal(today.step, 'hour')
     assert.equal(today.starts.length, 24)
-    assert.ok(Math.abs(Date.parse(today.starts[23]) - Date.now()) < 60 * 60_000)
-    assert.deepEqual([...new Set(today.rows.map((r) => r.at))], [23])
+    assert.ok([hourOf(began), hourOf(Date.now())].includes(Date.parse(today.starts[23])))
+    const hours = [began, Date.now()].map((time) => today.starts.indexOf(new Date(hourOf(time)).toISOString()))
+    for (const row of today.rows) assert.ok(hours.includes(row.at), `something was counted under ${today.starts[row.at]}`)
     assert.deepEqual(table(today), table(week))
 
     // Started again, the server still knows where Claude Code's count for the conversation stood: the next turn adds only itself.
@@ -215,9 +235,12 @@ test('usage is laid out by the days of this computer’s calendar, and a model o
   assert.deepEqual(parse(LIST), { 'fake-model': [0.000001, 0.0000001, 0.00001], 'xai/grok-9': [0.000002, 0.000002, 0.000006] })
   assert.deepEqual(parse('not a list'), {})
 
-  const HOUR = 60 * 60_000
-  const now = Date.now()
-  const date = (time) => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(time)
+  // Noon today, on this computer's clock: the hour that holds it began on today's date however far the time zone is
+  // off the clock's whole hours, and so did the hours 72 hours and forty days before it, whatever the clocks did since.
+  const noon = new Date()
+  noon.setHours(12, 0, 0, 0)
+  const now = noon.getTime()
+  const date = dateOf
   const one = { botId: 'a-bot', provider: 'codex', model: 'fake-model', costed: false, input: 1000, cached: 0, output: 0, cost: 0 }
   db.addUsage(one, now)
   db.addUsage(one, now)
@@ -228,6 +251,7 @@ test('usage is laid out by the days of this computer’s calendar, and a model o
   db.addUsage({ ...one, provider: 'grok', model: 'grok-9' }, now)
   db.addUsage({ ...one, provider: 'openai-compatible', model: 'x-ai/grok-9' }, now)
   // What a model did not name is counted as its provider's default; nothing used is not counted at all.
+  // These are counted under the hour that is running, whichever that is.
   count('a-bot', 'codex', { model: '', input: 10.4, cached: 99, output: 0 })
   count('a-bot', 'codex', { model: 'never-ran', input: 0, cached: 0, output: 0 })
 
@@ -242,7 +266,7 @@ test('usage is laid out by the days of this computer’s calendar, and a model o
   assert.equal(Number(row(at(now), 'grok', 'grok-9').cost.toFixed(6)), 0.002)
   assert.equal(Number(row(at(now), 'openai-compatible', 'x-ai/grok-9').cost.toFixed(6)), 0.002)
   // No more can have come from a cache than was sent.
-  assert.deepEqual([row(at(now), 'codex', 'default').input, row(at(now), 'codex', 'default').cached], [10, 10])
+  assert.deepEqual([row(week.rows, 'codex', 'default').input, row(week.rows, 'codex', 'default').cached], [10, 10])
   assert.equal(row(week.rows, 'codex', 'never-ran'), undefined)
   // Forty days ago is not in a week, and is in ninety days.
   assert.equal(week.rows.reduce((sum, r) => sum + (r.model === 'fake-model' && r.provider === 'codex' ? r.input : 0), 0), 3000)

@@ -211,13 +211,15 @@ function Chart({ usage, measure }: { usage: Counted; measure: Measure }) {
   // Redrawn when the appearance changes, as the colours are picked for each.
   usePrefs()
   const providers = useStore((s) => s.providers)
-  const [at, setAt] = useState<number | null>(null)
+  const [pointed, setAt] = useState<number | null>(null)
   const [asTable, setAsTable] = useState(false)
   const { series, values, most } = columns(usage, measure)
   const lines = scale(most)
   const top = lines.at(-1)!
   const say = (n: number) => (measure === 'tokens' ? tokens(n) : dollars(n))
   const count = usage.starts.length
+  // The column pointed at. One from a longer stretch of time, still pointed at when a shorter one arrives, is not in this chart.
+  const at = pointed !== null && pointed < count ? pointed : null
   // A few dates under the columns, spread evenly: every one would not fit.
   const every = count <= 8 ? 1 : Math.ceil(count / 6)
   const labelled = (i: number) => (count - 1 - i) % every === 0
