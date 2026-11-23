@@ -55,7 +55,8 @@ export function startServers(names: string[], args: string[]): Promise<number> {
     }
     const start = (name: string) => {
       // Someone whose server already runs here (as a background service, say) is left to that: a second one is never started on their data.
-      if (openElsewhere(path.join(homeOf(name), 'openkumi.db'))) {
+      // (A database that cannot be opened is not taken for one in use: its server is started, and says what is wrong with it.)
+      if (openElsewhere(path.join(homeOf(name), 'openkumi.db'), false)) {
         say(name, `${several ? 'Their' : `${name}’s`} server is already running on this computer, and is left as it is.`)
         return done()
       }

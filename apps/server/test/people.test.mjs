@@ -399,8 +399,10 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
       `import fs from 'node:fs'
        const who = process.argv[process.argv.indexOf('--for') + 1]
        const before = fs.existsSync(${JSON.stringify(starts)}) ? fs.readFileSync(${JSON.stringify(starts)}, 'utf8').split('\\n').filter((line) => line === who).length : 0
+       // Which process it is, put in place in one step and before the start is written down: whoever has seen the start reads this process, whole.
+       fs.writeFileSync(${JSON.stringify(path.join(both, 'pid-'))} + who + '.next', String(process.pid))
+       fs.renameSync(${JSON.stringify(path.join(both, 'pid-'))} + who + '.next', ${JSON.stringify(path.join(both, 'pid-'))} + who)
        fs.appendFileSync(${JSON.stringify(starts)}, who + '\\n')
-       fs.writeFileSync(${JSON.stringify(path.join(both, 'pid-'))} + who, String(process.pid))
        if (!before) process.exit(75)
        if (who === 'ana') {
          process.stderr.write('no end of line')
@@ -411,6 +413,12 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
     )
     const installed = started({ OPENKUMI_RUNTIME: runtime })
     const count = (who) => (fs.existsSync(starts) ? fs.readFileSync(starts, 'utf8').split('\n').filter((line) => line === who).length : 0)
+    /** Ends a stand-in server as the system would. Never anything but the one process it wrote down. */
+    const end = (who) => {
+      const pid = Number(fs.readFileSync(path.join(both, `pid-${who}`), 'utf8'))
+      assert.ok(Number.isInteger(pid) && pid > 1, `the process of ${who}’s stand-in`)
+      process.kill(pid, 'SIGKILL')
+    }
     await until(() => count('juan') === 2 && count('ana') === 2, 'each was started again after it stopped to update')
     // One that stops for another reason is not started again, and says so; the other goes on.
     await until(() => /ana \| This server has stopped \(3\)\. The others go on\./.test(installed.said()), 'it says the one has stopped')
@@ -418,14 +426,13 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
     await new Promise((r) => setTimeout(r, 500))
     assert.deepEqual([count('juan'), count('ana')], [2, 2])
     // One ended by something else (the system, out of memory) is said too. With none left, it ends by itself, with what the first that stopped badly ended with.
-    process.kill(Number(fs.readFileSync(path.join(both, 'pid-juan'), 'utf8')), 'SIGKILL')
+    end('juan')
     assert.equal(await installed.ended, 3)
     assert.match(installed.said(), /^juan \| This server has stopped \(SIGKILL\)\. The others go on\.$/m)
     // A single server ended from outside is said too: it had no chance to say why itself.
     const single = started({ OPENKUMI_RUNTIME: runtime }, ['--for', 'juan'])
     await until(() => count('juan') === 3, 'the one server was started')
-    await new Promise((r) => setTimeout(r, 300))
-    process.kill(Number(fs.readFileSync(path.join(both, 'pid-juan'), 'utf8')), 'SIGKILL')
+    end('juan')
     assert.equal(await single.ended, 1)
     assert.match(single.said(), /The server was ended \(SIGKILL\)\./)
   } finally {
