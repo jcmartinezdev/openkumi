@@ -98,6 +98,69 @@ openkumi pair       # a code for the app on another computer or phone
 From the source it is `OPENKUMI_LAN=1 npm run server`, then `npm run pair`. An app connected to it can do everything but open its folder in a file manager and
 pair or remove devices, which are only done at that computer.
 
+## Bots for someone else in the house
+
+Bots belong to a person. An environment has one owner, and every computer and phone paired with
+it sees all of its bots, so two people do not share one. Each person on a computer has a server
+of their own there, side by side, and you are simply the first: the one the app asked for a name
+when you first ran your bots on that computer. (A server installed alone cannot ask, and calls
+you by your account's name there.)
+
+<Steps>
+
+1. **On the computer that runs the bots**, open **Settings → Environments** and, under **People
+   on this computer**, choose **Add a person**. Give their name.
+
+2. Their server starts, and the app shows its address, a pairing code and the same as a picture.
+
+3. **On their computer**, they open **Settings → Environments → Add environment** and enter the
+   address and the code. **On their phone**, they scan the picture. From then on they have their
+   own first bot, and make their own.
+
+</Steps>
+
+**Pair a device** beside their name makes another code, for another of their computers or phones.
+The **⋯** menu changes a name, yours included, or removes someone: their server stops, and what
+it held stays in its folder.
+
+- **Apart from each other.** Each person's bots, conversations, automations, settings and paired
+  devices are in a folder of their own, `~/.openkumi/people/<name>/`. Nobody's app is ever shown
+  another person's bots, and the bots of one cannot message the bots of another.
+- **Looked after only at that computer.** People are added, renamed and removed in the app on the
+  computer that runs the bots, or in a terminal there. An app that is connected from another
+  computer or a phone uses its own person's server, and has no way to change who else has one.
+- **On a port of their own.** Yours is `4317`, the next person's `4327`, then `4337`. The address
+  shown for them ends in it.
+- **On the same sign-ins.** Everyone's bots run on what this computer is signed in to: the same
+  Claude Code, Codex and Grok plans, and the same limits.
+- **Running while yours is.** The app runs everyone's servers while it runs yours, and stops them
+  when it quits. With a server installed alone each has a background service of its own, and
+  they are updated together: when one server fetches a new version, the others start it too, each
+  once none of its bots is working.
+
+With a server installed alone, the same is done in a terminal on that computer:
+
+```sh
+openkumi people add ana         # their server, kept running in the background, and a code for their app
+openkumi people                 # who has bots here, on which port, and whether each one's server runs
+openkumi pair --for ana         # another code, for another of their devices
+openkumi status --for ana       # any command is about their server with --for after it
+openkumi people rename ana anna # another name; what is paired with their server stays paired
+openkumi people remove anna     # stop it; what it held stays in its folder
+```
+
+A command with no name after it is about the first person's server, which on a computer with one
+person is all there is to know. An app on that computer shows who has bots there and makes
+pairing codes, but leaves adding and removing to the terminal. From the source it is
+`npm run openkumi -- people add ana`, then `npm run openkumi -- start --for ana` to run it.
+
+<Aside type="caution" title="Apart in the app, not locked away at the computer">
+  Everyone's server runs under the same account of that computer, so whoever can log in to it
+  there can read every folder. For a wall the system keeps, give the other person an account of
+  their own on the computer and install OpenKumi in it, with `OPENKUMI_PORT` set to a port of its
+  own. Their bots then run on their own sign-ins too.
+</Aside>
+
 ## On an iPhone
 
 The iPhone app talks to your bots from anywhere: chat with them (with dictation),

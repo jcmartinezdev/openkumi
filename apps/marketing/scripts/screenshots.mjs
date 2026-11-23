@@ -12,6 +12,9 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { _electron } from 'playwright-core'
 
+/** A server keeps its data in the folder of the person it runs for: the first one in its list of people. */
+const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+
 const here = path.resolve(import.meta.dirname, '..')
 const root = path.resolve(here, '../..')
 const desktop = path.join(root, 'apps/desktop')
@@ -50,7 +53,7 @@ async function until(check, what, timeoutMs = 60_000) {
 }
 const up = () => fetch(`http://127.0.0.1:${PORT}/api/hello`).then((r) => r.ok, () => false)
 async function api(method, url, body) {
-  const token = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+  const token = JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')).accessToken
   const res = await fetch(`http://127.0.0.1:${PORT}${url}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
   if (!res.ok) throw new Error(`${method} ${url}: ${res.status} ${await res.text()}`)
   return res.json()
@@ -106,7 +109,7 @@ try {
 
   // 2. The conversations were had a while ago.
   const ago = { [kumi.id]: 2 * HOUR, [bots.inbox.id]: 5 * HOUR, [bots.chef.id]: 26 * HOUR, [bots.researcher.id]: 2 * 60_000 }
-  const db = new DatabaseSync(path.join(home, 'openkumi.db'))
+  const db = new DatabaseSync(path.join(dataOf(home), 'openkumi.db'))
   for (const [botId, by] of Object.entries(ago)) {
     const end = db.prepare('SELECT MAX(updated_at) AS t FROM threads WHERE bot_id = ?').get(botId).t
     const shift = Date.now() - by - end

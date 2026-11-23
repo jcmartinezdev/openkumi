@@ -102,7 +102,8 @@ node apps/desktop/scripts/try.mjs release/mac-arm64/OpenKumi.app/Contents/MacOS/
 
 Once people have installed a release, what they keep in `~/.openkumi` has to keep working with
 every release after it. The format of that folder has a number, `FORMAT` in
-`apps/server/src/db.ts`, which is written into the database. A version that finds a higher number
+`apps/server/src/config.ts`, which is written into each person's database, and into the
+database in the folder itself, which is all a version from before people had folders looks at. A version that finds a higher number
 than its own was started on data a newer version wrote: it changes nothing, says so, and does not
 start. Raise the number with any change an older version cannot work with, and add the step that
 brings older data up to it; a new table, or a column older versions can ignore, needs no new

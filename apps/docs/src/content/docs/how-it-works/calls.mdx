@@ -46,7 +46,7 @@ use, see [Calls](/calls/).
 
 1. The app opens the microphone (with echo cancellation), makes its half of a WebRTC connection,
    and sends it to the server with the bot to call.
-2. The server starts Codex's app server in an empty folder (`~/.openkumi/calls/workspace`), with
+2. The server starts Codex's app server in an empty folder (`calls/workspace` in the data folder), with
    everything that could run commands or touch files switched off, and asks it to start a voice
    call with the app's half, in the bot's voice.
 3. Codex sets the call up with OpenAI on your ChatGPT sign-in, and hands back OpenAI's half, which

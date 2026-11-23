@@ -14,15 +14,18 @@ export OPENKUMI_RUNTIME
 case "${1:-}" in
   serve)
     # What the background service runs: the server itself and nothing around it, so that it is
-    # the one told to stop. When it stops to update, the service starts it again.
-    exec "$here/node" "$here/server/src/index.ts"
+    # the one told to stop. When it stops to update, the service starts it again. What follows
+    # is passed on: "--for <name>" makes it the server of someone else on this computer.
+    shift
+    exec "$here/node" "$here/server/src/index.ts" "$@"
     ;;
   start)
     # In a terminal: the server, started again here when it stops to update (it ends with 75 then).
+    shift
     while :; do
       current="$OPENKUMI_RUNTIME/current"
       code=0
-      "$current/node" "$current/server/src/index.ts" || code=$?
+      "$current/node" "$current/server/src/index.ts" "$@" || code=$?
       [ "$code" = 75 ] || exit "$code"
     done
     ;;

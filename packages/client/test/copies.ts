@@ -7,6 +7,7 @@
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { createConnection } from '../src/connection'
 import { useRandom } from '../src/addresses'
@@ -16,7 +17,9 @@ import { follow, onState, openThread, receive, useTransport, type State } from '
 
 const [mode, home, port, dir] = process.argv.slice(2)
 const base = `http://127.0.0.1:${port}`
-const owner = () => JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+// The server keeps its data in the folder of the person it runs for: the first one here.
+const data = () => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+const owner = () => JSON.parse(fs.readFileSync(path.join(data(), 'auth.json'), 'utf8')).accessToken
 const http = async (method: string, url: string, body?: unknown) => {
   const res = await fetch(base + url, { method, headers: { Authorization: `Bearer ${owner()}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
   const json = await res.json()
@@ -72,7 +75,9 @@ const linkFile = path.join(dir, 'link.json')
 
 if (mode === 'first') {
   const { code } = await http('POST', '/api/pairing')
-  const { key, serverId } = await pair(base, code, 'Check', random)
+  const { key, serverId, called } = await pair(base, code, 'Check', random)
+  // With its key, it is told what to call the server: the computer it is on (and whose it is, where several people have one there).
+  assert.equal(called, os.hostname().replace(/\.local$/, ''))
   const link = { id: 'remote', name: 'Mini', addresses: [base], token: key, local: false, serverId }
   fs.writeFileSync(linkFile, JSON.stringify(link))
   follow(link)

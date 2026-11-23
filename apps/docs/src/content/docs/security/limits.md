@@ -53,6 +53,11 @@ accounts on the same computer read them.
 chmod 700 ~/.openkumi
 ```
 
+The same holds between the people with bots on one computer
+([Bots for someone else in the house](/environments/#bots-for-someone-else-in-the-house)): their
+bots are kept apart in the app, but all their servers run under the one account, and their folders
+lie side by side in `~/.openkumi/people/`.
+
 ## Keys on the desktop are in a file, not the keychain
 
 The desktop app keeps the keys of remote environments in `desktop.json`, readable only by your

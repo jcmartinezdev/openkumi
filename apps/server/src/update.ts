@@ -9,6 +9,11 @@
 // tells whatever runs it (the background service, or `openkumi start`) to start it again: that
 // start is the new version. It waits for that until no bot is working, unless it is told not to.
 //
+// Several servers can be started from one folder of versions: the owner's, and one for each
+// person given a server of their own on this computer (people.ts). Any of them may fetch a new
+// version, two of them at once too, and the others start it when they notice it is in place. Each
+// leaves a note of the version it runs, so that it is not tidied away from under it.
+//
 // A server inside the desktop app is updated with the app, and one run from the repository with
 // git: both only say so.
 import { spawn } from 'node:child_process'
@@ -78,16 +83,37 @@ async function latestRelease(): Promise<Manifest> {
 }
 
 const versionDir = (version: string) => path.join(RUNTIME, 'versions', version)
+/** Whether a version's folder holds a whole version. One is put in place in a single step, so anything less was cut short. */
+const whole = (dir: string) => fs.existsSync(path.join(dir, 'server', 'package.json'))
+
+/** Whether a process is still there. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (e) {
+    // Not ours to signal, but there.
+    return (e as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/** What this server works on while it fetches a version is named after its process, so that two servers fetching at once do not write over each other. */
+const MINE = `${process.pid}-`
+/** Whether a file or folder of that kind is another server's, which is still at it. */
+function theirs(name: string): boolean {
+  const pid = Number(/^\.?(\d+)-/.exec(name)?.[1])
+  return !!pid && pid !== process.pid && alive(pid)
+}
 
 /** Fetches a version, checks it and unpacks it beside the others. Does nothing when it is already there. */
 async function fetchVersion({ version, archives }: Manifest) {
   const dir = versionDir(version)
-  if (fs.existsSync(path.join(dir, 'server', 'package.json'))) return
+  if (whole(dir)) return
   const archive = archives[TARGET]
   if (!archive || !/^[\w.-]+$/.test(archive.file) || !/^[0-9a-f]{64}$/.test(archive.sha256)) throw new Error(`OpenKumi ${version} was not published for this kind of computer (${TARGET}).`)
   const downloads = path.join(RUNTIME, 'downloads')
   fs.mkdirSync(downloads, { recursive: true })
-  const file = path.join(downloads, archive.file)
+  const file = path.join(downloads, MINE + archive.file)
   // Read whole, then written: some tens of megabytes held for a moment. Passing it on piece by
   // piece as it arrives makes Node 24 fall over, taking the server with it, when the other end
   // closes the connection while a piece is still waiting to be taken.
@@ -98,7 +124,7 @@ async function fetchVersion({ version, archives }: Manifest) {
   // The checksum comes from the release's own list, so a download that was cut short or changed on the way is not unpacked.
   if (crypto.createHash('sha256').update(bytes).digest('hex') !== archive.sha256) throw new Error(`The download of OpenKumi ${version} is not the file that was published. Nothing was changed.`)
   fs.writeFileSync(file, bytes)
-  const unpacked = path.join(RUNTIME, 'versions', `.${version}.unpacking`)
+  const unpacked = path.join(RUNTIME, 'versions', `.${MINE}${version}.unpacking`)
   fs.rmSync(unpacked, { recursive: true, force: true })
   fs.mkdirSync(unpacked, { recursive: true })
   try {
@@ -106,12 +132,17 @@ async function fetchVersion({ version, archives }: Manifest) {
     // Tried once before anything points at it: its Node has to run here, and its program has to load.
     const said = await run(path.join(unpacked, 'node'), [path.join(unpacked, 'server', 'src', 'cli.ts'), 'version'])
     if (said.trim() !== version) throw new Error(`it says it is “${said.trim().slice(0, 40)}”`)
-    fs.rmSync(dir, { recursive: true, force: true })
-    fs.renameSync(unpacked, dir)
+    if (!whole(dir)) fs.rmSync(dir, { recursive: true, force: true })
+    try {
+      fs.renameSync(unpacked, dir)
+    } catch (e) {
+      // Refused because the version is there: another server put the same one in place meanwhile, and that one is it.
+      if (!whole(dir)) throw e
+    }
   } catch (e) {
-    fs.rmSync(unpacked, { recursive: true, force: true })
     throw new Error(`OpenKumi ${version} was downloaded but does not run on this computer: ${(e as Error).message}. Nothing was changed.`)
   } finally {
+    fs.rmSync(unpacked, { recursive: true, force: true })
     fs.rmSync(file, { force: true })
   }
 }
@@ -140,18 +171,44 @@ export function currentVersion(): string | null {
 /** Points `current` at a version, in one step: a start that happens meanwhile gets the old one or the new one, never neither. */
 function pointAt(version: string) {
   const link = path.join(RUNTIME, 'current')
-  const next = `${link}.next`
+  const next = path.join(RUNTIME, `.${MINE}current`)
   fs.rmSync(next, { force: true })
   fs.symlinkSync(path.join('versions', version), next)
   fs.renameSync(next, link)
 }
 
-/** Removes the versions that are neither running nor started next. */
-function tidy() {
-  const keep = new Set([VERSION, currentVersion()])
+/** Where each server started from this folder of versions leaves a note, named by its process, of the version it runs. */
+const running = () => path.join(RUNTIME, 'running')
+
+/** The versions that servers started from this folder are running right now. Notes left by servers that are gone are thrown away. */
+function inUse(): string[] {
+  const versions: string[] = []
+  for (const pid of list(running())) {
+    const note = path.join(running(), pid)
+    try {
+      if (alive(Number(pid))) versions.push(fs.readFileSync(note, 'utf8').trim())
+      else fs.rmSync(note, { force: true })
+    } catch {
+      // Gone since it was listed.
+    }
+  }
+  return versions
+}
+
+const list = (dir: string) => {
   try {
-    for (const name of fs.readdirSync(path.join(RUNTIME, 'versions'))) if (!keep.has(name)) fs.rmSync(path.join(RUNTIME, 'versions', name), { recursive: true, force: true })
-    fs.rmSync(path.join(RUNTIME, 'downloads'), { recursive: true, force: true })
+    return fs.readdirSync(dir)
+  } catch {
+    return []
+  }
+}
+
+/** Removes the versions that no server is running and that is not started next, and what was left of fetching one. */
+function tidy() {
+  const keep = new Set([VERSION, currentVersion(), ...inUse()])
+  try {
+    for (const name of list(path.join(RUNTIME, 'versions'))) if (!keep.has(name) && !theirs(name)) fs.rmSync(path.join(RUNTIME, 'versions', name), { recursive: true, force: true })
+    for (const name of list(path.join(RUNTIME, 'downloads'))) if (!theirs(name)) fs.rmSync(path.join(RUNTIME, 'downloads', name), { recursive: true, force: true })
   } catch {
     // Nothing to tidy.
   }
@@ -226,11 +283,19 @@ export function startUpdates(server: { working: () => number; restart: () => voi
   working = server.working
   if (HOW !== 'installed') return
   restart = server.restart
+  const note = path.join(running(), String(process.pid))
+  fs.mkdirSync(running(), { recursive: true })
+  fs.writeFileSync(note, VERSION)
+  process.on('exit', () => fs.rmSync(note, { force: true }))
   tidy()
   const look = () => void update(settings().autoUpdate)
   setTimeout(look, 30_000).unref()
   setInterval(look, 6 * HOUR).unref()
   // The moment a bot is done is when the new version can start; the timer is for whatever that misses.
   onEvent((event) => event.type === 'thread.upsert' && state.state === 'ready' && void setTimeout(settle, 500))
-  setInterval(settle, 15_000).unref()
+  setInterval(() => {
+    // Another server started from the same folder of versions may have put a new one in place: this one starts it too.
+    if ((state.state === 'idle' || state.state === 'failed') && staged()) set({ state: 'ready' })
+    settle()
+  }, 15_000).unref()
 }

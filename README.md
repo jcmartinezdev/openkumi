@@ -157,8 +157,9 @@ openkumi lan on     # let your other computers and your phone reach it
 openkumi pair       # a code to enter in the app: Settings → Environments → Add environment
 ```
 
-`openkumi help` lists the rest (`update`, `logs`, `service`, `uninstall`). More in
-[Installing and updating](https://docs.openkumi.ai/install/).
+`openkumi help` lists the rest (`update`, `logs`, `service`, `uninstall`), and
+`openkumi people add <name>` gives someone else in the house bots of their own, apart from yours.
+More in [Installing and updating](https://docs.openkumi.ai/install/).
 
 ### From the source
 

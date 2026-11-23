@@ -8,6 +8,9 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 
+/** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
+const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+
 // A range of its own: the test files run at the same time, and two that pick the same port cannot both start their server.
 const PORT = 5500 + Math.floor(Math.random() * 90)
 const fixture = (name) => path.resolve('test/fixtures', name)
@@ -30,7 +33,7 @@ async function withServer(home, fn) {
     server.on('exit', (code) => reject(new Error(`server exited with ${code}`)))
   })
   try {
-    const token = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+    const token = JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')).accessToken
     const api = async (method, url, body) =>
       (await fetch(`http://127.0.0.1:${PORT}${url}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })).json()
     return await fn(api)
@@ -61,7 +64,7 @@ test('runs that fell due while OpenKumi was off: a time of day long past is miss
 
     // Written while the server is not running, as if the computer had been asleep.
     const now = Date.now()
-    const db = new DatabaseSync(path.join(home, 'openkumi.db'))
+    const db = new DatabaseSync(path.join(dataOf(home), 'openkumi.db'))
     const add = (id, schedule, nextRunAt, lastStatus = null) =>
       db.prepare(
         `INSERT INTO automations (id, bot_id, title, prompt, starts_on, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, created_at, updated_at)

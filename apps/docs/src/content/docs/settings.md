@@ -25,8 +25,8 @@ its top finds any setting by name. Each page has **Restore defaults**.
 
 **Appearance**, **Chat** and **Confirm before deleting a conversation** belong to the device: each
 computer and phone keeps its own. Everything else belongs to the environment, and is the same from
-every device connected to it. The environment keeps its settings in `~/.openkumi/settings.json`,
-which holds only the values that differ from the defaults.
+every device connected to it. The environment keeps its settings in `settings.json` in its data folder
+(`~/.openkumi/people/<name>/`), which holds only the values that differ from the defaults.
 
 ### The limits in Advanced
 
@@ -48,7 +48,7 @@ wins.
 | `OPENKUMI_PORT` | `4317` | the server's port |
 | `OPENKUMI_HOOKS_PORT` | the server's port plus one | the port webhook calls are taken on, on this computer only |
 | `OPENKUMI_LAN` | unset | `1` lets other computers on the network connect whatever Settings says (same as `--lan`) |
-| `OPENKUMI_HOME` | `~/.openkumi` | the data folder |
+| `OPENKUMI_HOME` | `~/.openkumi` | the folder everything is kept in: each person's data folder is `people/<name>/` in it |
 | `OPENKUMI_BROWSER_CHANNEL` | from Settings | the browser program: `chrome`, `msedge`, or `chromium` for the one that comes with OpenKumi |
 | `OPENKUMI_CLAUDE_BIN`, `OPENKUMI_CODEX_BIN`, `OPENKUMI_GROK_BIN` | from Settings, else found on `PATH` | where the `claude`, `codex` and `grok` programs are |
 | `OPENKUMI_TAILSCALE_BIN` | the Tailscale app, else `tailscale` on `PATH` | the Tailscale program, asked for this computer's name on Tailscale |

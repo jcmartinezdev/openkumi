@@ -71,7 +71,7 @@ the computer starts over with a new id. A server run from the source code sends 
 ## Reading what was sent
 
 **Settings → Privacy** lists each thing that was sent, exactly as it went, and shows the id, with a
-button for a new one. The same list is kept in \`~/.openkumi/logs/telemetry.ndjson\`, a line per
+button for a new one. The same list is kept in \`logs/telemetry.ndjson\` in the data folder, a line per
 event, for the last few hundred.
 
 ## Errors

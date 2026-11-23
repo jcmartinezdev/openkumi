@@ -55,8 +55,8 @@ Calls need Codex signed in with a ChatGPT plan, whatever the bots run on (see [C
   </TabItem>
 </Tabs>
 
-The first time, the app asks where your bots should run: **Run them on this computer**, or
-**Connect to another computer** that already runs OpenKumi. [Your first bot](/getting-started/)
+The first time, the app asks where your bots should run: **Run them on this computer** (it then
+asks what you are called here), or **Connect to another computer** that already runs OpenKumi. [Your first bot](/getting-started/)
 goes on from there.
 
 Every release is installed, opened and tried on Windows and Linux automatically before it is
@@ -82,7 +82,7 @@ curl -fsSL https://openkumi.ai/install.sh | sh
 3. It puts an `openkumi` command in `~/.local/bin`.
 
 4. It keeps the server running in the background, also after a restart: a launchd agent on a Mac
-   (`ai.openkumi.server`), a systemd unit of your own user on Linux.
+   (`ai.openkumi.server.<name>`), a systemd unit of your own user on Linux.
 
 </Steps>
 
