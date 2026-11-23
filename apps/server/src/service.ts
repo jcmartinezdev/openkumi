@@ -38,12 +38,13 @@ const command = (who: string) => [path.join(RUNTIME, 'current', 'bin', 'openkumi
 /**
  * What the service is given of this terminal's surroundings: where programs are looked for (the
  * bots' engines are found there), and where OpenKumi keeps its data and listens, when those were chosen.
- * The ports named here are the first person's server's: everyone else's takes its port from the list of people.
+ * The ports named here are the first person's server's. Everyone else's takes its own port from the
+ * list of people, and is told the first person's too, to keep its bots off it (see serverPorts).
  */
 function surroundings(who: string): Record<string, string> {
   const usual = ['/opt/homebrew/bin', '/usr/local/bin', path.join(os.homedir(), '.local', 'bin'), '/usr/bin', '/bin', '/usr/sbin', '/sbin']
   const have = (process.env.PATH ?? '').split(path.delimiter).filter(Boolean)
-  const names = who === people()[0]?.name ? ['OPENKUMI_HOME', 'OPENKUMI_PORT', 'OPENKUMI_HOOKS_PORT', 'OPENKUMI_RELEASES_URL'] : ['OPENKUMI_HOME', 'OPENKUMI_RELEASES_URL']
+  const names = who === people()[0]?.name ? ['OPENKUMI_HOME', 'OPENKUMI_PORT', 'OPENKUMI_HOOKS_PORT', 'OPENKUMI_RELEASES_URL'] : ['OPENKUMI_HOME', 'OPENKUMI_PORT', 'OPENKUMI_RELEASES_URL']
   const kept = Object.fromEntries(names.flatMap((name) => (process.env[name] ? [[name, process.env[name]!]] : [])))
   return { PATH: [...have, ...usual.filter((dir) => !have.includes(dir))].join(path.delimiter), ...kept }
 }

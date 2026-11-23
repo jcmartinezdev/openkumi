@@ -253,6 +253,26 @@ export const VERSION: string = JSON.parse(fs.readFileSync(path.join(ROOT, 'packa
 /** Started with --lan: serve other devices on the local network whatever the setting says. */
 export const LAN = process.argv.includes('--lan') || process.env.OPENKUMI_LAN === '1'
 
+/** Everyone here as the list says now, people being added and removed while this server runs; as it was at the start when it cannot be read. */
+function everyoneNow(): Person[] {
+  try {
+    return people()
+  } catch {
+    return everyone
+  }
+}
+/** Whether other people have bots on this computer too. */
+export const sharedComputer = () => everyoneNow().length > 1
+/**
+ * The ports every server here listens on, this one's among them: each is OpenKumi, which a bot is
+ * never to reach. The first person's may have been moved with OPENKUMI_PORT, which every server
+ * started together is given: by the desktop app, "openkumi start" and the background services.
+ */
+export function serverPorts(): number[] {
+  const moved = Number(process.env.OPENKUMI_PORT)
+  return [...new Set([PORT, ...everyoneNow().map((p) => p.port), ...(Number.isInteger(moved) && moved > 0 ? [moved] : [])])]
+}
+
 /** The database, in HOME. */
 export const DATABASE = path.join(HOME, 'openkumi.db')
 

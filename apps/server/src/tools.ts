@@ -3,7 +3,7 @@ import type { Bot, ItemData, Thread } from '@openkumi/shared'
 import * as agent from './agent.ts'
 import { createBot, getBot, listBots } from './bots.ts'
 import { browserFor, byRef, isWebPage, snapshot } from './browser.ts'
-import { PORT } from './config.ts'
+import { serverPorts } from './config.ts'
 import { settings } from './settings.ts'
 import { serviceTools, superpowerOfTool } from './mcp.ts'
 import { track, whereOf } from './telemetry.ts'
@@ -51,12 +51,15 @@ async function page(ctx: ToolContext, { leaving = false, reading = false } = {})
 /** How long browser_ask_user waits for the owner: less than the half hour Claude Code, Codex and Grok wait for a tool. */
 const ASK_TIMEOUT = 25 * 60_000
 
-/** OpenKumi's own address. Requests from this computer are trusted like the owner, so a bot must never make one. */
+/**
+ * OpenKumi's own address, or that of anyone else's server on this computer, whose bots are theirs.
+ * A bot holds no key to any of them, so it could not use them; it is kept from even trying.
+ */
 function isOwnServer(url: URL) {
   const host = url.hostname.replace(/\.$/, '').toLowerCase()
   // Every way of writing "this computer", including IPv6 forms of 127.0.0.1.
   const local = host === 'localhost' || host.endsWith('.localhost') || host === '0.0.0.0' || /^127\./.test(host) || /^\[(::1?|::ffff:[0-9a-f:.]+)\]$/.test(host)
-  return local && (url.port || (url.protocol === 'https:' ? '443' : '80')) === String(PORT)
+  return local && serverPorts().includes(Number(url.port || (url.protocol === 'https:' ? '443' : '80')))
 }
 
 const botSummary = (b: Bot) => ({
@@ -70,7 +73,7 @@ const botSummary = (b: Bot) => ({
 
 const listBotsTool: Tool = {
   name: 'list_bots',
-  description: 'List every bot that exists in this OpenKumi installation, including yourself.',
+  description: "List every one of the user's bots in OpenKumi, yourself among them.",
   parameters: params({}),
   run: (_, ctx) => JSON.stringify(listBots().map((b) => ({ ...botSummary(b), you: b.id === ctx.bot.id })), null, 1),
 }

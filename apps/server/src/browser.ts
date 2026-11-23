@@ -7,17 +7,19 @@ import crypto from 'node:crypto'
 import path from 'node:path'
 import { type BrowserContext, type CDPSession, type Page, type Request, chromium } from 'playwright-core'
 import type { BrowserInput, BrowserState } from '@openkumi/shared'
-import { PORT, emit, privateDir } from './config.ts'
+import { PORT, emit, privateDir, serverPorts } from './config.ts'
 import { settings } from './settings.ts'
 import { track } from './telemetry.ts'
 import { incoming, resolve } from './workspace.ts'
 
 const VIEWPORT = { width: 1280, height: 800 }
 
-// A bot's browser must not be able to open OpenKumi itself: coming from this computer it would be
-// trusted like the owner, and could change the bot's rules and superpowers. These rules
-// make Chrome send any request for this server's address somewhere that refuses it.
-const NO_SELF_ACCESS = `--host-rules=${['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${PORT} 0.0.0.0:1`).join(', ')}`
+// A bot's browser must not be able to open OpenKumi itself, nor the server of anyone else on this
+// computer, whose bots are theirs. A bot holds no key to any of them, so it could not use them; this
+// keeps it from even trying. These rules make Chrome send any request for one of those addresses
+// somewhere that refuses it. Chrome reads them only when it starts (see BotBrowser.start).
+const noServerAccess = (ports: number[]) =>
+  `--host-rules=${ports.flatMap((port) => ['localhost', '*.localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${port} 0.0.0.0:1`)).join(', ')}`
 
 /**
  * Where a service sends the browser back to after a superpower's sign-in. It is OpenKumi's own
@@ -106,6 +108,8 @@ class BotBrowser {
   private signIns = new Map<string, (back: URL) => Promise<void>>()
   private starting: Promise<void> | null = null
   private stateTimer: NodeJS.Timeout | null = null
+  /** The servers on this computer it was started to keep away from. */
+  private keptFrom: number[] = []
 
   constructor(botId: string) {
     this.botId = botId
@@ -143,16 +147,28 @@ class BotBrowser {
   }
 
   async start(headless: boolean) {
-    if (this.context) return
-    this.starting ??= this.launch(headless).finally(() => (this.starting = null))
-    await this.starting
+    // Someone added to this computer since Chrome started is not in its rules: it starts again,
+    // keeping them out too. A start may have read the list of servers before someone was added, so
+    // once it is done everyone who was waiting for it looks again, whoever began it among them. A
+    // Chrome that closes as soon as it opens is not started over and over.
+    for (let tries = 0; ; tries++) {
+      while (this.starting) await this.starting
+      if (this.context && serverPorts().every((port) => this.keptFrom.includes(port))) return
+      if (tries === 3) throw new Error('The browser could not be started. Try again.')
+      const old = this.context
+      if (old) this.forget()
+      this.starting = (old ? old.close().catch(() => {}) : Promise.resolve())
+        .then(() => this.launch(headless))
+        .finally(() => (this.starting = null))
+    }
   }
 
   private async launch(headless: boolean) {
+    const ports = serverPorts()
     const options = {
       headless,
       viewport: VIEWPORT,
-      args: ['--disable-blink-features=AutomationControlled', '--no-first-run', '--no-default-browser-check', NO_SELF_ACCESS],
+      args: ['--disable-blink-features=AutomationControlled', '--no-first-run', '--no-default-browser-check', noServerAccess(ports)],
       ignoreDefaultArgs: ['--enable-automation'],
     }
     const profile = path.join(privateDir(this.botId), 'browser-profile')
@@ -174,6 +190,7 @@ class BotBrowser {
     }
     this.context = context
     this.headless = headless
+    this.keptFrom = ports
     // Seen however the browser gets there: services usually send it back with a redirect.
     context.on('request', (request) => request.url().startsWith(`${SIGN_IN_RETURN}?`) && void this.signInReturned(request))
     context.on('page', (page) => void this.adopt(page))
@@ -570,6 +587,8 @@ class BotBrowser {
   }
 
   async stop() {
+    // A start under way would open it again after this has closed it.
+    while (this.starting) await this.starting.catch(() => {})
     const context = this.context
     this.forget()
     await context?.close().catch(() => {})

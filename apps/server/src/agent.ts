@@ -11,7 +11,7 @@ import type { Attachment, Bot, Item, ItemData, Partial, Queued, Said, Thread } f
 import { attach, discard, handOver, outgoing, stageCopy, toShow, unstage, withFiles } from './attachments.ts'
 import { getBot, listBots } from './bots.ts'
 import { browserFor, retireWindow } from './browser.ts'
-import { emit, workspaceDir } from './config.ts'
+import { emit, sharedComputer, workspaceDir } from './config.ts'
 import * as db from './db.ts'
 import { heard, isOverflow, prepare, shorten, tokens, transcript } from './history.ts'
 import { masterPrompt } from './prompt.ts'
@@ -111,6 +111,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     hook: automation?.trigger.kind === 'hook',
     subagent: thread.kind === 'subagent',
     call,
+    shared: sharedComputer(),
     codex: bot.provider === 'codex',
     rules: bot.rules,
     time_zone: TIME_ZONE,
