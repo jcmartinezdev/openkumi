@@ -57,7 +57,17 @@ The background services on the computer are the installed OpenKumi's. They are n
 people, and the people here often have the same names. So from the repository,
 `npm run openkumi -- service …` refuses, and renaming or removing a person leaves services alone.
 
-To install a release here, as anyone would:
+Before this kept apart, code from the repository ran on `~/.openkumi`, and may have left it in a
+data format newer than the latest release reads. That release would then refuse to start on it.
+So look before installing one:
+
+```sh
+sqlite3 ~/.openkumi/openkumi.db 'PRAGMA user_version'      # the format of the data there
+git grep -h "export const FORMAT" "$(git describe --tags --abbrev=0 origin/main)" -- apps/server/src   # the latest release's
+```
+
+If the first is higher, stop what runs on `~/.openkumi` and move it to `~/.openkumi-dev` (unless
+that is there already): the repository keeps that data, and the release starts afresh. Then install it, as anyone would:
 
 ```sh
 curl -fsSL https://openkumi.ai/install.sh | sh   # the server, as a background service
