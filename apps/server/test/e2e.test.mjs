@@ -1009,10 +1009,10 @@ test('a computer shared with others: a bot is told it works for the user alone, 
   await new Promise((resolve) => theirs.listen(0, '127.0.0.1', resolve))
   const port = theirs.address().port
   const address = `http://127.0.0.1:${port}/api/state`
-  // A browser open before they are added reaches them, as it reaches anything else here.
-  assert.doesNotMatch(await tool('browser_navigate', { url: address }), /^Error/)
-  fs.writeFileSync(list, JSON.stringify([...JSON.parse(before), { name: 'ana', port }]))
   try {
+    // A browser open before they are added reaches them, as it reaches anything else here.
+    assert.doesNotMatch(await tool('browser_navigate', { url: address }), /^Error/)
+    fs.writeFileSync(list, JSON.stringify([...JSON.parse(before), { name: 'ana', port }]))
     const prompt = await told()
     assert.match(prompt, /^You are Tester, an AI bot running locally on a computer the user shares with others inside OpenKumi\./)
     assert.match(prompt, /\n# Other people on this computer\nThe user shares this computer with other people, who have bots of their own here\./)

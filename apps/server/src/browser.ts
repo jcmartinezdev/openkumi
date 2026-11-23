@@ -147,9 +147,11 @@ class BotBrowser {
   }
 
   async start(headless: boolean) {
+    // A start under way may have read the list of servers before someone was added.
+    while (this.starting) await this.starting
     // Someone added to this computer since Chrome started is not in its rules: it starts again,
     // keeping them out too.
-    if (this.context && !this.starting && serverPorts().some((port) => !this.keptFrom.includes(port))) {
+    if (this.context && serverPorts().some((port) => !this.keptFrom.includes(port))) {
       const old = this.context
       this.forget()
       this.starting = old
@@ -587,6 +589,8 @@ class BotBrowser {
   }
 
   async stop() {
+    // A start under way would open it again after this has closed it.
+    while (this.starting) await this.starting.catch(() => {})
     const context = this.context
     this.forget()
     await context?.close().catch(() => {})
