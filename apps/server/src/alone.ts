@@ -4,7 +4,8 @@
 // before anything else of the server is loaded, the database above all: index.ts loads this first.
 import { DATABASE, PERSON, openElsewhere, people } from './config.ts'
 
-if (openElsewhere(DATABASE)) {
+// (A database that cannot be opened is left to db.ts, which says what is wrong with it.)
+if (openElsewhere(DATABASE, false)) {
   console.error(`\n  ${people().length > 1 ? `${PERSON}’s OpenKumi server` : 'The OpenKumi server'} is already running on this computer: its data is open. This one was not started.\n`)
   process.exit(1)
 }

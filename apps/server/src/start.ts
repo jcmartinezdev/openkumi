@@ -27,10 +27,12 @@ export function startServers(names: string[], args: string[]): Promise<number> {
   const several = names.length > 1
   let stopping = false
   let code = 0
+  /** Still going through the names for the first time: none of them being left out means that all are done. */
+  let launching = true
   return new Promise((resolve) => {
     const signals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const
     const done = () => {
-      if (running.size) return
+      if (launching || running.size) return
       for (const signal of signals) process.off(signal, stop)
       resolve(code)
     }
@@ -82,7 +84,9 @@ export function startServers(names: string[], args: string[]): Promise<number> {
         // Ended by itself, with something wrong or by a signal that was not this one's doing.
         if ((ended !== 0 || signal) && !stopping) {
           code ||= ended ?? 1
+          // One server says itself why it ends, unless it was ended from outside.
           if (several) say(name, `This server has stopped (${signal ?? ended}). The others go on.`)
+          else if (signal) say(name, `The server was ended (${signal}).`)
         }
         done()
       })
@@ -101,5 +105,8 @@ export function startServers(names: string[], args: string[]): Promise<number> {
     // Also when the terminal is closed: the servers stop with it, closing their data, not left behind without it.
     for (const signal of signals) process.on(signal, stop)
     names.forEach(start)
+    launching = false
+    // Everyone's server was running already, or none could be started.
+    done()
   })
 }

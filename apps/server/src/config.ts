@@ -123,17 +123,18 @@ function first(): Person {
  * Whether another program has a database open. The last connection to close takes the file
  * beside it that changes are first written to away with it, so one that is still there after
  * this look has closed belongs to someone else. One left by a program that ended without closing
- * is taken up into the database by this look, and is gone after it.
+ * is taken up into the database by this look, and is gone after it. `unopened` is what to take a
+ * database for that this look could not open at all: in use, unless whoever asks would rather
+ * go on and have the database say what is wrong with it.
  */
-export function openElsewhere(file: string): boolean {
+export function openElsewhere(file: string, unopened = true): boolean {
   if (!fs.existsSync(`${file}-wal`)) return false
   try {
     const look = new DatabaseSync(file)
     look.prepare('PRAGMA user_version').get()
     look.close()
   } catch {
-    // Not even to be opened: not ours to move.
-    return true
+    return unopened
   }
   return fs.existsSync(`${file}-wal`)
 }

@@ -97,6 +97,8 @@ async function shutdown(code = 0) {
 }
 process.on('SIGINT', () => shutdown())
 process.on('SIGTERM', () => shutdown())
+// Its terminal was closed: that ends it either way, and this way it has closed its data and its bots' browsers first.
+process.on('SIGHUP', () => shutdown())
 
 // A server installed on its own keeps itself up to date (update.ts).
 startUpdates({ working: agent.working, restart: () => void shutdown(RESTART) })

@@ -334,7 +334,8 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
     let said = ''
     run.stdout.on('data', (d) => (said += d))
     run.stderr.on('data', (d) => (said += d))
-    const ended = new Promise((resolve) => run.on('exit', (code) => (running.delete(run), resolve(code))))
+    // Once it has ended and all it printed has been read.
+    const ended = new Promise((resolve) => run.on('close', (code) => (running.delete(run), resolve(code))))
     return { run, ended, said: () => said }
   }
   try {
@@ -371,6 +372,22 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
     one.run.kill('SIGTERM')
     assert.deepEqual([await rest.ended, await one.ended], [0, 0])
 
+    // ---- the same when it is the first person's that already runs, as when a background service keeps it running: those started after are still this command's to stop
+    const mine = started({}, ['--for', 'juan'])
+    await until(() => answers(port), 'the first person’s server answers')
+    const others = started()
+    await until(() => answers(ana.port), 'her server answers')
+    assert.match(others.said(), /^juan \| Their server is already running on this computer, and is left as it is\.$/m)
+    others.run.kill('SIGTERM')
+    assert.equal(await others.ended, 0)
+    assert.deepEqual([await answers(ana.port), await answers(port)], [false, true], 'hers was stopped with the command that started it, and the one it left alone goes on')
+    // And with everyone's running already, there is nothing for it to do: it says so and ends.
+    const again = started({}, ['--for', 'juan'])
+    assert.equal(await again.ended, 0)
+    assert.match(again.said(), /juan’s server is already running on this computer, and is left as it is\./)
+    mine.run.kill('SIGTERM')
+    assert.equal(await mine.ended, 0)
+
     // ---- an installed OpenKumi: a server that stops to update is started again, in the version that is current then
     // A stand-in for the installed program: each start writes down whose it is, and the first start of each stops as a server does to update.
     const runtime = path.join(both, 'installed')
@@ -404,6 +421,13 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
     process.kill(Number(fs.readFileSync(path.join(both, 'pid-juan'), 'utf8')), 'SIGKILL')
     assert.equal(await installed.ended, 3)
     assert.match(installed.said(), /^juan \| This server has stopped \(SIGKILL\)\. The others go on\.$/m)
+    // A single server ended from outside is said too: it had no chance to say why itself.
+    const single = started({ OPENKUMI_RUNTIME: runtime }, ['--for', 'juan'])
+    await until(() => count('juan') === 3, 'the one server was started')
+    await new Promise((r) => setTimeout(r, 300))
+    process.kill(Number(fs.readFileSync(path.join(both, 'pid-juan'), 'utf8')), 'SIGKILL')
+    assert.equal(await single.ended, 1)
+    assert.match(single.said(), /The server was ended \(SIGKILL\)\./)
   } finally {
     for (const run of running) run.kill('SIGKILL')
     fs.rmSync(both, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
