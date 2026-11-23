@@ -23,12 +23,12 @@ const whole = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n 
  * Counts what a model just used for a bot. `model` is the name the provider has for it; one it did
  * not name is counted as "default". `cost` is given when the program that ran it said one.
  */
-export function count(botId: string, provider: string, used: { model: string; input: number; cached: number; output: number; cost?: number }) {
+export function count(botId: string, provider: string, used: { model: string; input: number; cached: number; output: number; cost?: number }, at = Date.now()) {
   const input = whole(used.input)
   const output = whole(used.output)
   if (!input && !output) return
   try {
-    db.addUsage({ botId, provider, model: used.model || 'default', costed: used.cost !== undefined, input, cached: Math.min(input, whole(used.cached)), output, cost: used.cost ?? 0 })
+    db.addUsage({ botId, provider, model: used.model || 'default', costed: used.cost !== undefined, input, cached: Math.min(input, whole(used.cached)), output, cost: used.cost ?? 0 }, at)
   } catch (e) {
     // A count that could not be written must not stop the bot's turn.
     failed(e, 'background')
