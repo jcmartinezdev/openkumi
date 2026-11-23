@@ -59,7 +59,8 @@ if (command === 'serve') {
   // The server of the person named, or of everyone here: each in a process of its own, started again when it stops to update (start.ts).
   const { PERSON, people } = await import('./config.ts')
   const { startServers } = await import('./start.ts')
-  process.exit(await startServers(named ? [PERSON] : people().map((person) => person.name), rest))
+  // Ends by itself once they have: whatever they printed last is written out first.
+  process.exitCode = await startServers(named ? [PERSON] : people().map((person) => person.name), rest)
 } else {
   const { BASE, FIRST, PERSON, PORT, accessToken, people } = await import('./config.ts')
   const { RUNTIME, VERSION, WHY_NOT, newer, update } = await import('./update.ts')
@@ -197,7 +198,7 @@ if (command === 'serve') {
       if (what === 'install') {
         // A server started by hand would hold the port the service wants.
         const { running } = service.serviceStatus()
-        if (!running && (await ask('GET', '/api/update'))) stop(`${whose} is already running here, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
+        if (!running && (await ask('GET', '/api/update'))) stop(`${whose} is already running here, started by hand. Stop it (Ctrl-C in the terminal it runs in, which stops every server started there) and run this again.`)
         const notes = service.installService()
         console.log(`\n  ${whose} now runs in the background, and starts by itself after a restart.`)
         for (const note of notes) console.log(`  ${note}`)
@@ -310,7 +311,7 @@ if (command === 'serve') {
         if (person.name === people()[0].name) stop(`${person.name} is the first person here, whom a command with no name is about, and is not removed. They can be given another name: “openkumi people rename ${person.name} <new name>”. “openkumi uninstall” removes OpenKumi from this computer.`)
         // Not from under a server that nothing here can stop: it would go on with their data, off the list.
         const { installed } = service.serviceStatus(person.name)
-        if (!installed && (await helloAt(person.port))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
+        if (!installed && (await helloAt(person.port))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in the terminal it runs in, which stops every server started there) and run this again.`)
         // A service is stopped first. One that could not be stopped stays set up, with its person on the list: this throws then.
         if (installed) service.removeService(person.name)
         try {
@@ -329,7 +330,7 @@ if (command === 'serve') {
         const first = person.name === people()[0].name
         const { installed } = service.serviceStatus(person.name)
         // Its folder cannot move while it is open. A service is stopped for it and set up again under the new name; a server that nothing here can stop is left alone, and so is its folder (people.ts looks again once the service has stopped).
-        if (!installed && (await helloAt(portOf(person)))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
+        if (!installed && (await helloAt(portOf(person)))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in the terminal it runs in, which stops every server started there) and run this again.`)
         if (installed) service.removeService(person.name)
         let now = person.name
         try {

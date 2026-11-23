@@ -1,3 +1,5 @@
+// First of all, before the database is opened: there is one server for a person's data.
+import './alone.ts'
 import fs from 'node:fs'
 import path from 'node:path'
 import * as agent from './agent.ts'

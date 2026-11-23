@@ -355,8 +355,21 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
     await until(() => answers(ana.port), 'her server answers')
     assert.equal(await answers(port), false)
     assert.match(one.said(), new RegExp(`^ +The OpenKumi server is running at http://127\\.0\\.0\\.1:${ana.port}$`, 'm'))
+
+    // ---- someone whose server already runs is left to that: a second one is never started on their data
+    const rest = started()
+    await until(() => answers(port), 'the first person’s server answers')
+    assert.match(rest.said(), /^ana \| Their server is already running on this computer, and is left as it is\.$/m)
+    assert.doesNotMatch(rest.said(), /ana \| .*running at/)
+    // Nor by starting the server itself: it stops before it has loaded anything that touches the data.
+    const second = spawnSync(process.execPath, ['src/index.ts', '--for', 'ana'], { env: its, encoding: 'utf8' })
+    assert.equal(second.status, 1)
+    assert.match(second.stderr, /ana’s OpenKumi server is already running on this computer: its data is open\. This one was not started\./)
+    assert.doesNotMatch(second.stdout + second.stderr, /running at|already in use/)
+    assert.equal(await answers(ana.port), true, 'the one that was running was not disturbed')
+    rest.run.kill('SIGTERM')
     one.run.kill('SIGTERM')
-    assert.equal(await one.ended, 0)
+    assert.deepEqual([await rest.ended, await one.ended], [0, 0])
 
     // ---- an installed OpenKumi: a server that stops to update is started again, in the version that is current then
     // A stand-in for the installed program: each start writes down whose it is, and the first start of each stops as a server does to update.
@@ -370,8 +383,12 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
        const who = process.argv[process.argv.indexOf('--for') + 1]
        const before = fs.existsSync(${JSON.stringify(starts)}) ? fs.readFileSync(${JSON.stringify(starts)}, 'utf8').split('\\n').filter((line) => line === who).length : 0
        fs.appendFileSync(${JSON.stringify(starts)}, who + '\\n')
+       fs.writeFileSync(${JSON.stringify(path.join(both, 'pid-'))} + who, String(process.pid))
        if (!before) process.exit(75)
-       if (who === 'ana') process.exit(3)
+       if (who === 'ana') {
+         process.stderr.write('no end of line')
+         process.exit(3)
+       }
        process.on('SIGTERM', () => process.exit(0))
        setInterval(() => {}, 1000)`,
     )
@@ -380,10 +397,13 @@ test('“start” runs everyone’s servers in one terminal, starts one again wh
     await until(() => count('juan') === 2 && count('ana') === 2, 'each was started again after it stopped to update')
     // One that stops for another reason is not started again, and says so; the other goes on.
     await until(() => /ana \| This server has stopped \(3\)\. The others go on\./.test(installed.said()), 'it says the one has stopped')
+    assert.match(installed.said(), /^ana \| no end of line$/m, 'what it printed last is shown, whether or not it ended the line')
     await new Promise((r) => setTimeout(r, 500))
     assert.deepEqual([count('juan'), count('ana')], [2, 2])
-    installed.run.kill('SIGTERM')
-    assert.equal(await installed.ended, 3, 'it ends with what the one that stopped badly ended with')
+    // One ended by something else (the system, out of memory) is said too. With none left, it ends by itself, with what the first that stopped badly ended with.
+    process.kill(Number(fs.readFileSync(path.join(both, 'pid-juan'), 'utf8')), 'SIGKILL')
+    assert.equal(await installed.ended, 3)
+    assert.match(installed.said(), /^juan \| This server has stopped \(SIGKILL\)\. The others go on\.$/m)
   } finally {
     for (const run of running) run.kill('SIGKILL')
     fs.rmSync(both, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })

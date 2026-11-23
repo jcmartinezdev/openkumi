@@ -67,7 +67,7 @@ export async function addPerson(given: string): Promise<Person> {
  * off the list while it goes on with their data.
  */
 function notInUse(name: string) {
-  if (openElsewhere(path.join(homeOf(name), 'openkumi.db'))) throw new Error(`${name}’s server is running: it still has their data open. Stop it (Ctrl-C in its terminal) and run this again.`)
+  if (openElsewhere(path.join(homeOf(name), 'openkumi.db'))) throw new Error(`${name}’s server is running: it still has their data open. Stop it (Ctrl-C in the terminal it runs in, which stops every server started there) and run this again.`)
 }
 
 /** Takes a person off the list, once their server has stopped. Their data folder is left where it is. */
