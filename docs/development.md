@@ -30,7 +30,7 @@ Bots belong to a person, and each person on a computer has a server of their own
 are looked after with the same command as on a server installed alone:
 
 ```sh
-npm run openkumi -- people add ana      # a second person, on port 4327
+npm run openkumi -- people add ana      # a second person, on port 4427
 npm run openkumi -- people              # who has bots here, and whether each one's server runs
 npm run openkumi -- pair --for ana      # a code for their app
 npm run openkumi -- start --for ana     # only their server
