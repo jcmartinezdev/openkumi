@@ -66,6 +66,7 @@ export default function Settings() {
           <Row icon="cpu" label="Providers" value={`${connected} connected`} opens onPress={() => router.push('/settings/providers')} />
           <Row icon="sliders" label="New bots" opens onPress={() => router.push('/settings/new-bots')} />
           <Row icon="clock" label="Automations" value={automations.length ? String(automations.length) : 'None'} opens onPress={() => router.push('/automations')} />
+          <Row icon="chart" label="Usage" opens onPress={() => router.push('/settings/usage')} />
           <Row icon="eye" label="Privacy" value={telemetry === true ? 'Sends usage' : telemetry === false ? 'Sends nothing' : undefined} opens onPress={() => router.push('/settings/privacy')} />
         </Section>
       )}

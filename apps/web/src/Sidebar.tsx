@@ -3,7 +3,7 @@ import { ALPHA_NOTE } from '@openkumi/shared/alpha'
 import type { Modal } from './App'
 import { Icon } from './Icon'
 import { desktop, useDesktop } from './desktop'
-import { mainThread, openSettings, recentSubagents, rootOf, useStore } from './store'
+import { USAGE_ADDRESS, mainThread, openSettings, recentSubagents, rootOf, useStore } from './store'
 import { BotHead } from './Mascot'
 import { UpdatePill } from './Updates'
 
@@ -26,6 +26,8 @@ interface Props {
   thread?: Thread
   /** The automations are showing. */
   automationsOpen: boolean
+  /** What the models used is showing. */
+  usageOpen: boolean
   openModal: (m: Modal) => void
   /** Drawer state on narrow screens. */
   open: boolean
@@ -33,7 +35,7 @@ interface Props {
 }
 
 /** The bots, one row each: a bot has a single conversation, so there is nothing to pick beneath it. */
-export function Sidebar({ bot, thread, automationsOpen, openModal, open, close }: Props) {
+export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, open, close }: Props) {
   const bots = useStore((s) => s.bots)
   const threads = useStore((s) => s.threads)
   const providers = useStore((s) => s.providers)
@@ -112,6 +114,10 @@ export function Sidebar({ bot, thread, automationsOpen, openModal, open, close }
         <Icon name="clock" />
         <span className="grow">Automations</span>
         <span className="meta">{runsGoing ? <span className="spinner" aria-label="An automation is running" /> : automationCount > 0 && <span className="time">{automationCount}</span>}</span>
+      </a>
+      <a className={`row settings usage-link ${usageOpen ? 'active' : ''}`} href={USAGE_ADDRESS} aria-current={usageOpen ? 'page' : undefined} onClick={close}>
+        <Icon name="chart" />
+        <span className="grow">Usage</span>
       </a>
       <UpdatePill />
       <button className="row settings" onClick={() => (close(), openSettings(connected ? 'general' : 'providers'))}>

@@ -32,10 +32,10 @@ const TRIGGERS = ['time', 'watch', 'hook'] as const
  * where "[botId]" stands for whichever bot: the bot itself is never named).
  */
 export const SCREENS = [
-  'welcome', 'chat', 'automations', 'browser',
+  'welcome', 'chat', 'automations', 'usage', 'browser',
   ...['general', 'appearance', 'chat', 'providers', 'bots', 'superpowers', 'prompt', 'browser', 'environments', 'advanced', 'privacy', 'about'].map((page) => `settings/${page}`),
   'home', 'pair', 'scan', 'telemetry', 'picture', 'call', 'chat/[id]', 'browser/[botId]', 'model/[botId]', 'automations/[id]', 'automations/prompt',
-  'settings', 'settings/server', 'settings/new-bots', 'settings/bot/[botId]', 'settings/look/[botId]', 'settings/voice/[botId]',
+  'settings', 'settings/server', 'settings/new-bots', 'settings/usage','settings/bot/[botId]', 'settings/look/[botId]', 'settings/voice/[botId]',
   'superpowers/[botId]', 'superpowers/[botId]/[id]', 'superpowers/[botId]/[id]/file', 'superpowers/[botId]/[id]/files', 'superpowers/[botId]/[id]/problem', 'superpowers/[botId]/[id]/sign-in',
   'workspace/[botId]', 'workspace/[botId]/change', 'workspace/[botId]/changes', 'workspace/[botId]/file', 'workspace/[botId]/folder',
   'other',

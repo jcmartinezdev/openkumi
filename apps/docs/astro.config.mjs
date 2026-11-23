@@ -34,7 +34,7 @@ export default defineConfig({
         },
         {
           label: 'Everyday use',
-          items: ['using/conversation', 'using/browser'],
+          items: ['using/conversation', 'using/browser', 'using/usage'],
         },
         {
           label: 'How it works',

@@ -186,11 +186,20 @@ export function announceProviders() {
   emit({ type: 'providers', providers: providerInfos(), calls: callsInfo() })
 }
 
+/** The look at the providers that is under way, or the last one that was made. */
+let looked: Promise<void> | null = null
+
 /** Looks again at the providers that depend on a program installed on this computer, and tells the UI. */
-export async function refreshProviders() {
-  await Promise.all(providers.map((p) => p.refresh?.()))
-  announceProviders()
+export function refreshProviders(): Promise<void> {
+  looked = Promise.all(providers.map((p) => p.refresh?.())).then(announceProviders)
+  return looked
 }
+
+/**
+ * Settles once the providers have been looked at since the server started: before that, none of
+ * them is known to be connected, whatever is installed.
+ */
+export const providersLooked = () => looked ?? refreshProviders()
 
 onSettingsChange((now, before) => {
   // A new program path has to be looked at; switching a provider on or off only has to be announced.

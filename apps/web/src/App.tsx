@@ -14,6 +14,7 @@ import { SettingsView } from './Settings'
 import { Sidebar } from './Sidebar'
 import { TelemetryQuestion } from './Telemetry'
 import { Automations } from './Automations'
+import { Usage } from './Usage'
 import { type Route, loadThread, mainThread, navigate, openSettings, useRoute, useStore } from './store'
 
 export type Modal = { kind: 'new-bot' } | null
@@ -38,6 +39,8 @@ export function App() {
   const lastChat = useRef<Route>(current)
   if (!current.settings) lastChat.current = current
   const route = current.settings ? lastChat.current : current
+  // A page that shows in the conversation's place: the automations, or what the models used.
+  const page = !!route.automations || route.usage
   const autoPip = usePrefs().autoOpenBrowser
   const bots = useStore((s) => s.bots)
   const threads = useStore((s) => s.threads)
@@ -66,13 +69,13 @@ export function App() {
   const [autoStart, setAutoStart] = useState<string | null>(null)
   const [modal, setModal] = useState<Modal>(null)
   // Which screen is showing, by its name and never by what it shows, for the app's own telemetry.
-  const showing = current.settings ? `settings/${current.settings[0] ?? 'general'}` : current.automations ? 'automations' : 'chat'
+  const showing = current.settings ? `settings/${current.settings[0] ?? 'general'}` : current.automations ? 'automations' : current.usage ? 'usage' : 'chat'
   useEffect(() => {
     if (loaded) screen(showing)
   }, [loaded, showing])
   // The sidebar is a slide-out drawer on narrow screens.
   const [navOpen, setNavOpen] = useState(false)
-  useEffect(() => setNavOpen(false), [route.botId, route.threadId])
+  useEffect(() => setNavOpen(false), [route.botId, route.threadId, route.usage])
 
   // A bot's address shows its conversation; a longer one shows a subagent's thread or an earlier conversation.
   const thread = threads.find((t) => t.id === route.threadId) ?? mainThread(threads, route.botId)
@@ -86,10 +89,10 @@ export function App() {
   // Land on the first bot when the URL names nothing that exists.
   useEffect(() => {
     // Not while the settings are showing: they may have been opened directly, with no chat underneath yet.
-    if (loaded && !current.settings && !route.automations && !bot && bots.length) navigate(bots[0].id)
-  }, [loaded, bot, bots, current.settings, route.automations])
+    if (loaded && !current.settings && !page && !bot && bots.length) navigate(bots[0].id)
+  }, [loaded, bot, bots, current.settings, page])
 
-  const pane = bot && !route.automations ? panes[bot.id] : undefined
+  const pane = bot && !page ? panes[bot.id] : undefined
   // The pane shows the window of the thread the chat shows, unless one was docked from picture in picture.
   const chatBrowsing = browsingThread(threads, thread)?.id
   const paneThread = pane?.threadId ?? chatBrowsing
@@ -139,7 +142,7 @@ export function App() {
     setAutoStart(showPane ? null : bot.id)
     if (!showPane) screen('browser')
   }
-  const pipThread = bot && !route.automations ? pips[bot.id] : undefined
+  const pipThread = bot && !page ? pips[bot.id] : undefined
   const showPip = !!bot && !!pipThread && !(pane && paneThread === pipThread) && !!windowOf(browsers[bot.id], pipThread)
   /** Moves the floating window into the pane, optionally taking control of it on the way. */
   const dock = (full: boolean, take?: string) => {
@@ -151,7 +154,7 @@ export function App() {
 
   return (
     <div className="app">
-      <Sidebar bot={route.automations ? undefined : bot} thread={route.automations ? undefined : thread} automationsOpen={!!route.automations} openModal={(m) => (setNavOpen(false), setModal(m))} open={navOpen} close={() => setNavOpen(false)} />
+      <Sidebar bot={page ? undefined : bot} thread={page ? undefined : thread} automationsOpen={!!route.automations} usageOpen={route.usage} openModal={(m) => (setNavOpen(false), setModal(m))} open={navOpen} close={() => setNavOpen(false)} />
       {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
       <main
         className={`chat ${pane && !pane.full ? 'with-pane' : ''}`}
@@ -159,6 +162,8 @@ export function App() {
       >
         {route.automations ? (
           <Automations path={route.automations} openNav={() => setNavOpen(true)} />
+        ) : route.usage ? (
+          <Usage openNav={() => setNavOpen(true)} />
         ) : bot ? (
           <>
             <Chat

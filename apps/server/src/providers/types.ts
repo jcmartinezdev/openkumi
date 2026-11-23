@@ -1,5 +1,6 @@
-import type { Attachment, Effort, ItemData, ModelInfo, ProviderInfo } from '@openkumi/shared'
+import type { Attachment, Effort, ItemData, ModelInfo, ProviderInfo, ProviderLimits } from '@openkumi/shared'
 import type { Shown } from '../attachments.ts'
+import * as db from '../db.ts'
 
 export interface ToolSpec {
   name: string
@@ -65,9 +66,10 @@ export type ModelEvent =
   /**
    * How many tokens a model was sent and wrote, as whatever runs it reports: `input` is all it was
    * sent, of which `cached` was read from a cache. `model` is the name the engine has for the
-   * model it used, or '' where the model is the one that was asked for.
+   * model it used, or '' where the model is the one that was asked for. `cost` is what that would
+   * cost at the API's list prices, in dollars, where whatever runs the model says so itself.
    */
-  | { type: 'usage'; model: string; input: number; cached: number; output: number }
+  | { type: 'usage'; model: string; input: number; cached: number; output: number; cost?: number }
 
 /** What a provider's models can be shown with a message, besides text. Files of other kinds are only named. */
 export interface Sees {
@@ -87,23 +89,42 @@ export interface Provider {
   turn?(req: TurnRequest): AsyncGenerator<ModelEvent>
   /** Looks again at whether the provider is usable (for ones that depend on a program being installed). */
   refresh?(): Promise<void>
+  /**
+   * The limits of the plan it is signed in with, as its program reports them, for a provider that
+   * has a way to ask. Nothing goes to a model for it. Rejects when the program could not be asked.
+   */
+  limits?(): Promise<Pick<ProviderLimits, 'plan' | 'limits' | 'note'>>
 }
 
 const count = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n) : 0)
 
-/** What each model had used in each engine conversation when it was last heard of, to tell what a turn added. */
-const heard = new Map<string, Record<string, { input: number; cached: number; output: number }>>()
+/** Where a model's count stood in an engine's conversation. `cost` is in dollars, for a program that says it. */
+interface Counted {
+  input: number
+  cached: number
+  output: number
+  cost?: number
+}
+
+/**
+ * What each model had used in each engine conversation when it was last heard of, to tell what a
+ * turn added. Kept in the database too (db.ts), so that a conversation carried on after the
+ * server was started again is counted from where it stood.
+ */
+const heard = new Map<string, Record<string, Counted>>()
 
 /**
  * The token use of a turn of Claude Code, or of a program that reports as it does: `modelUsage`
- * in the result, by model. The program counts for the whole conversation, from before this turn
- * too, so what the turn used is what was added since the conversation was last heard of. One that
- * was begun before the server started has no such count here: its first turn back is not counted.
+ * in the result, by model, with what it would cost at the API's prices when the program says so.
+ * The program counts for the whole conversation, from before this turn too, so what the turn used
+ * is what was added since the conversation was last heard of. One that OpenKumi has never heard a
+ * count for (it was begun before counts were kept) has nothing to go by: its first turn back is
+ * not counted.
  */
 export function usedSince(session: string, resumed: boolean, modelUsage: unknown): Extract<ModelEvent, { type: 'usage' }>[] {
   if (!session || !modelUsage || typeof modelUsage !== 'object') return []
-  const before = heard.get(session)
-  const now: Record<string, { input: number; cached: number; output: number }> = {}
+  const before = heard.get(session) ?? db.getCounted<Record<string, Counted>>(session) ?? undefined
+  const now: Record<string, Counted> = {}
   for (const [name, u] of Object.entries(modelUsage as Record<string, any>)) {
     const cached = count(u?.cacheReadInputTokens)
     // Named as Anthropic names the model, where the program says: the name it goes by at a cloud provider can hold an account's number.
@@ -112,17 +133,20 @@ export function usedSince(session: string, resumed: boolean, modelUsage: unknown
     sum.input += count(u?.inputTokens) + cached + count(u?.cacheCreationInputTokens)
     sum.cached += cached
     sum.output += count(u?.outputTokens)
+    if (typeof u?.costUSD === 'number' && Number.isFinite(u.costUSD) && u.costUSD >= 0) sum.cost = (sum.cost ?? 0) + u.costUSD
   }
   heard.set(session, now)
   if (heard.size > 500) heard.delete(heard.keys().next().value!)
+  db.setCounted(session, now)
   if (resumed && !before) return []
   const events: Extract<ModelEvent, { type: 'usage' }>[] = []
   for (const [model, total] of Object.entries(now)) {
     const was = before?.[model] ?? { input: 0, cached: 0, output: 0 }
     // A count that went down is one that started over (an older version of the program counts each turn by itself).
     const fresh = total.input < was.input || total.output < was.output
-    const used = fresh ? total : { input: total.input - was.input, cached: Math.max(0, total.cached - was.cached), output: total.output - was.output }
-    if (used.input || used.output) events.push({ type: 'usage', model, ...used })
+    const used = fresh ? { input: total.input, cached: total.cached, output: total.output } : { input: total.input - was.input, cached: Math.max(0, total.cached - was.cached), output: total.output - was.output }
+    const cost = total.cost === undefined ? undefined : Math.max(0, total.cost - (fresh ? 0 : (was.cost ?? 0)))
+    if (used.input || used.output) events.push({ type: 'usage', model, ...used, ...(cost === undefined ? {} : { cost }) })
   }
   return events
 }

@@ -557,6 +557,67 @@ export interface ProviderInfo {
   baseUrl?: string
 }
 
+/**
+ * What the bots' models used in one stretch of time, on one provider and model, for one bot. The
+ * server counts it as each model reports it (apps/server/src/usage.ts).
+ */
+export interface UsageRow {
+  /** Which stretch of time: its place in `Usage.starts`. */
+  at: number
+  /** The bot it was for. It may have been deleted since. */
+  botId: string
+  provider: string
+  /** The model as whatever ran it names it ("claude-opus-5-5"), or "default" when it did not say. */
+  model: string
+  /** The tokens the model was sent, of which `cached` were read from a cache, and the tokens it wrote. */
+  input: number
+  cached: number
+  output: number
+  /**
+   * What that would have cost at the API's list prices, in US dollars: as the program that ran the
+   * model says, or else worked out from a public list of prices. Null when there is no price to go
+   * by: a model on this computer, or one the list does not have.
+   */
+  cost: number | null
+}
+
+/** What the bots' models used over the last hours or days: how many tokens, and what they would have cost as API calls. */
+export interface Usage {
+  /** Divided by the day, or for the last 24 hours by the hour. */
+  step: 'hour' | 'day'
+  /**
+   * Where each stretch begins, oldest first. A day is a date on the calendar of the computer that
+   * runs the bots ("2026-11-23"); an hour is a moment ("2026-11-23T14:00:00.000Z").
+   */
+  starts: string[]
+  rows: UsageRow[]
+  /** When this server began to count: what was used before is not known. Null when nothing has been counted yet. */
+  since: number | null
+  /** When the list of prices was last fetched, or null when there is none to go by (the server could not reach it). */
+  pricedAt: number | null
+}
+
+/** One allowance of a plan: how much of it is used up, and when it starts over. */
+export interface UsageLimit {
+  /** What it covers, for people: "5-hour session", "Week", "Week, Opus only". */
+  label: string
+  /** How much of it is used, from 0 to 100. */
+  used: number
+  /** When it starts over, or null when the provider does not say. */
+  resetsAt: number | null
+}
+
+/** The limits of the plan a provider is signed in with, as its own program reports them. */
+export interface ProviderLimits {
+  provider: string
+  /** The plan, as far as the program names it: "Max plan". Empty otherwise. */
+  plan: string
+  limits: UsageLimit[]
+  /** Why there are none, when there are none, for people. Empty otherwise. */
+  note: string
+  checkedAt: number
+}
+
 export interface BrowserTab {
   id: string
   url: string

@@ -59,6 +59,7 @@ wins.
 | `OPENKUMI_DESKTOP_UPDATES_URL` | this project's releases on GitHub | another place for the desktop app to look for versions of itself |
 | `OPENKUMI_TELEMETRY` | from Settings | `0` stops the server telling OpenKumi's makers anything, whatever Settings says (see [Usage and error reports](/telemetry/)); `DO_NOT_TRACK=1` does the same |
 | `OPENKUMI_TELEMETRY_URL`, `OPENKUMI_TELEMETRY_KEY` | PostHog in the EU, OpenKumi's project | another place and project for those reports to go, for testing; with these set a server run from the source sends too |
+| `OPENKUMI_PRICES_URL` | LiteLLM's public list on GitHub | another address for the list of model prices that [Usage](/using/usage/) goes by; set to nothing, the list is never fetched, and only what Claude Code prices itself has a cost |
 | `OPENKUMI_MOCK` | unset | `1` turns on the scripted offline provider the tests use |
 
 The desktop app also reads `OPENKUMI_PORT` and `OPENKUMI_HOME`, to find or start the local server.

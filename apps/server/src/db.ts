@@ -68,6 +68,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS queue_thread ON queue (thread_id, id);
   -- A message between bots is found by its key, from the sender's record of it and back.
   CREATE INDEX IF NOT EXISTS items_key ON items (json_extract(data, '$.key')) WHERE json_extract(data, '$.key') IS NOT NULL;
+  -- What the bots' models used, added up by the hour (\`hour\` is when it began), bot, provider and
+  -- model. \`costed\` rows are the ones whose cost was said by the program that ran the model, and
+  -- \`cost\` is that, in dollars; the others are priced when they are read (usage.ts). Kept when
+  -- the bot is deleted: it is what was used.
+  CREATE TABLE IF NOT EXISTS usage (
+    hour INTEGER NOT NULL, bot_id TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL, costed INTEGER NOT NULL,
+    input INTEGER NOT NULL, cached INTEGER NOT NULL, output INTEGER NOT NULL, cost REAL NOT NULL,
+    PRIMARY KEY (hour, bot_id, provider, model, costed)
+  );
+  -- Where an engine's own count for one of its conversations stood when it was last heard of: such
+  -- a count runs over the whole conversation, so what a turn used is what it added (providers/types.ts).
+  CREATE TABLE IF NOT EXISTS engine_counts (session TEXT PRIMARY KEY, counts TEXT NOT NULL, at INTEGER NOT NULL);
 `)
 
 /**
@@ -631,6 +643,57 @@ export function hookEvents(hookId: string, after: number, events: string[], limi
 
 /** The number of the latest call any webhook has taken. */
 export const lastHookEvent = () => (db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM hook_events').get() as { id: number }).id
+
+// ---- what the models used (what is counted, and what it costs, is in usage.ts)
+
+/** What a model used in one hour for one bot. `cost` is in dollars, when the program that ran the model said it (`costed`). */
+export interface Used {
+  hour: number
+  botId: string
+  provider: string
+  model: string
+  costed: boolean
+  input: number
+  cached: number
+  output: number
+  cost: number
+}
+
+const HOUR = 60 * 60_000
+
+/** Adds what a model just used to its hour's count. */
+export function addUsage(used: Omit<Used, 'hour'>, at = Date.now()) {
+  db.prepare(
+    `INSERT INTO usage (hour, bot_id, provider, model, costed, input, cached, output, cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (hour, bot_id, provider, model, costed) DO UPDATE SET
+       input = input + excluded.input, cached = cached + excluded.cached, output = output + excluded.output, cost = cost + excluded.cost`,
+  ).run(Math.floor(at / HOUR) * HOUR, used.botId, used.provider, used.model, used.costed ? 1 : 0, used.input, used.cached, used.output, used.cost)
+}
+
+/** What was used in the hours that began at `from` or later, oldest first. */
+export function usageSince(from: number): Used[] {
+  return db
+    .prepare('SELECT * FROM usage WHERE hour >= ? ORDER BY hour')
+    .all(from)
+    .map((r: any) => ({ hour: r.hour, botId: r.bot_id, provider: r.provider, model: r.model, costed: !!r.costed, input: r.input, cached: r.cached, output: r.output, cost: r.cost }))
+}
+
+/** The hour of the first thing ever counted, or null when nothing has been. */
+export const firstUsage = () => (db.prepare('SELECT MIN(hour) AS hour FROM usage').get() as { hour: number | null }).hour
+
+/** Where an engine's count for one of its conversations stood when it was last heard of, or null when it never was. */
+export function getCounted<T>(session: string): T | null {
+  const r = db.prepare('SELECT counts FROM engine_counts WHERE session = ?').get(session) as { counts: string } | undefined
+  try {
+    return r ? JSON.parse(r.counts) : null
+  } catch {
+    return null
+  }
+}
+
+export function setCounted(session: string, counts: unknown) {
+  db.prepare('INSERT INTO engine_counts (session, counts, at) VALUES (?, ?, ?) ON CONFLICT (session) DO UPDATE SET counts = excluded.counts, at = excluded.at').run(session, JSON.stringify(counts), Date.now())
+}
 
 export function closeDb() {
   db.close()

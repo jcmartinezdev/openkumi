@@ -1478,6 +1478,68 @@ test('master prompt: each bot’s line set from one page, and all a bot is told 
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('usage: what the bots’ models used by provider, model and bot, what it would cost as API calls, and how much of each plan is used', async (t) => {
+  // The list of prices is a stand-in: nothing is fetched from outside.
+  const list = http.createServer((_, res) => res.end(JSON.stringify({ 'fake-model': { input_cost_per_token: 0.000001, cache_read_input_token_cost: 0.0000001, output_cost_per_token: 0.00001, mode: 'chat' } })))
+  await new Promise((resolve) => list.listen(0, '127.0.0.1', resolve))
+  env.OPENKUMI_PRICES_URL = `http://127.0.0.1:${list.address().port}/prices.json`
+  t.after(() => (list.close(), delete env.OPENKUMI_PRICES_URL))
+  fs.mkdirSync(`${tmp}/app`, { recursive: true })
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Kumi')
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
+  const api = (method, url, body) => ask(LOCAL_PORT, 'local-home', method, url, body)
+
+  // A bot on each engine, each asked one thing. The stand-in engines say what a turn used: Claude Code
+  // 100 tokens sent and 10 written, for a quarter of a dollar; Codex 200 and 20, with no price of its own.
+  for (const [name, provider] of [['Counter Claude', 'claude-code'], ['Counter Codex', 'codex']]) {
+    const bot = await api('POST', '/api/bots', { name, provider, look: { creature: 'cat', color: 'sky', hat: 'none', extra: 'none', clothes: 'navy' } })
+    const thread = await api('POST', `/api/bots/${bot.id}/messages`, { text: 'count this' })
+    await until(async () => (await api('GET', `/api/threads/${thread.id}`)).thread.status === 'idle')
+  }
+
+  await win.locator('.sidebar a', { hasText: 'Usage' }).click()
+  const row = (name) => win.locator('.usage-list-row', { hasText: name })
+  await row('Counter Codex').waitFor()
+  assert.equal(await win.locator('.sidebar a[aria-current="page"]').innerText(), 'Usage')
+  // By bot: its tokens, and what they would cost. Claude Code's cost is its own; Codex's is from the list of prices.
+  assert.match(await row('Counter Claude').innerText(), /100 sent, 60% from cache · 10 written[\s\S]*110[\s\S]*\$0\.25/)
+  assert.match(await row('Counter Codex').innerText(), /200 sent, 25% from cache · 20 written[\s\S]*220[\s\S]*<\$0\.01/)
+  // By model, under the name its maker gives it, and by provider.
+  assert.match(await row('claude-test-1').innerText(), /Claude Code/)
+  assert.match(await row('fake-model').innerText(), /Codex/)
+  assert.ok((await win.locator('.usage-tile-value').first().innerText()).length > 0)
+
+  // How much of each plan is used, as the engines' own programs say.
+  const plan = (name) => win.locator('.usage-limit', { hasText: name })
+  await plan('Claude Code').locator('.usage-meter').first().waitFor({ timeout: 30_000 })
+  assert.match(await plan('Claude Code').innerText(), /Pro plan[\s\S]*Week\s+25% used[\s\S]*Starts over[\s\S]*Week, Opus only\s+81% used[\s\S]*Nearly used up/)
+  assert.match(await plan('Codex').innerText(), /Plus plan[\s\S]*Week\s+3% used/)
+  assert.equal(await plan('Claude Code').locator('.usage-meter.high').count(), 1)
+
+  // The chart: pointing at today's column says what is in it, and the same numbers are there as a table.
+  await win.locator('.usage-legend', { hasText: 'Claude Code' }).waitFor()
+  const plot = await win.locator('.usage-plot').boundingBox()
+  await win.mouse.move(plot.x + plot.width - 3, plot.y + plot.height / 2)
+  assert.match(await win.locator('.usage-tip').innerText(), /Codex[\s\S]*Claude Code[\s\S]*Total/)
+  await shot('usage')
+  await win.mouse.move(5, 5)
+  await win.getByRole('button', { name: 'Show as a table' }).click()
+  assert.match(await win.locator('.usage-table').innerText(), /Day[\s\S]*Codex[\s\S]*Claude Code[\s\S]*Total/)
+  assert.ok((await win.locator('.usage-table tbody tr').count()) >= 1)
+  // By cost, and by the hour for the last day.
+  await win.getByRole('button', { name: 'Cost', exact: true }).click()
+  assert.match(await win.locator('.usage-table tbody tr').first().innerText(), /\$0\.\d\d/)
+  await win.getByRole('button', { name: '24 hours' }).click()
+  await win.locator('.usage h2', { hasText: 'By the hour' }).waitFor()
+  await win.locator('.usage-table th', { hasText: 'Hour' }).waitFor()
+  await shot('usage-table')
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('dictation: what is said goes into the message where the cursor was, and only the words are sent', async (t) => {
   // It is written down on the Mac itself, so it needs macOS 26 and the program built beside the app.
   const program = path.resolve(import.meta.dirname, '../dist/dictation')

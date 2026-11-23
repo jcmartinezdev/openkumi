@@ -57,6 +57,8 @@ only if you agree: [all of it is listed](https://docs.openkumi.ai/telemetry/).
 - **Call your bot.** Talk with a bot out loud, from the computer or the iPhone, and it talks back
   at once. The voice comes with your ChatGPT plan, through Codex, with no API key; the work is
   still done by the bot itself, whatever it runs on. See [Calls](https://docs.openkumi.ai/calls/).
+- **See what it uses.** How many tokens your bots' models used by provider, model and bot, what
+  that would have cost as API calls, and how much of your Claude and ChatGPT plans is used up.
 - **From your other computers and your phone.** Pair a laptop or an iPhone with a one-time code,
   at home directly and anywhere else over Tailscale.
 - **Yours.** A bot is a folder of plain files on your disk that you can read, edit and back up.

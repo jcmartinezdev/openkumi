@@ -20,6 +20,7 @@ import type { ModelEvent, Steering } from './providers/types.ts'
 import { settings } from './settings.ts'
 import { superpowerIndex, superpowerNames } from './superpowers.ts'
 import { failed, modelSent, track, whereOf } from './telemetry.ts'
+import { count as countUsage } from './usage.ts'
 import { TIME_ZONE, finishRun, isMain } from './automations.ts'
 import { type ToolEndpoint, openToolEndpoint } from './tool-endpoint.ts'
 import { onACall, runTool, toolsFor } from './tools.ts'
@@ -501,12 +502,16 @@ async function turn(threadId: string, state: Run) {
     const seen = items.at(-1)?.id ?? 0
 
     const calls: Extract<ItemData, { type: 'function_call' }>[] = []
+    /** Counts what a model says it used: for the run (telemetry.ts), and for the usage page (usage.ts), by the name of the model that was asked when it gives none. */
+    const used = (ev: Extract<ModelEvent, { type: 'usage' }>) => {
+      const sum = state.used.get(ev.model) ?? { input: 0, cached: 0, output: 0 }
+      state.used.set(ev.model, { input: sum.input + ev.input, cached: sum.cached + ev.cached, output: sum.output + ev.output })
+      countUsage(bot.id, provider.id, { ...ev, model: ev.model || model })
+    }
     /** Stores a finished item, or passes streaming text on to whoever is watching. */
     const record = (ev: ModelEvent) => {
-      if (ev.type === 'usage') {
-        const sum = state.used.get(ev.model) ?? { input: 0, cached: 0, output: 0 }
-        state.used.set(ev.model, { input: sum.input + ev.input, cached: sum.cached + ev.cached, output: sum.output + ev.output })
-      } else if (ev.type === 'item') {
+      if (ev.type === 'usage') used(ev)
+      else if (ev.type === 'item') {
         if (ev.item.type === 'message') state.partial.text = ''
         if (ev.item.type === 'reasoning') state.partial.reasoning = ''
         db.addItem(threadId, ev.item)
@@ -595,7 +600,7 @@ async function turn(threadId: string, state: Run) {
     const system = instructions(bot, thread, problems, call)
     // The conversation is sent whole each time, so it is kept within what the model can take.
     const room = Math.max(1000, settings().historyLimit - Math.ceil(system.length / 4))
-    if (await shorten(threadId, room, { provider, model, signal })) items = db.listItems(threadId)
+    if (await shorten(threadId, room, { provider, model, signal, used })) items = db.listItems(threadId)
     try {
       const stream = provider.stream!({
         model,
@@ -613,7 +618,7 @@ async function turn(threadId: string, state: Run) {
       // The model's window turned out smaller than the limit in Settings: halve what it is sent and ask again, once.
       if (squeezed || signal.aborted || !isOverflow(e)) throw e
       squeezed = true
-      if (!(await shorten(threadId, Math.floor(tokens(prepare(items)) / 2), { provider, model, signal }))) throw e
+      if (!(await shorten(threadId, Math.floor(tokens(prepare(items)) / 2), { provider, model, signal, used }))) throw e
       continue
     }
     signal.throwIfAborted()
