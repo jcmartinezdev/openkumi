@@ -980,7 +980,7 @@ test('a bot cannot reach OpenKumi itself or files on the computer through its br
   }
   assert.match(await tool('web_fetch', { url: 'file:///etc/hosts' }), /^Error:/)
 
-  for (const url of [own, `http://127.0.0.1:${PORT}/`, `http://[::1]:${PORT}/`]) {
+  for (const url of [own, `http://127.0.0.1:${PORT}/`, `http://[::1]:${PORT}/`, `http://app.localhost:${PORT}/`]) {
     assert.match(await tool('browser_navigate', { url }), /^Error: .*ERR_CONNECTION_REFUSED/, url)
   }
   assert.match(await tool('browser_navigate', { url: 'file:///etc/hosts' }), /^Error: Only web addresses/)

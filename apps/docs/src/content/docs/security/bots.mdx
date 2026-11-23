@@ -37,8 +37,10 @@ See [Engines and models](/how-it-works/engines/#what-is-switched-off).
 
 A bot holds no key to the server, so it cannot use OpenKumi's API to change its own rules or
 superpowers, or anyone else's. Its engine reaches its tools at an address that works for one turn
-and only from this computer. A bot's browser and `web_fetch` also refuse OpenKumi's own address on
-this computer outright, and those of the other people's servers on it.
+and only from this computer. A bot's browser and `web_fetch` also refuse OpenKumi's own server, and
+the other people's servers on this computer, at the names the computer goes by for itself
+(`localhost` and names ending in `.localhost`, `127.0.0.1`, `::1`). At another of its addresses,
+such as its address on your network, only the key keeps a bot out.
 
 ## Its browser
 

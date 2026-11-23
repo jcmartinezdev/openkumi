@@ -19,7 +19,7 @@ const VIEWPORT = { width: 1280, height: 800 }
 // keeps it from even trying. These rules make Chrome send any request for one of those addresses
 // somewhere that refuses it. Chrome reads them only when it starts (see BotBrowser.start).
 const noServerAccess = (ports: number[]) =>
-  `--host-rules=${ports.flatMap((port) => ['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${port} 0.0.0.0:1`)).join(', ')}`
+  `--host-rules=${ports.flatMap((port) => ['localhost', '*.localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${port} 0.0.0.0:1`)).join(', ')}`
 
 /**
  * Where a service sends the browser back to after a superpower's sign-in. It is OpenKumi's own
@@ -147,22 +147,20 @@ class BotBrowser {
   }
 
   async start(headless: boolean) {
-    // A start under way may have read the list of servers before someone was added.
-    while (this.starting) await this.starting
     // Someone added to this computer since Chrome started is not in its rules: it starts again,
-    // keeping them out too.
-    if (this.context && serverPorts().some((port) => !this.keptFrom.includes(port))) {
+    // keeping them out too. A start may have read the list of servers before someone was added, so
+    // once it is done everyone who was waiting for it looks again, whoever began it among them. A
+    // Chrome that closes as soon as it opens is not started over and over.
+    for (let tries = 0; tries < 3; tries++) {
+      while (this.starting) await this.starting
+      if (this.context && serverPorts().every((port) => this.keptFrom.includes(port))) return
       const old = this.context
-      this.forget()
-      this.starting = old
-        .close()
-        .catch(() => {})
+      if (old) this.forget()
+      this.starting = (old ? old.close().catch(() => {}) : Promise.resolve())
         .then(() => this.launch(headless))
         .finally(() => (this.starting = null))
     }
-    if (this.context) return
-    this.starting ??= this.launch(headless).finally(() => (this.starting = null))
-    await this.starting
+    while (this.starting) await this.starting
   }
 
   private async launch(headless: boolean) {
