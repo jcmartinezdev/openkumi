@@ -14,7 +14,8 @@ import { startOAuthServer } from './fixtures/mcp-oauth.mjs'
 /** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
 const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
 
-const PORT = 4400 + Math.floor(Math.random() * 500)
+// Above 4418: a server run from the repository has 4417 and its webhooks 4418, and may well be running.
+const PORT = 4420 + Math.floor(Math.random() * 480)
 const BASE = `http://127.0.0.1:${PORT}`
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-test-'))
 /** The user's own Codex folder, with servers they set up for themselves, which no bot is to get. */

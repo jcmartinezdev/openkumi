@@ -31,10 +31,23 @@ const BEFORE = path.join(os.homedir(), '.openbot')
  *   openkumi.db         a note for versions from before people had folders (`leaveNote`)
  *   runtime/            the program, when it was installed on its own
  * Most computers have one person, made the first time OpenKumi starts.
+ *
+ * Run from the repository, to work on OpenKumi, the folder is ~/.openkumi-dev, and the first
+ * person's port 4417 (`USUAL_PORT`): an OpenKumi installed on the same computer keeps to
+ * ~/.openkumi and 4317, and nothing tried out here touches its data or takes its port.
+ * OPENKUMI_HOME and OPENKUMI_PORT choose others either way.
  */
 // A test says where its data is. One that forgot would be using the folder of whoever runs it.
 if (process.env.NODE_TEST_CONTEXT && !process.env.OPENKUMI_HOME) throw new Error('A test has to set OPENKUMI_HOME before the server’s modules are loaded: without it they use the real data folder.')
-export const BASE = process.env.OPENKUMI_HOME ?? home()
+/**
+ * Run from a clone of the repository rather than installed. A server started as an installed
+ * one is (bin/openkumi says where its versions are) counts as installed wherever its files are:
+ * that is how the tests try what only an installed server does.
+ */
+export const FROM_REPOSITORY = !process.env.OPENKUMI_RUNTIME && fs.existsSync(path.join(import.meta.dirname, '..', '..', '..', '.git'))
+export const BASE = process.env.OPENKUMI_HOME ?? (FROM_REPOSITORY ? path.join(os.homedir(), '.openkumi-dev') : home())
+/** The port the first person's server is given when it is made. */
+const USUAL_PORT = FROM_REPOSITORY ? 4417 : 4317
 
 /** Someone with bots on this computer: the name they go by here, and the port their server listens on. */
 export interface Person {
@@ -113,7 +126,7 @@ function first(): Person {
   } catch {
     // An account without a name.
   }
-  const person = { name: NAME.test(name) ? name : 'me', port: 4317 }
+  const person = { name: NAME.test(name) ? name : 'me', port: USUAL_PORT }
   moveIn(homeOf(person.name))
   savePeople([person])
   return person

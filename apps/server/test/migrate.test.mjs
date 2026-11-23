@@ -197,8 +197,10 @@ test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi
   const before = path.join(user, '.openbot')
   const after = path.join(user, '.openkumi')
   const { OPENKUMI_HOME, ...rest } = process.env
-  // Not said to be a test's server either: those have to be told where their data is.
-  const env = { ...rest, HOME: user, NODE_TEST_CONTEXT: '' }
+  // Not said to be a test's server either: those have to be told where their data is. And started
+  // as an installed server is (bin/openkumi names its folder of versions): one run from the
+  // repository keeps to a folder of its own, and never looks for these (repository.test.mjs).
+  const env = { ...rest, HOME: user, NODE_TEST_CONTEXT: '', OPENKUMI_RUNTIME: path.join(user, 'runtime'), OPENKUMI_RELEASES_URL: 'http://127.0.0.1:9' }
   try {
     fs.mkdirSync(before)
     fs.writeFileSync(path.join(before, 'auth.json'), JSON.stringify({ accessToken: 'keep-me' }))
@@ -226,6 +228,7 @@ test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi
     assert.ok(!fs.existsSync(before), 'moved')
     assert.ok(fs.existsSync(path.join(dataOf(after), 'openkumi.db')) && !fs.existsSync(path.join(dataOf(after), 'openbot.db')), 'the database is renamed with it')
     assert.equal(JSON.parse(fs.readFileSync(path.join(dataOf(after), 'auth.json'), 'utf8')).accessToken, 'keep-me', 'paired devices keep working')
+    assert.equal(JSON.parse(fs.readFileSync(path.join(after, 'people.json'), 'utf8'))[0].port, 4317, 'an installed OpenKumi’s usual port')
   } finally {
     // The programs the server asked about themselves (Claude Code, Codex, Grok) may still be writing into this home folder.
     fs.rmSync(user, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })

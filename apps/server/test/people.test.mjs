@@ -15,6 +15,8 @@ const PORT = 5400 + Math.floor(Math.random() * 40) * 10
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-people-'))
 // The port and the webhooks port chosen here are the first person's server's. Nobody else's takes them.
 const env = { ...process.env, OPENKUMI_HOME: home, OPENKUMI_PORT: String(PORT), OPENKUMI_HOOKS_PORT: String(PORT + 5), OPENKUMI_MOCK: '1', OPENKUMI_RUNTIME: '' }
+/** The port the first person is written down with, run from the repository as these tests are. An installed OpenKumi's is 4317 (migrate.test.mjs). */
+const USUAL = 4417
 
 const running = new Set()
 after(async () => {
@@ -60,7 +62,7 @@ test('each person has a server of their own on the same computer, apart from the
   const first = openkumi('people')
   assert.equal(first.code, 0, first.said)
   const [me] = listed()
-  assert.deepEqual([listed().length, me.port], [1, 4317], 'written down with the usual port, which this test’s own choice stands in for')
+  assert.deepEqual([listed().length, me.port], [1, USUAL], 'written down with the usual port, which this test’s own choice stands in for')
   assert.match(first.said, new RegExp(`${me.name} +port ${PORT} +not running`))
   assert.ok(fs.existsSync(folder(me.name, 'bots')), 'their data folder is one of people/, like anyone’s')
   assert.deepEqual(fs.readdirSync(home).sort(), ['openkumi.db', 'people', 'people.json'], 'no data lies in the folder itself: its database is a note for versions from before')
@@ -186,7 +188,7 @@ test('the first person is called what they said where they were asked, and a pai
       server.on('exit', (code) => reject(new Error(`server exited with ${code}`)))
     })
     // A name as people write it is made to fit a folder's.
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(asked, 'people.json'), 'utf8')), [{ name: 'maria-jose', port: 4317 }])
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(asked, 'people.json'), 'utf8')), [{ name: 'maria-jose', port: USUAL }])
     const token = JSON.parse(fs.readFileSync(path.join(asked, 'people', 'maria-jose', 'auth.json'), 'utf8')).accessToken
     const api = async (method, url) => (await fetch(`http://127.0.0.1:${port}${url}`, { method, headers: { Authorization: `Bearer ${token}` } })).json()
     assert.equal((await api('GET', '/api/state')).about.person, 'maria-jose')
@@ -270,7 +272,7 @@ test('a move into the first person’s folder that was cut short is carried on w
   fs.renameSync(path.join(cut, 'bots'), path.join(cut, 'people', 'whoever', 'bots'))
   try {
     assert.equal(startOn(cut, { OPENKUMI_NAME: 'Someone Else' }).status, 0)
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(cut, 'people.json'), 'utf8')), [{ name: 'whoever', port: 4317 }])
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(cut, 'people.json'), 'utf8')), [{ name: 'whoever', port: USUAL }])
     assert.deepEqual(inFolder(cut), ['openkumi.db', 'people', 'people.json'])
     assert.deepEqual(fs.readdirSync(path.join(cut, 'people', 'whoever')).sort(), ['auth.json', 'bots', 'settings.json'])
   } finally {
@@ -307,7 +309,7 @@ test('a move into the first person’s folder that was cut short is carried on w
     fs.rmSync(path.join(torn, 'people.json'))
     const [name] = fs.readdirSync(path.join(torn, 'people'))
     assert.equal(startOn(torn, { OPENKUMI_NAME: 'Someone Else' }).status, 0)
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(torn, 'people.json'), 'utf8')), [{ name, port: 4317 }])
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(torn, 'people.json'), 'utf8')), [{ name, port: USUAL }])
     assert.ok(!fs.existsSync(path.join(torn, 'people', name, 'openkumi.db')) && fs.existsSync(path.join(torn, 'openkumi.db')))
   } finally {
     fs.rmSync(torn, { recursive: true, force: true })
