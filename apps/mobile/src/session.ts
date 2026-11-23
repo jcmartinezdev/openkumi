@@ -145,11 +145,12 @@ export async function pairWith(address: string, code: string, phone: string) {
   const url = parseAddress(address)
   const refused = refusal(url)
   if (refused) throw new Error(refused)
-  const { key, serverId } = await pair(url, code, phone, () => Crypto.getRandomBytes(16))
+  const { key, serverId, called } = await pair(url, code, phone, () => Crypto.getRandomBytes(16))
   // Pairing again with the same server keeps its name and the addresses it had; another server's copy goes.
   const again = server && serverId && server.serverId === serverId ? server : null
   if (!again) await forgetCopy(PAIRED)
-  await keep({ name: again?.name ?? new URL(url).host, addresses: [...(again?.addresses.filter((a) => a.url !== url) ?? []), { url }], key, serverId })
+  // Called what it was called before, or what the server says it is: the computer it is on, and whose it is there.
+  await keep({ name: again?.name ?? called ?? new URL(url).host, addresses: [...(again?.addresses.filter((a) => a.url !== url) ?? []), { url }], key, serverId })
 }
 
 /** What the phone calls the server. Empty goes back to its address. */

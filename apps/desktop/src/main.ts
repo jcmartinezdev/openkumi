@@ -6,13 +6,16 @@
 //     environment it shows; its connection and the drawing of a bot's browser run on a worker thread.
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, app, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import type { DesktopState, Link } from '@openkumi/shared/desktop'
+import fs from 'node:fs'
 import os from 'node:os'
+import path from 'node:path'
 import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresses'
 import { pair, parseAddress } from '@openkumi/client/pair'
 import { canDictate, cancelDictation, microphone, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
 import { askToUpdate, config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
 import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
 import { ASSUME_YES, CATCH_SIGN_INS, FAKE_MICROPHONE, HIDDEN, PRELOAD } from './paths.ts'
+import { addPerson, pairingFor, people, removePerson, renamePerson } from './people.ts'
 import { APP_URL, keepPage, serveInterface } from './protocol.ts'
 import { checkForUpdate, installUpdate, onUpdateChange, startUpdates, updateState } from './updates.ts'
 
@@ -50,13 +53,28 @@ function connection(): Link | null {
   return environment ? { id: environment.id, name: environment.name, addresses: ordered(environment.addresses), token: environment.token, local: false, serverId: environment.serverId } : null
 }
 
+/**
+ * What the first person here would be called, while nobody has bots on this computer yet: the
+ * name of their account on it, made to fit. Undefined once someone has.
+ */
+function nobodyYet(): string | undefined {
+  if (fs.existsSync(path.join(process.env.OPENKUMI_HOME ?? path.join(os.homedir(), '.openkumi'), 'people.json'))) return undefined
+  let name = ''
+  try {
+    name = os.userInfo().username.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30).replace(/-+$/, '')
+  } catch {
+    // An account without a name.
+  }
+  return name || 'me'
+}
+
 function state(): DesktopState {
   return {
     version: app.getVersion(),
     update: updateState(),
     platform: process.platform,
     fullScreen: !!win?.isFullScreen(),
-    local: { enabled: config.local.enabled, state: config.local.enabled ? local.state : 'off', error: local.error, startedHere: !!local.child },
+    local: { enabled: config.local.enabled, state: config.local.enabled ? local.state : 'off', error: local.error, startedHere: !!local.child, nobodyYet: local.state === 'running' ? undefined : nobodyYet() },
     environments: config.environments.map(({ id, name, addresses, enabled }) => ({ id, name, addresses, enabled })),
     current: showing(),
     connection: connection(),
@@ -94,12 +112,15 @@ async function confirmed(message: string, detail: string, action: string) {
   return response === 0
 }
 
-/** Turns the local environment on (the server runs on this computer) or off (it does not). */
-async function setLocal(on: boolean) {
+/**
+ * Turns the local environment on (the server runs on this computer) or off (it does not). `name`
+ * is what the first person here is called, when this start makes them.
+ */
+async function setLocal(on: boolean, name = '') {
   if (on) {
     config.local.enabled = true
     changed()
-    await startLocal()
+    await startLocal(name)
     return
   }
   if (!config.local.enabled) return
@@ -116,12 +137,13 @@ async function add(input: { address?: unknown; code?: unknown; name?: unknown })
   const url = parseAddress(input?.address)
   const refused = refusal(url)
   if (refused) throw new Error(refused)
-  const { key, serverId } = await pair(url, input?.code, os.hostname().replace(/\.local$/, ''))
+  const { key, serverId, called } = await pair(url, input?.code, os.hostname().replace(/\.local$/, ''))
   // Pairing again with a computer that is already listed replaces the key it gave before, and the
   // address is added to the ones it had. An older server has no id: then it is known by the address.
   const listed =
     (serverId && config.environments.find((e) => e.serverId === serverId)) || config.environments.find((e) => !e.serverId && e.addresses.some((a) => a.url === url))
-  const name = String(input?.name ?? '').trim().slice(0, 60) || listed?.name || new URL(url).hostname
+  // Called what the person typed, or what it was called before, or what the server says it is: the computer it is on, and whose it is there.
+  const name = String(input?.name ?? '').trim().slice(0, 60) || listed?.name || called || new URL(url).hostname
   const id = listed?.id ?? `remote-${Date.now().toString(36)}`
   const addresses = listed?.addresses.some((a) => a.url === url) ? listed.addresses : [...(listed?.addresses ?? []), { url }]
   config.environments = [...config.environments.filter((e) => e.id !== id), { id, name, addresses, token: key, enabled: true, serverId: serverId ?? listed?.serverId }]
@@ -244,7 +266,13 @@ function answer(channel: string, handler: (...args: any[]) => unknown) {
 ipcMain.on('desktop:initial', (event) => (event.returnValue = fromApp(event) ? state() : null))
 answer('desktop:statuses', () => statuses())
 answer('desktop:open', (id) => open(String(id)))
-answer('desktop:set-local', (on) => setLocal(!!on))
+answer('desktop:set-local', (on, name) => setLocal(!!on, typeof name === 'string' ? name.slice(0, 60) : ''))
+// The people with bots on this computer (people.ts): asked of the app, never of a server over the network.
+answer('desktop:people', () => people())
+answer('desktop:people-add', (name) => addPerson(name))
+answer('desktop:people-rename', (name, to) => renamePerson(name, to))
+answer('desktop:people-remove', async (name) => ((await confirmed(`Remove ${String(name)}?`, 'Their server stops, and the computers and phones paired with it lose it. What it held is kept on this computer.', 'Remove')) ? removePerson(name) : people()))
+answer('desktop:people-pairing', (name) => pairingFor(name))
 answer('desktop:retry', () => retryLocal())
 answer('desktop:add', (input) => add(input))
 answer('desktop:update', (id, patch) => update(String(id), patch))

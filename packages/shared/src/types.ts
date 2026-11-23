@@ -528,6 +528,11 @@ export interface About {
   /** The number the apps compare with their own (packages/shared/src/protocol.ts). */
   protocol: number
   /**
+   * The person whose server this is, by the name they have on its computer ("juan-cruz"): each
+   * person there has a server of their own. Missing from servers from before people had names.
+   */
+  person?: string
+  /**
    * Whether this server would send anything to OpenKumi's makers if its owner agreed, and why not
    * when it would not (it runs from its source, say). Only a server that can is asked about.
    * A server from before there was any of this says nothing here.

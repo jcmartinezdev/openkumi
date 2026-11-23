@@ -20,6 +20,39 @@ export interface LocalEnvironment {
   error: string
   /** False when OpenKumi was already running here and the app joined it instead of starting it. */
   startedHere: boolean
+  /**
+   * Nobody has bots on this computer yet. Whoever turns the local environment on is the first
+   * person here, and this is what they are called unless they give another name: the name of
+   * their account on the computer. Missing once someone has, and from older apps.
+   */
+  nobodyYet?: string
+}
+
+/**
+ * Someone with bots on this computer. Each person has a server of their own here, apart from the
+ * others' (apps/server/src/people.ts); the local environment is the first person's.
+ */
+export interface PersonHere {
+  /** What they are called here, which is also their folder's name: small letters, digits and dashes. */
+  name: string
+  /** The port their server listens on. */
+  port: number
+  /** The person the local environment is: whoever sits at this app. */
+  me: boolean
+  running: boolean
+}
+
+/** A code that lets one computer or phone into a person's server, and where that server is reached. */
+export interface PersonPairing {
+  code: string
+  expiresAt: number
+  port: number
+  /** Whether other computers can reach their server at all. */
+  on: boolean
+  /** On the local network. */
+  addresses: string[]
+  /** Its name and address on Tailscale, when this computer is on it. */
+  tailscale: string[]
 }
 
 /** What the window needs to talk to the environment it shows. */
@@ -100,8 +133,27 @@ export interface DesktopBridge {
   statuses(): Promise<Record<string, EnvironmentReport>>
   /** Show another environment. */
   open(id: string): Promise<void>
-  /** Turn the local environment on (OpenKumi runs on this computer) or off (it does not). */
-  setLocal(on: boolean): Promise<void>
+  /**
+   * Turn the local environment on (OpenKumi runs on this computer) or off (it does not). `name` is
+   * what the first person here is called, when nobody has bots here yet (`nobodyYet`).
+   */
+  setLocal(on: boolean, name?: string): Promise<void>
+  /**
+   * The people with bots on this computer, looked after from here: only the app on the computer
+   * that runs the bots can, never one connected from elsewhere. Every change resolves with the
+   * list as it is then. Changes need the local environment to have been started by this app; the
+   * list and a pairing code only need it running. Missing from older apps.
+   */
+  people?: {
+    list(): Promise<PersonHere[]>
+    /** Bots of their own for someone else: their server is started too. */
+    add(name: string): Promise<PersonHere[]>
+    rename(name: string, to: string): Promise<PersonHere[]>
+    /** Stops their server. What it held is kept. */
+    remove(name: string): Promise<PersonHere[]>
+    /** A code for one of their own computers or phones. */
+    pairing(name: string): Promise<PersonPairing>
+  }
   /** Start the local environment again after it failed. */
   retry(): Promise<void>
   /** Pair with OpenKumi on another computer, using the code that computer shows, and add it. */

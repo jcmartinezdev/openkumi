@@ -48,7 +48,15 @@ delete env.ELECTRON_RUN_AS_NODE
 delete env.OPENKUMI_DEV_URL
 
 const up = (port) => fetch(`http://127.0.0.1:${port}/api/hello`).then((r) => r.ok, () => false)
-const tokenOf = (home) => JSON.parse(fs.readFileSync(`${tmp}/${home}/auth.json`, 'utf8')).accessToken
+/** A server keeps its data in the folder of the person it runs for: the first one in its list of people. */
+const dataOf = (home) => `${tmp}/${home}/people/${JSON.parse(fs.readFileSync(`${tmp}/${home}/people.json`, 'utf8'))[0].name}`
+const tokenOf = (home) => JSON.parse(fs.readFileSync(`${dataOf(home)}/auth.json`, 'utf8')).accessToken
+/** A data folder whose one person has let other computers connect, as a server that ran before leaves it. */
+function reachable(home) {
+  fs.mkdirSync(`${tmp}/${home}/people/someone`, { recursive: true })
+  fs.writeFileSync(`${tmp}/${home}/people.json`, JSON.stringify([{ name: 'someone', port: 4317 }]))
+  fs.writeFileSync(`${dataOf(home)}/settings.json`, '{"lan": true}')
+}
 /**
  * Asks a server, with its own access code. A server that is just moving to another address (the
  * network setting was switched) drops what is connected to it: the question is then asked again.
@@ -113,8 +121,7 @@ after(async () => {
 
 test('the local environment can be turned on and off, and remote environments added and opened, without the window reloading', async () => {
   // "Another computer": a second server with its own data, reached by this machine's network address.
-  fs.mkdirSync(`${tmp}/remote-home`, { recursive: true })
-  fs.writeFileSync(`${tmp}/remote-home/settings.json`, '{"lan": true}')
+  reachable('remote-home')
   const remote = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENKUMI_HOME: `${tmp}/remote-home`, OPENKUMI_PORT: String(REMOTE_PORT), OPENKUMI_MOCK: '1' }, stdio: 'ignore' })
   const remoteRow = (win) => win.locator('.set-row', { has: win.locator('h3:has-text("Other Mac")') })
 
@@ -151,10 +158,24 @@ test('the local environment can be turned on and off, and remote environments ad
     // From here on the window must stay the same page: changing environments does not reload it.
     await win.evaluate(() => (window.sameWindow = true))
 
-    // Running the bots here starts the server on this computer, in a process of its own, and shows it.
+    // Bots belong to a person, and nobody has bots on this computer yet: whoever runs them here
+    // first says what they are called, and is offered the name of their account on the computer.
     await start('Run them on this computer').click()
+    const named = win.locator('input[aria-label="Your name here"]')
+    await named.waitFor()
+    assert.match(await named.inputValue(), /^[a-z0-9][a-z0-9-]*$/)
+    assert.equal(await up(LOCAL_PORT), false, 'nothing starts before they have answered')
+    // Typed as people write a name, it becomes one a folder can have.
+    await named.fill('Juan Cruz')
+    assert.equal(await named.inputValue(), 'juan-cruz')
+    // (The screen fades in: a picture of it is taken once it has.)
+    if (process.env.OPENKUMI_TEST_SHOTS) await new Promise((r) => setTimeout(r, 800)).then(() => win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, 'welcome-name.png') }))
+    // Then the server starts on this computer, in a process of its own, for that person, and is shown.
+    await win.getByRole('button', { name: 'Start OpenKumi here' }).click()
     await showsBot(win, 'Kumi')
     assert.equal(await up(LOCAL_PORT), true)
+    assert.deepEqual(JSON.parse(fs.readFileSync(`${tmp}/local-home/people.json`, 'utf8')), [{ name: 'juan-cruz', port: 4317 }])
+    assert.ok(fs.existsSync(`${tmp}/local-home/people/juan-cruz/auth.json`))
     assert.ok((await processes()).includes('OpenKumi Server'), 'the server is a process of its own inside the app')
     // The server has no pages; the interface is the app's.
     assert.match(await (await fetch(`http://127.0.0.1:${LOCAL_PORT}/`)).text(), /no page of its own/)
@@ -253,6 +274,11 @@ test('the local environment can be turned on and off, and remote environments ad
       assert.ok(!(await processes()).includes('OpenKumi Server'), 'the app does not start a second one')
       await settings(win)
       assert.match(await win.locator('#local-environment').innerText(), /started outside this app/)
+      // The people here are shown, but this app does not run their servers, so it is not where they are added or removed.
+      const people = win.locator('.set-section', { has: win.locator('h2:has-text("People on this computer")') })
+      await people.locator('.set-row', { hasText: 'Juan Cruz' }).waitFor()
+      assert.match(await people.locator('#people').innerText(), /people are added and removed there: “openkumi people add <name>”/)
+      assert.equal(await people.getByRole('button', { name: 'Add a person' }).count() + (await people.locator('summary').count()), 0)
       await app.close()
       await new Promise((r) => setTimeout(r, 1500))
       assert.equal(await up(LOCAL_PORT), true)
@@ -473,7 +499,7 @@ test('files go up and come down, and another computer is paired and removed from
   // A file is sent up to the bot's folder, among its working files...
   await win.locator('.files-tab input[type=file]').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('kept on the other side') })
   await win.locator('.file-row', { hasText: 'notes.txt' }).click()
-  assert.equal(fs.readFileSync(`${tmp}/local-home/bots/${bot.id}/workspace/files/notes.txt`, 'utf8'), 'kept on the other side')
+  assert.equal(fs.readFileSync(`${dataOf('local-home')}/bots/${bot.id}/workspace/files/notes.txt`, 'utf8'), 'kept on the other side')
   await win.locator('.file-meta', { hasText: 'Working file' }).waitFor()
   assert.match(await win.locator('.file-meta').innerText(), /Changes to working files are not recorded\.$/)
   // ...and found again by its name.
@@ -515,14 +541,130 @@ test('files go up and come down, and another computer is paired and removed from
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('people: someone else gets bots of their own on this computer, a code for their own devices, and a server nobody else’s bots are on', async () => {
+  let win = await launch()
+  await showsBot(win, 'Kumi')
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
+  const listed = () => JSON.parse(fs.readFileSync(`${tmp}/local-home/people.json`, 'utf8'))
+  const section = () => win.locator('.set-section', { has: win.locator('h2:has-text("People on this computer")') })
+  const row = (name) => section().locator('.set-row', { has: win.locator(`h3:has-text("${name}")`) })
+  const mine = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Mine Only', provider: 'mock' })
+
+  // ---- the first person is whoever answered the welcome, and the local environment is theirs
+  await settings(win)
+  await row('Juan Cruz').waitFor()
+  assert.match(await row('Juan Cruz').innerText(), new RegExp(`Juan Cruz\\s*You\\s*juan-cruz · port ${LOCAL_PORT}`))
+  assert.equal(await row('Juan Cruz').getByRole('button', { name: 'Pair a device' }).count(), 0, 'their own devices are paired above, as before')
+  await win.evaluate(() => (location.hash = '/settings/about'))
+  await win.locator('#person', { hasText: 'Juan Cruz' }).waitFor()
+
+  // ---- someone else: a name is all it takes. Their server starts beside the first person's, and a code for their own device is shown at once.
+  await settings(win)
+  await section().getByRole('button', { name: 'Add a person' }).click()
+  const name = win.locator('input[aria-label="Name of the person to add"]')
+  await name.fill('Juan Cruz')
+  await section().getByRole('button', { name: 'Add', exact: true }).click()
+  await section().locator('.notice.error', { hasText: 'juan-cruz has bots here already' }).waitFor()
+  await name.fill('Ana')
+  await section().getByRole('button', { name: 'Add', exact: true }).click()
+  await row('Ana').locator('.pair-code').waitFor({ timeout: 60_000 })
+  const ana = listed()[1]
+  assert.deepEqual([listed().length, ana.name], [2, 'ana'])
+  assert.ok(ana.port !== LOCAL_PORT && (await up(ana.port)), 'their server runs on a port of its own')
+  assert.ok((await processes()).includes('OpenKumi Server (ana)'), 'in a process of its own inside the app, like the first person’s')
+  const code = await row('Ana').locator('.pair-code').innerText()
+  assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/)
+  const [address] = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/access')).addresses
+  assert.ok(address, 'this test needs the computer to be on a network')
+  // The address shown is their server's, and so is what the picture for a phone carries.
+  await row('Ana').locator('.set-link-row', { hasText: `${address}:${ana.port}` }).waitFor()
+  await row('Ana').locator('svg.qr').waitFor()
+  assert.match(await row('Ana').innerText(), /for one of Ana’s own computers or phones/)
+  await shot('people')
+
+  // ---- the code lets a computer into their server and no other: this app pairs with it as their own computer would
+  const begin = (port) => fetch(`http://127.0.0.1:${port}/api/pair/begin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nonce: 'ab'.repeat(16) }) }).then((r) => r.status)
+  assert.deepEqual([await begin(ana.port), await begin(LOCAL_PORT)], [200, 403], 'the first person’s server made no code')
+  await win.click('.set-section-head button:has-text("Add environment")')
+  await win.fill('input[aria-label="Address of the other computer"]', `${address}:${ana.port}`)
+  await win.fill('input[aria-label="Pairing code"]', code)
+  await win.click('button:has-text("Pair and add")')
+  // Given no name, it is called what the server says it is: whose, and on which computer.
+  const theirs = () => win.locator('.set-row', { has: win.locator('h3:has-text("Ana on ")') })
+  await theirs().waitFor()
+  await row('Ana').getByRole('button', { name: 'Done' }).click()
+  await row('Ana').locator('.pair-code').waitFor({ state: 'detached' })
+  await theirs().locator('button:has-text("Open")').click()
+  await win.evaluate(() => (location.hash = '/'))
+  // Their server has a first bot of its own, and none of the first person's.
+  await showsBot(win, 'Kumi')
+  await until(async () => (await win.locator('select.environment').inputValue()) !== 'local')
+  assert.equal(await win.locator('.sidebar .item', { hasText: 'Mine Only' }).count(), 0)
+  await win.evaluate(() => (location.hash = '/settings/about'))
+  await win.locator('#person', { hasText: 'Ana' }).waitFor()
+  // People are looked after at the computer that runs the bots, for everyone there: the list is the same whichever environment shows.
+  await settings(win)
+  await row('Ana').waitFor()
+  await win.locator('#local-environment button:has-text("Open")').click()
+  await win.evaluate(() => (location.hash = '/'))
+  await showsBot(win, 'Mine Only')
+
+  // ---- everyone's servers stop with the app, and start with it
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)) && !(await up(ana.port)), 15_000)
+  win = await launch()
+  await showsBot(win, 'Mine Only')
+  await until(() => up(ana.port))
+
+  // ---- another name: their server is stopped for it, their folder is renamed with them, and what was paired stays paired
+  await settings(win)
+  await row('Ana').locator('summary').click()
+  await row('Ana').getByRole('button', { name: 'Rename' }).click()
+  await win.fill('input[aria-label="Name of ana"]', 'Anna')
+  await win.keyboard.press('Enter')
+  await row('Anna').waitFor({ timeout: 60_000 })
+  assert.deepEqual([listed().map((p) => p.name), fs.readdirSync(`${tmp}/local-home/people`).sort()], [['juan-cruz', 'anna'], ['anna', 'juan-cruz']])
+  await until(() => up(ana.port))
+  assert.ok((await processes()).includes('OpenKumi Server (anna)') && !(await processes()).includes('OpenKumi Server (ana)'))
+  await theirs().locator('p:has-text("Connected")').waitFor({ timeout: 30_000 })
+
+  // ---- the first person's own name: the local environment is stopped for it and comes back as theirs
+  await row('Juan Cruz').locator('summary').click()
+  assert.equal(await row('Juan Cruz').getByRole('button', { name: 'Remove' }).count(), 0, 'nobody removes themselves from here')
+  await row('Juan Cruz').getByRole('button', { name: 'Rename' }).click()
+  await win.fill('input[aria-label="Name of juan-cruz"]', 'juan')
+  await win.keyboard.press('Enter')
+  await until(async () => listed()[0].name === 'juan' && (await up(LOCAL_PORT)), 60_000)
+  await win.evaluate(() => (location.hash = '/'))
+  await showsBot(win, 'Mine Only')
+  assert.ok(fs.existsSync(`${tmp}/local-home/people/juan/bots/${mine.id}/bot.md`) && !fs.existsSync(`${tmp}/local-home/people/juan-cruz`))
+
+  // ---- removed, their server stops and they are off the list; what it held is kept
+  await settings(win)
+  await row('Anna').locator('summary').click()
+  await row('Anna').getByRole('button', { name: 'Remove' }).click()
+  await row('Anna').waitFor({ state: 'detached', timeout: 30_000 })
+  await until(async () => !(await up(ana.port)), 15_000)
+  assert.deepEqual(listed().map((p) => p.name), ['juan'])
+  assert.ok(fs.existsSync(`${tmp}/local-home/people/anna/auth.json`), 'nothing of theirs was deleted')
+  // The environment that was paired with it is this app's own business, and is taken away here.
+  await theirs().locator('summary').click()
+  await theirs().locator('button:has-text("Remove")').click()
+  await theirs().waitFor({ state: 'detached' })
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${mine.id}`)
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('files go with a message: picked or taken out in the composer, pictures made smaller, kept by the conversation and copied to the bot\'s inbox', async () => {
   const win = await launch()
   await showsBot(win, 'Kumi')
   const bot = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Looker', provider: 'mock' })
-  const files = `${tmp}/local-home/bots/${bot.id}/workspace/files`
+  const files = `${dataOf('local-home')}/bots/${bot.id}/workspace/files`
   /** The names of the files waiting to go with a message, out of the bot's sight. */
   const waiting = () => {
-    const dir = `${tmp}/local-home/bots/${bot.id}/private/attachments/waiting`
+    const dir = `${dataOf('local-home')}/bots/${bot.id}/private/attachments/waiting`
     return fs.existsSync(dir) ? fs.readdirSync(dir).flatMap((id) => fs.readdirSync(`${dir}/${id}`)).sort() : []
   }
   await win.evaluate((id) => (location.hash = `/${id}`), bot.id)
@@ -593,7 +735,7 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
   const heard = []
   const impostor = http.createServer((req, res) => {
     heard.push(`${req.url} ${req.headers.authorization ?? ''}`)
-    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ app: 'openkumi', version: '0', authorized: true, home: `${tmp}/local-home`, proof: 'ff' }))
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ app: 'openkumi', version: '0', authorized: true, home: dataOf('local-home'), proof: 'ff' }))
   })
   await new Promise((resolve) => impostor.listen(LOCAL_PORT, '127.0.0.1', resolve))
   configure(localOnly)
@@ -637,8 +779,7 @@ test('the app recovers when the server it relies on goes away or shuts it out, a
 })
 
 test('an environment has several addresses: one where something else answers is never sent the key, the next is used, and the app moves back when the first returns', async () => {
-  fs.mkdirSync(`${tmp}/many-home`, { recursive: true })
-  fs.writeFileSync(`${tmp}/many-home/settings.json`, '{"lan": true}')
+  reachable('many-home')
   const far = spawn(process.execPath, [SERVER], { env: { ...process.env, OPENKUMI_HOME: `${tmp}/many-home`, OPENKUMI_PORT: String(REMOTE_PORT), OPENKUMI_MOCK: '1', OPENKUMI_TAILSCALE_BIN: env.OPENKUMI_TAILSCALE_BIN }, stdio: 'ignore' })
   /** Listens on a port of its own on this computer; `handle` answers what arrives there. */
   const listen = async (server, port = 0) => (await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve)), `http://127.0.0.1:${server.address().port}`)
@@ -964,7 +1105,7 @@ test('what is said to a busy bot waits in view, to be taken back, sent now or le
   // A message to another bot is shown here as what was sent, and there as what came; each opens the other.
   // Files of the sender's that go with it are shown in both, from the copies the other conversation keeps.
   const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
-  const trip = `${tmp}/local-home/bots/${busy.id}/workspace/files/trip`
+  const trip = `${dataOf('local-home')}/bots/${busy.id}/workspace/files/trip`
   fs.mkdirSync(trip, { recursive: true })
   fs.writeFileSync(`${trip}/plan.md`, 'Day 1: Alfama')
   fs.writeFileSync(`${trip}/map.png`, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))
@@ -984,7 +1125,7 @@ test('what is said to a busy bot waits in view, to be taken back, sent now or le
   await came.locator('.sent-file', { hasText: 'plan.md' }).waitFor()
   await came.locator('.sent-picture img').waitFor()
   await shot('between-came')
-  assert.equal(fs.readFileSync(`${tmp}/local-home/bots/${other.id}/workspace/files/inbox/plan.md`, 'utf8'), 'Day 1: Alfama')
+  assert.equal(fs.readFileSync(`${dataOf('local-home')}/bots/${other.id}/workspace/files/inbox/plan.md`, 'utf8'), 'Day 1: Alfama')
   await came.locator('.between-head').click()
   await win.locator('.msg.between.to.found', { hasText: 'plan a trip to Lisbon' }).waitFor({ timeout: 20_000 })
   assert.match(await here(), new RegExp(`^#/${busy.id}/t_[\\w-]+/\\d+$`))
@@ -1670,7 +1811,7 @@ test('telemetry: the server’s question is put once with its box ticked, nothin
     await toggle.click()
     await until(async () => (await state()).settings.telemetry === false, 10_000)
     await win.locator('#telemetry-id').waitFor({ state: 'detached' })
-    assert.equal(JSON.parse(fs.readFileSync(`${tmp}/local-home/telemetry.json`, 'utf8')).id, undefined)
+    assert.equal(JSON.parse(fs.readFileSync(`${dataOf('local-home')}/telemetry.json`, 'utf8')).id, undefined)
     await shot('telemetry-off')
 
     // Answered, the question is not put again.

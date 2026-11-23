@@ -2,7 +2,8 @@
 // right. App-wide settings are kept by the environment; settings marked "this device" stay in the app.
 import { type ReactNode, useEffect, useState } from 'react'
 import type { Bot, PairedComputer, ProviderInfo, Settings } from '@openkumi/shared'
-import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, RemoteEnvironment } from '@openkumi/shared/desktop'
+import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, PersonHere, PersonPairing, RemoteEnvironment } from '@openkumi/shared/desktop'
+import { shownName, typedName } from '@openkumi/shared/people'
 import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import qrcode from 'qrcode-generator'
 import { type Answer, KIND_NAMES, kindOf, ordered } from '@openkumi/client/addresses'
@@ -76,6 +77,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'environments', id: 'lan', title: 'Let other computers connect', also: 'lan remote network access sharing' },
   { page: 'environments', id: 'pair', title: 'Pair a computer', also: 'code link token access connect' },
   { page: 'environments', id: 'paired-computers', title: 'Paired computers', also: 'remove revoke devices access' },
+  { page: 'environments', id: 'people', title: 'People on this computer', also: 'person users family share accounts profiles someone else add name' },
   { page: 'advanced', id: 'max-steps', title: 'Steps per turn', also: 'limit' },
   { page: 'advanced', id: 'max-subagents', title: 'Subagents at once', also: 'limit parallel' },
   { page: 'advanced', id: 'max-depth', title: 'Subagent levels', also: 'depth nested' },
@@ -440,6 +442,7 @@ function Environments() {
     <Page>
       <EnvironmentList />
       {loaded && <Sharing />}
+      <PeopleHere />
     </Page>
   )
 }
@@ -659,6 +662,43 @@ interface AccessInfo {
   computers: PairedComputer[]
 }
 
+const clock = (time: number) => new Date(time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+
+/** A pairing code with the addresses it is used at, and both as a picture for a phone to scan. Under it, what is to be known about it. */
+function PairingCode({ code, port, addresses, tailscale, children }: { code: string; port: number; addresses: string[]; tailscale: string[]; children: ReactNode }) {
+  return (
+    <div className="set-below set-links">
+      <div className="set-link-row">
+        <span className="faint">Code</span>
+        <code className="pair-code">{code}</code>
+        <CopyButton text={code} />
+      </div>
+      {addresses.map((ip) => (
+        <div key={ip} className="set-link-row">
+          <span className="faint">Address</span>
+          <code>{ip}:{port}</code>
+          <CopyButton text={`${ip}:${port}`} />
+        </div>
+      ))}
+      {tailscale.map((host) => (
+        <div key={host} className="set-link-row">
+          <span className="faint">Tailscale</span>
+          <code>{host}:{port}</code>
+          <CopyButton text={`${host}:${port}`} />
+        </div>
+      ))}
+      {!addresses.length && !tailscale.length && <p className="faint">This computer is not connected to a network right now.</p>}
+      {addresses[0] && (
+        <div className="pair-qr">
+          <Qr text={pairingLink(`${addresses[0]}:${port}`, code)} />
+          <p className="faint">On a phone, open the OpenKumi app and choose “Scan the code”. It carries the address and the code, so there is nothing to type.</p>
+        </div>
+      )}
+      <p className="faint">{children}</p>
+    </div>
+  )
+}
+
 const day = (time: number) => new Date(time).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
 /** How the environment being shown lets the app on other computers in: one at a time, each with a key of its own. */
@@ -723,35 +763,9 @@ function Sharing() {
               control={local && <button onClick={() => run(async () => setPairing(await api('POST', '/api/pairing')))}>{pairing ? 'New code' : 'Pair a computer'}</button>}
             >
               {pairing && (
-                <div className="set-below set-links">
-                  <div className="set-link-row">
-                    <span className="faint">Code</span>
-                    <code className="pair-code">{pairing.code}</code>
-                    <CopyButton text={pairing.code} />
-                  </div>
-                  {info.addresses.map((ip) => (
-                    <div key={ip} className="set-link-row">
-                      <span className="faint">Address</span>
-                      <code>{ip}:{info.port}</code>
-                      <CopyButton text={`${ip}:${info.port}`} />
-                    </div>
-                  ))}
-                  {info.tailscale?.map((host) => (
-                    <div key={host} className="set-link-row">
-                      <span className="faint">Tailscale</span>
-                      <code>{host}:{info.port}</code>
-                      <CopyButton text={`${host}:${info.port}`} />
-                    </div>
-                  ))}
-                  {!info.addresses.length && !info.tailscale?.length && <p className="faint">This computer is not connected to a network right now.</p>}
-                  {info.addresses[0] && (
-                    <div className="pair-qr">
-                      <Qr text={pairingLink(`${info.addresses[0]}:${info.port}`, pairing.code)} />
-                      <p className="faint">On a phone, open the OpenKumi app and choose “Scan the code”. It carries the address and the code, so there is nothing to type.</p>
-                    </div>
-                  )}
-                  <p className="faint">The code works once, until {new Date(pairing.expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}. This closes by itself when the other computer has used it. Paired once, it learns this computer’s other addresses by itself, so it also finds it over Tailscale.</p>
-                </div>
+                <PairingCode code={pairing.code} port={info.port} addresses={info.addresses} tailscale={info.tailscale ?? []}>
+                  The code works once, until {clock(pairing.expiresAt)}. This closes by itself when the other computer has used it. Paired once, it learns this computer’s other addresses by itself, so it also finds it over Tailscale.
+                </PairingCode>
               )}
             </Row>
             {info.computers.map((computer, i) => (
@@ -768,6 +782,119 @@ function Sharing() {
         )}
       </Section>
     </>
+  )
+}
+
+/**
+ * The people with bots on this computer. Bots belong to a person, and each person here has a
+ * server of their own, apart from the others': the local environment is the first person's, and
+ * everyone else uses theirs from their own computer or phone. They are looked after here, in the
+ * app on the computer that runs the bots, and nowhere else.
+ */
+function PeopleHere() {
+  const { local } = useDesktop()
+  const [list, setList] = useState<PersonHere[]>([])
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [renaming, setRenaming] = useState<string | null>(null)
+  /** The code that lets one of a person's own computers or phones into their server. */
+  const [pairing, setPairing] = useState<(PersonPairing & { name: string }) | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const running = local.state === 'running'
+  useEffect(() => {
+    if (running) void desktop.people?.list().then(setList).catch(() => {})
+  }, [running])
+  if (!running || !desktop.people) return null
+  const people = desktop.people
+
+  /** Asks the app to change something, and takes the list as it is then. True when it worked. */
+  const change = async (work: () => Promise<PersonHere[] | void>) => {
+    setError('')
+    setBusy(true)
+    try {
+      const now = await work()
+      if (now) setList(now)
+      return true
+    } catch (e) {
+      setError(reason(e))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+  const pair = (who: string) => change(async () => setPairing({ name: who, ...(await people.pairing(who)) }))
+  // Someone new needs a code for their own computer or phone next, so one is made at once.
+  const add = () =>
+    change(async () => {
+      const added = typedName(name).replace(/-+$/, '')
+      const now = await people.add(added)
+      setList(now)
+      setAdding(false)
+      setName('')
+      setPairing({ name: added, ...(await people.pairing(added)) })
+    })
+  const menu = (e: { currentTarget: HTMLElement }) => e.currentTarget.closest('details')!.removeAttribute('open')
+
+  return (
+    <Section title="People on this computer" action={local.startedHere && <button className="ghost" onClick={() => setAdding(!adding)}><Icon name="plus" size={14} /> Add a person</button>}>
+      {error && <div className="notice error">{error}</div>}
+      <Row
+        id="people"
+        title="Bots belong to a person"
+        description="Each person here has bots of their own, kept apart from everyone else’s, and uses them from their own computer or phone once it is paired. Everyone’s bots run on what this computer is signed in to."
+        status={local.startedHere ? undefined : 'OpenKumi was started outside this app, so people are added and removed there: “openkumi people add <name>” in a terminal on this computer.'}
+      />
+      {adding && (
+        <Row
+          title="Their name"
+          description="What they are called here: small letters, digits and dashes. Their server starts at once, and you get a code for their computer or phone."
+          control={
+            <>
+              <input className="set-input" spellCheck={false} autoCapitalize="off" autoFocus aria-label="Name of the person to add" value={name} placeholder="such as ana" onChange={(e) => setName(typedName(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && name && !busy && void add()} />
+              <button className="primary" disabled={busy || !name.replace(/-+$/, '')} onClick={() => void add()}>{busy ? 'Adding…' : 'Add'}</button>
+            </>
+          }
+        />
+      )}
+      {list.map((person) => (
+        <Row
+          key={person.name}
+          title={
+            renaming === person.name ? (
+              <Field label={`Name of ${person.name}`} value={person.name} onCommit={(to) => change(() => people.rename(person.name, typedName(to).replace(/-+$/, ''))).then(() => setRenaming(null))} />
+            ) : (
+              <><Icon name="bot" size={15} />{shownName(person.name)}{person.me && <span className="pill good">You</span>}</>
+            )
+          }
+          description={<><span className="mono">{person.name}</span> · port {person.port}{person.running ? '' : ' · not running'}</>}
+          control={
+            <>
+              {!person.me && <button disabled={busy || !person.running} onClick={() => void pair(person.name)}>{pairing?.name === person.name ? 'New code' : 'Pair a device'}</button>}
+              {local.startedHere && (
+                <details className="set-menu">
+                  <summary className="icon" title="More" aria-label={`More for ${person.name}`}><Icon name="more" /></summary>
+                  <div className="set-menu-items">
+                    <button onClick={(e) => (menu(e), setRenaming(person.name))}>Rename</button>
+                    {!person.me && <button className="danger" onClick={(e) => (menu(e), pairing?.name === person.name && setPairing(null), void change(() => people.remove(person.name)))}>Remove</button>}
+                  </div>
+                </details>
+              )}
+            </>
+          }
+        >
+          {pairing?.name === person.name && (
+            <>
+              <PairingCode code={pairing.code} port={pairing.port} addresses={pairing.addresses} tailscale={pairing.tailscale}>
+                {pairing.on ? '' : 'Other computers cannot reach this server: “Let other computers connect” is off for it. '}
+                The code works once, until {clock(pairing.expiresAt)}, for one of {shownName(person.name)}’s own computers or phones. Whatever is paired with it sees {shownName(person.name)}’s bots, and nobody else’s.
+              </PairingCode>
+              <div className="set-below"><button className="ghost" onClick={() => setPairing(null)}>Done</button></div>
+            </>
+          )}
+        </Row>
+      ))}
+    </Section>
   )
 }
 
@@ -856,6 +983,7 @@ function AboutPage() {
           control={<a className="button" href={ISSUES_URL} target="_blank" rel="noreferrer">Report a problem</a>}
         />
         {fact('Runs with', `Node.js ${about.node.replace(/^v/, '')} on ${about.platform}`)}
+        {about.person && fact('Bots of', shownName(about.person), 'person')}
         {fact('Port', <>{about.port} <span className="faint">(set with OPENKUMI_PORT when starting OpenKumi)</span></>)}
         {fact('Data folder', <code>{home}</code>)}
         {fact('License', 'MIT')}
