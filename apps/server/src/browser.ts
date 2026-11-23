@@ -7,7 +7,7 @@ import crypto from 'node:crypto'
 import path from 'node:path'
 import { type BrowserContext, type CDPSession, type Page, type Request, chromium } from 'playwright-core'
 import type { BrowserInput, BrowserState } from '@openkumi/shared'
-import { PORT, emit, privateDir } from './config.ts'
+import { PORT, emit, privateDir, serverPorts } from './config.ts'
 import { settings } from './settings.ts'
 import { track } from './telemetry.ts'
 import { incoming, resolve } from './workspace.ts'
@@ -15,9 +15,12 @@ import { incoming, resolve } from './workspace.ts'
 const VIEWPORT = { width: 1280, height: 800 }
 
 // A bot's browser must not be able to open OpenKumi itself: coming from this computer it would be
-// trusted like the owner, and could change the bot's rules and superpowers. These rules
-// make Chrome send any request for this server's address somewhere that refuses it.
-const NO_SELF_ACCESS = `--host-rules=${['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${PORT} 0.0.0.0:1`).join(', ')}`
+// trusted like the owner, and could change the bot's rules and superpowers. Nor the server of anyone
+// else on this computer, whose bots are theirs. These rules make Chrome send any request for one
+// of those addresses somewhere that refuses it. They are set when the browser starts, so a person
+// added after that is kept out from its next start.
+const noServerAccess = () =>
+  `--host-rules=${serverPorts().flatMap((port) => ['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${port} 0.0.0.0:1`)).join(', ')}`
 
 /**
  * Where a service sends the browser back to after a superpower's sign-in. It is OpenKumi's own
@@ -152,7 +155,7 @@ class BotBrowser {
     const options = {
       headless,
       viewport: VIEWPORT,
-      args: ['--disable-blink-features=AutomationControlled', '--no-first-run', '--no-default-browser-check', NO_SELF_ACCESS],
+      args: ['--disable-blink-features=AutomationControlled', '--no-first-run', '--no-default-browser-check', noServerAccess()],
       ignoreDefaultArgs: ['--enable-automation'],
     }
     const profile = path.join(privateDir(this.botId), 'browser-profile')

@@ -997,6 +997,42 @@ test('a bot cannot reach OpenKumi itself or files on the computer through its br
   await api('POST', `/api/bots/${bot.id}/browser/stop`)
 })
 
+test('a computer shared with others: a bot is told it works for the user alone, and cannot reach anyone else\'s server here', async () => {
+  const alone = await told()
+  assert.match(alone, /running locally on the user's own computer inside OpenKumi/)
+  assert.ok(!alone.includes('# Other people on this computer'), 'nobody else is mentioned while there is nobody else')
+
+  // Someone else has a server on this computer, which answers like OpenKumi does.
+  const list = path.join(home, 'people.json')
+  const before = fs.readFileSync(list, 'utf8')
+  const theirs = http.createServer((_, res) => res.end('{"bots":["theirs"]}'))
+  await new Promise((resolve) => theirs.listen(0, '127.0.0.1', resolve))
+  const port = theirs.address().port
+  fs.writeFileSync(list, JSON.stringify([...JSON.parse(before), { name: 'ana', port }]))
+  try {
+    const prompt = await told()
+    assert.match(prompt, /^You are Tester, an AI bot running locally on a computer the user shares with others inside OpenKumi\./)
+    assert.match(prompt, /\n# Other people on this computer\nThe user shares this computer with other people, who have bots of their own here\./)
+    // Honest about what being apart does not do.
+    assert.match(prompt, /What is kept apart is the bots, not the computer\./)
+    assert.ok(prompt.indexOf('\n# Other people on this computer\n') < prompt.indexOf('\n# Working in OpenKumi\n'))
+    assert.doesNotMatch(prompt, /\bana\b/i, 'nor are the others named')
+
+    const address = `http://127.0.0.1:${port}/api/state`
+    assert.equal(await (await fetch(address)).text(), '{"bots":["theirs"]}')
+    assert.match(await tool('web_fetch', { url: address }), /^Error: That address is OpenKumi itself/)
+    assert.match(await tool('web_fetch', { url: `http://localhost:${port}/` }), /^Error: That address is OpenKumi itself/)
+    // A browser is kept from them from its start, which is after they were added.
+    await api('POST', `/api/bots/${bot.id}/browser/stop`)
+    assert.match(await tool('browser_navigate', { url: address }), /^Error: .*ERR_CONNECTION_REFUSED/)
+    await api('POST', `/api/bots/${bot.id}/browser/stop`)
+  } finally {
+    fs.writeFileSync(list, before)
+    await new Promise((resolve) => theirs.close(resolve))
+  }
+  assert.ok(!(await told()).includes('# Other people on this computer'), 'nor once they are gone again')
+})
+
 test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\'s turns', async () => {
   await api('POST', '/api/providers/check')
   const providers = Object.fromEntries((await api('GET', '/api/state')).providers.map((p) => [p.id, p]))
@@ -1050,7 +1086,7 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
     } else {
       assert.equal(started.config.sandbox_mode, 'read-only')
       assert.equal(started.config['skills.include_instructions'], false)
-      for (const feature of ['shell_tool', 'unified_exec', 'multi_agent', 'plugins']) assert.ok(started.disabled.includes(feature), feature)
+      for (const feature of ['shell_tool', 'unified_exec', 'multi_agent', 'plugins', 'memories']) assert.ok(started.disabled.includes(feature), feature)
       // It runs as Codex's app server, which reads the user's own setup: the servers they have there are switched off by name.
       assert.deepEqual([started.opened.sandbox, started.opened.approvalPolicy, started.opened.model], ['read-only', 'never', null])
       assert.deepEqual([started.config['mcp_servers.calendar.enabled'], started.config['mcp_servers.my notes.enabled'], started.config.notify], [false, false, []])

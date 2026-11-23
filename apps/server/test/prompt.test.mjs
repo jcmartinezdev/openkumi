@@ -39,7 +39,7 @@ test('a mistake in the template is not passed over', () => {
 test('the master prompt OpenKumi comes with fills in for every kind of thread', () => {
   const fill = {
     bot_name: 'Travel', model: 'Claude Opus 5.5', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Kumi (bot_id: kumi), the main assistant: Everyday questions\n- 🧳 Travel (bot_id: travel): Plans trips and books',
-    main: false, chat: true, can_message: true, automation: false, watch: false, hook: false, subagent: false, call: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
+    main: false, chat: true, can_message: true, automation: false, watch: false, hook: false, subagent: false, call: false, shared: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
     instructions_limit: '12000', agents_md: '', memory: '', superpowers: '', automation_title: '', by_user: false, by_you: false,
     by_other: false, automation_author: '', automation_gone: true,
   }

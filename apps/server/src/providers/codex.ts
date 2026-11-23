@@ -37,10 +37,14 @@ async function refresh() {
   info = { ...base, connected: true, detail: said.replace(/^Logged in using /i, 'Signed in with ') || 'Signed in', path: program, version }
 }
 
-/** Everything in Codex that runs commands, touches files, drives apps or starts its own agents. */
+/**
+ * Everything in Codex that runs commands, touches files, drives apps or starts its own agents; and
+ * its memories, which it keeps once for the computer's account and would carry from one bot's
+ * conversations into another's, those of other people's bots on this computer among them.
+ */
 const SWITCHED_OFF = [
   'shell_tool', 'unified_exec', 'view_image', 'multi_agent', 'plugins', 'apps', 'browser_use', 'computer_use',
-  'image_generation', 'hooks', 'skill_search', 'sleep_tool', 'goals', 'tool_suggest', 'workspace_dependencies',
+  'image_generation', 'hooks', 'skill_search', 'sleep_tool', 'goals', 'tool_suggest', 'workspace_dependencies', 'memories',
 ]
 
 // Config values are TOML; a JSON string is also a valid TOML string.

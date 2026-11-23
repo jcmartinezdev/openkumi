@@ -17,7 +17,8 @@ in its rules, and read its **Workspace → Changes** now and then.
 
 ## A bot's browser can reach your home network
 
-A bot's browser and `web_fetch` refuse OpenKumi's own address on this computer, and files on it.
+A bot's browser and `web_fetch` refuse OpenKumi's own address on this computer, the addresses of
+the other people's servers on it, and files on it.
 Otherwise they reach what any program on the computer can: the web, and also other devices on your
 home network and on Tailscale, such as a router's admin page. (Watches are stricter, and refuse all
 of those.) A bot holds no key, so it still cannot use another OpenKumi server it finds there.
