@@ -151,16 +151,16 @@ class BotBrowser {
     // keeping them out too. A start may have read the list of servers before someone was added, so
     // once it is done everyone who was waiting for it looks again, whoever began it among them. A
     // Chrome that closes as soon as it opens is not started over and over.
-    for (let tries = 0; tries < 3; tries++) {
+    for (let tries = 0; ; tries++) {
       while (this.starting) await this.starting
       if (this.context && serverPorts().every((port) => this.keptFrom.includes(port))) return
+      if (tries === 3) throw new Error('The browser could not be started. Try again.')
       const old = this.context
       if (old) this.forget()
       this.starting = (old ? old.close().catch(() => {}) : Promise.resolve())
         .then(() => this.launch(headless))
         .finally(() => (this.starting = null))
     }
-    while (this.starting) await this.starting
   }
 
   private async launch(headless: boolean) {
