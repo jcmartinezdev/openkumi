@@ -87,6 +87,20 @@ export function serverEnv(port: number): NodeJS.ProcessEnv {
 class Unfit extends Error {}
 
 /**
+ * Whether what answers at a port of this computer is the server that has this access code: it
+ * signs a value made up here with it. Nothing else is ever sent an access code, so something that
+ * got to the port first and only says it is OpenKumi learns nothing.
+ */
+export async function shows(port: number, token: string): Promise<boolean> {
+  const challenge = crypto.randomBytes(16).toString('hex')
+  const said = await hello(address(port), 3000, challenge)
+  if (!said || !token) return false
+  const expected = crypto.createHmac('sha256', token).update(challenge).digest()
+  const given = Buffer.from(said.proof ?? '', 'hex')
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected)
+}
+
+/**
  * Takes the server at this port as the local environment. Its access code is in its data folder,
  * which the server names to callers on this computer, and which only this computer's user can read.
  * Whatever answers at the port first has to show that it knows that code, by signing a value made
@@ -276,6 +290,8 @@ export function restartLocal(work: () => Promise<void>): Promise<void> {
 
 /** Who has bots on this computer, as the first person's server keeps the list: beside its data folder's own. */
 export function peopleHere(): { name: string; port: number }[] {
+  // Not known while the first person's server is down, or is one from before people had folders.
+  if (path.basename(path.dirname(local.home)) !== 'people') return []
   try {
     const said = JSON.parse(fs.readFileSync(path.join(path.dirname(path.dirname(local.home)), 'people.json'), 'utf8'))
     return Array.isArray(said) ? said.filter((p) => typeof p?.name === 'string' && /^[a-z0-9][a-z0-9-]{0,29}$/.test(p.name) && Number.isInteger(p?.port)) : []
@@ -289,9 +305,21 @@ export const me = () => path.basename(local.home)
 /** The servers of the other people here that this app started, by the person's name. */
 const others = new Map<string, UtilityProcess>()
 
-/** Starts the server of someone else here, and resolves once it listens. One this app already runs is left as it is. */
-export function startOther(name: string): Promise<void> {
-  if (others.has(name) || !local.child) return Promise.resolve()
+/** Whether this app runs any server at the moment, or is about to: what quitting has to stop first. */
+export const managing = () => !!local.child || others.size > 0 || !!starting
+/** The other people whose servers this app runs. */
+export const runHere = () => [...others.keys()]
+
+/**
+ * Starts the server of someone else here, and resolves once it listens. One this app already
+ * runs is left as it is, and so is one that something else keeps running (a background service,
+ * a terminal): two servers are never started on one person's data.
+ */
+export async function startOther(name: string): Promise<void> {
+  const person = peopleHere().find((p) => p.name === name)
+  if (!person || others.has(name) || !local.child || (await hello(address(person.port), 1500))) return
+  // Stopped, or started by another call, while that was being asked.
+  if (others.has(name) || !local.child) return
   const log = fs.createWriteStream(path.join(USER_DATA, `server-${name}.log`), { mode: 0o600 })
   const child = utilityProcess.fork(SERVER, ['--for', name], { serviceName: `OpenKumi Server (${name})`, stdio: ['ignore', 'pipe', 'pipe'], env: serverEnv(local.port) })
   others.set(name, child)
@@ -304,7 +332,12 @@ export function startOther(name: string): Promise<void> {
   }
   const startedAt = Date.now()
   return new Promise<void>((resolve, reject) => {
-    const late = setTimeout(() => reject(new Error(`${name}’s server did not start in time.`)), 40_000)
+    // One that never says it listens is ended, not left behind.
+    const late = setTimeout(() => {
+      if (others.get(name) === child) others.delete(name)
+      child.kill()
+      reject(new Error(`${name}’s server did not start in time.`))
+    }, 40_000)
     child.on('message', (message) => message?.type === 'ready' && (clearTimeout(late), resolve()))
     child.once('exit', () => {
       clearTimeout(late)

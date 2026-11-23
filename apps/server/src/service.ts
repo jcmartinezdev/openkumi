@@ -9,17 +9,24 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { PERSON, homeOf, people } from './config.ts'
+import { BASE, PERSON, homeOf, people } from './config.ts'
 import { RUNTIME } from './update.ts'
 
 const label = (who: string) => `ai.openkumi.server.${who}`
 const plistOf = (who: string) => path.join(os.homedir(), 'Library', 'LaunchAgents', `${label(who)}.plist`)
 const unitName = (who: string) => `openkumi-${who}.service`
 const unitOf = (who: string) => path.join(os.homedir(), '.config', 'systemd', 'user', unitName(who))
-/** The one service there was before each person had one, which ran the server of whoever is first here now. */
+/**
+ * The one service there was before each person had one. After an update it goes on running the
+ * server, now the first person's, until that person's own service is set up in its place: so
+ * for the first person it counts as theirs wherever one is asked about.
+ */
 const OLD = { label: 'ai.openkumi.server', unit: 'openkumi.service' }
-/** Where the service's output goes. */
-export const logOf = (who = PERSON) => path.join(homeOf(who), 'server.log')
+const oldFile = () => (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'LaunchAgents', `${OLD.label}.plist`) : path.join(os.homedir(), '.config', 'systemd', 'user', OLD.unit))
+/** Whether the service from before is what runs this person's server: only ever the first person's. */
+const onOld = (who: string) => who === people()[0]?.name && fs.existsSync(oldFile()) && !fs.existsSync(process.platform === 'darwin' ? plistOf(who) : unitOf(who))
+/** Where the service's output goes. The service from before writes where it always did. */
+export const logOf = (who = PERSON) => path.join(onOld(who) ? BASE : homeOf(who), 'server.log')
 
 /** `current` is asked each time the service starts, so a start after an update is the new version. */
 const command = (who: string) => [path.join(RUNTIME, 'current', 'bin', 'openkumi'), 'serve', '--for', who]
@@ -116,18 +123,27 @@ function supported() {
 
 /** Whether the service is set up, and whether it is running right now. */
 export function serviceStatus(who = PERSON): { installed: boolean; running: boolean } {
-  const [file, name] = mac ? [plistOf(who), label(who)] : [unitOf(who), unitName(who)]
+  const [file, name] = onOld(who) ? [oldFile(), mac ? OLD.label : OLD.unit] : mac ? [plistOf(who), label(who)] : [unitOf(who), unitName(who)]
   if (mac) return { installed: fs.existsSync(file), running: fs.existsSync(file) && works('launchctl', ['print', `${domain()}/${name}`]) }
   return { installed: fs.existsSync(file), running: fs.existsSync(file) && works('systemctl', ['--user', 'is-active', '--quiet', name]) }
 }
 
-/** Stops and takes away the service from before each person had one. It would start a second server for the first person. */
-function retire() {
-  const file = mac ? path.join(os.homedir(), 'Library', 'LaunchAgents', `${OLD.label}.plist`) : path.join(os.homedir(), '.config', 'systemd', 'user', OLD.unit)
-  if (!fs.existsSync(file)) return
+/**
+ * Stops and takes away the service from before each person had one: it would start a second
+ * server for the first person. True when there was one. It is given a moment to stop, so that
+ * what is started in its place does not find its server still there.
+ */
+function retire(): boolean {
+  const file = oldFile()
+  if (!fs.existsSync(file)) return false
+  const running = () => (mac ? works('launchctl', ['print', `${domain()}/${OLD.label}`]) : works('systemctl', ['--user', 'is-active', '--quiet', OLD.unit]))
   if (mac) works('launchctl', ['bootout', `${domain()}/${OLD.label}`])
   else works('systemctl', ['--user', 'disable', '--now', OLD.unit])
+  for (let tries = 0; tries < 12 && running(); tries++) execFileSync('sleep', ['0.5'])
+  if (running()) throw new Error(`The background service from before could not be stopped, so nothing was changed. Stop it by hand (${mac ? `launchctl bootout ${domain()}/${OLD.label}` : `systemctl --user stop ${OLD.unit}`}) and run this again.`)
   fs.rmSync(file, { force: true })
+  if (!mac) works('systemctl', ['--user', 'daemon-reload'])
+  return true
 }
 
 /** Sets the service up and starts it. Done again, it is set up afresh and started again. */
@@ -181,8 +197,8 @@ function stillRunning(who: string) {
  */
 export function removeService(who = PERSON): boolean {
   const file = mac ? plistOf(who) : unitOf(who)
-  if (who === people()[0]?.name) retire()
-  if (!fs.existsSync(file)) return false
+  const old = who === people()[0]?.name && retire()
+  if (!fs.existsSync(file)) return old
   if (mac) works('launchctl', ['bootout', `${domain()}/${label(who)}`])
   else works('systemctl', ['--user', 'disable', '--now', unitName(who)])
   if (stillRunning(who)) throw new Error(`The background service could not be stopped, so nothing was removed. Stop it by hand (${mac ? `launchctl bootout ${domain()}/${label(who)}` : `systemctl --user stop ${unitName(who)}`}) and run this again.`)

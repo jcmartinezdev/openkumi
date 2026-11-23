@@ -13,9 +13,9 @@ import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresse
 import { pair, parseAddress } from '@openkumi/client/pair'
 import { canDictate, cancelDictation, microphone, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
 import { askToUpdate, config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
-import { local, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
+import { local, managing, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
 import { ASSUME_YES, CATCH_SIGN_INS, FAKE_MICROPHONE, HIDDEN, PRELOAD } from './paths.ts'
-import { addPerson, pairingFor, people, removePerson, renamePerson } from './people.ts'
+import { addPerson, pairingFor, people, removePerson, renamePerson, workingHere } from './people.ts'
 import { APP_URL, keepPage, serveInterface } from './protocol.ts'
 import { checkForUpdate, installUpdate, onUpdateChange, startUpdates, updateState } from './updates.ts'
 
@@ -216,21 +216,6 @@ async function updateEnvironment(id: string) {
 let stopped = false
 
 /**
- * How many bots are at work in the server this app runs: what quitting the app would cut off.
- * Null when the server did not say, which is not the same as none.
- */
-async function workingHere(): Promise<number | null> {
-  if (!local.child) return 0
-  try {
-    const res = await fetch(`http://127.0.0.1:${local.port}/api/update`, { headers: { Authorization: `Bearer ${local.token}` }, signal: AbortSignal.timeout(3000) })
-    const working = res.ok ? (await res.json()).working : null
-    return typeof working === 'number' ? working : null
-  } catch {
-    return null
-  }
-}
-
-/**
  * Puts the downloaded version of the app in place and opens it. Quitting stops the server this
  * app runs, and the bots at work in it, whichever environment the window happens to show: so the
  * person is asked first when there are any, and the server is stopped cleanly, so their work is saved.
@@ -240,7 +225,7 @@ async function restartForUpdate() {
   const working = await workingHere()
   const asked = working === null ? 'Bots may be working on this computer.' : working ? `${working === 1 ? '1 bot is' : `${working} bots are`} working on this computer.` : ''
   if (asked && !(await confirmed(asked, 'Restarting stops them. What they have done so far is kept.', 'Restart'))) return
-  if (local.child) await stopLocal()
+  if (managing()) await stopLocal()
   // A look for updates that ran meanwhile may have found a still newer version, which is being
   // fetched now: there is nothing to install yet, so the server is started again and the app stays.
   if (updateState().state !== 'ready') {
@@ -412,9 +397,9 @@ else {
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
   })
-  // The server this app started ends with it; bots that are still working are stopped cleanly.
+  // The servers this app started end with it, everyone's; bots that are still working are stopped cleanly.
   app.on('before-quit', (event) => {
-    if (stopped || !local.child) return
+    if (stopped || !managing()) return
     event.preventDefault()
     void stopLocal().then(() => {
       stopped = true

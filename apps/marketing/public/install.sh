@@ -113,6 +113,20 @@ say "OpenKumi $version is installed. Its command is $BIN/openkumi"
 # ---- keep it running
 started=no
 if [ "$service" = yes ]; then
+  # The one service there was before each person had a server of their own would keep a server of
+  # that time running, and its data is not moved into its person's folder from under it. It is
+  # stopped here; "service install" then sets it up again, under that person's name.
+  if [ -f "$HOME/Library/LaunchAgents/ai.openkumi.server.plist" ]; then
+    launchctl bootout "gui/$(id -u)/ai.openkumi.server" 2>/dev/null || true
+    tries=0
+    while [ "$tries" -lt 10 ] && launchctl print "gui/$(id -u)/ai.openkumi.server" >/dev/null 2>&1; do
+      sleep 1
+      tries=$((tries + 1))
+    done
+  fi
+  if [ -f "$HOME/.config/systemd/user/openkumi.service" ]; then
+    systemctl --user stop openkumi.service 2>/dev/null || true
+  fi
   if "$BIN/openkumi" service install; then started=yes; fi
 fi
 

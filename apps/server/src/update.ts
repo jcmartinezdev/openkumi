@@ -132,12 +132,15 @@ async function fetchVersion({ version, archives }: Manifest) {
     // Tried once before anything points at it: its Node has to run here, and its program has to load.
     const said = await run(path.join(unpacked, 'node'), [path.join(unpacked, 'server', 'src', 'cli.ts'), 'version'])
     if (said.trim() !== version) throw new Error(`it says it is “${said.trim().slice(0, 40)}”`)
-    if (!whole(dir)) fs.rmSync(dir, { recursive: true, force: true })
     try {
       fs.renameSync(unpacked, dir)
-    } catch (e) {
-      // Refused because the version is there: another server put the same one in place meanwhile, and that one is it.
-      if (!whole(dir)) throw e
+    } catch {
+      // Refused because something is there. A whole version: another server put the same one in
+      // place meanwhile, and that one is it. Anything less was left by something cut short.
+      if (!whole(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true })
+        fs.renameSync(unpacked, dir)
+      }
     }
   } catch (e) {
     throw new Error(`OpenKumi ${version} was downloaded but does not run on this computer: ${(e as Error).message}. Nothing was changed.`)
@@ -168,8 +171,13 @@ export function currentVersion(): string | null {
   }
 }
 
-/** Points `current` at a version, in one step: a start that happens meanwhile gets the old one or the new one, never neither. */
+/**
+ * Points `current` at a version, in one step: a start that happens meanwhile gets the old one or
+ * the new one, never neither. Not back from a newer one, which another server put there meanwhile.
+ */
 function pointAt(version: string) {
+  const now = currentVersion()
+  if (now && newer(now, version)) return
   const link = path.join(RUNTIME, 'current')
   const next = path.join(RUNTIME, `.${MINE}current`)
   fs.rmSync(next, { force: true })
@@ -203,11 +211,15 @@ const list = (dir: string) => {
   }
 }
 
-/** Removes the versions that no server is running and that is not started next, and what was left of fetching one. */
+/**
+ * Removes the versions from before this one that no server is running and that is not started
+ * next, and what was left of fetching one. A newer version is never removed here: another server
+ * may be putting it in place at this moment, between unpacking it and pointing `current` at it.
+ */
 function tidy() {
   const keep = new Set([VERSION, currentVersion(), ...inUse()])
   try {
-    for (const name of list(path.join(RUNTIME, 'versions'))) if (!keep.has(name) && !theirs(name)) fs.rmSync(path.join(RUNTIME, 'versions', name), { recursive: true, force: true })
+    for (const name of list(path.join(RUNTIME, 'versions'))) if (!keep.has(name) && !theirs(name) && !newer(name, VERSION)) fs.rmSync(path.join(RUNTIME, 'versions', name), { recursive: true, force: true })
     for (const name of list(path.join(RUNTIME, 'downloads'))) if (!theirs(name)) fs.rmSync(path.join(RUNTIME, 'downloads', name), { recursive: true, force: true })
   } catch {
     // Nothing to tidy.

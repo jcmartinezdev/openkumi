@@ -6,9 +6,9 @@ import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
-import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { after, test } from 'node:test'
 
 const PORT = 5400 + Math.floor(Math.random() * 40) * 10
@@ -117,6 +117,12 @@ test('each person has a server of their own on the same computer, apart from the
   const begin = (port) => fetch(`http://127.0.0.1:${port}/api/pair/begin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nonce: 'ab'.repeat(16) }) })
   assert.deepEqual([(await begin(theirs.port)).status, (await begin(mine.port)).status], [200, 403])
   assert.match(openkumi('lan', 'off', '--for', 'ana').said, /Only this computer can reach ana’s OpenKumi/)
+  // (Switching that moves the server to another address of the computer, which takes it a moment.)
+  for (let tries = 0; tries < 100; tries++) {
+    if ((await theirs.api('GET', '/api/state').catch(() => ({}))).settings?.lan === false) break
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  await new Promise((r) => setTimeout(r, 400))
   assert.equal((await theirs.api('GET', '/api/state')).settings.lan, false)
   const list = openkumi('people').said
   assert.match(list, new RegExp(`juan +port ${PORT} +running`))
@@ -125,12 +131,15 @@ test('each person has a server of their own on the same computer, apart from the
   assert.match(openkumi('people', 'add', 'eve', '--for', 'ana').said, /leave out “--for”/)
   assert.match(openkumi('people', 'rename', 'ana', 'anna').said, /is running, started by hand/, 'a folder is not moved from under a server that has it open')
 
+  // ---- nobody is taken off the list from under their running server, which would go on with their data
+  assert.match(openkumi('people', 'remove', 'ana').said, /ana’s server is running, started by hand/)
+  assert.deepEqual(listed().map((p) => p.name), ['juan', 'ana', 'leo'])
+  await theirs.stop()
+  await mine.stop()
+
   // ---- taken off the list, what their server held stays, and is theirs again when they are added again
   const removed = openkumi('people', 'remove', 'ana')
   assert.equal(removed.code, 0, removed.said)
-  assert.match(removed.said, /started by hand and is still running/)
-  await theirs.stop()
-  await mine.stop()
   assert.deepEqual(listed().map((p) => p.name), ['juan', 'leo'])
   assert.ok(fs.existsSync(folder('ana', 'bots', made.id, 'bot.md')), 'nothing of theirs was deleted')
   assert.equal(openkumi('status', '--for', 'ana').code, 1)
@@ -143,11 +152,12 @@ test('each person has a server of their own on the same computer, apart from the
   assert.equal(again.token, theirs.token)
   await again.stop()
 
-  // ---- the last one cannot be removed, and when the first one goes the next is the one meant
+  // ---- the first person stays: who a command with no name is about, and whose the ports given by hand are, does not pass to someone else
   assert.equal(openkumi('people', 'remove', 'leo').code, 0)
-  assert.match(openkumi('people', 'remove', 'juan').said, /A command with no name after it is about anna’s server from now on/)
-  assert.match(openkumi('people', 'remove', 'anna').said, /is the only one with bots here/)
-  assert.deepEqual(listed().map((p) => p.name), ['anna'])
+  const kept = openkumi('people', 'remove', 'juan')
+  assert.equal(kept.code, 1)
+  assert.match(kept.said, /juan is the first person here[\s\S]*is not removed[\s\S]*people rename juan/)
+  assert.deepEqual(listed().map((p) => p.name), ['juan', 'anna'])
 })
 
 test('the first person is called what they said where they were asked, and a paired computer is told whose server it has', async () => {
@@ -191,7 +201,7 @@ test('the first person is called what they said where they were asked, and a pai
     assert.equal((await pairAs('Phone')).name, `Maria Jose on ${computer}`)
     assert.deepEqual(command('rename', 'leo', 'leon'), { renamed: 'leon' })
     assert.deepEqual(command('remove', 'leon'), { removed: 'leon' })
-    assert.deepEqual(command('remove', 'maria-jose'), { error: 'maria-jose is the only one with bots here. “openkumi uninstall” removes OpenKumi from this computer.' })
+    assert.match(command('remove', 'maria-jose').error, /^maria-jose is the first person here, whom a command with no name is about, and is not removed\./)
   } finally {
     server.kill('SIGTERM')
     await new Promise((r) => server.on('exit', r))
@@ -199,37 +209,95 @@ test('the first person is called what they said where they were asked, and a pai
   }
 })
 
-test('what a server from before kept in the folder itself is not moved from under it while it runs', async () => {
-  // A folder as it was before each person had one of their own in it, and a stand-in for the server that still has it open.
-  const old = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-before-'))
+/** A data folder as a version from before each person had one left it: everything in the folder itself. */
+function before(name) {
+  const old = fs.mkdtempSync(path.join(os.tmpdir(), `openkumi-${name}-`))
   fs.mkdirSync(path.join(old, 'bots', 'b_1'), { recursive: true })
   fs.writeFileSync(path.join(old, 'auth.json'), JSON.stringify({ accessToken: 'keep-me' }))
-  const port = PORT + 7
-  const before = http.createServer((_, res) => res.end(JSON.stringify({ app: 'openkumi', home: old })))
-  await new Promise((resolve) => before.listen(port, '127.0.0.1', resolve))
-  // Not waited for in one go: the stand-in has to be able to answer meanwhile.
-  const run = (...args) =>
-    new Promise((resolve) => {
-      const ran = spawn(process.execPath, ['src/cli.ts', ...args], { env: { ...env, OPENKUMI_HOME: old, OPENKUMI_PORT: String(port) }, stdio: ['ignore', 'ignore', 'pipe'] })
-      let stderr = ''
-      ran.stderr.on('data', (d) => (stderr += d))
-      ran.on('exit', (status) => resolve({ status, stderr }))
-    })
-  try {
-    const refused = await run('people')
-    assert.equal(refused.status, 1)
-    assert.match(refused.stderr, /An OpenKumi server from before this version is running on this computer/)
-    assert.deepEqual(fs.readdirSync(old).sort(), ['auth.json', 'bots'], 'nothing was moved or made')
+  fs.writeFileSync(path.join(old, 'settings.json'), JSON.stringify({ lan: true }))
+  return old
+}
+/** A start of this version on that folder, as any command is: what it said, and the code it ended with. */
+const startOn = (old, more = {}) => spawnSync(process.execPath, ['src/cli.ts', 'people'], { env: { ...env, OPENKUMI_HOME: old, ...more }, encoding: 'utf8' })
+const inFolder = (old) => fs.readdirSync(old).sort()
 
-    // Once it has stopped, all of it becomes the first person's.
-    await new Promise((resolve) => before.close(resolve))
-    assert.equal((await run('people')).status, 0)
+test('what a server from before kept in the folder itself is not moved from under it while it has it open', async () => {
+  const old = before('open')
+  const file = path.join(old, 'openkumi.db')
+  // The server from before, standing in: a program with the database open, as a running server has it. Whatever port it listens on, or none.
+  const holding = spawn(process.execPath, ['-e', `const { DatabaseSync } = require('node:sqlite'); const db = new DatabaseSync(${JSON.stringify(file)}); db.exec('PRAGMA journal_mode = WAL; CREATE TABLE threads (id TEXT); INSERT INTO threads VALUES (1)'); console.log('open'); setInterval(() => {}, 1000)`], { stdio: ['ignore', 'pipe', 'inherit'] })
+  try {
+    await new Promise((resolve) => holding.stdout.on('data', resolve))
+    const refused = startOn(old)
+    assert.equal(refused.status, 1)
+    assert.match(refused.stderr, /OpenKumi from before this version is still running on this computer, with its data open/)
+    assert.deepEqual(inFolder(old), ['auth.json', 'bots', 'openkumi.db', 'openkumi.db-shm', 'openkumi.db-wal', 'settings.json'], 'nothing was moved or made')
+
+    // It ends without closing its database, as a crash does. What it had not yet put into the database is not lost, and all of it becomes the first person's.
+    holding.kill('SIGKILL')
+    await new Promise((resolve) => holding.on('exit', resolve))
+    assert.ok(fs.existsSync(`${file}-wal`))
+    assert.equal(startOn(old).status, 0)
     const [{ name }] = JSON.parse(fs.readFileSync(path.join(old, 'people.json'), 'utf8'))
-    assert.deepEqual(fs.readdirSync(old).sort(), ['openkumi.db', 'people', 'people.json'])
-    assert.ok(fs.existsSync(path.join(old, 'people', name, 'bots', 'b_1')))
+    assert.deepEqual(inFolder(old), ['openkumi.db', 'people', 'people.json'])
+    assert.deepEqual(fs.readdirSync(path.join(old, 'people', name)).sort(), ['auth.json', 'bots', 'openkumi.db', 'settings.json'])
     assert.equal(JSON.parse(fs.readFileSync(path.join(old, 'people', name, 'auth.json'), 'utf8')).accessToken, 'keep-me')
+    const moved = new DatabaseSync(path.join(old, 'people', name, 'openkumi.db'))
+    assert.equal(moved.prepare('SELECT count(*) AS n FROM threads').get().n, 1)
+    moved.close()
   } finally {
-    before.close()
+    holding.kill('SIGKILL')
     fs.rmSync(old, { recursive: true, force: true })
+  }
+})
+
+test('a move into the first person’s folder that was cut short is carried on with, and one that cannot be finished writes nothing down', () => {
+  // ---- cut short after the bots had moved: the rest follows, into the folder that was begun, whatever this start would have called its person
+  const cut = before('cut')
+  fs.mkdirSync(path.join(cut, 'people', 'whoever'), { recursive: true })
+  fs.renameSync(path.join(cut, 'bots'), path.join(cut, 'people', 'whoever', 'bots'))
+  try {
+    assert.equal(startOn(cut, { OPENKUMI_NAME: 'Someone Else' }).status, 0)
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(cut, 'people.json'), 'utf8')), [{ name: 'whoever', port: 4317 }])
+    assert.deepEqual(inFolder(cut), ['openkumi.db', 'people', 'people.json'])
+    assert.deepEqual(fs.readdirSync(path.join(cut, 'people', 'whoever')).sort(), ['auth.json', 'bots', 'settings.json'])
+  } finally {
+    fs.rmSync(cut, { recursive: true, force: true })
+  }
+
+  // ---- something is in the way: it says what, and nobody is written down, so the next start tries again
+  const blocked = before('blocked')
+  fs.mkdirSync(path.join(blocked, 'people', 'whoever'), { recursive: true })
+  fs.writeFileSync(path.join(blocked, 'people', 'whoever', 'auth.json'), JSON.stringify({ accessToken: 'another' }))
+  try {
+    const stopped = startOn(blocked)
+    assert.equal(stopped.status, 1)
+    assert.match(stopped.stderr, /auth\.json could not be moved into its person’s folder: there is already something at /)
+    assert.ok(!fs.existsSync(path.join(blocked, 'people.json')) && !fs.existsSync(path.join(blocked, 'openkumi.db')))
+    assert.equal(JSON.parse(fs.readFileSync(path.join(blocked, 'auth.json'), 'utf8')).accessToken, 'keep-me')
+    fs.rmSync(path.join(blocked, 'people', 'whoever', 'auth.json'))
+    assert.equal(startOn(blocked).status, 0)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(blocked, 'people', 'whoever', 'auth.json'), 'utf8')).accessToken, 'keep-me')
+  } finally {
+    fs.rmSync(blocked, { recursive: true, force: true })
+  }
+
+  // ---- a list of people that is there but cannot be read is not taken for nobody: everyone on it would be replaced by one new person
+  const torn = before('torn')
+  try {
+    assert.equal(startOn(torn).status, 0)
+    fs.writeFileSync(path.join(torn, 'people.json'), '[{ "name": "an')
+    const refused = startOn(torn)
+    assert.equal(refused.status, 1)
+    assert.match(refused.stderr, /people\.json is not a list of the people with bots on this computer/)
+    assert.equal(fs.readFileSync(path.join(torn, 'people.json'), 'utf8'), '[{ "name": "an')
+    // Gone altogether, with the note for versions from before still there: the note is not taken for anyone's data.
+    fs.rmSync(path.join(torn, 'people.json'))
+    const [name] = fs.readdirSync(path.join(torn, 'people'))
+    assert.equal(startOn(torn, { OPENKUMI_NAME: 'Someone Else' }).status, 0)
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(torn, 'people.json'), 'utf8')), [{ name, port: 4317 }])
+    assert.ok(!fs.existsSync(path.join(torn, 'people', name, 'openkumi.db')) && fs.existsSync(path.join(torn, 'openkumi.db')))
+  } finally {
+    fs.rmSync(torn, { recursive: true, force: true })
   }
 })

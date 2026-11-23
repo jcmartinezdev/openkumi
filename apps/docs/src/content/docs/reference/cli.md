@@ -41,7 +41,7 @@ itself.
 | --- | --- |
 | `openkumi people` | who has bots here, on which port, and whether each one's server runs |
 | `openkumi people add <name>` | bots of their own for someone else: a data folder in `~/.openkumi/people/<name>/`, a port of its own, and a background service of its own. Other computers on your network can reach it from the start, and it prints the address and a pairing code for their app. |
-| `openkumi people remove <name>` | stops their server and removes its service. What it held stays in its folder, and adding the same name again carries on with it. The last person cannot be removed. |
+| `openkumi people remove <name>` | stops their server and removes its service. What it held stays in its folder, and adding the same name again carries on with it. The first person is not removed: they are the one a command with no name is about, and can be given another name. |
 | `openkumi people rename <name> <new name>` | another name for someone, yourself included. Their folder and service are renamed with them, and what is paired with their server stays paired. |
 | `--for <name>` | after any command of the first table, makes it about that person's server: `openkumi pair --for ana`, `openkumi status --for ana`, `openkumi lan off --for ana`, `openkumi logs --for ana`. |
 

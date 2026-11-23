@@ -161,17 +161,18 @@ test('servers started from one folder of versions fetch a new one at once withou
   const versions = (name = '') => path.join(runtime, 'versions', name)
   const notes = (name = '') => path.join(runtime, 'running', name)
   const within = (server, ms) => Promise.race([server.exited, new Promise((r) => setTimeout(() => r('still running'), ms))])
-  // Two servers of other versions left their notes: one is still there (this test stands in for it), one is gone.
+  // Two servers of earlier versions left their notes: one is still there (this test stands in for it), one is gone.
   const gone = String(spawnSync(process.execPath, ['-e', '']).pid)
-  for (const version of ['1.2.3', '1.2.4']) fs.mkdirSync(versions(version), { recursive: true })
+  for (const version of ['0.0.0-kept', '0.0.0-gone', '9.9.0']) fs.mkdirSync(versions(version), { recursive: true })
   fs.mkdirSync(notes(), { recursive: true })
-  fs.writeFileSync(notes(String(process.pid)), '1.2.3')
-  fs.writeFileSync(notes(gone), '1.2.4')
+  fs.writeFileSync(notes(String(process.pid)), '0.0.0-kept')
+  fs.writeFileSync(notes(gone), '0.0.0-gone')
   let servers = []
   try {
     // ---- a version a server still runs is not tidied away from under it
     servers = [await start('shared-a', installed), await start('shared-b', installed, PORT + 1)]
-    assert.deepEqual(fs.readdirSync(versions()), ['1.2.3'], 'the version of the server that is gone was tidied away, the other left')
+    // ...nor is a newer one, which another server may be putting in place at that moment.
+    assert.deepEqual(fs.readdirSync(versions()).sort(), ['0.0.0-kept', '9.9.0'], 'the version of the server that is gone was tidied away, the other two left')
     assert.deepEqual(fs.readdirSync(notes()).sort(), [process.pid, ...servers.map((s) => s.pid)].map(String).sort(), 'each server left a note, and the one of the server that is gone was thrown away')
 
     // ---- both fetch the new version at the same moment
@@ -179,7 +180,7 @@ test('servers started from one folder of versions fetch a new one at once withou
     assert.deepEqual(updates.map((u) => [u.state, u.staged, u.error]), [['ready', '9.9.9', ''], ['ready', '9.9.9', '']])
     assert.deepEqual(await Promise.all(servers.map((s) => within(s, 15_000))), [75, 75])
     assert.equal(fs.readlinkSync(path.join(runtime, 'current')), path.join('versions', '9.9.9'))
-    assert.deepEqual(fs.readdirSync(versions()).sort(), ['1.2.3', '9.9.9'], 'nothing is left of the fetching')
+    assert.deepEqual(fs.readdirSync(versions()).sort(), ['0.0.0-kept', '9.9.0', '9.9.9'], 'nothing is left of the fetching')
     assert.deepEqual(fs.readdirSync(runtime).filter((name) => name.startsWith('.')), [])
     assert.deepEqual(fs.readdirSync(notes()), [String(process.pid)], 'a server that stops takes its note with it')
 

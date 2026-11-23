@@ -10,7 +10,7 @@ import path from 'node:path'
 import { utilityProcess } from 'electron'
 import type { PersonHere, PersonPairing } from '@openkumi/shared/desktop'
 import { hello } from './environments.ts'
-import { local, me, peopleHere, restartLocal, serverEnv, startOther, startOthers, stopOther } from './local.ts'
+import { local, me, peopleHere, restartLocal, runHere, serverEnv, shows, startOther, startOthers, stopOther } from './local.ts'
 import { CLI } from './paths.ts'
 
 const address = (port: number) => `http://127.0.0.1:${port}`
@@ -100,26 +100,50 @@ export async function removePerson(name: unknown): Promise<PersonHere[]> {
   return people()
 }
 
+/** A person's server's own access code, from its data folder, which only this computer's user can read. '' before its first start. */
+function codeOf(name: string): string {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(path.dirname(local.home), name, 'auth.json'), 'utf8')).accessToken ?? ''
+  } catch {
+    return ''
+  }
+}
+
 /**
  * A code that lets one computer or phone into someone's server, and where it can be reached. Their
  * server makes it: this asks it as the app on its own computer does, with its access code from
- * its data folder.
+ * its data folder, once what answers at its port has shown that it is that server.
  */
 export async function pairingFor(name: unknown): Promise<PersonPairing> {
   running()
   const person = known(name)
-  const at = address(portOf(person))
-  let code = ''
-  try {
-    code = JSON.parse(fs.readFileSync(path.join(path.dirname(local.home), person.name, 'auth.json'), 'utf8')).accessToken ?? ''
-  } catch {
-    // Said below.
-  }
+  const [port, code] = [portOf(person), codeOf(person.name)]
+  if (!(await shows(port, code))) throw new Error(`${person.name}’s server is not running, so it cannot make a code.`)
   const ask = async (method: string, route: string) => {
-    const res = code ? await fetch(at + route, { method, headers: { Authorization: `Bearer ${code}` }, signal: AbortSignal.timeout(8000) }).catch(() => null) : null
-    if (!res?.ok) throw new Error(`${person.name}’s server is not running, so it cannot make a code.`)
+    const res = await fetch(address(port) + route, { method, headers: { Authorization: `Bearer ${code}` }, signal: AbortSignal.timeout(8000) }).catch(() => null)
+    if (!res?.ok) throw new Error(`${person.name}’s server did not answer.`)
     return res.json()
   }
   const [pairing, access] = await Promise.all([ask('POST', '/api/pairing'), ask('GET', '/api/access')])
   return { code: String(pairing.code), expiresAt: Number(pairing.expiresAt), port: Number(access.port), on: !!access.on, addresses: access.addresses ?? [], tailscale: access.tailscale ?? [] }
+}
+
+/**
+ * How many bots are at work in the servers this app runs, everyone's: what quitting the app would
+ * cut off. Null when one of them did not say, which is not the same as none.
+ */
+export async function workingHere(): Promise<number | null> {
+  const servers = [...(local.child ? [{ port: local.port, code: local.token }] : []), ...peopleHere().filter((p) => runHere().includes(p.name)).map((p) => ({ port: p.port, code: codeOf(p.name) }))]
+  const counts = await Promise.all(
+    servers.map(async ({ port, code }) => {
+      try {
+        const res = await fetch(`${address(port)}/api/update`, { headers: { Authorization: `Bearer ${code}` }, signal: AbortSignal.timeout(3000) })
+        const working = res.ok ? (await res.json()).working : null
+        return typeof working === 'number' ? working : null
+      } catch {
+        return null
+      }
+    }),
+  )
+  return counts.some((n) => n === null) ? null : counts.reduce<number>((sum, n) => sum + n!, 0)
 }

@@ -299,26 +299,23 @@ if (command === 'start' || command === 'serve') {
       } else if (what === 'remove') {
         if (!given) stop('Say who: “openkumi people remove <name>”.')
         const person = known()
-        const list = people()
-        if (list.length === 1) stop(`${person.name} is the only one with bots here. “openkumi uninstall” removes OpenKumi from this computer.`)
-        const [port, first] = [portOf(person), person.name === list[0].name]
+        // Whoever is first is the one a command with no name is about, the one this computer's own app shows, and the one the ports given by hand are for. That does not pass to someone else.
+        if (person.name === people()[0].name) stop(`${person.name} is the first person here, whom a command with no name is about, and is not removed. They can be given another name: “openkumi people rename ${person.name} <new name>”. “openkumi uninstall” removes OpenKumi from this computer.`)
+        // Not from under a server that nothing here can stop: it would go on with their data, off the list.
+        if (!service.serviceStatus(person.name).running && (await helloAt(person.port))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
         // One that could not be stopped stays on the list, with its service: this throws then.
         service.removeService(person.name)
         forgetPerson(person.name)
         done({ removed: person.name })
-        const still = !!(await helloAt(port))
-        console.log(`\n  ${person.name}’s server ${still ? 'is off the list' : 'is stopped'}, and no longer starts by itself.`)
-        if (still) console.log('  It was started by hand and is still running: stop it with Ctrl-C in its terminal.')
-        console.log(`  What it held is still in ${where(person.name)}. Adding ${person.name} again carries on with it; deleting that folder removes it for good.`)
-        if (first) console.log(`  A command with no name after it is about ${list[1].name}’s server from now on.`)
-        console.log()
+        console.log(`\n  ${person.name}’s server is stopped, and no longer starts by itself.`)
+        console.log(`  What it held is still in ${where(person.name)}. Adding ${person.name} again carries on with it; deleting that folder removes it for good.\n`)
       } else if (what === 'rename') {
         if (!given || !other) stop('Say who, and what they are called from now on: “openkumi people rename <name> <new name>”.')
         const person = known()
         const first = person.name === people()[0].name
-        const { installed } = service.serviceStatus(person.name)
-        // Its folder cannot move while it is open. A service is stopped for it and set up again under the new name.
-        if (!installed && (await helloAt(portOf(person)))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
+        const { installed, running } = service.serviceStatus(person.name)
+        // Its folder cannot move while it is open. A service is stopped for it and set up again under the new name; one that nothing here can stop is left alone.
+        if (!running && (await helloAt(portOf(person)))) stop(`${person.name}’s server is running, started by hand. Stop it (Ctrl-C in its terminal) and run this again.`)
         if (installed) service.removeService(person.name)
         let now = person.name
         try {

@@ -5,7 +5,7 @@
 // it. Every test here starts from that: what it leaves in the folder is found in the first
 // person's after a start.
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -214,11 +214,12 @@ test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi
     `)
     const threads = async (get) => (await get('/api/state')).threads.map((t) => t.id)
 
-    // The database is still open there: the folder stays where it is, and is used there. What lay
-    // in it becomes the first person's, as anywhere.
-    await withServer(before, async (get) => assert.ok((await threads(get)).includes('t_kept')), env)
-    assert.ok(!fs.existsSync(after), 'not moved while in use')
-    assert.deepEqual(fs.readdirSync(before).sort(), ['openkumi.db', 'people', 'people.json'])
+    // The database is still open there, as an Open Bot server has it: the folder stays where it
+    // is, and nothing in it is moved into a person's folder from under that server. The start says so, and ends.
+    const refused = spawnSync(process.execPath, ['src/index.ts'], { env: { ...process.env, OPENKUMI_PORT: String(PORT), OPENKUMI_MOCK: '1', ...env }, encoding: 'utf8' })
+    assert.equal(refused.status, 1)
+    assert.match(refused.stderr, /OpenKumi from before this version is still running on this computer, with its data open/)
+    assert.ok(!fs.existsSync(after) && fs.existsSync(path.join(before, 'openbot.db')) && !fs.existsSync(path.join(before, 'people.json')), 'not moved while in use')
 
     db.close()
     await withServer(after, async (get) => assert.ok((await threads(get)).includes('t_kept')), env)
