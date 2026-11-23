@@ -1,7 +1,11 @@
 // Bots used to be database rows with a browser profile at the top of their folder. Starting the
 // server on such a data folder must turn each one into a bot folder without losing anything.
+//
+// The data also used to lie in the folder itself, before each person had a folder of their own in
+// it. Every test here starts from that: what it leaves in the folder is found in the first
+// person's after a start.
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -9,6 +13,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { test } from 'node:test'
 
 const PORT = 4900 + Math.floor(Math.random() * 90)
+
+/** Where the server keeps its data once it has started: the folder of the first person, made at that start. */
+const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
 
 /** Runs the server on the data in `home`, or with `env` saying where that is some other way. */
 async function withServer(home, fn, env = { OPENKUMI_HOME: home }) {
@@ -21,7 +28,7 @@ async function withServer(home, fn, env = { OPENKUMI_HOME: home }) {
     server.on('exit', (code) => reject(new Error(`server exited with ${code}`)))
   })
   try {
-    const token = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+    const token = JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')).accessToken
     return await fn(async (url) => (await fetch(`http://127.0.0.1:${PORT}${url}`, { headers: { Authorization: `Bearer ${token}` } })).json())
   } finally {
     server.kill('SIGTERM')
@@ -56,7 +63,7 @@ test('bots stored in the database become folders, keeping their id, logins and c
     fs.mkdirSync(oldProfile, { recursive: true })
     fs.writeFileSync(path.join(oldProfile, 'Cookies'), 'logins')
 
-    const dir = path.join(home, 'bots', 'b_Old-1_x')
+    const dir = (...parts) => path.join(dataOf(home), 'bots', 'b_Old-1_x', ...parts)
     const looks = []
     for (const run of [1, 2]) {
       // The second start must find nothing left to do.
@@ -78,14 +85,19 @@ test('bots stored in the database become folders, keeping their id, logins and c
     }
 
     assert.equal(looks[0], looks[1])
-    assert.equal(fs.readFileSync(path.join(dir, 'private', 'browser-profile', 'Cookies'), 'utf8'), 'logins', 'logins moved with the profile')
-    assert.ok(!fs.existsSync(oldProfile))
-    assert.match(fs.readFileSync(path.join(dir, 'workspace', 'AGENTS.md'), 'utf8'), /^# Helper: v2\n\nBe brief\.\n/)
-    assert.match(fs.readFileSync(path.join(dir, 'workspace', 'memory', 'notes.md'), 'utf8'), /- Likes tea/)
+    assert.deepEqual(fs.readdirSync(home).sort(), ['openkumi.db', 'people', 'people.json'], 'all that lay in the folder itself is in the first person’s folder now')
+    // What is left there is a note for a version from before: a format newer than it reads, so it leaves everything alone.
+    const note = new DatabaseSync(path.join(home, 'openkumi.db'))
+    assert.deepEqual([note.prepare('PRAGMA user_version').get().user_version > 1, note.prepare(`SELECT name FROM sqlite_master`).all()], [true, []])
+    note.close()
+    assert.equal(fs.readFileSync(dir('private', 'browser-profile', 'Cookies'), 'utf8'), 'logins', 'logins moved with the profile')
+    assert.ok(!fs.existsSync(dir('browser-profile')))
+    assert.match(fs.readFileSync(dir('workspace', 'AGENTS.md'), 'utf8'), /^# Helper: v2\n\nBe brief\.\n/)
+    assert.match(fs.readFileSync(dir('workspace', 'memory', 'notes.md'), 'utf8'), /- Likes tea/)
 
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')), { accessToken: 'keep-me' }, 'the old sign-in is forgotten, the access code is not')
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')), { accessToken: 'keep-me' }, 'the old sign-in is forgotten, the access code is not')
 
-    const after = new DatabaseSync(path.join(home, 'openkumi.db'))
+    const after = new DatabaseSync(path.join(dataOf(home), 'openkumi.db'))
     const tables = after.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all().map((r) => r.name)
     assert.ok(tables.includes('bots_imported') && !tables.includes('bots'), 'the old rows are kept aside, not deleted')
     after.close()
@@ -171,21 +183,22 @@ test('skills, connections and plugins become superpowers: what a bot had that is
     }
     for (const gone of ['skills', 'mcp.json', 'plugins.json', 'private/mcp']) assert.ok(!fs.existsSync(path.join(one, gone)), gone)
     assert.ok(!fs.existsSync(path.join(two, 'superpowers.json')), 'a bot that had nothing gets nothing')
-    assert.deepEqual(fs.readdirSync(path.join(home, 'skills')), ['mine'], 'a skill the owner added is not deleted')
-    assert.ok(!fs.existsSync(path.join(home, 'mcp.json')))
-    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')), { accessToken: 'keep-me' })
+    assert.deepEqual(fs.readdirSync(path.join(dataOf(home), 'skills')), ['mine'], 'a skill the owner added is not deleted')
+    assert.ok(!fs.existsSync(path.join(dataOf(home), 'mcp.json')))
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')), { accessToken: 'keep-me' })
   } finally {
     fs.rmSync(home, { recursive: true, force: true })
   }
 })
 
-test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi, once no server has it open', async () => {
+test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi, once no server has its database open there', async () => {
   // A home folder of its own, so the server looks for ~/.openbot and ~/.openkumi in it.
   const user = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-renamed-'))
   const before = path.join(user, '.openbot')
   const after = path.join(user, '.openkumi')
   const { OPENKUMI_HOME, ...rest } = process.env
-  const env = { ...rest, HOME: user }
+  // Not said to be a test's server either: those have to be told where their data is.
+  const env = { ...rest, HOME: user, NODE_TEST_CONTEXT: '' }
   try {
     fs.mkdirSync(before)
     fs.writeFileSync(path.join(before, 'auth.json'), JSON.stringify({ accessToken: 'keep-me' }))
@@ -201,15 +214,18 @@ test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi
     `)
     const threads = async (get) => (await get('/api/state')).threads.map((t) => t.id)
 
-    // An Open Bot server still has the database open: the folder stays where it is, and is used there.
-    await withServer(before, async (get) => assert.ok((await threads(get)).includes('t_kept')), env)
-    assert.ok(!fs.existsSync(after), 'not moved while in use')
+    // The database is still open there, as an Open Bot server has it: the folder stays where it
+    // is, and nothing in it is moved into a person's folder from under that server. The start says so, and ends.
+    const refused = spawnSync(process.execPath, ['src/index.ts'], { env: { ...process.env, OPENKUMI_PORT: String(PORT), OPENKUMI_MOCK: '1', ...env }, encoding: 'utf8' })
+    assert.equal(refused.status, 1)
+    assert.match(refused.stderr, /OpenKumi from before this version is still running on this computer, with its data open/)
+    assert.ok(!fs.existsSync(after) && fs.existsSync(path.join(before, 'openbot.db')) && !fs.existsSync(path.join(before, 'people.json')), 'not moved while in use')
 
     db.close()
     await withServer(after, async (get) => assert.ok((await threads(get)).includes('t_kept')), env)
     assert.ok(!fs.existsSync(before), 'moved')
-    assert.ok(fs.existsSync(path.join(after, 'openkumi.db')) && !fs.existsSync(path.join(after, 'openbot.db')), 'the database is renamed with it')
-    assert.equal(JSON.parse(fs.readFileSync(path.join(after, 'auth.json'), 'utf8')).accessToken, 'keep-me', 'paired devices keep working')
+    assert.ok(fs.existsSync(path.join(dataOf(after), 'openkumi.db')) && !fs.existsSync(path.join(dataOf(after), 'openbot.db')), 'the database is renamed with it')
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dataOf(after), 'auth.json'), 'utf8')).accessToken, 'keep-me', 'paired devices keep working')
   } finally {
     // The programs the server asked about themselves (Claude Code, Codex, Grok) may still be writing into this home folder.
     fs.rmSync(user, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
@@ -218,9 +234,9 @@ test('the data folder from when OpenKumi was called Open Bot becomes ~/.openkumi
 
 test('data written by a newer version is left alone: the server says so and does not start', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-migrate-'))
-  const file = path.join(home, 'openkumi.db')
+  const file = () => path.join(dataOf(home), 'openkumi.db')
   const format = () => {
-    const db = new DatabaseSync(file)
+    const db = new DatabaseSync(file())
     const { user_version } = db.prepare('PRAGMA user_version').get()
     const tables = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all().map((r) => r.name)
     db.close()
@@ -233,7 +249,7 @@ test('data written by a newer version is left alone: the server says so and does
     assert.ok(ours >= 1, 'the format is written into the database')
 
     // The same folder, after a newer version has been at it.
-    const db = new DatabaseSync(file)
+    const db = new DatabaseSync(file())
     db.exec(`PRAGMA user_version = ${ours + 1}; CREATE TABLE from_the_future (id TEXT); DROP TABLE queue;`)
     db.close()
     const before = format()

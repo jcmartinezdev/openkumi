@@ -5,39 +5,49 @@ description: "The folder an environment keeps its bots, conversations and settin
 
 import BotAnatomy from '../../../components/diagrams/BotAnatomy.astro'
 
-An environment keeps everything in `~/.openkumi` (override with `OPENKUMI_HOME`). The app's
-settings screens only read and write these files, so you can also read and edit them by hand, and
-back the folder up like any other.
+OpenKumi keeps everything in `~/.openkumi` (override with `OPENKUMI_HOME`). Bots belong to a
+person, so each person with bots on the computer has a data folder of their own in it, and a
+server of their own that runs on it. Most computers have one person, made the first time OpenKumi
+starts: under the name you gave the app then, or after your account on the computer.
 
 ```
 ~/.openkumi/
-  bots/<id>/
-    bot.md                   yours: name, emoji, what it is for, look, voice, what it runs on,
+  people.json                who has bots here, and the port each one's server listens on
+  people/<name>/             a person's data folder: all that follows, once for each person
+    bots/<id>/
+      bot.md                 yours: name, emoji, what it is for, look, voice, what it runs on,
                              and below the header, the rules the bot must follow
-    superpowers.json         yours: the superpowers switched on for it (once there is one)
-    workspace/               the bot's own, and the only place its file tools reach
-      AGENTS.md              its instructions to itself, which it writes and updates
-      memory/                its notes; only the list is loaded, it reads a note when needed
-      files/                 its working files (not in the history)
-        inbox/               files you or another bot sent it, and its browser downloads
-    private/                 never visible to the bot
-      browser-profile/       its Chrome profile: cookies, sign-ins
-      superpowers/<id>.json  its account with the app a superpower works in
-      history.git/           the record of every change to AGENTS.md and memory/
-      attachments/           the conversation's copies of files sent in it
-      grok/                  the settings Grok is given for each turn, on a bot that runs on Grok
-  openkumi.db                conversations, messages, the queue, automations and their runs, webhooks
-  settings.json              app-wide settings that differ from the defaults
-  auth.json                  the access code, this server's id, API keys (readable only by you)
-  clients.json               the computers and phones paired with this one (readable only by you)
-  telemetry.json             the random id usage and error reports go under, while they are on
-  logs/telemetry.ndjson      each report that was sent, as it went (see Usage and error reports)
-  calls/workspace/           an empty folder Codex is started in for a call
-  server.log                 what a server installed alone printed in the background
+      superpowers.json       yours: the superpowers switched on for it (once there is one)
+      workspace/             the bot's own, and the only place its file tools reach
+        AGENTS.md            its instructions to itself, which it writes and updates
+        memory/              its notes; only the list is loaded, it reads a note when needed
+        files/               its working files (not in the history)
+          inbox/             files you or another bot sent it, and its browser downloads
+      private/               never visible to the bot
+        browser-profile/     its Chrome profile: cookies, sign-ins
+        superpowers/<id>.json  its account with the app a superpower works in
+        history.git/         the record of every change to AGENTS.md and memory/
+        attachments/         the conversation's copies of files sent in it
+        grok/                the settings Grok is given for each turn, on a bot that runs on Grok
+    openkumi.db              conversations, messages, the queue, automations and their runs, webhooks
+    settings.json            app-wide settings that differ from the defaults
+    auth.json                the access code, this server's id, API keys (readable only by you)
+    clients.json             the computers and phones paired with this one (readable only by you)
+    telemetry.json           the random id usage and error reports go under, while they are on
+    logs/telemetry.ndjson    each report that was sent, as it went (see Usage and error reports)
+    calls/workspace/         an empty folder Codex is started in for a call
+    server.log               what a server installed alone printed in the background
+  openkumi.db                not your data: a note that makes a version of OpenKumi from before
+                             people had folders say it is too old, where it would start afresh
   runtime/                   only for a server installed alone: the program, not your data
     versions/<version>/      that version's server, with the Node it runs on
     current                  a link to the version that is started
 ```
+
+The app's settings screens only read and write these files, so you can also read and edit them by
+hand, and back the folder up like any other. `openkumi people` says what your name here is, and
+`openkumi people rename` changes it. A version from before people had folders kept all of it in
+`~/.openkumi` itself; the first start of a newer one moves it into your folder.
 
 ## Who owns what
 

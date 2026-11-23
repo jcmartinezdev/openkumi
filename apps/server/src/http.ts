@@ -12,7 +12,7 @@ import * as agent from './agent.ts'
 import { checkWaiting, isPicture, kept, stage, typeOf, unstage } from './attachments.ts'
 import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
 import { type Frame, browserFor, browserStates, isWebPage, letGo, stopBrowser } from './browser.ts'
-import { HOME, HOME_LABEL, LAN, PORT, ROOT, accessToken, botDir, onEvent, readSecrets, serverId, writeSecret } from './config.ts'
+import { FIRST, HOME, HOME_LABEL, LAN, PERSON, PORT, ROOT, accessToken, botDir, onEvent, people, readSecrets, serverId, shown, writeSecret } from './config.ts'
 import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, proveTo, removeComputer } from './clients.ts'
 import * as mcp from './mcp.ts'
 import * as db from './db.ts'
@@ -173,7 +173,7 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     home: HOME_LABEL,
     settings: settings(),
     defaults: DEFAULTS,
-    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT, protocol: PROTOCOL, telemetry: telemetry.telemetryInfo() },
+    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT, protocol: PROTOCOL, telemetry: telemetry.telemetryInfo(), person: PERSON },
     update: updateInfo(),
   }
 })
@@ -203,6 +203,11 @@ route('GET', '/api/addresses', async () => ({
 }))
 // A code for pairing one more computer. It works once, for a few minutes.
 // Who gets in is decided at this computer, not by a computer that was let in.
+/** What a computer that was just paired calls this server, unless its person names it otherwise: the computer it is on, and whose it is where several people have one there. */
+function placeName(): string {
+  const computer = os.hostname().replace(/\.local$/, '') || 'OpenKumi'
+  return people().length > 1 ? `${shown(PERSON)} on ${computer}` : computer
+}
 const ownerOnly = ({ req, url }: Call) => whoIs(req, url) === 'owner' || fail(403, 'Computers are paired and removed on the computer running OpenKumi.')
 route('POST', '/api/pairing', (_, __, call) => (ownerOnly(call), newPairingCode()))
 // Taking a computer's key away also ends whatever it has open.
@@ -555,7 +560,8 @@ function createServer() {
       if (req.method === 'POST' && url.pathname === '/api/pair/finish') {
         const body = await readJson(req)
         const paired = finishPairing(String(body.nonce ?? ''), String(body.serverNonce ?? ''), String(body.proof ?? ''), String(body.name ?? ''))
-        return void (paired ? json(200, paired) : json(403, { error: 'The pairing code was not right, or it has run out. Make a new one on the other computer.' }))
+        // With its key, the computer is told what to call this server: whose it is, where several people have one here.
+        return void (paired ? json(200, { ...paired, name: placeName() }) : json(403, { error: 'The pairing code was not right, or it has run out. Make a new one on the other computer.' }))
       }
     } catch (e: any) {
       return void json(e instanceof HttpError ? e.status : 500, { error: String(e?.message ?? e).split('\n')[0] })
@@ -687,10 +693,10 @@ export function startServer(): http.Server {
     // Run by the desktop app, what is printed goes into a log file, and the app shows the link itself.
     if (host === '127.0.0.1' || parent) return
     console.log(`  Other computers on your network can reach it at ${homeAddresses().map((ip) => `http://${ip}:${PORT}`).join(' or ')}`)
-    console.log('  To let one in, run "npm run pair" here and enter the code it prints in the app there.\n')
+    console.log(`  To let one in, run "${FIRST ? 'npm run pair' : `openkumi pair --for ${PERSON}`}" here and enter the code it prints in the app there.\n`)
   }
   server.on('error', (e: NodeJS.ErrnoException) => {
-    console.error(e.code === 'EADDRINUSE' ? `Port ${PORT} is already in use. Set OPENKUMI_PORT to use another.` : e)
+    console.error(e.code !== 'EADDRINUSE' ? e : `Port ${PORT} is already in use. ${FIRST ? 'Set OPENKUMI_PORT to use another.' : `Is ${PERSON}’s server running already?`}`)
     process.exit(1)
   })
   server.listen(PORT, host, () => {

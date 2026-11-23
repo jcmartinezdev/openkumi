@@ -7,6 +7,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
+/** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
+const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+
 const PORT = 5000 + Math.floor(Math.random() * 90)
 
 /** The servers that are running. A test that fails part-way leaves one behind, and the tests would then never end. */
@@ -25,7 +28,7 @@ async function start(home) {
     server.stdout.on('data', (d) => String(d).includes('running at') && resolve())
     exited.then((code) => reject(new Error(`server exited with ${code}`)))
   })
-  const token = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+  const token = JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')).accessToken
   async function api(method, url, body) {
     const res = await fetch(`http://127.0.0.1:${PORT}${url}`, {
       method,

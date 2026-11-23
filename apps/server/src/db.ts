@@ -4,22 +4,16 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import type { Automation, HistoryMatch, Hook, Item, ItemData, Queued, Said, Thread } from '@openkumi/shared'
 import type { Seen } from './watch.ts'
-import { DATABASE, HOME_LABEL, VERSION, emit, privateDir } from './config.ts'
+import { DATABASE, FORMAT, HOME_LABEL, VERSION, emit, privateDir } from './config.ts'
 
 const db = new DatabaseSync(DATABASE)
 
-/**
- * The format the data folder is kept in: this database, and the settings and bots' folders beside
- * it. The number is written into the database. A version of OpenKumi that finds a higher one than
- * its own was started on data a newer version has written, which it would misread, so it leaves
- * everything as it is and says so.
- *
- * Raise it with any change an older version cannot work with (a column that comes to mean
- * something else, a file that moves), and put the step that brings older data up to it at the end
- * of the steps below, under `if (found < n)`. A new table, or a new column that older versions
- * can ignore, needs no new number.
- */
-export const FORMAT = 1
+// The number of the format this data is kept in (FORMAT, in config.ts) is written into the
+// database. A version of OpenKumi that finds a higher one than its own was started on data a newer
+// version has written, which it would misread, so it leaves everything as it is and says so.
+// A step that brings older data up to a new number goes at the end of the steps below, under
+// `if (found < n)`.
+export { FORMAT }
 const found = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version
 if (found > FORMAT) {
   db.close()

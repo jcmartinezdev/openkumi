@@ -9,6 +9,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { after, test } from 'node:test'
 
+/** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
+const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+
 const PORT = 5100 + Math.floor(Math.random() * 90)
 const running = new Set()
 
@@ -46,7 +49,7 @@ async function start(home, { sends = true, env = {} } = {}) {
     server.stdout.on('data', (d) => String(d).includes('running at') && resolve())
     exited.then((code) => reject(new Error(`server exited with ${code}`)))
   })
-  const token = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+  const token = JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')).accessToken
   async function api(method, url, body) {
     const res = await fetch(`http://127.0.0.1:${PORT}${url}`, {
       method,
@@ -160,7 +163,7 @@ test('a no drops what was waiting, and switching off later throws the id away', 
     await use(server)
     await server.stop()
     assert.deepEqual(received, [])
-    assert.ok(!fs.existsSync(path.join(home, 'logs', 'telemetry.ndjson')))
+    assert.ok(!fs.existsSync(path.join(dataOf(home), 'logs', 'telemetry.ndjson')))
 
     // Agreed to after all: what happens from then on is sent, and the server has an id.
     server = await start(home)
@@ -168,12 +171,12 @@ test('a no drops what was waiting, and switching off later throws the id away', 
     await use(server)
     await server.stop()
     assert.ok(names().includes('run finished'))
-    assert.ok(JSON.parse(fs.readFileSync(path.join(home, 'telemetry.json'), 'utf8')).id)
+    assert.ok(JSON.parse(fs.readFileSync(path.join(dataOf(home), 'telemetry.json'), 'utf8')).id)
 
     // Then switched off again.
     server = await start(home)
     await server.api('PATCH', '/api/settings', { telemetry: false })
-    assert.equal(JSON.parse(fs.readFileSync(path.join(home, 'telemetry.json'), 'utf8')).id, undefined)
+    assert.equal(JSON.parse(fs.readFileSync(path.join(dataOf(home), 'telemetry.json'), 'utf8')).id, undefined)
     assert.equal((await server.api('GET', '/api/telemetry')).id, null)
     received.length = 0
     await use(server)
@@ -259,8 +262,11 @@ test('a failed run is reported by where it failed, never by what the error said'
 
 test('what a crash left behind is reported at the next start, and only what the server itself would have written', () =>
   withHome(async (home) => {
+    // The folder of the person whose server crashed, as it left it.
+    fs.mkdirSync(path.join(home, 'people', 'ana'), { recursive: true })
+    fs.writeFileSync(path.join(home, 'people.json'), JSON.stringify([{ name: 'ana', port: 4317 }]))
     fs.writeFileSync(
-      path.join(home, 'telemetry-crash.json'),
+      path.join(dataOf(home), 'telemetry-crash.json'),
       JSON.stringify({
         type: 'TypeError',
         error: 'src/agent.ts:turn',
@@ -273,7 +279,7 @@ test('what a crash left behind is reported at the next start, and only what the 
       }),
     )
     const server = await start(home)
-    assert.ok(!fs.existsSync(path.join(home, 'telemetry-crash.json')))
+    assert.ok(!fs.existsSync(path.join(dataOf(home), 'telemetry-crash.json')))
     await server.api('PATCH', '/api/settings', { telemetry: true })
     await until(() => received.length)
     const crash = received.find((e) => e.event === '$exception').properties
@@ -376,6 +382,9 @@ test('the tokens a run used are counted by model, as each engine reports them, a
   }))
 
 test('what a turn used is what its engine added to its own count, and a name that is not a model’s plain name is not sent', async () => {
+  // The server's modules keep their data in OPENKUMI_HOME, so it is set before they are loaded.
+  process.env.OPENKUMI_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-telemetry-'))
+  after(() => fs.rmSync(process.env.OPENKUMI_HOME, { recursive: true, force: true }))
   const { usedSince } = await import('../src/providers/types.ts')
   const { modelSent } = await import('../src/telemetry.ts')
   const at = (input, read, output) => ({ 'claude-x': { inputTokens: input, cacheReadInputTokens: read, cacheCreationInputTokens: 5, outputTokens: output } })

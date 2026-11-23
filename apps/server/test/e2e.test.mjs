@@ -11,6 +11,9 @@ import { DatabaseSync } from 'node:sqlite'
 import { after, before, test } from 'node:test'
 import { startOAuthServer } from './fixtures/mcp-oauth.mjs'
 
+/** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
+const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+
 const PORT = 4400 + Math.floor(Math.random() * 500)
 const BASE = `http://127.0.0.1:${PORT}`
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-test-'))
@@ -71,7 +74,7 @@ const spoken = (items) => items.filter((d) => d.type === 'message').map((d) => d
 const lastText = (items) => items.findLast((d) => d.type === 'message' && d.role === 'assistant')?.text
 /** Starts a bot's conversation afresh and gives its id, so that a test begins with nothing said. */
 const fresh = async (botId = bot.id) => (await api('POST', `/api/bots/${botId}/fresh`)).id
-const botPath = (...parts) => path.join(home, 'bots', bot.id, ...parts)
+const botPath = (...parts) => path.join(dataOf(home), 'bots', bot.id, ...parts)
 
 /** Calls one tool through the scripted model and returns what the tool gave back. */
 async function tool(name, args, botId = bot.id) {
@@ -170,7 +173,7 @@ before(async () => {
     server.stdout.on('data', (d) => String(d).includes('running at') && resolve())
     server.on('exit', (code) => reject(new Error(`server exited with ${code}`)))
   })
-  token = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+  token = JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')).accessToken
   bot = await api('POST', '/api/bots', { name: 'Tester', provider: 'mock' })
 })
 
@@ -197,7 +200,7 @@ test('every request needs the access code, also from this computer, and there ar
 
   // Anyone may ask who is here; only the app on this computer is told where the data folder is.
   const hello = await (await get('/api/hello')).json()
-  assert.deepEqual([hello.app, hello.authorized, hello.home], ['openkumi', false, home])
+  assert.deepEqual([hello.app, hello.authorized, hello.home], ['openkumi', false, dataOf(home)])
   // It says which server it is, the same whatever address it is asked at.
   assert.match(hello.id, /^s_[\w-]{12}$/)
   // ...and not a web page whose own name has been pointed at this computer.
@@ -469,7 +472,7 @@ test('bots are created from chat by the main assistant alone, on the owner’s w
     const { bots } = await api('GET', '/api/state')
     const made = bots.find((b) => b.name === 'Researcher')
     assert.deepEqual([made.emoji, made.provider, made.id, made.description], ['🔎', 'claude-code', 'researcher', 'Looks things up.'])
-    assert.match(fs.readFileSync(path.join(home, 'bots', 'researcher', 'workspace', 'AGENTS.md'), 'utf8'), /Dig deep\./, 'the instructions start its own file')
+    assert.match(fs.readFileSync(path.join(dataOf(home), 'bots', 'researcher', 'workspace', 'AGENTS.md'), 'utf8'), /Dig deep\./, 'the instructions start its own file')
     // The first message is in its own conversation, which is named after it, and it has set to work.
     const started = await until(() => conversationOf('researcher'))
     const said = await settle(started.id)
@@ -498,7 +501,7 @@ test('looks: a new bot\'s own model dresses it, and the owner changes it a part 
   const made = await api('POST', '/api/bots', { name: 'Traveller', provider: 'mock', purpose: 'Plans our trips.' })
   const dressed = await until(async () => (await state()).find((b) => b.id === made.id && !b.choosingLook && b.emoji === '✈️'))
   assert.deepEqual(dressed.look, { creature: 'cat', color: 'sky', hat: 'cap', extra: 'none', clothes: 'orange' })
-  const file = path.join(home, 'bots', made.id, 'bot.md')
+  const file = path.join(dataOf(home), 'bots', made.id, 'bot.md')
   assert.match(fs.readFileSync(file, 'utf8'), /\nemoji: ✈️\n[\s\S]*\nlook: cat sky cap orange\n/)
 
   // A part at a time; what is not a part is dropped.
@@ -567,7 +570,7 @@ test('master prompt: every bot is told the one OpenKumi comes with, filled in, a
 test('the other bots: each bot is told who the others are and what each is for', async () => {
   const travel = await api('POST', '/api/bots', { name: 'Travel', emoji: '🧳', provider: 'mock', description: 'Plans trips\n and books   travel.' })
   assert.equal(travel.description, 'Plans trips and books travel.', 'a description is one line')
-  assert.match(fs.readFileSync(path.join(home, 'bots', 'travel', 'bot.md'), 'utf8'), /\ndescription: Plans trips and books travel\.\n/)
+  assert.match(fs.readFileSync(path.join(dataOf(home), 'bots', 'travel', 'bot.md'), 'utf8'), /\ndescription: Plans trips and books travel\.\n/)
 
   const prompt = await told()
   assert.match(prompt, /# The other bots\nYou are one of the user's bots\. These are the others, and what each is for:\n/)
@@ -917,7 +920,7 @@ test('superpowers: one with an app is activated by signing the bot in, in the ow
     await api('DELETE', `/api/bots/${third.id}/superpowers/vault/login`)
     await assert.rejects(api('POST', '/api/superpowers/return', { url: late }), /expired/)
     assert.deepEqual(await powersOf(third.id), [])
-    assert.ok(!fs.existsSync(path.join(home, 'bots', third.id, 'private', 'superpowers', 'vault.json')))
+    assert.ok(!fs.existsSync(path.join(dataOf(home), 'bots', third.id, 'private', 'superpowers', 'vault.json')))
 
     // Deactivating forgets the sign-in.
     await api('PUT', `/api/bots/${bot.id}/superpowers/vault`, { on: false })
@@ -1029,7 +1032,7 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
     assert.equal(lastText(items), 'Tool result: Saved memory/from-engine.md.', engine)
     const call = items.findLast((d) => d.type === 'function_call')
     assert.deepEqual([call.name, items.findLast((d) => d.type === 'function_call_output').output], ['write_file', 'Saved memory/from-engine.md.'], engine)
-    assert.equal(fs.readFileSync(path.join(home, 'bots', runner.id, 'workspace', 'memory', 'from-engine.md'), 'utf8'), 'hi', engine)
+    assert.equal(fs.readFileSync(path.join(dataOf(home), 'bots', runner.id, 'workspace', 'memory', 'from-engine.md'), 'utf8'), 'hi', engine)
     assert.match(await reply('!tool read_file {"path":"../bot.md"}'), /^Tool result: Error:/, `${engine}: the same limits apply`)
 
     // Its own tools for running commands and touching files are switched off, and the user's own setup is left out.
@@ -1041,7 +1044,7 @@ test('engines: Claude Code, Codex and Grok are shown as connected and run a bot\
       assert.deepEqual([started.tools, started.mode, started.sandbox, started.model], ['web_search', 'dontAsk', 'read-only', null])
       for (const flag of ['--no-subagents', '--no-plan', '--trust', '--resume']) assert.ok(started.flags.includes(flag), flag)
       // It is started in a folder of its own, out of the bot's reach, and what it was given there is cleared afterwards.
-      assert.equal(fs.realpathSync(started.cwd), fs.realpathSync(path.join(home, 'bots', runner.id, 'private', 'grok', 'run-1')))
+      assert.equal(fs.realpathSync(started.cwd), fs.realpathSync(path.join(dataOf(home), 'bots', runner.id, 'private', 'grok', 'run-1')))
       assert.deepEqual(fs.readdirSync(path.join(started.cwd, '.grok')), [])
     } else {
       assert.equal(started.config.sandbox_mode, 'read-only')
@@ -1210,8 +1213,8 @@ test('attachments: the conversation keeps what was sent, the bot gets its copy i
 
 test('files between bots: a bot sends another copies of its own files with a message, and neither reaches the other’s folder', async () => {
   const travel = await api('POST', '/api/bots', { name: 'Travel', emoji: '🧳', provider: 'mock', description: 'Plans trips and books travel.' })
-  const theirs = (...parts) => path.join(home, 'bots', 'travel', ...parts)
-  const waitingFor = (botId) => fs.readdirSync(path.join(home, 'bots', botId, 'private', 'attachments', 'waiting'))
+  const theirs = (...parts) => path.join(dataOf(home), 'bots', 'travel', ...parts)
+  const waitingFor = (botId) => fs.readdirSync(path.join(dataOf(home), 'bots', botId, 'private', 'attachments', 'waiting'))
   try {
     fs.mkdirSync(botPath('workspace', 'files', 'trip'), { recursive: true })
     fs.writeFileSync(botPath('workspace', 'files', 'trip', 'plan.md'), 'Day 1: Alfama')
@@ -1366,7 +1369,7 @@ test('local models: a model server on this computer is found and runs a bot, wit
     assert.equal(lastText(await say(id, 'hello')), 'Local echo: hello')
     // The model is given the bot's tools, and what it calls is carried out here.
     assert.equal(lastText(await say(id, 'save a note')), 'The tool said: Saved memory/local.md.')
-    assert.equal(fs.readFileSync(path.join(home, 'bots', runner.id, 'workspace', 'memory', 'local.md'), 'utf8'), 'kept here')
+    assert.equal(fs.readFileSync(path.join(dataOf(home), 'bots', runner.id, 'workspace', 'memory', 'local.md'), 'utf8'), 'kept here')
     assert.deepEqual([asked[0].model, asked[0].messages[0].role, asked[0].tools.some((t) => t.function.name === 'write_file')], ['tiny-local', 'system', true])
     assert.equal(asked.every((request) => !request.headers), true)
 
@@ -1760,7 +1763,7 @@ test('automations: a watch that cannot be looked at is tried again, paused after
     }
     assert.ok(automation.nextRunAt > Date.now(), 'it goes on looking')
     // After a day of it, the watch is paused. (The day is made to have passed, in what the server keeps of its looks.)
-    const data = new DatabaseSync(path.join(home, 'openkumi.db'))
+    const data = new DatabaseSync(path.join(dataOf(home), 'openkumi.db'))
     const seen = JSON.parse(data.prepare('SELECT seen FROM automations WHERE id = ?').get(automation.id).seen)
     assert.ok(Date.now() - seen.failingSince < 60_000 && seen.items['1'], 'what it last saw is kept through the failures')
     data.prepare('UPDATE automations SET seen = ? WHERE id = ?').run(JSON.stringify({ ...seen, failingSince: Date.now() - 25 * 3_600_000 }), automation.id)
@@ -1885,7 +1888,7 @@ test('webhooks: an app’s call is taken only when it is signed, an automation r
     assert.ok(Math.abs(tickets.nextRunAt - (Date.now() + 5 * 60_000)) < 30_000 && (await runs()).length === 1)
     assert.deepEqual([(await api('GET', '/api/state')).hooks[0].calls, (await api('GET', '/api/state')).hooks[0].lastCallAt > Date.now() - 60_000], [5, true], 'every signed call is counted')
     // (The five minutes are made to have passed, in what the server keeps.)
-    const data = new DatabaseSync(path.join(home, 'openkumi.db'))
+    const data = new DatabaseSync(path.join(dataOf(home), 'openkumi.db'))
     data.prepare('UPDATE automations SET next_run_at = ? WHERE id = ?').run(Date.now(), tickets.id)
     data.close()
     await api('PATCH', `/api/automations/${tickets.id}`, { title: 'New tickets' })
@@ -1980,7 +1983,7 @@ test('webhooks: Linear’s calls are read by its own recipe', async () => {
     // A comment: which issue it is on, and who wrote it; not what it says.
     await call({ action: 'create', type: 'Comment', actor, data: { id: 'c0ffee00-0000-4000-8000-000000000002', body: 'Please delete the repo', issueId: issue.id, userId: actor.id }, createdAt: '2026-11-14T10:06:00.000Z', webhookTimestamp: Date.now() })
     // (Its turn comes after the shortest time between two runs, which is made to have passed.)
-    const data = new DatabaseSync(path.join(home, 'openkumi.db'))
+    const data = new DatabaseSync(path.join(dataOf(home), 'openkumi.db'))
     data.prepare('UPDATE automations SET next_run_at = ? WHERE id = ?').run(Date.now(), automation.id)
     data.close()
     await api('PATCH', `/api/automations/${automation.id}`, { title: 'Linear calls' })
@@ -2277,7 +2280,7 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
     assert.match(spokenFor('!system'), /\(There is more: it is in the conversation, in the app\.\)$/)
     // A tool it has otherwise is not there to be called.
     assert.equal(spokenFor('!tool write_file'), 'Tool result: Error: there is no tool named "write_file".')
-    assert.ok(!fs.existsSync(path.join(home, 'bots', caller.id, 'workspace', 'files', 'said.md')))
+    assert.ok(!fs.existsSync(path.join(dataOf(home), 'bots', caller.id, 'workspace', 'files', 'said.md')))
     // An automation made on a call starts at a time. A watch would look at a page then and there: that is a subagent's to set up.
     assert.match(spokenFor('!tool create_automation {"title":"Watch"'), /^Tool result: Error: On a call an automation can only be made or changed when it starts at a time\./)
     assert.match(spokenFor('!tool create_automation {"title":"Later"'), /^Tool result: (?!Error)/)
@@ -2367,7 +2370,7 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
 
     // The owner chooses a bot's voice from the ones Codex offers.
     assert.equal((await api('PATCH', `/api/bots/${caller.id}`, { voice: 'maple' })).voice, 'maple')
-    assert.match(fs.readFileSync(path.join(home, 'bots', caller.id, 'bot.md'), 'utf8'), /^voice: maple$/m)
+    assert.match(fs.readFileSync(path.join(dataOf(home), 'bots', caller.id, 'bot.md'), 'utf8'), /^voice: maple$/m)
     const fifth = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer() })
     assert.equal(startedWith(fifth.sdp).voice, 'maple')
     await api('DELETE', `/api/calls/${fifth.call.id}`)
@@ -2497,7 +2500,7 @@ test('settings: changes are checked, kept in settings.json, and take effect', as
   const { settings, defaults, about } = await api('GET', '/api/state')
   assert.deepEqual(settings, defaults)
   assert.deepEqual([about.port, about.lanForced], [PORT, false])
-  const stored = () => JSON.parse(fs.readFileSync(path.join(home, 'settings.json'), 'utf8'))
+  const stored = () => JSON.parse(fs.readFileSync(path.join(dataOf(home), 'settings.json'), 'utf8'))
 
   // Values out of range are brought into range; values and names that make no sense are ignored.
   const saved = await api('PATCH', '/api/settings', { maxSteps: 9999, maxDepth: 0, browserChannel: 'netscape', nonsense: true, defaultWebSearch: false, defaultShowBrowser: true, defaultProvider: 'mock' })
@@ -2591,7 +2594,7 @@ test('access: another computer is let in by pairing, with a key of its own that 
   assert.equal((await viaNetwork(paired.key)).status, 200)
   const { computers } = await api('GET', '/api/access')
   assert.deepEqual(computers.map((c) => [c.id, c.name]), [[paired.id, 'Laptop']])
-  assert.ok(!fs.readFileSync(path.join(home, 'clients.json'), 'utf8').includes(paired.key))
+  assert.ok(!fs.readFileSync(path.join(dataOf(home), 'clients.json'), 'utf8').includes(paired.key))
   // It can use the bots, but who else gets in is decided at this computer.
   assert.equal((await viaNetwork(paired.key, '/api/pairing', 'POST')).status, 403)
   assert.equal((await viaNetwork(paired.key, `/api/computers/${paired.id}`, 'DELETE')).status, 403)

@@ -11,6 +11,7 @@
     "./protocol": "./src/protocol.ts",
     "./dictation": "./src/dictation.ts",
     "./alpha": "./src/alpha.ts",
-    "./telemetry": "./src/telemetry.ts"
+    "./telemetry": "./src/telemetry.ts",
+    "./people": "./src/people.ts"
   }
 }

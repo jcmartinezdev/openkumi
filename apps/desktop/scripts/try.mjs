@@ -23,6 +23,9 @@ import os from 'node:os'
 import path from 'node:path'
 import { _electron } from 'playwright-core'
 
+/** A server keeps its data in the folder of the person it runs for: the first one in its list of people. */
+const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+
 const args = process.argv.slice(2)
 const program = args[0] && !args[0].startsWith('--') ? path.resolve(args[0]) : ''
 if (!program || !fs.existsSync(program)) {
@@ -113,7 +116,7 @@ for (const name of ['ELECTRON_RUN_AS_NODE', 'OPENKUMI_DEV_URL', 'OPENKUMI_CLAUDE
 let app
 let win
 const api = async (method, url, body) => {
-  const token = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+  const token = JSON.parse(fs.readFileSync(path.join(dataOf(home), 'auth.json'), 'utf8')).accessToken
   const res = await fetch(`http://127.0.0.1:${port}${url}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) })
   const text = await res.text()
   assert.ok(res.ok, `${method} ${url} gave ${res.status}: ${text.slice(0, 300)}`)
@@ -152,6 +155,8 @@ const steps = [
   }],
   ['It starts its own server, in the version it came with', async () => {
     await win.locator('.welcome-start', { hasText: 'Run them on this computer' }).click()
+    // Nobody has bots on this computer yet, so it asks what the first person is called, and offers their account's name.
+    await win.getByRole('button', { name: 'Start OpenKumi here' }).click()
     await win.locator('.sidebar .item', { hasText: 'Kumi' }).first().waitFor({ timeout: 90_000 })
     const hello = await (await fetch(`http://127.0.0.1:${port}/api/hello`)).json()
     assert.equal(hello.version, version)

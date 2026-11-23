@@ -43,6 +43,8 @@ const part = (inRepository: string, installed: string) => (app.isPackaged ? path
 export const WEB = part(path.join('web', 'dist'), 'web')
 /** The server's entry (apps/server). It is TypeScript, which the app's own Node runs as it is. */
 export const SERVER = part(path.join('server', 'src', 'index.ts'), path.join('server', 'src', 'index.ts'))
+/** The server's own command line, beside it: what the `openkumi` command of a server installed alone runs. */
+export const CLI = path.join(path.dirname(SERVER), 'cli.ts')
 export const PRELOAD = path.join(__dirname, 'preload.cjs')
 /** The program that takes dictation on a Mac (packages/dictation/macos), built beside the app's own. Installed, it is among the resources, outside the archive. */
 export const DICTATION = app.isPackaged ? path.join(process.resourcesPath, 'dictation') : path.join(__dirname, 'dictation')

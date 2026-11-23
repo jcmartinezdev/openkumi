@@ -11,7 +11,8 @@ anything private.
 
 - **The desktop app's server:** `server.log` in the app's data folder (on a Mac,
   `~/Library/Application Support/OpenKumi`).
-- **A server installed alone:** `openkumi logs`, or `~/.openkumi/server.log`. A server started
+- **A server installed alone:** `openkumi logs`, or `server.log` in its data folder
+  (`~/.openkumi/people/<name>/`). A server started
   with `openkumi start` prints in its own terminal.
 - **Everything an engine says:** turn on **Settings → Advanced → Log what the engines print**, try
   again, and look in the log above.

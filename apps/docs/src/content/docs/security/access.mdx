@@ -19,7 +19,7 @@ are no cookies, so a web page open in a browser has no way in; only the app's ow
 
 | Who | Holds | What the server keeps |
 | --- | --- | --- |
-| The app on the computer that runs the bots | the server's **access code**, read from `~/.openkumi/auth.json` | the code itself, in that file. It is accepted only from this computer, and never through a proxy |
+| The app on the computer that runs the bots | the server's **access code**, read from `auth.json` in the server's data folder | the code itself, in that file. It is accepted only from this computer, and never through a proxy |
 | Every other computer and phone | a **key of its own** (24 random bytes), given when it was paired | only a SHA-256 hash of the key, in `clients.json` |
 | An engine, for one turn | the turn's **tools address**, with a random token in it | the token, in memory, until the turn ends |
 | An app that calls a webhook | the webhook's **signing secret** | the secret, in the database |
@@ -138,14 +138,14 @@ web page that has pointed a name of its own at this computer learns nothing.
 
 ## Where keys are kept
 
-| What | Where | Readable by |
+| What | Where, in `~/.openkumi/people/<name>/` | Readable by |
 | --- | --- | --- |
-| The access code, the server's id, API keys | `~/.openkumi/auth.json` | your account only |
-| Hashes of paired devices' keys | `~/.openkumi/clients.json` | your account only |
+| The access code, the server's id, API keys | `auth.json` | your account only |
+| Hashes of paired devices' keys | `clients.json` | your account only |
 | A bot's tokens for its apps | `bots/<id>/private/superpowers/<id>.json` | your account only |
 | A bot's cookies and sign-ins | `bots/<id>/private/browser-profile/` | as Chrome keeps them |
-| Webhook signing secrets | `~/.openkumi/openkumi.db` | as your system makes new files (see [Known limits](/security/limits/)) |
-| The keys of remote environments, on a computer | `desktop.json` in the app's data folder | your account only |
+| Webhook signing secrets | `openkumi.db` | as your system makes new files (see [Known limits](/security/limits/)) |
+| The keys of remote environments, on a computer | `desktop.json` in the app's own data folder, not here | your account only |
 | The key of the environment, on an iPhone | the iPhone's keychain | the app |
 
 There are no user accounts in OpenKumi itself: anyone who can use your account on a computer can

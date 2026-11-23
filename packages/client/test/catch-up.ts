@@ -9,7 +9,9 @@ import { follow, loadOlder, onState, openThread, receive, useTransport, type Sta
 
 const [home, port] = process.argv.slice(2)
 const base = `http://127.0.0.1:${port}`
-const token = JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken
+// The server keeps its data in the folder of the person it runs for: the first one here.
+const data = path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+const token = JSON.parse(fs.readFileSync(path.join(data, 'auth.json'), 'utf8')).accessToken
 const http = async (method: string, url: string, body?: unknown) => {
   const res = await fetch(base + url, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
   const json = await res.json()

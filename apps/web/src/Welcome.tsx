@@ -6,11 +6,12 @@ import type { Look } from '@openkumi/shared'
 import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import { BODY_COLORS, describeLook, surprise } from '@openkumi/client/mascot'
 import { note, screen } from '@openkumi/client/telemetry'
-import { desktop, reason } from './desktop'
+import { typedName } from '@openkumi/shared/people'
+import { desktop, reason, useDesktop } from './desktop'
 import { Icon } from './Icon'
 import { Mascot } from './Mascot'
 import { AddEnvironment } from './Settings'
-import { Section } from './settingsUi'
+import { Row, Section } from './settingsUi'
 
 interface Dress {
   look: Look
@@ -253,12 +254,19 @@ function useChange() {
 export function Welcome() {
   const still = useStill()
   const [pairing, setPairing] = useState(false)
+  /** Asked what they are called, before OpenKumi starts here for the first time. */
+  const [naming, setNaming] = useState(false)
+  /** What the first person here would be called, while nobody has bots on this computer yet. */
+  const { nobodyYet } = useDesktop().local
   const { busy, error, change } = useChange()
   const crew = useRef<HTMLDivElement>(null)
-  useWatching(crew, still || pairing)
+  useWatching(crew, still || pairing || naming)
   useEffect(() => screen('welcome'), [])
   // Once OpenKumi is turned on here, or another computer is paired, the window moves on by itself.
   if (pairing) return <Pairing back={() => setPairing(false)} />
+  if (naming) return <Naming suggested={nobodyYet ?? ''} back={() => setNaming(false)} />
+  /** Bots belong to a person: the first one here says what they are called before anything starts. */
+  const startHere = () => (nobodyYet === undefined ? void change(() => desktop.setLocal(true)) : setNaming(true))
 
   return (
     <div className="gate welcome">
@@ -297,7 +305,7 @@ export function Welcome() {
                 type="button"
                 className="welcome-start"
                 disabled={busy}
-                onClick={() => (note({ event: 'welcome answered', choice: start.key }), start.key === 'pair' ? setPairing(true) : void change(() => desktop.setLocal(true)))}
+                onClick={() => (note({ event: 'welcome answered', choice: start.key }), start.key === 'pair' ? setPairing(true) : startHere())}
               >
                 <span className="welcome-start-icon"><Icon name={start.icon} size={22} /></span>
                 <span className="grow">
@@ -336,6 +344,45 @@ function Pairing({ back }: { back: () => void }) {
           {error && <div className="notice error">{error}</div>}
           <Section title="Pair with it">
             <AddEnvironment add={(input) => void change(() => desktop.add(input))} busy={busy} />
+          </Section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Who the bots on this computer belong to. Bots are kept by person, so the first one to run them
+ * here says what they are called; someone else can be given bots of their own beside theirs later.
+ */
+function Naming({ suggested, back }: { suggested: string; back: () => void }) {
+  const { busy, error, change } = useChange()
+  const [name, setName] = useState(suggested)
+  const ready = !!name.replace(/-+$/, '')
+  const start = () => ready && !busy && void change(() => desktop.setLocal(true, name))
+  useEffect(() => {
+    const escape = (e: KeyboardEvent) => e.key === 'Escape' && back()
+    addEventListener('keydown', escape)
+    return () => removeEventListener('keydown', escape)
+  }, [])
+  return (
+    <div className="gate welcome">
+      <div className="gate-bar" />
+      <div className="set-scroll">
+        <div className="set-column welcome-pairing">
+          <button type="button" className="ghost welcome-back" onClick={back}><Icon name="back" size={14} /> Back</button>
+          <div className="gate-head">
+            <h1>What should we call you?</h1>
+            <p>Your bots, and everything they keep, go under this name on this computer. Someone else here can have bots of their own beside yours later.</p>
+          </div>
+          {error && <div className="notice error">{error}</div>}
+          <Section title="Your name here">
+            <Row
+              title="Name"
+              description="Small letters, digits and dashes. It can be changed later, in Settings under Environments."
+              control={<input className="set-input wide" spellCheck={false} autoCapitalize="off" autoFocus aria-label="Your name here" value={name} placeholder="such as ana" onChange={(e) => setName(typedName(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && start()} />}
+            />
+            <Row title="" control={<button className="primary" disabled={busy || !ready} onClick={start}>{busy ? 'Starting…' : 'Start OpenKumi here'}</button>} />
           </Section>
         </div>
       </div>

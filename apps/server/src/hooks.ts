@@ -16,12 +16,12 @@ import http from 'node:http'
 import type { Hook, Trigger } from '@openkumi/shared'
 import * as automations from './automations.ts'
 import { getBot } from './bots.ts'
-import { PORT } from './config.ts'
+import { FIRST, PORT } from './config.ts'
 import * as db from './db.ts'
 import { type HookRecipe, enabledSuperpowers, hookRecipe, superpowerName } from './superpowers.ts'
 
 /** The port the calls come in by: on this computer only, for a tunnel from the internet to point at. */
-export const HOOKS_PORT = Number(process.env.OPENKUMI_HOOKS_PORT ?? PORT + 1)
+export const HOOKS_PORT = Number((FIRST ? process.env.OPENKUMI_HOOKS_PORT : undefined) ?? PORT + 1)
 const MAX_BODY = 1_000_000
 /** How many calls one run is told about. The rest wait for the next. */
 const MAX_EVENTS = 50

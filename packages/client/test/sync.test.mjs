@@ -9,6 +9,9 @@ import path from 'node:path'
 import { after, before, test } from 'node:test'
 import { build } from 'esbuild'
 
+/** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
+const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
+
 // Clear of 5173, where the interface is served while it is being worked on.
 const PORT = 5600 + Math.floor(Math.random() * 90)
 const SERVER = path.resolve(import.meta.dirname, '../../../apps/server')
@@ -67,7 +70,7 @@ test('a copy kept on the device is shown before the server answers and while it 
   await run('copies', 'second', home, String(PORT), shelf)
   // The server's data is started afresh: a new database, the same server.
   await stop()
-  for (const file of fs.readdirSync(home)) if (file.startsWith('openkumi.db')) fs.rmSync(path.join(home, file))
+  for (const file of fs.readdirSync(dataOf(home))) if (file.startsWith('openkumi.db')) fs.rmSync(path.join(dataOf(home), file))
   await start()
   await run('copies', 'third', home, String(PORT), shelf)
 })
