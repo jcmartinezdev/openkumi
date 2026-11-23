@@ -119,6 +119,11 @@ you by your account's name there.)
 
 </Steps>
 
+Type the address as it is shown, port and all: an address typed without one is taken to mean
+`4317`, which is yours. Their app names the environment after them and the computer, such as
+"Ana on mac-mini", and can be given another name. The app on the computer that runs the bots
+shows yours: they use theirs from their own computer or phone.
+
 **Pair a device** beside their name makes another code, for another of their computers or phones.
 The **⋯** menu changes a name, yours included, or removes someone: their server stops, and what
 it held stays in its folder.
@@ -130,7 +135,11 @@ it held stays in its folder.
   computer that runs the bots, or in a terminal there. An app that is connected from another
   computer or a phone uses its own person's server, and has no way to change who else has one.
 - **On a port of their own.** Yours is `4317`, the next person's `4327`, then `4337`. The address
-  shown for them ends in it.
+  shown for them ends in it, and their [webhooks](/webhooks/#bots-for-someone-else-on-the-same-computer)
+  come in on the port after it (`4328`).
+- **Each with their own say.** Settings, which providers their bots may use, paired devices, and
+  whether [usage and error reports](/telemetry/) are sent are each person's own. So are the
+  accounts their bots sign in to, in their browsers and through superpowers.
 - **On the same sign-ins.** Everyone's bots run on what this computer is signed in to: the same
   Claude Code, Codex and Grok plans, and the same limits.
 - **Running while yours is.** The app runs everyone's servers while it runs yours, and stops them

@@ -18,8 +18,23 @@ npm run docs        # the documentation (apps/docs), at http://localhost:4322
 ```
 
 The tests are run with Node.js 26 (`node --test test/` needs it). They use a scripted offline model, a real headless Chrome for the bots, and the real app
-with its window kept off the screen. Everything they touch is temporary. To test a packaged app
-instead of the source: `OPENKUMI_DESKTOP_APP="release/mac-arm64/OpenKumi.app/Contents/MacOS/OpenKumi" npm test -w @openkumi/desktop`.
+with its window kept off the screen. Everything they touch is temporary: a test sets
+`OPENKUMI_HOME` to a folder of its own before it loads anything from `apps/server/src`, and
+`config.ts` refuses to load under `node --test` without it, since it would otherwise use the data
+of whoever runs the tests. The person's data folder inside it is `dataOf(home)` in the tests that
+need it. To test a packaged app instead of the source:
+`OPENKUMI_DESKTOP_APP="release/mac-arm64/OpenKumi.app/Contents/MacOS/OpenKumi" npm test -w @openkumi/desktop`.
+
+Bots belong to a person, and each person on a computer has a server of their own
+(`apps/server/src/people.ts`). From the source, `npm run server` runs everyone's, and the people
+are looked after with the same command as on a server installed alone:
+
+```sh
+npm run openkumi -- people add ana      # a second person, on port 4327
+npm run openkumi -- people              # who has bots here, and whether each one's server runs
+npm run openkumi -- pair --for ana      # a code for their app
+npm run openkumi -- start --for ana     # only their server
+```
 
 ## Releasing
 
@@ -164,6 +179,11 @@ apps/
       tool-endpoint.ts serves a bot's tools to an engine over MCP for the length of one turn
       calls.ts         calls: sets one up through Codex, passes what the voice hands over to the bot,
                        and has the voice say what the bot answers
+      config.ts        where the data is, whose server this one is (`--for <name>`), and the data's FORMAT
+      people.ts        the people with bots on this computer: adding, renaming, removing them
+      start.ts         `openkumi start`: everyone's servers in one terminal, each started again after an update
+      service.ts       the background service of a server installed alone, one per person
+      update.ts        a server installed alone updating itself, safely for several on one program
       settings.ts      app-wide settings, kept in settings.json
       http.ts          the API and the stream of events. No pages
       history.ts       what a model is shown of a long conversation: trimming, and the summary of its older part
@@ -176,7 +196,9 @@ apps/
   desktop/           the desktop app (Electron)
     src/
       main.ts          the window, the menu, and what the window may ask for
-      local.ts         the local environment: the server, in a process of its own
+      local.ts         the local environment: the server, in a process of its own, and the
+                       servers of the other people on this computer
+      people.ts        Settings → Environments → People on this computer, through `openkumi people`
       environments.ts  the list of environments and their access codes
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app

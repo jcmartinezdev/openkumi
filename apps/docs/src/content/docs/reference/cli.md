@@ -1,6 +1,6 @@
 ---
 title: The openkumi command
-description: "Every command of a server installed alone: starting it, the background service, status, pairing, network access, updates, logs and removing it."
+description: "Every command of a server installed alone: starting it, the background service, status, pairing, network access, updates, logs, removing it, and the people with bots on the computer."
 ---
 
 A server installed with `install.sh` ([Installing and updating](/install/#the-server-alone)) comes
@@ -17,7 +17,7 @@ app. From a clone of the repository, the same commands run as `npm run openkumi 
 | `openkumi pair` | a pairing code and this computer's addresses, for the app on another computer or phone (**Settings → Environments → Add environment**). The code works once, for ten minutes. |
 | `openkumi lan on` / `off` | whether other computers on your network (and Tailscale) can reach it. Each still needs a code to get in. |
 | `openkumi telemetry on` / `off` | whether it tells OpenKumi's makers how it is used and what goes wrong, never what you or your bots write. Without `on` or `off`, how that stands. See [Usage and error reports](/telemetry/). |
-| `openkumi update` | fetches the newest version and starts it once no bot is working |
+| `openkumi update` | fetches the newest version and starts it once no bot is working. Where several people have bots on this computer, their servers start it too, each once none of its own bots is working. |
 | `openkumi update --now` | the same, without waiting for the bots: those at work are stopped |
 | `openkumi update --check` | only says whether there is a newer version |
 | `openkumi logs` | the last of what the background service printed (`server.log` in your data folder, `~/.openkumi/people/<name>/`) |
@@ -58,7 +58,8 @@ the Node that came with the release. When an update is in place, the server stop
 Each person's server is that same program under a service of its own
 (`ai.openkumi.server.<name>` on a Mac, `openkumi-<name>.service` on Linux). Each running server
 leaves a note of its version in `~/.openkumi/runtime/running/`, so an update one of them fetched
-does not remove the version another is still running.
+does not remove the version another is still running, and each looks every 15 seconds for a
+version another one put in place, to start it too.
 
 The service runs as you, not as the system, because the bots use your sign-ins to Claude Code,
 Codex and Grok. On Linux it asks to keep running after you log out; where the

@@ -27,7 +27,8 @@ are no cookies, so a web page open in a browser has no way in; only the app's ow
 A bot holds none of these. Neither does anything it reads.
 
 **Only the computer that runs the bots** can pair a new device, remove one, or open a folder in the
-file manager. A paired device cannot let another in.
+file manager, and only there are people added, renamed or removed. A paired device cannot let
+another in.
 
 ## The network
 
@@ -87,6 +88,22 @@ occasion with it (HMAC-SHA256), so neither can be fooled by something else at th
 **Settings → Environments → Paired computers**, on the computer that runs the bots, lists every
 device, with when it was paired and last seen. **Remove** deletes its key's hash and ends its open
 connections at once.
+
+## Several people on one computer
+
+Each person with bots on a computer has a server of their own
+([Bots for someone else in the house](/environments/#bots-for-someone-else-in-the-house)), and
+each server has all of the above to itself: its own port, access code, id, pairing codes and
+paired devices. A key one server gave opens nothing on another, and a device checks the server's
+id before it sends its key (below), so a device pointed at the wrong person's port sends it
+nothing. People are looked after only at that computer, through the server's own command line,
+never over the network, so no device paired with one person's server can add, see or change
+anyone else.
+
+What keeps the people apart is the servers, not the computer: everyone's runs under the same
+account there, and that account can read every person's access code. The app on that computer
+uses this to make pairing codes for each person. See
+[Known limits](/security/limits/#your-computer-account-is-the-boundary).
 
 ## Before a key is sent anywhere
 

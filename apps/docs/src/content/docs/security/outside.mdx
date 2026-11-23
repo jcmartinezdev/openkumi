@@ -54,7 +54,8 @@ the app's standard sign-in (OAuth). The steps are drawn on [Superpowers](/superp
 
 - The door is a port of its own (4318), open on this computer only, that takes `POST /hooks/…` and
   nothing else, and only once a webhook is set up. The internet reaches it only through a tunnel
-  you point at it.
+  you point at it. Each person with bots on the computer has a door of their own, on the port
+  after their server's, which reaches only their bots.
 - Each webhook has an address made of random letters nobody can guess, and a secret the app signs
   each call with (HMAC-SHA256). An unsigned or wrongly signed call gets the same answer as an
   address nobody set up. The same call is taken once.

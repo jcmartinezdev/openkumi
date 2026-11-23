@@ -74,6 +74,11 @@ that stays logged in.
   [Automations](/automations/).
 - **From anywhere.** Pair another computer or an iPhone with a one-time code, and reach your bots
   at home directly and away over Tailscale. See [Other computers and your phone](/environments/).
+- **Bots for everyone in the house.** One computer can run bots for several people: each gets a
+  server of their own, with bots, conversations, settings and paired devices apart from everyone
+  else's, on the same Claude, ChatGPT or Grok plan. Add someone from **Settings → Environments**,
+  or with `openkumi people add`. See
+  [Bots for someone else in the house](/environments/#bots-for-someone-else-in-the-house).
 - **Bots that work together.** A bot can write into another bot's conversation, to pass it work or
   to ask it for something and get the answer back. You read every such message in both
   conversations, and can switch it off. See [Messages between bots](/how-it-works/messages-between-bots/).

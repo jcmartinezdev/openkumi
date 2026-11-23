@@ -31,8 +31,9 @@ up, once, and a door of their own.
 <Steps>
 
 1. **Open the door to the internet.** Webhooks are taken on a port of their own: the server's port
-   plus one, `4318` unless `OPENKUMI_HOOKS_PORT` says otherwise. It listens on this computer only,
-   and takes `POST /hooks/…` and nothing else. Point a tunnel at it, for example:
+   plus one, `4318` unless `OPENKUMI_HOOKS_PORT` says otherwise (Linear's page under
+   **Settings → Superpowers** says which). It listens on this computer only, and takes
+   `POST /hooks/…` and nothing else. Point a tunnel at it, for example:
 
    ```sh
    tailscale funnel 4318
@@ -75,6 +76,26 @@ up, once, and a door of their own.
   together in the next one, up to 50 at a time. While an automation is paused, its calls are kept,
   and it is given them when it is turned on again.
 
+## Bots for someone else on the same computer
+
+Each person with bots on a computer ([Bots for someone else in the
+house](/environments/#bots-for-someone-else-in-the-house)) has a server of their own, and so a
+door of their own: their server's port plus one, `4328` for the second person, `4338` for the
+third. Their public address, their webhooks and their secrets are their own, set up from their
+app, and a call that comes in at one person's door never reaches another person's bots.
+
+So each needs a tunnel of their own, pointed at their own door. Tailscale Funnel opens only the
+ports 443, 8443 and 10000 to the internet, and `tailscale funnel 4318` above gave 443 to the
+first person's. Give the second person another of them:
+
+```sh
+tailscale funnel --https=8443 4328
+```
+
+Their public address is then the computer's Tailscale name with that port,
+`https://my-mac.example.ts.net:8443`. Type it in under **Public address**: the address OpenKumi
+suggests there has no port.
+
 ## Taking it down
 
 **Remove webhook** on Linear's page stops its address working at once and pauses the automations
@@ -82,7 +103,8 @@ that start on its calls. Deactivating the superpower for that bot does the same.
 in Linear too.
 
 <Aside type="caution">
-  Point this tunnel at the webhook port (4318). The server's own port (4317) is a different door:
+  Point this tunnel at the webhook port (4318, or the port after another person's server). The
+  server's own port (4317) is a different door:
   it takes your devices, not webhooks. Putting it on the internet too is possible, behind an
   `https` address of its own, but Tailscale is the safer way to reach your bots from anywhere. See
   [Servers and addresses](/connections/#a-public-address).

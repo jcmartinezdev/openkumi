@@ -82,7 +82,9 @@ curl -fsSL https://openkumi.ai/install.sh | sh
 3. It puts an `openkumi` command in `~/.local/bin`.
 
 4. It keeps the server running in the background, also after a restart: a launchd agent on a Mac
-   (`ai.openkumi.server.<name>`), a systemd unit of your own user on Linux.
+   (`ai.openkumi.server.<name>`), a systemd unit of your own user on Linux
+   (`openkumi-<name>.service`). `<name>` is yours on this computer: a server installed alone
+   cannot ask, so it takes your account's name (`openkumi people rename` changes it).
 
 </Steps>
 
@@ -102,6 +104,9 @@ openkumi lan on     # let your other computers and your phone reach it
 openkumi pair       # a code to enter in the app: Settings → Environments → Add environment
 ```
 
+Someone else in the house can have bots of their own on the same computer, apart from yours:
+`openkumi people add ana` (see
+[Bots for someone else in the house](/environments/#bots-for-someone-else-in-the-house)).
 [The openkumi command](/reference/cli/) lists the rest, and
 [Other computers and your phone](/environments/) explains pairing.
 
@@ -128,14 +133,16 @@ anything.
 - **The desktop app** looks for a newer version 8 seconds after it starts and every 4 hours,
   downloads it in the background, and shows **Restart to update** in the sidebar and under
   **Settings → About** when it is ready. It never restarts by itself: quitting stops the bots that
-  run on this computer, so when any are working it asks first. Left alone, the new version takes
-  over the next time you quit. The server inside the app is part of it and comes with it. (On
-  Linux only the AppImage updates itself.)
+  run on this computer, everyone's, so when any are working it asks first. Left alone, the new
+  version takes over the next time you quit. The server inside the app is part of it and comes
+  with it. (On Linux only the AppImage updates itself.)
 - **A server installed alone** looks 30 seconds after it starts and every 6 hours. It downloads the
   new version, checks it against the checksum the release gives for it, tries it once, and starts
-  it as soon as no bot is working. **Settings → About**, in an app connected to it, shows where it
-  stands, has **Update** to do it now, and a switch to stop it updating by itself. With that off it
-  only updates when you ask, there or with `openkumi update`.
+  it as soon as no bot is working. Where several people have bots on that computer, it is one
+  program for all of them: their servers start the new version too, each once its own bots are
+  done. **Settings → About**, in an app connected to it, shows where it stands, has **Update** to
+  do it now, and a switch to stop it updating by itself. With that off it only updates when you
+  ask, there or with `openkumi update`.
 
 <Aside title="Versions do not have to match">
   What has to match between an app and a server is not the version but one number that says how
@@ -146,10 +153,16 @@ anything.
 
 Your data in `~/.openkumi` is kept across versions. A version that finds data written by a newer
 one changes nothing and does not start, so going back to an older version never damages it.
+Versions from before people had folders of their own kept everything in `~/.openkumi` itself: the
+first start of a newer one moves it into yours, `~/.openkumi/people/<name>/`, and an older one
+started after that says it is too old instead of starting with no bots.
 
 ## Removing it
 
 - **The desktop app:** delete it as you would any app. Your bots and their data stay in
   `~/.openkumi` until you delete that folder too.
 - **A server installed alone:** `openkumi uninstall` removes the program, the command and the
-  background service. Your bots and their data stay in `~/.openkumi`.
+  background services, everyone's. Your bots and their data stay in `~/.openkumi`.
+- **Someone else's bots only:** `openkumi people remove <name>`, or **⋯** beside their name under
+  **Settings → Environments → People on this computer**. Their server stops; what it held stays in
+  `~/.openkumi/people/<name>/` until you delete that folder.
