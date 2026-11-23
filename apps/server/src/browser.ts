@@ -14,13 +14,12 @@ import { incoming, resolve } from './workspace.ts'
 
 const VIEWPORT = { width: 1280, height: 800 }
 
-// A bot's browser must not be able to open OpenKumi itself: coming from this computer it would be
-// trusted like the owner, and could change the bot's rules and superpowers. Nor the server of anyone
-// else on this computer, whose bots are theirs. These rules make Chrome send any request for one
-// of those addresses somewhere that refuses it. They are set when the browser starts, so a person
-// added after that is kept out from its next start.
-const noServerAccess = () =>
-  `--host-rules=${serverPorts().flatMap((port) => ['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${port} 0.0.0.0:1`)).join(', ')}`
+// A bot's browser must not be able to open OpenKumi itself, nor the server of anyone else on this
+// computer, whose bots are theirs. A bot holds no key to any of them, so it could not use them; this
+// keeps it from even trying. These rules make Chrome send any request for one of those addresses
+// somewhere that refuses it. Chrome reads them only when it starts (see BotBrowser.start).
+const noServerAccess = (ports: number[]) =>
+  `--host-rules=${ports.flatMap((port) => ['localhost', '127.0.0.1', '[::1]', '[::ffff:7f00:1]'].map((host) => `MAP ${host}:${port} 0.0.0.0:1`)).join(', ')}`
 
 /**
  * Where a service sends the browser back to after a superpower's sign-in. It is OpenKumi's own
@@ -109,6 +108,8 @@ class BotBrowser {
   private signIns = new Map<string, (back: URL) => Promise<void>>()
   private starting: Promise<void> | null = null
   private stateTimer: NodeJS.Timeout | null = null
+  /** The servers on this computer it was started to keep away from. */
+  private keptFrom: number[] = []
 
   constructor(botId: string) {
     this.botId = botId
@@ -146,16 +147,28 @@ class BotBrowser {
   }
 
   async start(headless: boolean) {
+    // Someone added to this computer since Chrome started is not in its rules: it starts again,
+    // keeping them out too.
+    if (this.context && !this.starting && serverPorts().some((port) => !this.keptFrom.includes(port))) {
+      const old = this.context
+      this.forget()
+      this.starting = old
+        .close()
+        .catch(() => {})
+        .then(() => this.launch(headless))
+        .finally(() => (this.starting = null))
+    }
     if (this.context) return
     this.starting ??= this.launch(headless).finally(() => (this.starting = null))
     await this.starting
   }
 
   private async launch(headless: boolean) {
+    const ports = serverPorts()
     const options = {
       headless,
       viewport: VIEWPORT,
-      args: ['--disable-blink-features=AutomationControlled', '--no-first-run', '--no-default-browser-check', noServerAccess()],
+      args: ['--disable-blink-features=AutomationControlled', '--no-first-run', '--no-default-browser-check', noServerAccess(ports)],
       ignoreDefaultArgs: ['--enable-automation'],
     }
     const profile = path.join(privateDir(this.botId), 'browser-profile')
@@ -177,6 +190,7 @@ class BotBrowser {
     }
     this.context = context
     this.headless = headless
+    this.keptFrom = ports
     // Seen however the browser gets there: services usually send it back with a redirect.
     context.on('request', (request) => request.url().startsWith(`${SIGN_IN_RETURN}?`) && void this.signInReturned(request))
     context.on('page', (page) => void this.adopt(page))

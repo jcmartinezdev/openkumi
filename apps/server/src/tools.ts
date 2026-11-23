@@ -52,9 +52,8 @@ async function page(ctx: ToolContext, { leaving = false, reading = false } = {})
 const ASK_TIMEOUT = 25 * 60_000
 
 /**
- * OpenKumi's own address, or that of anyone else's server on this computer. Requests from this
- * computer are trusted like the owner, so a bot must never make one; and another person's server
- * holds their bots, which are none of this one's business.
+ * OpenKumi's own address, or that of anyone else's server on this computer, whose bots are theirs.
+ * A bot holds no key to any of them, so it could not use them; it is kept from even trying.
  */
 function isOwnServer(url: URL) {
   const host = url.hostname.replace(/\.$/, '').toLowerCase()

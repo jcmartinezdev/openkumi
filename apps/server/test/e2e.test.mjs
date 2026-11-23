@@ -1008,6 +1008,9 @@ test('a computer shared with others: a bot is told it works for the user alone, 
   const theirs = http.createServer((_, res) => res.end('{"bots":["theirs"]}'))
   await new Promise((resolve) => theirs.listen(0, '127.0.0.1', resolve))
   const port = theirs.address().port
+  const address = `http://127.0.0.1:${port}/api/state`
+  // A browser open before they are added reaches them, as it reaches anything else here.
+  assert.doesNotMatch(await tool('browser_navigate', { url: address }), /^Error/)
   fs.writeFileSync(list, JSON.stringify([...JSON.parse(before), { name: 'ana', port }]))
   try {
     const prompt = await told()
@@ -1018,12 +1021,10 @@ test('a computer shared with others: a bot is told it works for the user alone, 
     assert.ok(prompt.indexOf('\n# Other people on this computer\n') < prompt.indexOf('\n# Working in OpenKumi\n'))
     assert.doesNotMatch(prompt, /\bana\b/i, 'nor are the others named')
 
-    const address = `http://127.0.0.1:${port}/api/state`
     assert.equal(await (await fetch(address)).text(), '{"bots":["theirs"]}')
     assert.match(await tool('web_fetch', { url: address }), /^Error: That address is OpenKumi itself/)
     assert.match(await tool('web_fetch', { url: `http://localhost:${port}/` }), /^Error: That address is OpenKumi itself/)
-    // A browser is kept from them from its start, which is after they were added.
-    await api('POST', `/api/bots/${bot.id}/browser/stop`)
+    // That browser starts again at its next use, with them kept out.
     assert.match(await tool('browser_navigate', { url: address }), /^Error: .*ERR_CONNECTION_REFUSED/)
     await api('POST', `/api/bots/${bot.id}/browser/stop`)
   } finally {

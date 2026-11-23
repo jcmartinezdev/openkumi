@@ -265,8 +265,9 @@ function everyoneNow(): Person[] {
 export const sharedComputer = () => everyoneNow().length > 1
 /**
  * The ports every server here listens on, this one's among them: each is OpenKumi, which a bot is
- * never to reach. The first person's may have been moved with OPENKUMI_PORT, which every server
- * started together is given.
+ * never to reach. The first person's may have been moved with OPENKUMI_PORT, which the desktop app
+ * and "openkumi start" give every server they start; a background service has it only for the
+ * first person's own.
  */
 export function serverPorts(): number[] {
   const moved = Number(process.env.OPENKUMI_PORT)
