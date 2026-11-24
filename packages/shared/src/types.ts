@@ -532,6 +532,8 @@ export interface About {
    * person there has a server of their own. Missing from servers from before people had names.
    */
   person?: string
+  /** The name of the computer it runs on ("mac-mini"), without the network's part. Missing from older servers. */
+  computer?: string
   /**
    * Whether this server would send anything to OpenKumi's makers if its owner agreed, and why not
    * when it would not (it runs from its source, say). Only a server that can is asked about.

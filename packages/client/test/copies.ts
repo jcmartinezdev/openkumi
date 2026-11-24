@@ -77,7 +77,7 @@ if (mode === 'first') {
   const { code } = await http('POST', '/api/pairing')
   const { key, serverId, called } = await pair(base, code, 'Check', random)
   // With its key, it is told what to call the server: the computer it is on (and whose it is, where several people have one there).
-  assert.equal(called, os.hostname().replace(/\.local$/, '').slice(0, 60), 'kept to the length of a name')
+  assert.equal(called, (os.hostname().split('.')[0] || 'OpenKumi').slice(0, 60), 'kept to the length of a name')
   const link = { id: 'remote', name: 'Mini', addresses: [base], token: key, local: false, serverId }
   fs.writeFileSync(linkFile, JSON.stringify(link))
   follow(link)

@@ -658,8 +658,27 @@ test('people: someone else gets bots of their own on this computer, picked at th
   await pick(win, elsewhere, '.set-nav')
   await win.evaluate(() => (location.hash = '/'))
   await showsBot(win, 'Kumi')
-  await until(async () => (await showing()) === `Ana\n${elsewhere}`)
+  // Whose they are is said once: under her name, the computer they are on, as it calls itself.
+  const computer = os.hostname().split('.')[0]
+  // Kept to the 60 letters of a name, which cuts a long host name short (as GitHub's computers have).
+  assert.equal(elsewhere, `Ana on ${computer}`.slice(0, 60))
+  await until(async () => (await showing()) === `Ana\n${computer}`)
   assert.equal(await win.locator('.sidebar .item', { hasText: 'Mine Only' }).count(), 0)
+  // Her profile, seen from a device of hers: no renaming or removing her, and her network switch only shown, as a device cannot let others in.
+  await profile('Ana')
+  assert.match(await win.locator('#person').innerText(), new RegExp(`Bots on ${computer}, which this app is paired with`))
+  assert.equal(await win.locator('#lan .switch').count(), 0)
+  assert.match(await win.locator('#lan').innerText(), /On\s*$/)
+  assert.equal(await win.getByRole('button', { name: 'Rename' }).count() + (await win.locator('#remove-person').count()) + (await win.getByRole('button', { name: 'Pair a device' }).count()), 0)
+  // Another computer's mark is drawn from whose bots it holds, as hers are everywhere else.
+  await win.locator('.set-nav .switcher-current').click()
+  const marks = () => win.locator('.set-nav .switcher-item .avatar').evaluateAll((all) => all.map((mark) => getComputedStyle(mark).backgroundColor))
+  await until(async () => {
+    const [, here, there] = await marks()
+    return here && here === there
+  }, 10_000)
+  await win.locator('.set-nav .switcher-current').click()
+  await win.evaluate(() => (location.hash = '/'))
   // People are looked after at the computer that runs the bots: everyone here is offered whichever shows.
   assert.deepEqual(await switcher(win), ['Juan Cruz', 'Ana', 'Add a person', `*${elsewhere}`, 'Connect to another computer'])
   await pick(win, 'Juan Cruz')

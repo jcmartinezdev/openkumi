@@ -17,6 +17,8 @@ export interface Environment {
   enabled: boolean
   /** Its server's own id, once known: another server answering at one of the addresses is not it. */
   serverId?: string
+  /** Whose bots it holds, by the name they have on that computer, once it has said. */
+  person?: string
 }
 
 /** An environment as an earlier version kept it, with a single address. */

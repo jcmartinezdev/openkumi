@@ -9,7 +9,7 @@ import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { openSettings, useStore } from './store'
 
-/** A person's mark: the first letter of their name, on a colour of their own. */
+/** A person's mark: the first letter of their name, on a colour of their own, the same wherever their name is shown. */
 export function Avatar({ name, size = 24 }: { name: string; size?: number }) {
   let hue = 0
   for (const char of name) hue = (hue * 31 + char.charCodeAt(0)) % 360
@@ -23,18 +23,40 @@ export function Avatar({ name, size = 24 }: { name: string; size?: number }) {
 /** Whose bots the window shows, as they are called, and the computer they are on. */
 export function useShowing(): { name: string; where: string } {
   const app = useDesktop()
-  // Said by the server itself; until it has, a computer elsewhere goes by the name it has here.
+  // Said by the server itself; until it has, a computer elsewhere goes by what it said before, or the name it has here.
   const person = useStore((s) => s.about.person)
+  const computer = useStore((s) => s.about.computer)
   if (app.current === 'local') return { name: shownName(app.local.person ?? person ?? '') || 'This computer', where: 'This computer' }
   const environment = app.environments.find((e) => e.id === app.current)
-  const where = environment?.name ?? 'Another computer'
-  return { name: person ? shownName(person) : where, where }
+  const whose = person ?? environment?.person
+  const label = environment?.name ?? 'Another computer'
+  return { name: whose ? shownName(whose) : label, where: whose ? placeOf(label, whose, computer) : label }
 }
 
-function Item({ name, current, onClick }: { name: string; current: boolean; onClick: () => void }) {
+/**
+ * Where a computer elsewhere is, said once whose bots it holds is said beside it. The name pairing
+ * gave it, "Ana on mac-mini", names her twice: then it is the computer, as that computer calls
+ * itself. A name it was given here instead is kept as it is.
+ */
+function placeOf(label: string, whose: string, computer?: string): string {
+  // The name pairing gave ends in the computer, whoever it names first: it is kept when she is
+  // renamed, so "Ana on mac-mini" can be Bea's. Paired before the computer left the network's
+  // part out of its name, it is "mac-mini.fritz.box". A long one is cut to the 60 letters a
+  // name is kept to, in the middle of the computer's name.
+  const on = label.lastIndexOf(' on ')
+  const tail = (on < 0 ? label : label.slice(on + ' on '.length)).split('.')[0].toLowerCase()
+  const own = computer?.toLowerCase()
+  if (computer && own && tail && (tail === own || (label.length === 60 && own.startsWith(tail)))) return computer
+  // An older server does not say what its computer is called: only their own name is left out.
+  const prefix = `${shownName(whose)} on `
+  return label.startsWith(prefix) ? label.slice(prefix.length) : label
+}
+
+/** One choice in the list: `mark` is whose name the mark is drawn from, when that is not what is shown. */
+function Item({ name, mark, current, onClick }: { name: string; mark?: string; current: boolean; onClick: () => void }) {
   return (
     <button role="menuitemradio" aria-checked={current} className="switcher-item" onClick={onClick}>
-      <Avatar name={name} />
+      <Avatar name={mark ?? name} />
       <span className="grow">{name}</span>
       {current && <Icon name="check" size={14} />}
     </button>
@@ -93,7 +115,7 @@ export function Switcher({ picked }: { picked?: () => void }) {
           )}
           {local.enabled && <div className="switcher-sep" />}
           {elsewhere.length > 0 && <h4>Other computers</h4>}
-          {elsewhere.map((e) => <Item key={e.id} name={e.name} current={app.current === e.id} onClick={() => pick(e.id)} />)}
+          {elsewhere.map((e) => <Item key={e.id} name={e.name} mark={e.person && shownName(e.person)} current={app.current === e.id} onClick={() => pick(e.id)} />)}
           <button role="menuitem" className="switcher-item add" onClick={go(() => openSettings('environments', 'add'))}>
             <span className="switcher-plus"><Icon name="plus" size={14} /></span>
             <span className="grow">Connect to another computer</span>

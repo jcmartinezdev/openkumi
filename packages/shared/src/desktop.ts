@@ -10,6 +10,8 @@ export interface RemoteEnvironment {
   /** Where it can be reached. `found` ones were reported by the server; the others were put in by hand. */
   addresses: { url: string; found?: boolean }[]
   enabled: boolean
+  /** Whose bots it holds, by the name they have on that computer, once it has said. */
+  person?: string
 }
 
 /** OpenKumi on this computer, run by the app in a process of its own while it is turned on. */
@@ -166,8 +168,8 @@ export interface DesktopBridge {
   addAddress(id: string, address: string): Promise<{ checked: boolean }>
   /** Forgets an address that was put in by hand. */
   removeAddress(id: string, url: string): Promise<void>
-  /** Keeps what the window learned about the environment it shows: its server's id and the addresses the server reports. */
-  learn(id: string, learned: { serverId?: string; addresses?: string[] }): Promise<void>
+  /** Keeps what the window learned about the environment it shows: its server's id, the addresses the server reports, and whose bots it holds. */
+  learn(id: string, learned: { serverId?: string; addresses?: string[]; person?: string }): Promise<void>
   /**
    * Asks a remote environment that runs an older OpenKumi to update itself. Its key only goes to
    * an address that has shown it is that environment. Resolves with what it said it will do.

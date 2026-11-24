@@ -766,7 +766,7 @@ function ProfilePage() {
             here ? (
               <>{person && <><span className="mono">{person}</span> · </>}bots on this computer · port {about.port}</>
             ) : (
-              <>Bots on {showing.where}, which this app was paired with</>
+              <>Bots on {showing.where}, which this app is paired with</>
             )
           }
           status={here && person && !local.startedHere ? 'OpenKumi was started outside this app on this computer, so people are added, renamed and removed there: “openkumi people” in a terminal.' : undefined}
@@ -816,10 +816,8 @@ function Devices({ name }: { name: string }) {
     return () => clearInterval(watch)
   }, [pairing])
 
-  const toggle = (next: boolean) => {
-    if (!next && !local && !confirm('This app reaches these bots over the network, so it will lose them. Switch it off?')) return
-    lan.set(next)
-  }
+  // Only at the computer that runs the bots: an app elsewhere would cut itself off.
+  const toggle = (next: boolean) => lan.set(next)
   const run = (work: () => Promise<unknown>) => (setError(''), void work().catch((e) => setError(e.message)))
   const revoke = (computer: PairedComputer) => {
     if (!confirm(`Stop letting “${computer.name}” in? It is disconnected at once and has to be paired again to come back.`)) return
@@ -837,9 +835,15 @@ function Devices({ name }: { name: string }) {
           id="lan"
           title="Let other devices connect"
           description={`${name}’s other computers and phone can use these bots once they are paired: on the same network, or from anywhere over Tailscale. On the local network the connection is not encrypted, so use it only on networks you trust; Tailscale encrypts it.`}
-          status={about.lanForced ? 'OpenKumi was started with --lan, which keeps this on. Start it without that to control it here.' : undefined}
-          reset={about.lanForced ? undefined : lan.reset && (() => toggle(false))}
-          control={<Switch label="Let other devices connect" checked={on} disabled={about.lanForced} onChange={toggle} />}
+          status={
+            about.lanForced
+              ? 'OpenKumi was started with --lan, which keeps this on. Start it without that to control it here.'
+              : !local
+                ? 'Only the app on the computer that runs these bots switches this. This app needs it on to reach them.'
+                : undefined
+          }
+          reset={about.lanForced || !local ? undefined : lan.reset && (() => toggle(false))}
+          control={local ? <Switch label="Let other devices connect" checked={on} disabled={about.lanForced} onChange={toggle} /> : <span className="set-fact">{on ? 'On' : 'Off'}</span>}
         />
         {on && info && (
           <>
