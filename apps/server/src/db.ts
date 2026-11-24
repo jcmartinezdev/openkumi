@@ -102,7 +102,7 @@ function changed(threadId: string, removed = false): number {
 /** The number of the latest change to any thread. */
 export const latestChange = () => (db.prepare('SELECT COALESCE(MAX(seq), 0) AS seq FROM changes').get() as { seq: number }).seq
 
-const hasColumn = (name: string) => !!db.prepare(`SELECT 1 FROM pragma_table_info('threads') WHERE name = ?`).get(name)
+const hasColumn = (name: string, table = 'threads') => !!db.prepare(`SELECT 1 FROM pragma_table_info('${table}') WHERE name = ?`).get(name)
 
 // Threads run by an engine (Claude Code, Codex) remember the engine's own conversation here.
 if (!hasColumn('session')) db.exec('ALTER TABLE threads ADD COLUMN session TEXT')
@@ -128,6 +128,12 @@ db.exec('CREATE INDEX IF NOT EXISTS threads_automation ON threads (automation_id
 
 // What waits for a bot that was stopped, or failed, is held back until the owner lets it go.
 if (!hasColumn('held')) db.exec('ALTER TABLE threads ADD COLUMN held INTEGER NOT NULL DEFAULT 0')
+
+// An automation may run on a model of its own, which its runs, and their subagents, are then on.
+// Older versions do not look at these: there, such an automation runs on what its bot runs on.
+if (!hasColumn('runs_on', 'automations')) db.exec('ALTER TABLE automations ADD COLUMN runs_on TEXT')
+if (!hasColumn('provider')) db.exec('ALTER TABLE threads ADD COLUMN provider TEXT')
+if (!hasColumn('effort')) db.exec('ALTER TABLE threads ADD COLUMN effort TEXT')
 
 // Nothing survives a restart mid-run, so no thread can still be running. That is a change like any
 // other, or an app's copy would show those threads at work for good.
@@ -155,7 +161,9 @@ function toThread(r: any): Thread {
     automationId: r.automation_id ?? null,
     archivedAt: r.archived_at ?? null,
     status: r.status,
+    provider: r.provider ?? null,
     model: r.model,
+    effort: r.effort ?? null,
     reported: !!r.reported,
     held: !!r.held,
     createdAt: r.created_at,
@@ -249,7 +257,9 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     automationId: null,
     archivedAt: null,
     status: 'idle',
+    provider: null,
     model: null,
+    effort: null,
     reported: false,
     held: false,
     createdAt: now,
@@ -257,9 +267,9 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     ...init,
   }
   db.prepare(
-    `INSERT INTO threads (id, bot_id, parent_id, title, kind, automation_id, status, model, reported, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(t.id, t.botId, t.parentId, t.title, t.kind, t.automationId, t.status, t.model, t.reported ? 1 : 0, t.createdAt, t.updatedAt)
+    `INSERT INTO threads (id, bot_id, parent_id, title, kind, automation_id, status, provider, model, effort, reported, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(t.id, t.botId, t.parentId, t.title, t.kind, t.automationId, t.status, t.provider, t.model, t.effort, t.reported ? 1 : 0, t.createdAt, t.updatedAt)
   emit({ type: 'thread.upsert', thread: t, seq: changed(t.id) })
   return t
 }
@@ -492,6 +502,7 @@ function toAutomation(r: any): Automation {
     title: r.title,
     prompt: r.prompt,
     trigger: JSON.parse(r.starts_on),
+    runsOn: r.runs_on ? JSON.parse(r.runs_on) : null,
     enabled: !!r.enabled,
     createdBy: r.created_by,
     nextRunAt: r.next_run_at,
@@ -520,12 +531,12 @@ export function getAutomation(id: string): Automation | undefined {
 export function saveAutomation(automation: Automation): Automation {
   const a = { ...automation, updatedAt: Date.now() }
   db.prepare(
-    `INSERT INTO automations (id, bot_id, title, prompt, starts_on, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, last_check, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (id) DO UPDATE SET bot_id = excluded.bot_id, title = excluded.title, prompt = excluded.prompt, starts_on = excluded.starts_on,
+    `INSERT INTO automations (id, bot_id, title, prompt, starts_on, runs_on, enabled, created_by, next_run_at, last_run_at, last_status, last_error, last_thread_id, last_check, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (id) DO UPDATE SET bot_id = excluded.bot_id, title = excluded.title, prompt = excluded.prompt, starts_on = excluded.starts_on, runs_on = excluded.runs_on,
        enabled = excluded.enabled, next_run_at = excluded.next_run_at, last_run_at = excluded.last_run_at, last_status = excluded.last_status,
        last_error = excluded.last_error, last_thread_id = excluded.last_thread_id, last_check = excluded.last_check, updated_at = excluded.updated_at`,
-  ).run(a.id, a.botId, a.title, a.prompt, JSON.stringify(a.trigger), a.enabled ? 1 : 0, a.createdBy, a.nextRunAt, a.lastRunAt, a.lastStatus, a.lastError, a.lastThreadId, a.lastCheck ? JSON.stringify(a.lastCheck) : null, a.createdAt, a.updatedAt)
+  ).run(a.id, a.botId, a.title, a.prompt, JSON.stringify(a.trigger), a.runsOn ? JSON.stringify(a.runsOn) : null, a.enabled ? 1 : 0, a.createdBy, a.nextRunAt, a.lastRunAt, a.lastStatus, a.lastError, a.lastThreadId, a.lastCheck ? JSON.stringify(a.lastCheck) : null, a.createdAt, a.updatedAt)
   emit({ type: 'automation.upsert', automation: a })
   return a
 }

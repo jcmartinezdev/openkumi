@@ -19,6 +19,16 @@ export interface ModelInfo {
 }
 
 /**
+ * What a bot, or a single run, works on: a provider, one of its models (empty for the provider's
+ * default, so it follows that if it changes) and how hard the model thinks.
+ */
+export interface RunsOn {
+  provider: string
+  model: string
+  effort: Effort
+}
+
+/**
  * A bot is a folder (see server/bots.ts). These fields are what its owner controls: they live in
  * bot.md, next to the list of its superpowers, where the bot itself cannot write.
  * What the bot knows (its instructions, memory and files) lives in its workspace instead.
@@ -211,8 +221,16 @@ export interface Thread {
   /** When the owner started fresh and left this conversation behind; null for the current one. Archived ones are read-only. */
   archivedAt: number | null
   status: ThreadStatus
-  /** Model override for this thread (subagents may run on a different model). */
+  /**
+   * The provider this thread runs on, when that was chosen for it rather than left to its bot: a
+   * run of an automation with a model of its own, and the subagents of such a run. `model` and
+   * `effort` are then that provider's, an empty model being its default.
+   */
+  provider: string | null
+  /** The model this thread runs on. Without `provider`, one of the bot's provider that a subagent was given in place of the bot's. */
   model: string | null
+  /** How hard the model thinks, when `provider` is set. */
+  effort: Effort | null
   /** Subagents and runs of automations: whether the latest result has been delivered. */
   reported: boolean
   /**
@@ -367,6 +385,11 @@ export interface Automation {
   title: string
   prompt: string
   trigger: Trigger
+  /**
+   * What its runs work on, when that is not what its bot runs on. Null follows the bot: whatever
+   * the bot runs on at the time.
+   */
+  runsOn: RunsOn | null
   /** Paused when false. */
   enabled: boolean
   /** Who made it: 'user' for the owner, or the id of the bot that made it. */
