@@ -41,10 +41,12 @@ export function useShowing(): { name: string; where: string } {
 function placeOf(label: string, whose: string, computer?: string): string {
   // The name pairing gave ends in the computer, whoever it names first: it is kept when she is
   // renamed, so "Ana on mac-mini" can be Bea's. Paired before the computer left the network's
-  // part out of its name, it is "mac-mini.fritz.box".
+  // part out of its name, it is "mac-mini.fritz.box". A long one is cut to the 60 letters a
+  // name is kept to, in the middle of the computer's name.
   const on = label.lastIndexOf(' on ')
-  const tail = on < 0 ? label : label.slice(on + ' on '.length)
-  if (computer && tail.split('.')[0].toLowerCase() === computer.toLowerCase()) return computer
+  const tail = (on < 0 ? label : label.slice(on + ' on '.length)).split('.')[0].toLowerCase()
+  const own = computer?.toLowerCase()
+  if (computer && own && tail && (tail === own || (label.length === 60 && own.startsWith(tail)))) return computer
   // An older server does not say what its computer is called: only their own name is left out.
   const prefix = `${shownName(whose)} on `
   return label.startsWith(prefix) ? label.slice(prefix.length) : label

@@ -660,7 +660,8 @@ test('people: someone else gets bots of their own on this computer, picked at th
   await showsBot(win, 'Kumi')
   // Whose they are is said once: under her name, the computer they are on, as it calls itself.
   const computer = os.hostname().split('.')[0]
-  assert.equal(elsewhere, `Ana on ${computer}`)
+  // Kept to the 60 letters of a name, which cuts a long host name short (as GitHub's computers have).
+  assert.equal(elsewhere, `Ana on ${computer}`.slice(0, 60))
   await until(async () => (await showing()) === `Ana\n${computer}`)
   assert.equal(await win.locator('.sidebar .item', { hasText: 'Mine Only' }).count(), 0)
   // Her profile, seen from a device of hers: no renaming or removing her, and her network switch only shown, as a device cannot let others in.
