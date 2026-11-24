@@ -7,6 +7,7 @@ import { shownName, typedName } from '@openkumi/shared/people'
 import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import qrcode from 'qrcode-generator'
 import { type Answer, KIND_NAMES, kindOf, ordered } from '@openkumi/client/addresses'
+import { BOT_SORTS, useBotOrder } from '@openkumi/client/bots'
 import { windowCount } from '@openkumi/client/browser'
 import { pairingLink } from '@openkumi/client/pair'
 import { BotPage, TABS } from './BotPage'
@@ -63,6 +64,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'general', id: 'default-provider', title: 'New bots run on', also: 'default provider model' },
   { page: 'general', id: 'default-web-search', title: 'Web search for new bots' },
   { page: 'general', id: 'default-show-browser', title: 'Show the browser window for new bots', also: 'headless' },
+  { page: 'general', id: 'bot-order', title: 'Order of the bots', also: 'sort sidebar list arrange drag last message recent created manual' },
   { page: 'general', id: 'confirm-delete', title: 'Confirm before deleting a conversation', also: 'chat' },
   { page: 'appearance', id: 'theme', title: 'Theme', also: 'dark light mode' },
   { page: 'appearance', id: 'text-size', title: 'Message text size', also: 'font' },
@@ -102,7 +104,8 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
 
 /** The settings each page's "Restore defaults" puts back. */
 const RESTORE: Partial<Record<PageId, { settings?: (keyof Settings)[]; prefs?: (keyof Prefs)[] }>> = {
-  general: { settings: ['defaultProvider', 'defaultWebSearch', 'defaultShowBrowser'], prefs: ['confirmDelete'] },
+  // The order chosen for the bots goes back; the owner's own order is kept for when it is chosen again.
+  general: { settings: ['botSort', 'defaultProvider', 'defaultWebSearch', 'defaultShowBrowser'], prefs: ['confirmDelete'] },
   appearance: { prefs: ['theme', 'textSize', 'wide'] },
   chat: { prefs: ['enterSends', 'suggestions', 'expandSteps'] },
   browser: { settings: ['browserChannel'], prefs: ['autoOpenBrowser'] },
@@ -275,8 +278,20 @@ function General() {
   const showBrowser = useSetting('defaultShowBrowser')
   const confirmDelete = usePref('confirmDelete')
   const usable = providers.filter((p) => (p.connected && p.enabled !== false) || p.id === runsOn.value)
+  const order = useBotOrder()
   return (
     <Page>
+      {order.choosable && (
+        <Section title="Bots">
+          <Row
+            id="bot-order"
+            title="Order of the bots"
+            description="How the sidebar lists them, and the phone app with it. In your own order, drag the bots in the sidebar to where you want them."
+            reset={order.sort === 'created' ? undefined : () => void order.choose('created').catch((e) => alert(e.message))}
+            control={<Pick label="Order of the bots" value={order.sort} options={BOT_SORTS} onChange={(sort) => void order.choose(sort).catch((e) => alert(e.message))} />}
+          />
+        </Section>
+      )}
       <Section title="New bots">
         <Row
           id="default-provider"

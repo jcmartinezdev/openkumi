@@ -1,13 +1,26 @@
 // The bots on the paired server. Each has one conversation, so a bot is a row, like a contact.
 // Under them, as at the bottom of the computer's sidebar, the automations; Settings is the gear.
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
+// Their order is chosen from the arrows in the top bar; in the owner's own order, a bot that is
+// held can be dragged to its place.
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
+import type { BotSort } from '@openkumi/shared'
 import { mainThread, useStore } from '@openkumi/client/store'
 import { moment } from '@openkumi/client/automations'
+import { BOT_SORTS, useBotOrder } from '@openkumi/client/bots'
 import { Glyph } from '../src/icons'
 import { forget, useSession } from '../src/session'
+import { SortableList } from '../src/SortableList'
 import { useTheme } from '../src/theme'
 import { BotHead } from '../src/Mascot'
+
+const ROW = 60
+/** What each order of the bots does, said under its name where it is chosen. */
+const SORT_HINTS: Record<BotSort, string> = {
+  created: 'The oldest bot first',
+  recent: 'The one you last talked with first',
+  manual: 'Hold a bot, then drag it into place',
+}
 
 function ago(time: number): string {
   const minutes = Math.floor((Date.now() - time) / 60_000)
@@ -21,7 +34,7 @@ export default function Home() {
   const theme = useTheme()
   const router = useRouter()
   const { server } = useSession()
-  const bots = useStore((s) => s.bots)
+  const { bots, sort, choosable, choose, move } = useBotOrder()
   const threads = useStore((s) => s.threads)
   const loaded = useStore((s) => s.loaded)
   const connected = useStore((s) => s.connected)
@@ -32,8 +45,19 @@ export default function Home() {
   const automations = useStore((s) => s.automations)
 
   const unpair = () => Alert.alert('Unpair this phone?', 'The phone forgets the server. To use it again, pair it again.', [{ text: 'Cancel', style: 'cancel' }, { text: 'Unpair', style: 'destructive', onPress: () => void forget() }])
+  const notSaved = (e: Error) => Alert.alert('Not saved', e.message)
+  const manual = sort === 'manual'
   const header = (
     <Stack.Toolbar placement="right">
+      {loaded && !outdated && !newer && choosable && bots.length > 1 && (
+        <Stack.Toolbar.Menu icon="arrow.up.arrow.down" title="Order of the bots" accessibilityLabel="Order of the bots">
+          {BOT_SORTS.map(([value, label]) => (
+            <Stack.Toolbar.MenuAction key={value} isOn={sort === value} subtitle={SORT_HINTS[value]} onPress={() => void choose(value).catch(notSaved)}>
+              {label}
+            </Stack.Toolbar.MenuAction>
+          ))}
+        </Stack.Toolbar.Menu>
+      )}
       <Stack.Toolbar.Button icon="gearshape" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
     </Stack.Toolbar>
   )
@@ -81,22 +105,38 @@ export default function Home() {
     <>
       {header}
       {!connected && <Text style={[styles.banner, { color: theme.muted, backgroundColor: theme.side }]}>Reconnecting…</Text>}
-      <FlatList
-        data={bots}
-        keyExtractor={(bot) => bot.id}
+      <SortableList
+        items={bots}
+        rowHeight={ROW}
+        sortable={manual}
+        onMove={(id, to) => void move(id, to).catch(notSaved)}
+        liftedStyle={{ backgroundColor: theme.raised, borderRadius: 14 }}
         contentContainerStyle={{ paddingVertical: 8, paddingBottom: 40 }}
-        renderItem={({ item: bot }) => {
+        renderRow={(bot, row) => {
           const thread = mainThread(threads, bot.id)
+          const place = bots.indexOf(bot)
           return (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Conversation with ${bot.name}`} style={({ pressed }) => [styles.bot, pressed && { backgroundColor: theme.side }]} onPress={() => router.push({ pathname: '/chat/[id]', params: { id: `bot:${bot.id}` } })}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Conversation with ${bot.name}`}
+              accessibilityHint={manual ? 'Hold, then drag, to move it in the list' : undefined}
+              // For VoiceOver, which cannot drag: a place up or down.
+              accessibilityActions={manual ? [...(place > 0 ? [{ name: 'up', label: 'Move up' }] : []), ...(place < bots.length - 1 ? [{ name: 'down', label: 'Move down' }] : [])] : undefined}
+              onAccessibilityAction={(e) => void move(bot.id, place + (e.nativeEvent.actionName === 'up' ? -1 : 1)).catch(notSaved)}
+              style={({ pressed }) => [styles.bot, pressed && { backgroundColor: theme.side }]}
+              onPress={() => router.push({ pathname: '/chat/[id]', params: { id: `bot:${bot.id}` } })}
+              delayLongPress={300}
+              onLongPress={manual ? row.lift : undefined}
+              onPressOut={row.release}
+            >
               <BotHead bot={bot} size={40} />
               <Text style={[styles.botName, { color: theme.text }]} numberOfLines={1}>{bot.name}</Text>
               {thread?.status === 'running' ? <ActivityIndicator size="small" color={theme.run} /> : thread && <Text style={{ color: theme.faint, fontSize: 13 }}>{ago(thread.updatedAt)}</Text>}
             </Pressable>
           )
         }}
-        ListEmptyComponent={<Text style={[styles.lead, { color: theme.muted, padding: 24 }]}>There are no bots on this server yet. Create one in the app on your computer.</Text>}
-        ListFooterComponent={bots.length ? scheduled : undefined}
+        empty={<Text style={[styles.lead, { color: theme.muted, padding: 24 }]}>There are no bots on this server yet. Create one in the app on your computer.</Text>}
+        footer={bots.length ? scheduled : undefined}
       />
     </>
   )
@@ -106,7 +146,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 },
   lead: { fontSize: 15, lineHeight: 22, textAlign: 'center' },
   banner: { textAlign: 'center', fontSize: 13, paddingVertical: 6 },
-  bot: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: 60 },
+  bot: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: ROW, borderRadius: 14 },
   avatar: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   botName: { flex: 1, fontSize: 17, fontWeight: '600' },
   automations: { height: 64, marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth },

@@ -139,17 +139,32 @@ export async function api<T = any>(method: string, path: string, body?: unknown)
   return res.json().catch(() => ({}))
 }
 
-/** Changes app-wide settings. The page shows the new values at once; the server confirms them or the old ones come back. */
+/** The changes to the settings that the server has not answered yet, and the last one made. */
+const saving = new Set<object>()
+let lastSave: object | null = null
+
+/**
+ * Changes app-wide settings. The page shows the new values at once; the server confirms them or
+ * the old ones come back. While a later change waits for its answer, what the server says of an
+ * earlier one is passed over: it would put back, for a moment, what the later one changed (a bot
+ * moved twice in a row would jump back a place, and the next move would start from there).
+ */
 export async function saveSettings(patch: globalThis.Partial<Settings>) {
   const before = state.settings
   const asked = epoch
+  const mine = {}
+  saving.add(mine)
+  lastSave = mine
   set({ settings: { ...before, ...patch } })
   try {
     const saved = await api<Settings>('PATCH', '/api/settings', patch)
+    saving.delete(mine)
     // Another environment is showing by now; the answer is about the one that was left.
-    if (asked === epoch) set({ settings: saved })
+    if (asked === epoch && mine === lastSave) set({ settings: saved })
   } catch (e) {
-    if (asked === epoch) set({ settings: before })
+    saving.delete(mine)
+    // Not over a later change: what was there before this one no longer is.
+    if (asked === epoch && mine === lastSave) set({ settings: before })
     throw e
   }
 }
@@ -251,7 +266,8 @@ function handle(ev: ServerEvent) {
       return set({ callSaying: { ...state.callSaying, [ev.role]: state.callSaying[ev.role] + ev.text } })
     }
     case 'settings':
-      return set({ settings: ev.settings })
+      // Told of a change of this app's own while a later one waits: the answer to that one has the last word.
+      return saving.size ? undefined : set({ settings: ev.settings })
     case 'update':
       return set({ update: ev.update })
     case 'superpowers':
@@ -332,8 +348,9 @@ export function follow(next: Link | null) {
   at = null
   arrived(null)
   clearTimeout(again)
-  // Whatever was being fetched belonged to the environment that is being left.
+  // Whatever was being fetched, or saved, belonged to the environment that is being left.
   loading.clear()
+  saving.clear()
   current.clear()
   leaving.forEach((fn) => fn())
   set(EMPTY)

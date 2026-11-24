@@ -563,6 +563,30 @@ test('a bot is a folder: bot.md holds the owner\'s settings and rules', async ()
   await api('PATCH', `/api/bots/${bot.id}`, { name: 'Tester' })
 })
 
+test('the order of the bots: which order, and the owner\'s own, are kept for every device, and a bot that is deleted leaves it', async () => {
+  const { settings: before, defaults, bots } = await api('GET', '/api/state')
+  assert.equal(before.botSort, 'created')
+  assert.deepEqual(defaults.botOrder, [])
+  const extra = await api('POST', '/api/bots', { name: 'Sorted', provider: 'mock', look: { creature: 'cat' } })
+
+  // Only an order there is, and only what can be a bot's id, each once.
+  assert.equal((await api('PATCH', '/api/settings', { botSort: 'recent' })).botSort, 'recent')
+  assert.equal((await api('PATCH', '/api/settings', { botSort: 'alphabetical' })).botSort, 'recent')
+  const order = [extra.id, bots[0].id]
+  assert.deepEqual((await api('PATCH', '/api/settings', { botSort: 'manual', botOrder: [...order, extra.id, '../etc', 7] })).botOrder, order)
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataOf(home), 'settings.json'), 'utf8')).botOrder, order)
+
+  // The bots themselves are still sent as they were made: the first of them is the main assistant.
+  const now = await api('GET', '/api/state')
+  assert.deepEqual(now.bots.map((b) => b.id), [...bots.map((b) => b.id), extra.id])
+  assert.equal(now.settings.botSort, 'manual')
+
+  // A bot made later under the same name would get the same id, and not the place of the one that is gone.
+  await api('DELETE', `/api/bots/${extra.id}`)
+  assert.deepEqual((await api('GET', '/api/state')).settings.botOrder, [bots[0].id])
+  await api('PATCH', '/api/settings', { botSort: 'created', botOrder: [] })
+})
+
 test('master prompt: every bot is told the one OpenKumi comes with, filled in, and nothing in the app changes it', async () => {
   const prompt = await told()
   assert.match(prompt, /^You are Tester, an AI bot running locally on the user's own computer inside OpenKumi\. Today is /)

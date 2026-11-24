@@ -1,5 +1,7 @@
-import type { Bot, Thread } from '@openkumi/shared'
+import { type DragEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react'
+import type { Bot, BotSort, Thread } from '@openkumi/shared'
 import { ALPHA_NOTE } from '@openkumi/shared/alpha'
+import { BOT_SORTS, useBotOrder } from '@openkumi/client/bots'
 import type { Modal } from './App'
 import { Icon } from './Icon'
 import { USAGE_ADDRESS, mainThread, openSettings, recentSubagents, rootOf, useStore } from './store'
@@ -34,9 +36,57 @@ interface Props {
   close: () => void
 }
 
+/** What each order of the bots does, said under its name where it is chosen. */
+const SORT_HINTS: Record<BotSort, string> = {
+  created: 'The oldest bot first',
+  recent: 'The one you last talked with first',
+  manual: 'Drag the bots into place',
+}
+
+/** The button over the list of bots that chooses their order. */
+function SortMenu({ sort, choose }: { sort: BotSort; choose: (sort: BotSort) => void }) {
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  // A click anywhere else closes it.
+  useEffect(() => {
+    if (!open) return
+    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false)
+    document.addEventListener('mousedown', away)
+    return () => document.removeEventListener('mousedown', away)
+  }, [open])
+  return (
+    <div className="sort" ref={box} onKeyDown={(e) => e.key === 'Escape' && open && (e.stopPropagation(), setOpen(false))}>
+      <button className="icon small" title="Order of the bots" aria-label="Order of the bots" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name="sort" size={14} />
+      </button>
+      {open && (
+        <div className="sort-menu" role="menu" aria-label="Order of the bots">
+          <h4>Order of the bots</h4>
+          {BOT_SORTS.map(([value, label]) => (
+            <button key={value} role="menuitemradio" aria-checked={sort === value} className="sort-item" onClick={() => (setOpen(false), choose(value))}>
+              <span className="grow">
+                {label}
+                <small>{SORT_HINTS[value]}</small>
+              </span>
+              {sort === value && <Icon name="check" size={14} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** A bot being dragged to another place in the list, and the bot it would be put before or after. */
+interface Dragging {
+  id: string
+  over: string | null
+  after: boolean
+}
+
 /** The bots, one row each: a bot has a single conversation, so there is nothing to pick beneath it. */
 export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, open, close }: Props) {
-  const bots = useStore((s) => s.bots)
+  const { bots, sort, choosable, choose, move } = useBotOrder()
   const threads = useStore((s) => s.threads)
   const providers = useStore((s) => s.providers)
   const automationCount = useStore((s) => s.automations.filter((a) => a.enabled).length)
@@ -45,6 +95,29 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
   // A subagent may run as another bot; the conversation it belongs to decides which bot is current.
   const currentBotId = root?.botId ?? bot?.id
   const connected = providers.some((p) => p.connected)
+  const failed = (e: Error) => alert(e.message)
+
+  // In the owner's own order a bot is dragged to its place, or moved a place with Alt and an arrow.
+  const manual = sort === 'manual' && bots.length > 1
+  const [drag, setDrag] = useState<Dragging | null>(null)
+  const over = (id: string, after: boolean) => drag && (drag.over !== id || drag.after !== after) && setDrag({ ...drag, over: id, after })
+  const drop = (e: DragEvent) => {
+    if (!drag) return
+    e.preventDefault()
+    setDrag(null)
+    if (!drag.over || drag.over === drag.id) return
+    const rest = bots.filter((b) => b.id !== drag.id)
+    void move(drag.id, rest.findIndex((b) => b.id === drag.over) + (drag.after ? 1 : 0)).catch(failed)
+  }
+  const nudge = (e: KeyboardEvent, id: string, place: number) => {
+    if (!manual || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+    e.preventDefault()
+    const to = place + (e.key === 'ArrowUp' ? -1 : 1)
+    if (to < 0 || to >= bots.length) return
+    void move(id, to).catch(failed)
+    // The row is put elsewhere in the page, which can take the keyboard away from it.
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`.sidebar a[data-bot="${CSS.escape(id)}"]`)?.focus())
+  }
 
   return (
     <nav className={`sidebar ${open ? 'open' : ''}`}>
@@ -59,17 +132,54 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
       </div>
       {/* Whose bots these are, and where: switched here, for everyone on this computer and the other computers. */}
       <Switcher picked={close} />
-      <div className="side-scroll">
-        {bots.map((b) => {
+      {/* With more than one bot, their order is chosen over the list. */}
+      {choosable && bots.length > 1 && (
+        <div className="side-caption">
+          <span className="grow">Bots</span>
+          <SortMenu sort={sort} choose={(next) => void choose(next).catch(failed)} />
+        </div>
+      )}
+      <div
+        className="side-scroll"
+        // Below the last bot is the end of the list.
+        onDragOver={drag ? (e) => (e.preventDefault(), e.target === e.currentTarget && over(bots[bots.length - 1].id, true)) : undefined}
+        onDrop={drop}
+      >
+        {bots.map((b, place) => {
           const main = mainThread(threads, b.id)
           const current = b.id === currentBotId
           // What its subagents are doing shows under the bot being looked at, and as a mark on the others.
           const subagents = main ? recentSubagents(threads, main) : []
           const working = main?.status === 'running' || subagents.some((t) => t.status === 'running')
           return (
-            <section key={b.id} className="group">
-              <div className="item">
+            <section
+              key={b.id}
+              className={`group ${drag?.id === b.id ? 'dragging' : drag?.over === b.id ? (drag.after ? 'drop-after' : 'drop-before') : ''}`}
+              onDragOver={drag ? (e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                // Measured on the bot's own row: over the subagents listed beneath it is after it.
+                const box = e.currentTarget.firstElementChild!.getBoundingClientRect()
+                over(b.id, e.clientY > box.top + box.height / 2)
+              } : undefined}
+            >
+              <div
+                className="item"
+                draggable={manual}
+                onDragStart={manual ? (e) => {
+                  e.dataTransfer.effectAllowed = 'move'
+                  e.dataTransfer.setData('text/plain', b.name)
+                  // A frame later, so that what is carried is drawn as the row was.
+                  requestAnimationFrame(() => setDrag({ id: b.id, over: null, after: false }))
+                } : undefined}
+                onDragEnd={() => setDrag(null)}
+              >
                 <a
+                  data-bot={b.id}
+                  // The row is what is dragged, not its address.
+                  draggable={manual ? false : undefined}
+                  aria-keyshortcuts={manual ? 'Alt+ArrowUp Alt+ArrowDown' : undefined}
+                  onKeyDown={(e) => nudge(e, b.id, place)}
                   // Lit for its conversation and its earlier ones; a subagent listed beneath it is lit instead.
                   className={`row bot ${current && !subagents.some((t) => t.id === thread?.id) ? 'active' : ''}`}
                   href={`#/${b.id}`}
