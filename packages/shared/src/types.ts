@@ -404,7 +404,7 @@ export interface Settings {
   lan: boolean
   /** Which browser program the bots drive. "chromium" is the one that comes with Playwright. */
   browserChannel: 'chrome' | 'msedge' | 'chromium'
-  /** What a new bot runs on. Empty means the first provider that is connected. */
+  /** What a new bot runs on. Empty means what the main assistant runs on, model and effort too. */
   defaultProvider: string
   defaultWebSearch: boolean
   defaultShowBrowser: boolean

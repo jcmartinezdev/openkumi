@@ -76,9 +76,11 @@ of you. Install the program, sign in in a terminal, then open **Settings → Pro
 
 ## Choosing what a bot runs on
 
-- **New bots** run on what **Settings → General → New bots run on** says. When that is not
-  connected, a new bot gets the first one that is, in this order: Codex, Claude Code, Grok, local
-  models, an API.
+- **New bots** run on what **Settings → General → New bots run on** says. It starts as **Same as**
+  your main assistant: a new bot, whether you make it or ask the main assistant for one, gets the
+  main assistant's engine, model and reasoning effort. When the engine it names is not connected,
+  a new bot runs as the main assistant does; when neither is, it gets the first one connected, in
+  this order: Codex, Claude Code, Grok, local models, an API.
 - **One bot**: its settings have **Runs on**, **Model** and, where the model has one,
   **Reasoning effort**. **Default** means the engine's own default model.
 - **One subagent**: a bot can give a subagent another model for a part of the job.

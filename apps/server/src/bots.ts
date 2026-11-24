@@ -97,6 +97,9 @@ export function listBots(): Bot[] {
     .sort((a, b) => a.createdAt - b.createdAt)
 }
 
+/** The main assistant: the first bot. It alone makes bots, and new bots run on what it runs on unless Settings says otherwise. */
+export const mainBot = (): Bot | undefined => listBots()[0]
+
 /** Tells the UI about a bot again, after something about it changed. */
 export function announce(id: string) {
   const bot = getBot(id)
@@ -145,11 +148,20 @@ function newId(name: string): string {
   }
 }
 
-/** What a new bot runs on: the default chosen in Settings, else the first provider that is ready to use. */
-function newBotProvider(): string {
-  const app = appSettings()
+type Engine = Pick<Settings, 'provider' | 'model' | 'effort'>
+
+/**
+ * What a new bot runs on: the engine chosen in Settings, with its default model; else what the
+ * main assistant runs on, with its model and effort, so that a bot made from a chat with it works
+ * as it does; else the first provider that is ready to use.
+ */
+function newBotEngine(): Engine {
   const usable = providerInfos().filter((p) => p.connected && p.enabled !== false)
-  return usable.find((p) => p.id === app.defaultProvider)?.id ?? usable[0]?.id ?? FALLBACK
+  const chosen = usable.find((p) => p.id === appSettings().defaultProvider)
+  if (chosen) return { provider: chosen.id, model: '', effort: '' }
+  const main = mainBot()
+  if (main && usable.some((p) => p.id === main.provider)) return { provider: main.provider, model: main.model, effort: main.effort }
+  return { provider: usable[0]?.id ?? FALLBACK, model: '', effort: '' }
 }
 
 /**
@@ -159,7 +171,7 @@ function newBotProvider(): string {
  * exists (and the emoji on its sign too, when none was given).
  */
 export async function createBot(input: Record<string, unknown>, by: 'user' | 'bot' | 'server' = 'user'): Promise<Bot> {
-  const { look, ...patch } = clean(input)
+  const { look, provider, ...patch } = clean(input)
   const name = patch.name?.trim()
   if (!name) throw new Error('A bot needs a name')
   const purpose = typeof input.purpose === 'string' ? input.purpose.slice(0, 8000) : ''
@@ -171,9 +183,8 @@ export async function createBot(input: Record<string, unknown>, by: 'user' | 'bo
     look: { ...lookFrom(id), ...look },
     voice: '',
     rules: '',
-    provider: newBotProvider(),
-    model: '',
-    effort: '',
+    // A model and effort go with their engine: a bot given only an engine has that engine's defaults.
+    ...(provider ? { provider, model: '', effort: '' as const } : newBotEngine()),
     webSearch: app.defaultWebSearch,
     headless: !app.defaultShowBrowser,
     createdAt: Date.now(),
@@ -244,7 +255,8 @@ export async function pickLook(input: Record<string, unknown>): Promise<{ look: 
     } catch {}
     purpose = [bot.description, bot.rules, own.slice(0, 3000)].filter(Boolean).join('\n\n')
   }
-  const choice = await chooseLook(bot?.provider ?? newBotProvider(), bot?.model ?? '', name, purpose, AbortSignal.timeout(120_000))
+  const engine = bot ?? newBotEngine()
+  const choice = await chooseLook(engine.provider, engine.model, name, purpose, AbortSignal.timeout(120_000))
   if (!choice) throw new Error('The model did not come up with a look. Try again, or choose one yourself.')
   return choice
 }
