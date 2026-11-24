@@ -158,7 +158,8 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
               onDragOver={drag ? (e) => {
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
-                const box = e.currentTarget.getBoundingClientRect()
+                // Measured on the bot's own row: over the subagents listed beneath it is after it.
+                const box = e.currentTarget.firstElementChild!.getBoundingClientRect()
                 over(b.id, e.clientY > box.top + box.height / 2)
               } : undefined}
             >

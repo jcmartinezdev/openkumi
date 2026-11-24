@@ -1643,8 +1643,11 @@ test('the order of the bots: as they were made, the one last talked with first, 
   await win.keyboard.press('Alt+ArrowUp')
   await until(async () => (await listed()).at(-2) === 'Birch', 10_000)
   await until(() => win.evaluate(() => document.activeElement?.textContent?.includes('Birch')), 10_000)
-  // Talking with a bot does not move it now.
-  assert.equal((await listed())[0], 'Alder')
+  // Moves made one right after another each start from the one before: down to the end, then up two places.
+  await win.keyboard.press('Alt+ArrowDown')
+  await win.keyboard.press('Alt+ArrowUp')
+  await win.keyboard.press('Alt+ArrowUp')
+  await until(async () => (await listed()).at(-3) === 'Birch' && (await settings()).botOrder.at(-3) === birch.id, 10_000)
 
   // The settings have the choice too, found by searching, and put it back.
   await win.evaluate(() => (location.hash = '/settings/general'))
