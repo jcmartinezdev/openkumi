@@ -104,7 +104,8 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
 
 /** The settings each page's "Restore defaults" puts back. */
 const RESTORE: Partial<Record<PageId, { settings?: (keyof Settings)[]; prefs?: (keyof Prefs)[] }>> = {
-  general: { settings: ['defaultProvider', 'defaultWebSearch', 'defaultShowBrowser'], prefs: ['confirmDelete'] },
+  // The order chosen for the bots goes back; the owner's own order is kept for when it is chosen again.
+  general: { settings: ['botSort', 'defaultProvider', 'defaultWebSearch', 'defaultShowBrowser'], prefs: ['confirmDelete'] },
   appearance: { prefs: ['theme', 'textSize', 'wide'] },
   chat: { prefs: ['enterSends', 'suggestions', 'expandSteps'] },
   browser: { settings: ['browserChannel'], prefs: ['autoOpenBrowser'] },

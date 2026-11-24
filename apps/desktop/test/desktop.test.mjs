@@ -1655,8 +1655,12 @@ test('the order of the bots: as they were made, the one last talked with first, 
   await win.locator('.set-results button', { hasText: 'Order of the bots' }).click()
   const choice = win.getByRole('combobox', { name: 'Order of the bots' })
   assert.equal(await choice.inputValue(), 'manual')
-  await choice.selectOption('created')
+  await choice.selectOption('recent')
+  await until(async () => (await settings()).botSort === 'recent', 10_000)
+  // The page's "Restore defaults" puts the order back with the rest, and keeps the owner's own for another time.
+  await win.getByRole('button', { name: 'Restore defaults' }).click()
   await until(async () => (await settings()).botSort === 'created', 10_000)
+  assert.ok((await settings()).botOrder.includes(birch.id))
   await win.keyboard.press('Escape')
   await win.keyboard.press('Escape')
   await showsBot(win, 'Kumi')

@@ -265,11 +265,11 @@ export async function pickLook(input: Record<string, unknown>): Promise<{ look: 
 export function deleteBot(id: string) {
   if (!readSettings(id)) return
   fs.rmSync(botDir(id), { recursive: true, force: true })
+  track('bot deleted')
+  emit({ type: 'bot.delete', id })
   // A bot made later under the same name gets the same id, and should not take this one's place in the owner's order.
   const order = appSettings().botOrder
   if (order.includes(id)) updateSettings({ botOrder: order.filter((other) => other !== id) })
-  track('bot deleted')
-  emit({ type: 'bot.delete', id })
 }
 
 /**
