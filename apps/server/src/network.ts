@@ -34,11 +34,11 @@ export function nearby(ip: string): boolean {
  */
 export const served = (ip: string) => nearby(ip) && !onTailscale(ip)
 
-/** This computer's addresses on the local network. */
+/** This computer's addresses on the local network: not Tailscale's, nor a public one it may have. */
 export const homeAddresses = () =>
   Object.values(os.networkInterfaces())
     .flat()
-    .filter((i) => i && i.family === 'IPv4' && !i.internal && !onTailscale(i.address))
+    .filter((i) => i && i.family === 'IPv4' && !i.internal && served(i.address))
     .map((i) => i!.address)
 
 // ---- Tailscale
