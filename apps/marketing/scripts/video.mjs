@@ -89,7 +89,8 @@ function ffmpeg(args, input) {
   const run = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: [input ? 'pipe' : 'ignore', 'inherit', 'inherit'], env: { ...process.env, SVT_LOG: '1' } })
   const done = new Promise((resolve, reject) => {
     run.on('error', reject)
-    run.on('exit', (code) => (code ? reject(new Error(`ffmpeg stopped with code ${code}: ffmpeg ${args.join(' ')}`)) : resolve()))
+    // A run stopped by a signal has no code, and is no more finished than one that failed.
+    run.on('exit', (code, signal) => (code === 0 ? resolve() : reject(new Error(`ffmpeg ${signal ? `was stopped by ${signal}` : `stopped with code ${code}`}: ffmpeg ${args.join(' ')}`))))
   })
   return { stdin: run.stdin, done }
 }
