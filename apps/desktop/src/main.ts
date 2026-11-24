@@ -269,6 +269,8 @@ async function addAddress(id: string, address: unknown) {
   if (environment.addresses.some((a) => a.url === url)) return { checked: true }
   const { checked, serverId } = await checkNew(url, environment.token, environment)
   environment.serverId ??= serverId
+  // Asking takes a moment, in which it may have been added already.
+  if (environment.addresses.some((a) => a.url === url)) return { checked }
   environment.addresses = [...environment.addresses, { url }]
   changed()
   return { checked }

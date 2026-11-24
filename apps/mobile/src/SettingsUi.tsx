@@ -186,8 +186,9 @@ export function Field({ label, value, placeholder, onCommit, onChange, multiline
         style={[styles.field, { color: theme.text }]}
         value={text}
         onChangeText={setText}
+        // Done ends the editing too, so this is the one place it is saved: saving on Done as well
+        // saved it twice, and an address was added twice.
         onEndEditing={commit}
-        onSubmitEditing={commit}
         placeholder={placeholder}
         placeholderTextColor={theme.faint}
         maxLength={maxLength}

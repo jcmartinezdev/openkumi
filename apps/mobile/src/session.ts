@@ -136,7 +136,8 @@ export async function restore() {
   }
   // An earlier version kept a single address.
   const { url, ...rest } = saved ?? ({} as Partial<Server & { url: string }>)
-  const addresses = rest.addresses ?? (url ? [{ url }] : [])
+  // An earlier version could keep the same address twice; one is enough.
+  const addresses = (rest.addresses ?? (url ? [{ url }] : [])).filter((a, i, all) => all.findIndex((b) => b.url === a.url) === i)
   set(addresses.length && rest.key && rest.name ? { ...rest, name: rest.name, key: rest.key, addresses } : null)
 }
 
@@ -168,6 +169,9 @@ export async function addAddress(address: string): Promise<{ checked: boolean }>
   const url = parseAddress(address)
   if (server.addresses.some((a) => a.url === url)) return { checked: true }
   const { checked, serverId } = await checkNew(url, server.key, server)
+  // Asking takes a moment, in which it may have been added already.
+  if (!server) throw new Error('This phone is not paired.')
+  if (server.addresses.some((a) => a.url === url)) return { checked }
   await keep({ ...server, serverId: server.serverId ?? serverId, addresses: [...server.addresses, { url }] })
   return { checked }
 }

@@ -24,4 +24,6 @@ test('an address typed without http:// or https:// is https unless it is at home
   // What was typed is kept; whether a key may go there is decided elsewhere (see addresses.ts).
   assert.equal(parseAddress('http://mac-mini.tail1234.ts.net'), 'http://mac-mini.tail1234.ts.net:4317')
   assert.equal(parseAddress('HTTPS://192.168.1.20'), 'https://192.168.1.20')
+  // A name typed in capitals is the same address.
+  assert.equal(parseAddress('Jarvis-AI-Mini.local:4317'), 'http://jarvis-ai-mini.local:4317')
 })
