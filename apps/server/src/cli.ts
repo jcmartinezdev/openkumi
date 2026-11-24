@@ -65,6 +65,7 @@ if (command === 'serve') {
   const { BASE, FIRST, FROM_REPOSITORY, PERSON, PORT, accessToken, people } = await import('./config.ts')
   const { RUNTIME, VERSION, WHY_NOT, newer, update } = await import('./update.ts')
   const service = await import('./service.ts')
+  const { homeAddresses } = await import('./network.ts')
 
   const stop = (message: string): never => {
     console.error(`\n  ${message}\n`)
@@ -97,11 +98,15 @@ if (command === 'serve') {
   const starting = RUNTIME ? `Start it with “${typed('start')}”, or keep it running with “${typed('service install')}”.` : `Start it with “${FIRST ? 'npm run server' : `npm run openkumi -- start --for ${PERSON}`}”.`
   const notRunning = () => stop(`${whose} is not running here (port ${PORT}). ${starting}`)
 
-  /** A pairing code, with the addresses the server it is for can be reached at. */
+  /**
+   * A pairing code, with the addresses on the home network the server it is for can be reached at.
+   * From anywhere else, a device pairs at an https address its owner put in front of it.
+   */
   function showCode(code: string, port: number) {
-    const addresses = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => `${i!.address}:${port}`)
+    const addresses = homeAddresses().map((ip) => `${ip}:${port}`)
     console.log(`\n  Pairing code:  ${code}`)
-    console.log(`  Address:       ${addresses.join('  or  ') || '(this computer is not on a network)'}`)
+    console.log(`  Address:       ${addresses.join('  or  ') || '(this computer is not on a home network)'}`)
+    console.log(`  Away from home, use an https address you put in front of port ${port} instead.`)
   }
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
