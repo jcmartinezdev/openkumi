@@ -32,8 +32,8 @@ export interface Superpower {
   hooks: string[]
   /** The icon, as a data: address for an <img>. */
   icon: string | null
-  /** Its page in the app (README.md), which says what to ask it and how it is set up. */
-  Content: MarkdownInstance<Record<string, never>>['Content']
+  /** Its page in the app (README.md), which says what to ask it and how it is set up; one may have none, as in the app. */
+  Content: MarkdownInstance<Record<string, never>>['Content'] | null
 }
 
 const manifests = import.meta.glob<Manifest>('../../../server/superpowers/*/superpower.json', { eager: true, import: 'default' })
@@ -55,7 +55,7 @@ export const superpowers: Superpower[] = Object.entries(manifests)
       site: m.site ?? null,
       hooks: m.hooks?.events.map((e) => e.name) ?? [],
       icon: icon ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}` : null,
-      Content: readmes[`${folder}README.md`].Content,
+      Content: readmes[`${folder}README.md`]?.Content ?? null,
     }
   })
   .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))

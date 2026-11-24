@@ -35,7 +35,7 @@ const siteName = power.site && new URL(power.site).host.replace(/^www\./, '')
 
     <div class="body">
       <div class="main">
-        <div class="prose"><Content /></div>
+        {Content && <div class="prose"><Content /></div>}
         <h2>What it can do</h2>
         <ul class="checks">{power.can.map((line) => <li>{line}</li>)}</ul>
       </div>
