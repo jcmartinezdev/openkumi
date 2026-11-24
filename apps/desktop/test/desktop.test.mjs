@@ -82,6 +82,20 @@ async function pairWith(port, home, name = 'Test computer') {
   return post('/api/pair/finish', { nonce, serverNonce: begun.nonce, proof: sign('computer', nonce, begun.nonce), name })
 }
 
+/**
+ * Waits until an element is in the same place in the window twice in a row, a moment apart. A click
+ * goes where the element was when the click was worked out, so one that is still moving is missed.
+ */
+async function holdsStill(locator) {
+  let last = null
+  await until(async () => {
+    const box = JSON.stringify(await locator.boundingBox())
+    const still = box === last
+    last = box
+    return still
+  }, 10_000)
+}
+
 async function until(check, timeoutMs = 40_000) {
   const deadline = Date.now() + timeoutMs
   while (!(await check())) {
@@ -481,10 +495,20 @@ test('replies are drawn with code in colour, diagrams, formulas and tables, and 
   await until(async () => (await win.locator('.page-frame').evaluate((el) => el.offsetHeight)) > 200, 10_000)
   // The page stands for the call that showed it, which is not listed as a step.
   assert.equal(await win.locator('.activity', { hasText: 'show_page' }).count(), 0)
-  // The reply after it is written out first, so the page has stopped moving.
+  // The reply after it is written out first, so the page has stopped moving; and the turn is over,
+  // so nothing below it comes or goes (the "Working" line) and moves it while its link is clicked.
   await win.locator('.msg.assistant[data-item]', { hasText: 'Tool result: Shown “Sales”' }).waitFor()
+  await win.getByRole('button', { name: 'Stop', exact: true }).waitFor({ state: 'detached' })
+  await holdsStill(inside.locator('#out'))
+  // What the app saw when the page said its link was clicked, to tell a missed click from a refused one.
+  await win.evaluate(() => {
+    window.pageSaid = []
+    addEventListener('message', (e) => e.data?.openkumi === 'open' && window.pageSaid.push({ focused: document.activeElement?.tagName, clicked: navigator.userActivation?.isActive }))
+  })
   await inside.locator('#out').click()
-  await until(async () => (await app.evaluate(() => globalThis.opened)).includes('https://example.com/more'), 5000)
+  await until(async () => (await app.evaluate(() => globalThis.opened)).includes('https://example.com/more'), 5000).catch(async () => {
+    throw new Error(`The page's link was not opened. What the app was told: ${JSON.stringify(await win.evaluate(() => window.pageSaid))}`)
+  })
 
   // It is a site of its own: it cannot reach the app, what the app is given, or the network.
   const page = win.frames().find((f) => f.url().startsWith('openkumi://page/'))
