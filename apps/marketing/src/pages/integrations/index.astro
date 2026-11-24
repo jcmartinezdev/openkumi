@@ -1,0 +1,382 @@
+---
+// Every superpower, to look through: searched and narrowed down in the page, each leading to a page of its own.
+import Layout from '../../layouts/Layout.astro'
+import { DOCS_URL, ISSUES_URL } from '../../lib/site'
+import { apps, groups, knowHow, superpowers } from '../../lib/superpowers'
+---
+
+<Layout title="Integrations: the apps and know-how your bots can have · OpenKumi" description={`${superpowers.length} superpowers an OpenKumi bot can have: ${apps.length} apps it works in, such as Notion, Linear and Todoist, signed in with an account of its own, and ${knowHow.length} kinds of know-how with nothing to sign in to. Switched on one bot at a time.`}>
+  <section class="head">
+    <div class="glow" aria-hidden="true"></div>
+    <div class="container head-inner">
+      <span class="eyebrow">Integrations</span>
+      <h1>Superpowers for your bots</h1>
+      <p class="lede">The apps a bot can work in, and the know-how it can have. You switch each one on for one bot at a time. The ones that work in an app sign in with an account of the bot’s own, and a bot can use what you give it, but never give itself more.</p>
+      <ul class="facts">
+        <li><strong>{apps.length}</strong> apps, signed in with the bot’s own account</li>
+        <li><strong>{knowHow.length}</strong> kinds of know-how, with nothing to sign in to</li>
+        <li><strong>{superpowers.filter((p) => p.hooks.length).length}</strong> that can start a bot with a webhook</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="catalog" aria-label="Every superpower">
+    <div class="container">
+      <div class="controls" hidden data-controls>
+        <label class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+          <span class="visually-hidden">Search the superpowers</span>
+          <input type="search" placeholder="Search: Notion, meetings, weather…" autocomplete="off" spellcheck="false" data-search />
+        </label>
+        <div class="chips" role="group" aria-label="Group">
+          <button type="button" aria-pressed="true" data-group="">All <span>{superpowers.length}</span></button>
+          {groups.map((group) => <button type="button" aria-pressed="false" data-group={group.name}>{group.name} <span>{group.count}</span></button>)}
+        </div>
+        <div class="chips kinds" role="group" aria-label="Kind">
+          <button type="button" aria-pressed="true" data-kind="">Apps and know-how</button>
+          <button type="button" aria-pressed="false" data-kind="app">Apps <span>{apps.length}</span></button>
+          <button type="button" aria-pressed="false" data-kind="know-how">Know-how <span>{knowHow.length}</span></button>
+        </div>
+      </div>
+
+      <ul class="cards">
+        {
+          superpowers.map((power) => (
+            <li data-groups={power.categories.join('|')} data-kind={power.app ? 'app' : 'know-how'} data-text={`${power.name} ${power.tagline} ${power.categories.join(' ')}`.toLowerCase()}>
+              <a href={`/integrations/${power.id}`}>
+                {power.icon ? <img src={power.icon} alt="" width="44" height="44" /> : <span class="letter">{power.name[0]}</span>}
+                <span class="name">{power.name}</span>
+                <span class="tagline">{power.tagline}</span>
+                <span class="tags">
+                  <span class:list={['kind', { app: power.app }]}>{power.app ? 'App' : 'Know-how'}</span>
+                  {power.categories.map((group) => <span>{group}</span>)}
+                  {power.hooks.length > 0 && <span>Webhooks</span>}
+                </span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="none" hidden data-none>No superpower matches that. <a href={ISSUES_URL}>Tell us which one you are missing.</a></p>
+
+      <div class="more">
+        <div>
+          <h2>Missing an app?</h2>
+          <p>New superpowers come with new versions of OpenKumi. Tell us which app your bots should work in, and what they should do there.</p>
+        </div>
+        <div class="more-links">
+          <a class="button primary" href={ISSUES_URL}>Ask for one on GitHub</a>
+          <a class="button secondary" href={`${DOCS_URL}/superpowers/`}>How superpowers work</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script is:inline>
+  // Narrows the list by words, group and kind. Without the script every superpower is shown, and
+  // the controls stay hidden. A group can be given in the address: /integrations?group=Work.
+  const controls = document.querySelector('[data-controls]')
+  const search = document.querySelector('[data-search]')
+  const cards = [...document.querySelectorAll('.cards li')]
+  const none = document.querySelector('[data-none]')
+  const chosen = { group: new URLSearchParams(location.search).get('group') ?? '', kind: '' }
+  controls.hidden = false
+
+  function press(attr, value) {
+    for (const button of controls.querySelectorAll(`[data-${attr}]`)) button.setAttribute('aria-pressed', String(button.dataset[attr] === value))
+  }
+  function show() {
+    const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    let shown = 0
+    for (const card of cards) {
+      const fits =
+        (!chosen.group || card.dataset.groups.split('|').includes(chosen.group)) &&
+        (!chosen.kind || card.dataset.kind === chosen.kind) &&
+        words.every((word) => card.dataset.text.includes(word))
+      card.hidden = !fits
+      if (fits) shown++
+    }
+    none.hidden = shown > 0
+  }
+
+  // A group the page does not have is no group at all.
+  if (!controls.querySelector(`[data-group="${CSS.escape(chosen.group)}"]`)) chosen.group = ''
+  press('group', chosen.group)
+  show()
+  search.addEventListener('input', show)
+  controls.addEventListener('click', (event) => {
+    const button = event.target.closest('button')
+    if (!button) return
+    const attr = 'group' in button.dataset ? 'group' : 'kind'
+    chosen[attr] = button.dataset[attr]
+    press(attr, chosen[attr])
+    show()
+    if (attr === 'group') history.replaceState(null, '', chosen.group ? `?group=${encodeURIComponent(chosen.group)}` : location.pathname)
+  })
+</script>
+
+<style>
+  .head {
+    position: relative;
+    padding: 80px 0 40px;
+    overflow: hidden;
+  }
+  .glow {
+    position: absolute;
+    inset: -40% 0 auto;
+    height: 640px;
+    background:
+      radial-gradient(40% 50% at 30% 40%, color-mix(in srgb, var(--sky) 18%, transparent), transparent 70%),
+      radial-gradient(35% 45% at 72% 30%, color-mix(in srgb, var(--orange) 14%, transparent), transparent 70%);
+    filter: blur(20px);
+    pointer-events: none;
+  }
+  .head-inner {
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+    text-align: center;
+  }
+  h1 {
+    font-size: clamp(40px, 7vw, 72px);
+    letter-spacing: -0.035em;
+  }
+  .lede {
+    max-width: 700px;
+    font-size: clamp(17px, 2vw, 20px);
+    color: var(--muted);
+  }
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .facts li {
+    padding: 8px 16px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-raised);
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .facts strong {
+    color: var(--text);
+  }
+
+  .catalog {
+    padding: 24px 0 120px;
+  }
+  .controls {
+    display: grid;
+    gap: 14px;
+    justify-items: center;
+    margin-bottom: 32px;
+  }
+  .controls[hidden] {
+    display: none;
+  }
+  .search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: min(560px, 100%);
+    height: 50px;
+    padding: 0 18px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--bg-raised);
+    box-shadow: var(--shadow);
+  }
+  .search:focus-within {
+    border-color: var(--sky);
+    box-shadow: 0 0 0 3px var(--sky-soft);
+  }
+  .search svg {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    color: var(--faint);
+  }
+  .search input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font: 400 16px var(--body);
+  }
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
+  .chips button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--bg-raised);
+    color: var(--text);
+    font: 600 14px/1 var(--body);
+    cursor: pointer;
+  }
+  .chips button span {
+    color: var(--faint);
+    font-weight: 500;
+  }
+  .chips button[aria-pressed='true'] {
+    background: var(--button);
+    border-color: var(--button);
+    color: var(--button-text);
+  }
+  .chips button[aria-pressed='true'] span {
+    color: inherit;
+    opacity: 0.7;
+  }
+  .kinds button {
+    height: 32px;
+    font-size: 13px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (max-width: 960px) {
+    .cards {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+  @media (max-width: 600px) {
+    .cards {
+      grid-template-columns: 1fr;
+    }
+  }
+  .cards li[hidden] {
+    display: none;
+  }
+  .cards a {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto 1fr auto;
+    gap: 4px 16px;
+    height: 100%;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--bg-raised);
+    text-decoration: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  }
+  .cards a:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+  }
+  .cards img,
+  .letter {
+    grid-row: span 3;
+    width: 44px;
+    height: 44px;
+  }
+  .letter {
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: var(--bg-sunk);
+    font-weight: 700;
+  }
+  .name {
+    font: 700 18px/1.25 var(--display);
+    letter-spacing: -0.01em;
+  }
+  .tagline {
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .tags span {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: var(--bg-sunk);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .tags .kind {
+    background: color-mix(in srgb, var(--green) 14%, transparent);
+    color: color-mix(in srgb, var(--green) 70%, var(--text));
+  }
+  .tags .kind.app {
+    background: var(--sky-soft);
+    color: color-mix(in srgb, var(--sky) 75%, var(--text));
+  }
+  .none {
+    padding: 40px 0;
+    text-align: center;
+    color: var(--muted);
+  }
+  .none a {
+    color: var(--text);
+  }
+
+  .more {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 24px 40px;
+    margin-top: 56px;
+    padding: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-sunk);
+  }
+  .more h2 {
+    font-size: 26px;
+    margin-bottom: 8px;
+  }
+  .more p {
+    color: var(--muted);
+  }
+  .more-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  @media (max-width: 760px) {
+    .more {
+      grid-template-columns: 1fr;
+      padding: 24px;
+    }
+  }
+</style>

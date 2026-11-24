@@ -8,9 +8,9 @@ Activating it signs the bot in: you approve it on
 Linear's own page. The bot sees what your Linear account sees.
 
 Linear can also call OpenKumi the moment an issue or a comment is created or changed, so that an
-automation starts at once instead of at its next look. That is a webhook, set up below, once for
-each bot; it needs an admin of the Linear workspace, and an address the internet can reach this
-computer by.
+automation starts at once instead of at its next look. That is a webhook, set up on this page in
+the app, once for each bot; it needs an admin of the Linear workspace, and an address the internet
+can reach this computer by.
 
 The bot reads freely and can file issues and comments. It asks before it changes the status,
 assignee or priority of an existing issue.

@@ -5,18 +5,7 @@ import Mascot from '../components/Mascot.astro'
 import ProviderMark from '../components/ProviderMark.astro'
 import Shot from '../components/Shot.astro'
 import { DOWNLOADS, DOWNLOAD_URL, FILM, GITHUB_URL, INSTALL_COMMAND, IPHONE_BETA_URL, ISSUES_URL, RELEASES_URL } from '../lib/site'
-
-// The superpowers that ship with the app, read from the server's own folder of them, by name as the app lists them.
-type Power = { name: string; tagline: string; categories?: string[] }
-const powers = Object.entries(import.meta.glob<Power>('../../../server/superpowers/*/superpower.json', { eager: true, import: 'default' }))
-const icons = import.meta.glob<string>('../../../server/superpowers/*/icon.svg', { eager: true, query: '?raw', import: 'default' })
-const superpowers = powers
-  .map(([file, power]) => ({ ...power, categories: power.categories ?? [], icon: icons[file.replace('superpower.json', 'icon.svg')] }))
-  .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
-// The groups the app's catalog has, in its order (docs: Superpowers), with how many are in each.
-const groups = ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday']
-  .map((name) => ({ name, count: superpowers.filter((p) => p.categories.includes(name)).length }))
-  .filter((group) => group.count)
+import { apps, knowHow, superpowers } from '../lib/superpowers'
 
 // The first five are the bots in the screenshots, dressed the same.
 const crew: { name: string; role: string; look?: Look; emoji?: string }[] = [
@@ -395,26 +384,23 @@ const faq = [
       <div class="section-head">
         <span class="eyebrow">Superpowers</span>
         <h2>Powers you hand out, one bot at a time</h2>
-        <p>Let a bot work in your apps, or give it know-how. Each superpower says exactly what it can do, and the ones that work in an app sign in with an account of the bot’s own. A bot can use what you give it, and never give itself more.</p>
-      </div>
-      <div class="power-filter" role="group" aria-label="Show superpowers for" hidden data-power-filter>
-        <button type="button" aria-pressed="true" data-group="">All <span>{superpowers.length}</span></button>
-        {groups.map((group) => <button type="button" aria-pressed="false" data-group={group.name}>{group.name} <span>{group.count}</span></button>)}
+        <p>{apps.length} apps a bot can work in, with an account of its own, and {knowHow.length} kinds of know-how with nothing to sign in to. Each says exactly what it can do, and a bot can use what you give it, never give itself more.</p>
       </div>
       <ul class="powers">
         {
           superpowers.map((power) => (
-            <li data-groups={power.categories.join('|')}>
-              {power.icon ? <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(power.icon)}`} alt="" width="32" height="32" /> : <span class="letter">{power.name[0]}</span>}
-              <span>
-                <strong>{power.name}</strong>
-                <small>{power.tagline}</small>
-              </span>
+            <li>
+              <a href={`/integrations/${power.id}`} title={power.tagline}>
+                {power.icon ? <img src={power.icon} alt="" width="36" height="36" /> : <span class="letter">{power.name[0]}</span>}
+                <span>{power.name}</span>
+              </a>
             </li>
           ))
         }
       </ul>
-      <button type="button" class="button secondary more-powers" hidden data-more-powers>Show all {superpowers.length}</button>
+      <div class="powers-more">
+        <a class="button primary" href="/integrations">Explore all {superpowers.length} superpowers</a>
+      </div>
     </div>
   </section>
 
@@ -660,30 +646,6 @@ const faq = [
       // The keyboard goes with the eye, to the player's controls.
       film.focus({ preventScroll: true })
       film.play().catch(() => {})
-    })
-  }
-
-  // The superpowers by group: the buttons show once the script can work them, and until then all are shown.
-  // On a phone, where they make one long column, the first few are shown until the visitor asks for the rest.
-  const filter = document.querySelector('[data-power-filter]')
-  const list = document.querySelector('.powers')
-  const more = document.querySelector('[data-more-powers]')
-  const showAll = () => {
-    list.classList.remove('short')
-    more.hidden = true
-  }
-  if (filter && list && more) {
-    filter.hidden = false
-    list.classList.add('short')
-    more.hidden = false
-    more.addEventListener('click', showAll)
-    filter.addEventListener('click', (event) => {
-      const button = event.target.closest('button')
-      if (!button) return
-      for (const other of filter.querySelectorAll('button')) other.setAttribute('aria-pressed', String(other === button))
-      const group = button.dataset.group
-      if (group) showAll()
-      for (const power of list.querySelectorAll('li')) power.hidden = !!group && !power.dataset.groups.split('|').includes(group)
     })
   }
 </script>
@@ -1000,6 +962,10 @@ const faq = [
   @media (max-width: 960px) {
     .anatomy {
       grid-template-columns: 1fr 1fr;
+    }
+    /* No wider than the bot, so it stays inside a narrow screen. */
+    .halo {
+      inset: -12% 0 10%;
     }
     .core {
       grid-column: 1 / -1;
@@ -1599,111 +1565,64 @@ const faq = [
     }
   }
 
-  /* ---- superpowers */
-  .power-filter {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-    margin: -16px 0 32px;
-  }
-  .power-filter[hidden] {
-    display: none;
-  }
-  .power-filter button {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 36px;
-    padding: 0 14px;
-    border: 1px solid var(--border-strong);
-    border-radius: 999px;
-    background: var(--bg-raised);
-    color: var(--text);
-    font: 600 14px/1 var(--body);
-    cursor: pointer;
-  }
-  .power-filter button span {
-    color: var(--faint);
-    font-weight: 500;
-  }
-  .power-filter button[aria-pressed='true'] {
-    background: var(--button);
-    border-color: var(--button);
-    color: var(--button-text);
-  }
-  .power-filter button[aria-pressed='true'] span {
-    color: inherit;
-    opacity: 0.7;
-  }
+  /* ---- superpowers: a tile each, leading to its page */
   .powers {
     list-style: none;
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
     gap: 10px;
   }
-  @media (max-width: 960px) {
+  @media (max-width: 520px) {
     .powers {
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
     }
   }
-  @media (max-width: 600px) {
-    .powers {
-      grid-template-columns: 1fr;
-    }
-  }
-  .powers li {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    padding: 14px 16px;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    background: var(--bg-raised);
-  }
-  .powers li[hidden] {
-    display: none;
-  }
-  .more-powers {
-    display: none;
-  }
-  @media (max-width: 600px) {
-    .powers.short li:nth-child(n + 11) {
-      display: none;
-    }
-    .more-powers:not([hidden]) {
-      display: flex;
-      margin: 16px auto 0;
-    }
-  }
-  .powers li > span {
+  .powers a {
     display: grid;
-    gap: 2px;
-    min-width: 0;
+    justify-items: center;
+    align-content: start;
+    gap: 10px;
+    height: 100%;
+    padding: 18px 8px 14px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-raised);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    text-decoration: none;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .powers a:hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
   }
   .powers img,
   .letter {
-    width: 32px;
-    height: 32px;
-    flex: none;
-    margin-top: 2px;
+    width: 36px;
+    height: 36px;
   }
   .letter {
     display: grid;
     place-items: center;
-    border-radius: 9px;
+    border-radius: 10px;
     background: var(--bg-sunk);
     font-weight: 700;
   }
-  .powers strong {
-    font-size: 15.5px;
+  @media (max-width: 520px) {
+    .powers a {
+      padding: 14px 4px 12px;
+      font-size: 13px;
+    }
   }
-  .powers small {
-    font-size: 14px;
-    line-height: 1.45;
-    color: var(--muted);
+  .powers-more {
+    display: flex;
+    justify-content: center;
+    margin-top: 32px;
   }
 
   /* ---- the crew */

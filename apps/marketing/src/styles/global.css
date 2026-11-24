@@ -57,6 +57,12 @@
 *::after {
   box-sizing: border-box;
 }
+/* Nothing on the page may make it wider than the screen. Set on the root, where iOS Safari heeds
+   it; \`clip\` keeps the body from scrolling on its own, so the header still sticks. */
+html,
+body {
+  overflow-x: clip;
+}
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 80px;
@@ -74,7 +80,6 @@ body {
   font: 400 17px/1.6 var(--body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow-x: hidden;
 }
 img,
 svg {

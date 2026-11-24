@@ -70,7 +70,7 @@ export const ISSUES_URL = `${GITHUB_URL}/issues`
 
 export const NAV = [
   { href: '/#features', label: 'Features' },
-  { href: '/#superpowers', label: 'Superpowers' },
+  { href: '/integrations', label: 'Integrations' },
   { href: '/#privacy', label: 'Privacy' },
   { href: '/#faq', label: 'FAQ' },
   { href: DOCS_URL, label: 'Docs' },
