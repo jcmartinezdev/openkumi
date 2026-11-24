@@ -30,8 +30,8 @@ A computer that runs the OpenKumi server is an **environment**. The desktop app 
 | Runs a newer OpenKumi than this app | update the app (**Settings → About**) |
 | Turned off | its switch is off; the app does not try it |
 
-The window shows **one environment at a time** (marked **Showing now**). **Open**, the sidebar, or
-the **Environment** menu switches to another; the window stays as it is and only what it is
+The window shows **one environment at a time** (marked **Showing now**). **Open**, the switcher at
+the top of the sidebar or of Settings, or the **People** menu switches to another; the window stays as it is and only what it is
 connected to changes. The app connects only to the one it shows, so while you look at one, the
 bots of the others go on working on their own computers, unaffected.
 
@@ -47,8 +47,9 @@ same computer. If nothing answers there, the app starts its own server: on port 
 port if 4317 is taken by something that is not an OpenKumi of yours.
 
 The local environment is the first person's server on this computer. Where others have bots there
-too, each on a server of their own, the app runs theirs while it runs yours, and they reach theirs
-from their own devices as a remote environment, on its own port
+too, each on a server of their own, the app runs theirs while it runs yours, and shows theirs when
+they are picked in its switcher. They reach theirs from their own devices as a remote environment,
+on its own port
 ([Bots for someone else in the house](/environments/#bots-for-someone-else-in-the-house)).
 
 ## Several addresses
@@ -204,9 +205,9 @@ and proves itself.
 
 ### On the computer that runs the bots
 
-**Settings → Environments → Let other computers connect** (or `openkumi lan on`) lets other devices
+**Settings → Profile & devices → Let other devices connect** (or `openkumi lan on`) lets other devices
 reach it at all; off, it listens on this computer only and reports no addresses. Below it, **Pair a
-computer** shows the computer's home network addresses and Tailscale names, for typing in; the QR
+device** shows the computer's home network addresses and Tailscale names, for typing in; the QR
 code carries the first home network address, and the device learns the rest once it connects.
 
 ### On the iPhone
@@ -216,7 +217,7 @@ the order they are tried, with which one is in use, and **Add** takes another, t
 
 <Aside title="Troubleshooting">
   An environment never connects away from home: turn Tailscale on, on both, or add a public `https`
-  address. Never at home: **Let other computers connect** has to be on, and a firewall must let
+  address. Never at home: **Let other devices connect** has to be on, and a firewall must let
   port 4317 in (and 4327, 4337 and so on, for the other people with bots on that computer). See
   [When something is wrong](/troubleshooting/#the-app-cannot-connect).
 </Aside>

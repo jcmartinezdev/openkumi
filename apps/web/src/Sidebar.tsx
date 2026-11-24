@@ -2,9 +2,9 @@ import type { Bot, Thread } from '@openkumi/shared'
 import { ALPHA_NOTE } from '@openkumi/shared/alpha'
 import type { Modal } from './App'
 import { Icon } from './Icon'
-import { desktop, useDesktop } from './desktop'
 import { USAGE_ADDRESS, mainThread, openSettings, recentSubagents, rootOf, useStore } from './store'
 import { BotHead } from './Mascot'
+import { Switcher } from './Switcher'
 import { UpdatePill } from './Updates'
 
 export function StatusDot({ thread }: { thread: Thread }) {
@@ -45,9 +45,6 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
   // A subagent may run as another bot; the conversation it belongs to decides which bot is current.
   const currentBotId = root?.botId ?? bot?.id
   const connected = providers.some((p) => p.connected)
-  const app = useDesktop()
-  // The environments that are turned on, to switch between.
-  const environments = [...(app.local.enabled ? [{ id: 'local', name: 'This computer' }] : []), ...app.environments.filter((e) => e.enabled)]
 
   return (
     <nav className={`sidebar ${open ? 'open' : ''}`}>
@@ -55,17 +52,13 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
         <span className="wordmark">OpenKumi</span>
         {/* OpenKumi is an alpha; Settings › About says what that means. */}
         <button className="alpha-badge" title={ALPHA_NOTE} onClick={() => (close(), openSettings('about'))}>Alpha</button>
-        {/* With more than one environment turned on: which one is showing. */}
-        {environments.length > 1 && (
-          <select className="picker environment" aria-label="Environment" value={app.current ?? ''} onChange={(e) => void desktop.open(e.target.value).catch(() => {})}>
-            {environments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        )}
         <span className="grow" />
         <button className="icon" title="New bot" aria-label="New bot" onClick={() => openModal({ kind: 'new-bot' })}>
           <Icon name="plus" />
         </button>
       </div>
+      {/* Whose bots these are, and where: switched here, for everyone on this computer and the other computers. */}
+      <Switcher picked={close} />
       <div className="side-scroll">
         {bots.map((b) => {
           const main = mainThread(threads, b.id)

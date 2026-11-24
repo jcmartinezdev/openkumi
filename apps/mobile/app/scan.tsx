@@ -1,4 +1,4 @@
-// Reads the QR code the computer shows under "Pair a computer", which carries its address and the code.
+// Reads the QR code the computer shows under "Pair a device", which carries its address and the code.
 import { useRef } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'

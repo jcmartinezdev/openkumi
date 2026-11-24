@@ -36,14 +36,12 @@ const bridge: DesktopBridge | null = initial && {
     return () => void listeners.delete(listener)
   },
   statuses: () => ipcRenderer.invoke('desktop:statuses'),
-  open: (id) => ipcRenderer.invoke('desktop:open', id),
+  open: (id, person) => ipcRenderer.invoke('desktop:open', id, person),
   setLocal: (on, name) => ipcRenderer.invoke('desktop:set-local', on, name),
   people: {
-    list: () => ipcRenderer.invoke('desktop:people'),
     add: (name) => ipcRenderer.invoke('desktop:people-add', name),
     rename: (name, to) => ipcRenderer.invoke('desktop:people-rename', name, to),
     remove: (name) => ipcRenderer.invoke('desktop:people-remove', name),
-    pairing: (name) => ipcRenderer.invoke('desktop:people-pairing', name),
   },
   retry: () => ipcRenderer.invoke('desktop:retry'),
   add: (input) => ipcRenderer.invoke('desktop:add', input),

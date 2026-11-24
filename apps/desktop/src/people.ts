@@ -1,16 +1,15 @@
 // The people with bots on this computer, as the person at its window looks after them: who they
-// are, adding one, another name for one, and a pairing code for one's own computer or phone.
+// are, adding one, another name for one, and taking one off. Whose bots the window shows is picked
+// in main.ts; their devices are paired by their own server, which the window then talks to.
 //
 // Nothing of this goes over the network. The list is the server's own file, and a change to it is
 // made by the server's own command line (apps/server/src/cli.ts, `openkumi people`), run here as
 // that command is run in a terminal. So people are looked after at the computer that runs the
 // bots, as paired computers are, and an app connected from elsewhere has no way to.
-import fs from 'node:fs'
-import path from 'node:path'
 import { utilityProcess } from 'electron'
-import type { PersonHere, PersonPairing } from '@openkumi/shared/desktop'
+import type { PersonHere } from '@openkumi/shared/desktop'
 import { hello } from './environments.ts'
-import { local, me, peopleHere, restartLocal, runHere, serverEnv, shows, startOther, startOthers, stopOther } from './local.ts'
+import { codeIn, local, me, peopleHere, restartLocal, runHere, serverEnv, shows, startOther, startOthers, stopOther } from './local.ts'
 import { CLI } from './paths.ts'
 
 const address = (port: number) => `http://127.0.0.1:${port}`
@@ -100,37 +99,9 @@ export async function removePerson(name: unknown): Promise<PersonHere[]> {
   return people()
 }
 
-/** A server's own access code, from its data folder, which only this computer's user can read. '' before its first start. */
-function codeIn(home: string): string {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken ?? ''
-  } catch {
-    return ''
-  }
-}
-
 /** Asks a server on this computer with its access code. What answers is what was asked: an answer passed on from somewhere else is none. */
 const asked = (port: number, code: string, method: string, route: string, timeoutMs: number) =>
   fetch(address(port) + route, { method, headers: { Authorization: `Bearer ${code}` }, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' })
-
-/**
- * A code that lets one computer or phone into someone's server, and where it can be reached. Their
- * server makes it: this asks it as the app on its own computer does, with its access code from
- * its data folder, once what answers at its port has shown that it is that server.
- */
-export async function pairingFor(name: unknown): Promise<PersonPairing> {
-  running()
-  const person = known(name)
-  const [port, code] = [portOf(person), codeIn(path.join(path.dirname(local.home), person.name))]
-  if (!(await shows(port, code))) throw new Error(`${person.name}’s server is not running, so it cannot make a code.`)
-  const ask = async (method: string, route: string) => {
-    const res = await asked(port, code, method, route, 8000).catch(() => null)
-    if (!res?.ok) throw new Error(`${person.name}’s server did not answer.`)
-    return res.json()
-  }
-  const [pairing, access] = await Promise.all([ask('POST', '/api/pairing'), ask('GET', '/api/access')])
-  return { code: String(pairing.code), expiresAt: Number(pairing.expiresAt), port: Number(access.port), on: !!access.on, addresses: access.addresses ?? [], tailscale: access.tailscale ?? [] }
-}
 
 /**
  * How many bots are at work in the servers this app runs, everyone's: what quitting the app would

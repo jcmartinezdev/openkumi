@@ -302,6 +302,27 @@ export function peopleHere(): { name: string; port: number }[] {
 /** The person the local environment is: the one whose data folder its server has. */
 export const me = () => path.basename(local.home)
 
+/** A server's own access code, from its data folder, which only this computer's user can read. '' before its first start. */
+export function codeIn(home: string): string {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(home, 'auth.json'), 'utf8')).accessToken ?? ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Where the server of someone else here is reached, with its access code from their data folder,
+ * once what answers at their port has shown that it knows that code. Null while it does not answer:
+ * the code is never handed to anything else.
+ */
+export async function serverOf(name: string): Promise<{ port: number; token: string } | null> {
+  const person = peopleHere().find((p) => p.name === name)
+  if (!person || local.state !== 'running') return null
+  const token = codeIn(path.join(path.dirname(local.home), person.name))
+  return token && (await shows(person.port, token)) ? { port: person.port, token } : null
+}
+
 /** A server of someone else here that this app started: its process, the port it listens on, and its data folder. */
 interface Other {
   child: UtilityProcess
@@ -346,7 +367,8 @@ export async function startOther(name: string): Promise<void> {
       void end(child)
       reject(new Error(`${name}’s server did not start in time.`))
     }, 40_000)
-    child.on('message', (message) => message?.type === 'ready' && (clearTimeout(late), resolve()))
+    // The window may be waiting to show their bots.
+    child.on('message', (message) => message?.type === 'ready' && (clearTimeout(late), resolve(), changed()))
     child.once('exit', () => {
       clearTimeout(late)
       log.end()

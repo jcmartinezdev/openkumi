@@ -214,6 +214,7 @@ button.pill.link:hover { background: var(--active); }
 .gate-head { display: grid; gap: 6px; padding: 0 16px; }
 .gate-head h1 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
 .gate-head p { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.gate-head > button { justify-self: start; margin-top: 6px; }
 
 /* ---- the welcome (Welcome.tsx), while there is no environment at all: the crew, the words, and the ways to start */
 .welcome-scroll { flex: 1; min-height: 0; overflow-y: auto; }
@@ -880,7 +881,29 @@ a.set-link:hover { background: var(--hover); }
 .set-menu > summary:hover, .set-menu[open] > summary { background: var(--hover); color: var(--text); }
 .set-menu-items { position: absolute; right: 0; top: 34px; z-index: 3; display: grid; min-width: 140px; padding: 4px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--raised); box-shadow: var(--shadow); }
 .set-menu-items button { justify-content: flex-start; height: 30px; border: none; font-weight: 400; }
-.picker.environment { max-width: 130px; margin-left: 6px; }
+
+/* Whose bots the window shows, at the top of the sidebar and of the settings (Switcher.tsx). */
+.switcher { position: relative; flex: none; }
+.sidebar > .switcher { margin: 0 8px 6px; }
+.switcher-current { display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; height: auto; min-height: 42px; padding: 5px 10px 5px 8px; border-color: var(--border); border-radius: 9px; background: var(--raised); text-align: left; font-weight: 400; }
+.switcher-current:hover:not(:disabled), .switcher-current[aria-expanded='true'] { background: var(--raised); border-color: var(--border-strong); }
+.switcher-current > svg { transform: rotate(90deg); color: var(--faint); flex: none; }
+.switcher-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.switcher-text strong, .switcher-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switcher-text strong { font-size: 13px; font-weight: 600; }
+.switcher-text small { margin: 0; font-size: 11.5px; line-height: 1.3; }
+.avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; color: #fff; font-weight: 600; line-height: 1; }
+.switcher-menu { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 6; display: grid; gap: 1px; max-height: 70vh; overflow-y: auto; padding: 4px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--raised); box-shadow: var(--shadow); }
+.switcher-menu h4 { margin: 6px 8px 3px; font-size: 11.5px; font-weight: 500; color: var(--faint); }
+.switcher-item { display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; height: auto; min-height: 34px; padding: 4px 8px; border: none; border-radius: 7px; font-weight: 400; text-align: left; }
+.switcher-item .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switcher-item > svg { color: var(--muted); flex: none; }
+.switcher-item.add { color: var(--muted); }
+.switcher-item.add .grow { white-space: normal; }
+.switcher-item.add:hover:not(:disabled) { color: var(--text); }
+.switcher-plus { display: inline-grid; place-items: center; width: 24px; flex: none; }
+.switcher-sep { height: 1px; margin: 4px; background: var(--border); }
+.set-row h3 .avatar { margin-right: 2px; }
 
 /* ---- automations: shown in the conversation's place, built from the settings' rows */
 
@@ -1080,6 +1103,10 @@ button.usage-as-table:hover:not(:disabled) { color: var(--text); }
   /* The settings keep their sections in view as a strip of icons. */
   .set-nav { width: 56px; gap: 8px; }
   .set-search, .set-nav-group h3, .set-nav-item span { display: none; }
+  /* Just the person's mark; the list opens beside the strip. */
+  .set-nav .switcher-current { justify-content: center; min-height: 40px; padding: 0; border-color: transparent; background: none; }
+  .set-nav .switcher-text, .set-nav .switcher-current > svg { display: none; }
+  .set-nav .switcher-menu { position: fixed; top: calc(54px + env(safe-area-inset-top)); left: 8px; right: auto; width: 240px; }
   .set-nav-item { justify-content: center; padding: 0; }
   .set-nav-group + .set-nav-group { padding-top: 8px; border-top: 1px solid var(--border); }
   .set-head { padding-left: 14px; }

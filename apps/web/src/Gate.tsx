@@ -1,6 +1,7 @@
 // What the window shows while it has no environment to show: the welcome while there is none at
 // all, then while OpenKumi starts on this computer, and when the environment cannot be reached.
-import { useDesktop } from './desktop'
+import { shownName } from '@openkumi/shared/people'
+import { desktop, useDesktop } from './desktop'
 import { EnvironmentList } from './Settings'
 import { Section } from './settingsUi'
 import { useStore } from './store'
@@ -22,12 +23,18 @@ export function Gate() {
   /** What is going on, and whether there is anything for the person to decide. */
   let lead: string
   let waiting = false
+  /** Someone else's bots on this computer were picked, and their server does not answer (yet). */
+  const someoneElse = app.current === 'local' && local.state === 'running' && !app.connection && !!local.person && local.person !== local.first
   if (!app.current) {
     lead = 'No environment is turned on. Turn one on, or add one.'
   } else if (app.current === 'local' && local.state !== 'running') {
     // Turned on and not running: it is starting, it failed, or the app is on its way out.
     waiting = local.state !== 'failed'
     lead = local.state === 'starting' ? 'Starting OpenKumi on this computer…' : local.state === 'off' ? 'Stopping OpenKumi on this computer…' : 'OpenKumi could not start on this computer.'
+  } else if (someoneElse) {
+    // Their server starts after the first person's, or is starting again under a new name.
+    waiting = true
+    lead = `Waiting for ${shownName(local.person!)}’s bots on this computer…`
   } else if (refused && app.current !== 'local') {
     // (On this computer the app reads the new code by itself, so there is nothing to ask for.)
     lead = `${name} no longer lets this computer in. Pair them again: “Add environment” below, with a new code from its Settings.`
@@ -50,6 +57,7 @@ export function Gate() {
           <div className="gate-head">
             <h1>OpenKumi <span className="alpha-badge">Alpha</span></h1>
             <p role="status">{waiting && <span className="spinner" />}{lead}</p>
+            {someoneElse && local.first && <button onClick={() => void desktop.open('local', local.first).catch(() => {})}>Show {shownName(local.first)}’s bots instead</button>}
           </div>
           {/* The settings cannot be opened from here, and updating this app is what there is to do. */}
           {newer && app.current !== 'local' && <Section title="Updates"><AppUpdateRow /></Section>}

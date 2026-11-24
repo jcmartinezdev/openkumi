@@ -119,6 +119,12 @@ const PATHS: Record<string, ReactNode> = {
       <circle cx="12" cy="3.500" r="1" />
     </>
   ),
+  person: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4.500 20.500a7.500 7.500 0 0 1 15 0" />
+    </>
+  ),
   monitor: (
     <>
       <rect x="3" y="4" width="18" height="12" rx="2" />

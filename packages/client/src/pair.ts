@@ -10,7 +10,7 @@ const sign = (code: string, who: 'server' | 'computer', ours: string, theirs: st
 /** Compares without stopping at the first difference, so how long it takes says nothing. */
 const same = (a: string, b: string) => a.length === b.length && [...a].reduce((diff, char, i) => diff | (char.charCodeAt(0) ^ b.charCodeAt(i)), 0) === 0
 
-const unreachable = (url: string) => `Could not reach OpenKumi at ${url}. Check that the other computer is on, that “Let other computers connect” is switched on in its Settings, under Environments, and that both are on the same network.`
+const unreachable = (url: string) => `Could not reach OpenKumi at ${url}. Check that the other computer is on, that “Let other devices connect” is switched on in its Settings, under Profile & devices, and that both are on the same network.`
 
 /** The server's address as typed: with or without http://, with or without the port. */
 export function parseAddress(address: unknown): string {

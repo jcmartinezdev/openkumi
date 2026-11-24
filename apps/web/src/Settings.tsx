@@ -2,7 +2,7 @@
 // right. App-wide settings are kept by the environment; settings marked "this device" stay in the app.
 import { type ReactNode, useEffect, useState } from 'react'
 import type { Bot, PairedComputer, ProviderInfo, Settings } from '@openkumi/shared'
-import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, PersonHere, PersonPairing, RemoteEnvironment } from '@openkumi/shared/desktop'
+import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, RemoteEnvironment } from '@openkumi/shared/desktop'
 import { shownName, typedName } from '@openkumi/shared/people'
 import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import qrcode from 'qrcode-generator'
@@ -18,14 +18,16 @@ import { PREF_DEFAULTS, type Prefs, setPrefs, usePrefs } from './prefs'
 import { CopyButton, Field, Page, Pick, Row, Section, Switch, onServer, pointAt, usePref, useSetting } from './settingsUi'
 import { api, closeSettings, navigate, openSettings, saveSettings, useStore } from './store'
 import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
+import { Avatar, Switcher, useShowing } from './Switcher'
 import { PrivacyPage } from './Telemetry'
 import { UpdatesSection } from './Updates'
 import { BotHead } from './Mascot'
 
-type PageId = 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'prompt' | 'browser' | 'environments' | 'advanced' | 'privacy' | 'about'
+type PageId = 'profile' | 'general' | 'appearance' | 'chat' | 'providers' | 'bots' | 'superpowers' | 'prompt' | 'browser' | 'environments' | 'advanced' | 'privacy' | 'about'
 type IconName = Parameters<typeof Icon>[0]['name']
 
 const PAGES: Record<PageId, { label: string; icon: IconName }> = {
+  profile: { label: 'Profile & devices', icon: 'person' },
   general: { label: 'General', icon: 'sliders' },
   appearance: { label: 'Appearance', icon: 'sun' },
   chat: { label: 'Chat', icon: 'message' },
@@ -40,15 +42,24 @@ const PAGES: Record<PageId, { label: string; icon: IconName }> = {
   about: { label: 'About', icon: 'info' },
 }
 
-const NAV: { heading: string | null; pages: PageId[] }[] = [
-  { heading: null, pages: ['general', 'appearance', 'chat'] },
-  { heading: 'Agents', pages: ['providers', 'bots', 'superpowers', 'prompt', 'browser'] },
-  { heading: 'Network', pages: ['environments'] },
-  { heading: null, pages: ['advanced', 'privacy', 'about'] },
+/**
+ * First the pages of the person picked at the top, which their own server keeps: they change with
+ * whoever is picked. Then this app's own, the same whoever is picked.
+ */
+const NAV: { heading: 'person' | 'app'; pages: PageId[] }[] = [
+  { heading: 'person', pages: ['profile', 'general', 'providers', 'bots', 'superpowers', 'prompt', 'browser', 'advanced', 'privacy'] },
+  { heading: 'app', pages: ['appearance', 'chat', 'environments', 'about'] },
 ]
+const THIS_APP = 'This app'
+/** Whether a page is about the person picked at the top. */
+const theirs = (page: PageId) => NAV[0].pages.includes(page)
 
 /** Every setting the search can find: the page it is on, the row to bring into view, and what it is called. */
 const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: string }[] = [
+  { page: 'profile', id: 'person', title: 'Profile', also: 'person people name rename remove users family share accounts profiles someone else whose switch' },
+  { page: 'profile', id: 'lan', title: 'Let other devices connect', also: 'lan remote network access sharing computers phone' },
+  { page: 'profile', id: 'pair', title: 'Pair a device', also: 'code link token access connect computer phone qr' },
+  { page: 'profile', id: 'paired-computers', title: 'Paired devices', also: 'remove revoke computers phones access' },
   { page: 'general', id: 'default-provider', title: 'New bots run on', also: 'default provider model' },
   { page: 'general', id: 'default-web-search', title: 'Web search for new bots' },
   { page: 'general', id: 'default-show-browser', title: 'Show the browser window for new bots', also: 'headless' },
@@ -73,11 +84,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'browser', id: 'browsers-running', title: 'Browsers running now', also: 'stop' },
   { page: 'superpowers', id: 'superpowers', title: 'Superpowers', also: 'plugins skills apps tools productivity work creative marketing travel everyday notion linear atlassian jira confluence todoist granola otter readwise typefully evernote clickup miro fathom tldv attio folk pocketsmith webflow wix jotform klaviyo posthog sentry pandadoc crm forms analytics websites meetings finance documents errors weather exchange rates currency holidays watch seo social posts launch landing pages competitors sign in' },
   { page: 'environments', id: 'local-environment', title: 'Local environment', also: 'run on this computer server' },
-  { page: 'environments', id: 'remote-environments', title: 'Remote environments', also: 'add another computer connect server lan' },
-  { page: 'environments', id: 'lan', title: 'Let other computers connect', also: 'lan remote network access sharing' },
-  { page: 'environments', id: 'pair', title: 'Pair a computer', also: 'code link token access connect' },
-  { page: 'environments', id: 'paired-computers', title: 'Paired computers', also: 'remove revoke devices access' },
-  { page: 'environments', id: 'people', title: 'People on this computer', also: 'person users family share accounts profiles someone else add name' },
+  { page: 'environments', id: 'remote-environments', title: 'Other computers', also: 'remote environments add another computer connect server lan' },
   { page: 'advanced', id: 'max-steps', title: 'Steps per turn', also: 'limit' },
   { page: 'advanced', id: 'max-subagents', title: 'Subagents at once', also: 'limit parallel' },
   { page: 'advanced', id: 'max-depth', title: 'Subagent levels', also: 'depth nested' },
@@ -122,6 +129,7 @@ function RestoreDefaults({ page }: { page: PageId }) {
 }
 
 function Nav({ page }: { page: PageId }) {
+  const showing = useShowing()
   const [query, setQuery] = useState('')
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   const results = words.length ? SEARCH.filter((s) => words.every((w) => `${s.title} ${s.also ?? ''} ${PAGES[s.page].label}`.toLowerCase().includes(w))) : null
@@ -140,6 +148,8 @@ function Nav({ page }: { page: PageId }) {
   }
   return (
     <nav className="set-nav" aria-label="Settings sections">
+      {/* Whose settings these are: most pages change with whoever is picked here. */}
+      <Switcher />
       <label className="set-search">
         <Icon name="search" size={15} />
         <input
@@ -166,9 +176,9 @@ function Nav({ page }: { page: PageId }) {
           {!results.length && <p className="faint">No settings match.</p>}
         </div>
       ) : (
-        NAV.map((group, i) => (
-          <div key={group.heading ?? i} className="set-nav-group" role="group" aria-label={group.heading ?? undefined}>
-            {group.heading && <h3 aria-hidden>{group.heading}</h3>}
+        NAV.map((group) => (
+          <div key={group.heading} className="set-nav-group" role="group" aria-label={group.heading === 'person' ? showing.name : THIS_APP}>
+            <h3 aria-hidden>{group.heading === 'person' ? showing.name : THIS_APP}</h3>
             {group.pages.map((id) => (
               <a key={id} className={`set-nav-item ${id === page ? 'active' : ''}`} href={`#/settings/${id}`} aria-current={id === page ? 'page' : undefined} title={PAGES[id].label}>
                 <Icon name={PAGES[id].icon} size={16} />
@@ -184,6 +194,7 @@ function Nav({ page }: { page: PageId }) {
 
 export function SettingsView({ path, newBot }: { path: string[]; newBot: () => void }) {
   const page: PageId = path[0] in PAGES ? (path[0] as PageId) : 'general'
+  const showing = useShowing()
   const bots = useStore((s) => s.bots)
   const bot = page === 'bots' && path[1] ? bots.find((b) => b.id === path[1]) : undefined
   const power = useStore((s) => (page === 'superpowers' && path[1] ? s.superpowers.find((p) => p.id === path[1]) : undefined))
@@ -205,7 +216,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
       <div className="set-main">
         <header className="set-head">
           <nav className="crumbs" aria-label="Breadcrumb">
-            <span className="crumb-root">Settings</span>
+            <span className="crumb-root">{theirs(page) ? showing.name : THIS_APP}</span>
             <Icon name="chevron" size={12} />
             {bot || power ? <a href={`#/settings/${page}`}>{PAGES[page].label}</a> : <span aria-current="page">{PAGES[page].label}</span>}
             {(bot || power) && (
@@ -231,7 +242,8 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           <button className="icon" title="Close" aria-label="Close settings" onClick={closeSettings}><Icon name="x" /></button>
         </header>
         {/* Keyed by page so each one starts scrolled to the top. */}
-        <div className="set-body" key={bot ? `bot:${bot.id}${botPower ? `:${botPower.id}` : ''}` : power ? `superpower:${power.id}` : page}>
+        <div className="set-body" key={bot ? `bot:${bot.id}${botPower ? `:${botPower.id}` : ''}` : power ? `superpower:${power.id}` : `${page}:${page === 'environments' ? (path[1] ?? '') : ''}`}>
+          {page === 'profile' && <ProfilePage />}
           {page === 'general' && <General />}
           {page === 'appearance' && <Appearance />}
           {page === 'chat' && <ChatPage />}
@@ -240,7 +252,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} power={path[2] === 'superpowers' ? path[3] : undefined} /> : <Bots newBot={newBot} />)}
           {page === 'superpowers' && (path[1] ? <SuperpowerPage id={path[1]} /> : <SuperpowerCatalog />)}
           {page === 'browser' && <BrowserPage />}
-          {page === 'environments' && <Environments />}
+          {page === 'environments' && <Environments adding={path[1] === 'add'} />}
           {page === 'advanced' && <Advanced />}
           {page === 'privacy' && <PrivacyPage />}
           {page === 'about' && <AboutPage />}
@@ -422,8 +434,9 @@ function BrowserPage() {
   )
 }
 
-// ---- Environments: where bots run. The local environment and the remote ones, and how the
-// environment being shown lets the app on other computers in.
+// ---- Environments: where bots run. The local environment, which runs everyone's bots on this
+// computer, and the other computers this app was paired with. Whose bots are shown is picked at the
+// top of the settings; who else may use them is on that person's Profile & devices page.
 
 const REMOTE_STATUS: Record<EnvironmentStatus, string> = { connected: 'Connected', unreachable: 'Not reachable', refused: 'No longer lets this computer in', outdated: 'Runs an older OpenKumi, which has to be updated first', newer: 'Runs a newer OpenKumi than this app, which has to be updated first', off: 'Turned off' }
 const ANSWERS: Record<Answer, string> = { ok: 'Answers', refused: 'No longer lets this computer in', other: 'Something else answers', outdated: 'Runs an older OpenKumi', newer: 'Runs a newer OpenKumi than this app', unreachable: 'Not reachable from here', blocked: 'Needs https' }
@@ -436,23 +449,23 @@ const LOCAL_STATE: Record<LocalEnvironment['state'], string> = {
   failed: 'OpenKumi could not start on this computer.',
 }
 
-function Environments() {
-  const loaded = useStore((s) => s.loaded)
+function Environments({ adding }: { adding: boolean }) {
   return (
     <Page>
-      <EnvironmentList />
-      {loaded && <Sharing />}
-      <PeopleHere />
+      <EnvironmentList adding={adding} />
     </Page>
   )
 }
 
-/** The local environment and the remote ones. Part of the settings, and what the window shows while there is nothing to connect to. */
-export function EnvironmentList() {
+/**
+ * The local environment and the remote ones. Part of the settings, and what the window shows while
+ * there is nothing to connect to. `adding` opens the form for another computer at once.
+ */
+export function EnvironmentList({ adding: addingFirst = false }: { adding?: boolean }) {
   const app = useDesktop()
   const inUse = useStore((s) => s.address)
   const [statuses, setStatuses] = useState<Record<string, EnvironmentReport>>({})
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState(addingFirst)
   const [renaming, setRenaming] = useState<string | null>(null)
   /** The environment whose addresses are open below it. */
   const [opened, setOpened] = useState<string | null>(null)
@@ -491,7 +504,7 @@ export function EnvironmentList() {
     <>
       {error && <div className="notice error">{error}</div>}
       {told && !error && <div className="notice">{told}</div>}
-      <Section title="This app">
+      <Section title="This computer">
         <Row
           id="local-environment"
           title={<>Local environment{showing('local')}</>}
@@ -507,7 +520,7 @@ export function EnvironmentList() {
         />
       </Section>
 
-      <Section title="Environments" action={<button className="ghost" onClick={() => setAdding(!adding)}><Icon name="plus" size={14} /> Add environment</button>}>
+      <Section title="Other computers" action={<button className="ghost" onClick={() => setAdding(!adding)}><Icon name="plus" size={14} /> Add environment</button>}>
         {/* The form stays open when the link was not accepted, so it can be corrected. */}
         {adding && <AddEnvironment add={(input) => change(() => desktop.add(input)).then((added) => added && setAdding(false))} busy={busy} />}
         {app.environments.map((environment, i) => {
@@ -626,7 +639,7 @@ export function AddEnvironment({ add, busy }: { add: (input: { address: string; 
     <>
       <Row
         title="Address of the other computer"
-        description="On that computer, open Settings, go to Environments, switch on “Let other computers connect” and choose “Pair a computer”. It shows its address and a code."
+        description="On that computer, open Settings, go to Profile & devices, switch on “Let other devices connect” and choose “Pair a device”. It shows its address and a code."
         control={<input {...plain} autoFocus aria-label="Address of the other computer" value={address} placeholder="192.168.1.20:4317" onChange={(e) => setAddress(e.target.value)} />}
       />
       <Row title="Pairing code" description="Works once, for ten minutes. It is checked on both computers and never sent between them." control={<input {...plain} aria-label="Pairing code" value={code} placeholder="ABCD-EFGH-JKMN" onChange={(e) => setCode(e.target.value)} />} />
@@ -701,8 +714,82 @@ function PairingCode({ code, port, addresses, tailscale, children }: { code: str
 
 const day = (time: number) => new Date(time).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
-/** How the environment being shown lets the app on other computers in: one at a time, each with a key of its own. */
-function Sharing() {
+// ---- Profile & devices: the person picked at the top, and the computers and phones that use their bots.
+
+/**
+ * Whose bots these are, by the name they have on the computer that runs them, and the devices
+ * that use them. People are renamed and removed at that computer, by the app that runs everyone's
+ * servers there (apps/desktop/src/people.ts); their devices are paired by their own server.
+ */
+function ProfilePage() {
+  const app = useDesktop()
+  const { local } = app
+  const about = useStore((s) => s.about)
+  const loaded = useStore((s) => s.loaded)
+  const showing = useShowing()
+  const here = !!app.connection?.local
+  // Their name on this computer, which is also their folder's.
+  const person = here ? (app.connection?.person ?? about.person) : about.person
+  const first = here && person === local.first
+  const manage = here && !!person && local.startedHere && !!desktop.people
+  const [renaming, setRenaming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  /** Asks the app to change something. True when it worked. */
+  const change = async (work: () => Promise<unknown>) => {
+    setError('')
+    setBusy(true)
+    try {
+      await work()
+      return true
+    } catch (e) {
+      setError(reason(e))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Page>
+      {error && <div className="notice error">{error}</div>}
+      <Section title="Profile">
+        <Row
+          id="person"
+          title={
+            renaming && person ? (
+              <Field label={`Name of ${person}`} value={person} onCommit={(to) => void change(() => desktop.people!.rename(person, typedName(to).replace(/-+$/, ''))).then(() => setRenaming(false))} />
+            ) : (
+              <><Avatar name={showing.name} size={22} />{showing.name}</>
+            )
+          }
+          description={
+            here ? (
+              <>{person && <><span className="mono">{person}</span> · </>}bots on this computer · port {about.port}</>
+            ) : (
+              <>Bots on {showing.where}, which this app was paired with</>
+            )
+          }
+          status={here && person && !local.startedHere ? 'OpenKumi was started outside this app on this computer, so people are added, renamed and removed there: “openkumi people” in a terminal.' : undefined}
+          control={manage && !renaming && <button disabled={busy} onClick={() => setRenaming(true)}>Rename</button>}
+        />
+      </Section>
+      {loaded && <Devices name={showing.name} />}
+      {manage && !first && (
+        <Section title="Remove">
+          <Row
+            id="remove-person"
+            title={`Remove ${showing.name} from this computer`}
+            description={`Their server stops, and the computers and phones paired with it lose it. What it held is kept in their folder on this computer. The app goes back to ${shownName(local.first ?? '') || 'the first person'}’s bots.`}
+            control={<button className="danger" disabled={busy} onClick={() => void change(() => desktop.people!.remove(person!))}>Remove</button>}
+          />
+        </Section>
+      )}
+    </Page>
+  )
+}
+
+/** The computers and phones that use the bots shown, one at a time, each with a key of its own. `name` is whose bots they are. */
+function Devices({ name }: { name: string }) {
   const lan = useSetting('lan')
   const about = useStore((s) => s.about)
   const connected = useStore((s) => s.connected)
@@ -717,7 +804,7 @@ function Sharing() {
   useEffect(() => {
     if (connected) void load()
   }, [connected, lan.value])
-  // While a code is waiting to be used, the list is watched for the computer that uses it.
+  // While a code is waiting to be used, the list is watched for the device that uses it.
   useEffect(() => {
     if (!pairing) return
     const known = info?.computers.length ?? 0
@@ -730,7 +817,7 @@ function Sharing() {
   }, [pairing])
 
   const toggle = (next: boolean) => {
-    if (!next && !local && !confirm('This app reaches the environment over the network, so it will lose it. Switch it off?')) return
+    if (!next && !local && !confirm('This app reaches these bots over the network, so it will lose them. Switch it off?')) return
     lan.set(next)
   }
   const run = (work: () => Promise<unknown>) => (setError(''), void work().catch((e) => setError(e.message)))
@@ -745,26 +832,30 @@ function Sharing() {
   return (
     <>
       {error && <div className="notice error">{error}</div>}
-      <Section title="Sharing this environment">
+      <Section title="Devices">
         <Row
           id="lan"
-          title="Let other computers connect"
-          description="The OpenKumi app on your other computers and phone can use this environment once they are paired with it: on the same network, or from anywhere over Tailscale. On the local network the connection is not encrypted, so use it only on networks you trust; Tailscale encrypts it."
+          title="Let other devices connect"
+          description={`${name}’s other computers and phone can use these bots once they are paired: on the same network, or from anywhere over Tailscale. On the local network the connection is not encrypted, so use it only on networks you trust; Tailscale encrypts it.`}
           status={about.lanForced ? 'OpenKumi was started with --lan, which keeps this on. Start it without that to control it here.' : undefined}
           reset={about.lanForced ? undefined : lan.reset && (() => toggle(false))}
-          control={<Switch label="Let other computers connect" checked={on} disabled={about.lanForced} onChange={toggle} />}
+          control={<Switch label="Let other devices connect" checked={on} disabled={about.lanForced} onChange={toggle} />}
         />
         {on && info && (
           <>
             <Row
               id="pair"
-              title="Pair a computer"
-              description={local ? 'Makes a code that lets one computer or phone in. In the OpenKumi app on a computer, choose Settings, Environments, “Add environment”, and enter this computer’s address and the code. On a phone, scan the picture.' : 'Computers are paired, and removed, in the app on the computer that runs this environment.'}
-              control={local && <button onClick={() => run(async () => setPairing(await api('POST', '/api/pairing')))}>{pairing ? 'New code' : 'Pair a computer'}</button>}
+              title="Pair a device"
+              description={
+                local
+                  ? `Makes a code that lets one of ${name}’s computers or phones in. On a phone, open OpenKumi and scan the picture. On a computer, open the OpenKumi app, choose “Connect to another computer” under the name at the top of Settings, and enter this computer’s address and the code.`
+                  : 'Devices are paired, and removed, in the app on the computer that runs these bots.'
+              }
+              control={local && <button onClick={() => run(async () => setPairing(await api('POST', '/api/pairing')))}>{pairing ? 'New code' : 'Pair a device'}</button>}
             >
               {pairing && (
                 <PairingCode code={pairing.code} port={info.port} addresses={info.addresses} tailscale={info.tailscale ?? []}>
-                  The code works once, until {clock(pairing.expiresAt)}. This closes by itself when the other computer has used it. Paired once, it learns this computer’s other addresses by itself, so it also finds it over Tailscale.
+                  The code works once, until {clock(pairing.expiresAt)}. Whatever is paired with it sees {name}’s bots, and nobody else’s. This closes by itself when the device has used it. Paired once, it learns this computer’s other addresses by itself, so it also finds it over Tailscale.
                 </PairingCode>
               )}
             </Row>
@@ -777,124 +868,11 @@ function Sharing() {
                 control={local && <button className="danger" onClick={() => revoke(computer)}>Remove</button>}
               />
             ))}
-            {!info.computers.length && <Row id="paired-computers" title="No computers are paired" description="Only the app on this computer can use this environment." />}
+            {!info.computers.length && <Row id="paired-computers" title="No devices are paired" description={`Only the app on this computer can use ${name}’s bots.`} />}
           </>
         )}
       </Section>
     </>
-  )
-}
-
-/**
- * The people with bots on this computer. Bots belong to a person, and each person here has a
- * server of their own, apart from the others': the local environment is the first person's, and
- * everyone else uses theirs from their own computer or phone. They are looked after here, in the
- * app on the computer that runs the bots, and nowhere else.
- */
-function PeopleHere() {
-  const { local } = useDesktop()
-  const [list, setList] = useState<PersonHere[]>([])
-  const [adding, setAdding] = useState(false)
-  const [name, setName] = useState('')
-  const [renaming, setRenaming] = useState<string | null>(null)
-  /** The code that lets one of a person's own computers or phones into their server. */
-  const [pairing, setPairing] = useState<(PersonPairing & { name: string }) | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const running = local.state === 'running'
-  useEffect(() => {
-    if (running) void desktop.people?.list().then(setList).catch(() => {})
-  }, [running])
-  if (!running || !desktop.people) return null
-  const people = desktop.people
-
-  /** Asks the app to change something, and takes the list as it is then. True when it worked. */
-  const change = async (work: () => Promise<PersonHere[] | void>) => {
-    setError('')
-    setBusy(true)
-    try {
-      const now = await work()
-      if (now) setList(now)
-      return true
-    } catch (e) {
-      setError(reason(e))
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }
-  const pair = (who: string) => change(async () => setPairing({ name: who, ...(await people.pairing(who)) }))
-  // Someone new needs a code for their own computer or phone next, so one is made at once.
-  const add = () =>
-    change(async () => {
-      const added = typedName(name).replace(/-+$/, '')
-      const now = await people.add(added)
-      setList(now)
-      setAdding(false)
-      setName('')
-      setPairing({ name: added, ...(await people.pairing(added)) })
-    })
-  const menu = (e: { currentTarget: HTMLElement }) => e.currentTarget.closest('details')!.removeAttribute('open')
-
-  return (
-    <Section title="People on this computer" action={local.startedHere && <button className="ghost" onClick={() => setAdding(!adding)}><Icon name="plus" size={14} /> Add a person</button>}>
-      {error && <div className="notice error">{error}</div>}
-      <Row
-        id="people"
-        title="Bots belong to a person"
-        description="Each person here has bots of their own, kept apart from everyone else’s, and uses them from their own computer or phone once it is paired. Everyone’s bots run on what this computer is signed in to."
-        status={local.startedHere ? undefined : 'OpenKumi was started outside this app, so people are added and removed there: “openkumi people add <name>” in a terminal on this computer.'}
-      />
-      {adding && (
-        <Row
-          title="Their name"
-          description="What they are called here: small letters, digits and dashes. Their server starts at once, and you get a code for their computer or phone."
-          control={
-            <>
-              <input className="set-input" spellCheck={false} autoCapitalize="off" autoFocus aria-label="Name of the person to add" value={name} placeholder="such as ana" onChange={(e) => setName(typedName(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && name && !busy && void add()} />
-              <button className="primary" disabled={busy || !name.replace(/-+$/, '')} onClick={() => void add()}>{busy ? 'Adding…' : 'Add'}</button>
-            </>
-          }
-        />
-      )}
-      {list.map((person) => (
-        <Row
-          key={person.name}
-          title={
-            renaming === person.name ? (
-              <Field label={`Name of ${person.name}`} value={person.name} onCommit={(to) => change(() => people.rename(person.name, typedName(to).replace(/-+$/, ''))).then(() => setRenaming(null))} />
-            ) : (
-              <><Icon name="bot" size={15} />{shownName(person.name)}{person.me && <span className="pill good">You</span>}</>
-            )
-          }
-          description={<><span className="mono">{person.name}</span> · port {person.port}{person.running ? '' : ' · not running'}</>}
-          control={
-            <>
-              {!person.me && <button disabled={busy || !person.running} onClick={() => void pair(person.name)}>{pairing?.name === person.name ? 'New code' : 'Pair a device'}</button>}
-              {local.startedHere && (
-                <details className="set-menu">
-                  <summary className="icon" title="More" aria-label={`More for ${person.name}`}><Icon name="more" /></summary>
-                  <div className="set-menu-items">
-                    <button onClick={(e) => (menu(e), setRenaming(person.name))}>Rename</button>
-                    {!person.me && <button className="danger" onClick={(e) => (menu(e), pairing?.name === person.name && setPairing(null), void change(() => people.remove(person.name)))}>Remove</button>}
-                  </div>
-                </details>
-              )}
-            </>
-          }
-        >
-          {pairing?.name === person.name && (
-            <>
-              <PairingCode code={pairing.code} port={pairing.port} addresses={pairing.addresses} tailscale={pairing.tailscale}>
-                {pairing.on ? '' : 'Other computers cannot reach this server: “Let other computers connect” is off for it. '}
-                The code works once, until {clock(pairing.expiresAt)}, for one of {shownName(person.name)}’s own computers or phones. Whatever is paired with it sees {shownName(person.name)}’s bots, and nobody else’s.
-              </PairingCode>
-              <div className="set-below"><button className="ghost" onClick={() => setPairing(null)}>Done</button></div>
-            </>
-          )}
-        </Row>
-      ))}
-    </Section>
   )
 }
 
@@ -983,7 +961,6 @@ function AboutPage() {
           control={<a className="button" href={ISSUES_URL} target="_blank" rel="noreferrer">Report a problem</a>}
         />
         {fact('Runs with', `Node.js ${about.node.replace(/^v/, '')} on ${about.platform}`)}
-        {about.person && fact('Bots of', shownName(about.person), 'person')}
         {fact('Port', <>{about.port} <span className="faint">(set with OPENKUMI_PORT when starting OpenKumi)</span></>)}
         {fact('Data folder', <code>{home}</code>)}
         {fact('License', 'MIT')}

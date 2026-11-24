@@ -2,7 +2,7 @@ OpenKumi's iPhone app is the remote for OpenKumi, a free, open-source program th
 
 To try it:
 1. On a Mac, download the desktop app from https://openkumi.ai (Download) and open it. Choose "Run them on this computer". A bot answers through an AI program the person already has; the app shows how to sign in to Claude Code, Codex (ChatGPT) or Grok.
-2. In the desktop app: Settings > Environments > "Let other computers connect", then "Pair a computer". It shows a QR code and a code.
+2. In the desktop app: Settings > Profile & devices > "Let other devices connect", then "Pair a device". It shows a QR code and a code.
 3. On the iPhone, on the same Wi-Fi: tap "Pair with your computer" on the welcome screen and scan the QR code.
 The list of bots then appears. You can chat with a bot, send it photos, dictate, call it, and watch its browser.
 

@@ -78,7 +78,7 @@ export default function ServerSettings() {
         <Field key={server.addresses.length} label="Add" value="" placeholder="mac-mini.tail1234.ts.net:4317" autoCapitalize="none" keyboardType="url" onCommit={(address) => void add(address)} />
       </Section>
 
-      <Section footer="This phone has a key of its own, kept in its keychain. The computer can shut it out at any time, in Settings › Environments.">
+      <Section footer="This phone has a key of its own, kept in its keychain. The computer can shut it out at any time, in Settings › Profile & devices.">
         <Row label="Unpair this phone" tone="destructive" onPress={unpair} />
       </Section>
     </SettingsPage>

@@ -19,26 +19,29 @@ reaching it away from home, and keeping that safe.
   and your bots only run in remote environments. If OpenKumi is already running on this computer
   when the app starts (a server you installed alone, say), the app uses that one, after it has
   shown it is the real thing, and leaves it running when you quit.
-- **Environments.** Other computers that run OpenKumi, each paired with this one. Each has a
+- **Other computers.** Other computers that run OpenKumi, each paired with this one. Each has a
   switch, one or more addresses, and can be renamed or removed.
 
-The window shows one environment at a time. With more than one turned on, switch between them from
-the sidebar or the **Environment** menu; the window stays as it is and only what it is connected
-to changes. See [Servers and addresses](/connections/#several-servers).
+The window shows one person's bots at a time. The switcher at the top of the sidebar, and at the
+top of Settings, says whose they are and on which computer, and picks another: anyone with bots on
+this computer, or one of the other computers. The **People** menu does the same. The window stays as
+it is and only what it is connected to changes. See [Servers and addresses](/connections/#several-servers).
 
 ## Pairing another computer
 
 <Steps>
 
-1. **On the computer that runs the bots**, open **Settings → Environments**, turn on **Let other
-   computers connect**, then choose **Pair a computer**. It shows its address, a code like
-   `ABCD-EFGH-JKMN`, and the same as a QR code.
+1. **On the computer that runs the bots**, open **Settings → Profile & devices**, turn on **Let
+   other devices connect**, then choose **Pair a device**. It shows its address, a code like
+   `ABCD-EFGH-JKMN`, and the same as a QR code. The device gets the bots of whoever is picked at
+   the top of Settings.
 
    With no app there (a server installed alone), run `openkumi lan on`, then `openkumi pair`. From
    a clone of the repository it is `npm run pair`.
 
-2. **On the other computer**, open **Settings → Environments → Add environment** (or, on a fresh
-   install, **Connect to another computer**), and enter the address and the code.
+2. **On the other computer**, choose **Connect to another computer** in the switcher at the top of
+   the sidebar (or **Settings → Environments → Add environment**; on a fresh install, **Connect to
+   another computer**), and enter the address and the code.
 
 3. That is all. The other computer now has a key of its own, and the bots appear.
 
@@ -50,8 +53,8 @@ occasion with it. So the app cannot be talked into pairing with something else a
 and the server only lets in a computer that was given the code.
 [Keys, pairing and the network](/security/access/#pairing) draws the exchange.
 
-**Settings → Environments → Paired computers**, on the computer that runs the bots, lists every
-computer and phone it has let in, with when each was last seen. **Remove** shuts one out at once,
+**Settings → Profile & devices**, on the computer that runs the bots, lists every computer and
+phone that person has let in, with when each was last seen. **Remove** shuts one out at once,
 and ends whatever it has open, without disturbing the others. Who gets in is decided only at the
 computer that runs the bots: a paired computer cannot pair another.
 
@@ -108,36 +111,43 @@ you by your account's name there.)
 
 <Steps>
 
-1. **On the computer that runs the bots**, open **Settings → Environments** and, under **People
-   on this computer**, choose **Add a person**. Give their name.
+1. **On the computer that runs the bots**, open the switcher at the top of the sidebar or of
+   Settings, and choose **Add a person**. Give their name.
 
-2. Their server starts, and the app shows its address, a pairing code and the same as a picture.
+2. Their server starts, and the app switches to them, on their **Profile & devices** page. **Pair
+   a device** there shows its address, a pairing code and the same as a picture.
 
-3. **On their computer**, they open **Settings → Environments → Add environment** and enter the
-   address and the code. **On their phone**, they scan the picture. From then on they have their
-   own first bot, and make their own.
+3. **On their computer**, they choose **Connect to another computer** and enter the address and the
+   code. **On their phone**, they scan the picture. From then on they have their own first bot, and
+   make their own.
 
 </Steps>
 
 Type the address as it is shown, port and all: an address typed without one is taken to mean
 `4317`, which is yours. Their app names the environment after them and the computer, such as
-"Ana on mac-mini", and can be given another name. The app on the computer that runs the bots
-shows yours: they use theirs from their own computer or phone.
+"Ana on mac-mini", and can be given another name.
 
-**Pair a device** beside their name makes another code, for another of their computers or phones.
-The **⋯** menu changes a name, yours included, or removes someone: their server stops, and what
-it held stays in its folder.
+On the computer that runs the bots, the app shows whoever is picked in the switcher: their bots,
+their settings and their devices. Pick someone there to set up their bots, or to pair another of
+their devices; the app remembers who was picked. On each person's **Profile & devices** page,
+**Pair a device** makes another code, **Rename** changes the name (yours too, on your page), and
+**Remove** takes someone else off the computer: their server stops, and what it held stays in its
+folder. You, the first person, cannot be removed from the app.
 
 - **Apart from each other.** Each person's bots, conversations, automations, settings and paired
-  devices are in a folder of their own, `~/.openkumi/people/<name>/`. Nobody's app is ever shown
-  another person's bots, and the bots of one cannot message the bots of another.
+  devices are in a folder of their own, `~/.openkumi/people/<name>/`. A computer or phone paired
+  with one person is never shown another person's bots, and the bots of one cannot message the
+  bots of another.
+- **Open to whoever sits at that computer.** The app there shows anyone's bots once they are
+  picked: there is no lock between people. Whoever can use that computer's account can read
+  every person's folder in any case (see below).
 - **Bots that know it.** Once a computer has more than one person, every bot on it is told that it
   shares the computer with others, that it works for its own person alone and cannot reach anyone
   else's bots, and that this keeps the bots apart but not the computer: asked who can see what it
   is told, it says that whoever can use the computer's account can read every person's files.
-- **Looked after only at that computer.** People are added, renamed and removed in the app on the
-  computer that runs the bots, or in a terminal there. An app that is connected from another
-  computer or a phone uses its own person's server, and has no way to change who else has one.
+- **Looked after only at that computer.** People are added, picked, renamed and removed in the app
+  on the computer that runs the bots, or in a terminal there. An app that is connected from another
+  computer or a phone uses one person's server, and has no way to see or change anyone else's.
 - **On a port of their own.** Yours is `4317`, the next person's `4327`, then `4337`. The address
   shown for them ends in it, and their [webhooks](/webhooks/#bots-for-someone-else-on-the-same-computer)
   come in on the port after it (`4328`).
@@ -164,8 +174,8 @@ openkumi people remove anna     # stop it; what it held stays in its folder
 
 A command with no name after it is about the first person's server, which on a computer with one
 person is all there is to know. The exception is `openkumi start`, which runs everyone's servers
-in one terminal; `openkumi start --for ana` runs only hers. An app on that computer shows who has
-bots there and makes pairing codes, but leaves adding and removing to the terminal. From the
+in one terminal; `openkumi start --for ana` runs only hers. An app on that computer shows anyone's
+bots, picked in its switcher, but leaves adding, renaming and removing to the terminal. From the
 source it is `npm run openkumi -- people add ana`, and `npm run server` runs everyone's.
 
 <Aside type="caution" title="Apart in the app, not locked away at the computer">
@@ -188,7 +198,7 @@ up on the computer, or by asking a bot).
 
 <Steps>
 
-1. On the computer that runs the bots, choose **Pair a computer** as above.
+1. On the computer that runs the bots, choose **Pair a device** on **Settings → Profile & devices**, as above.
 2. In the phone app, scan the QR code it shows, or type the address and the code.
 
 </Steps>
