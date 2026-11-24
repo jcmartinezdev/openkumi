@@ -1585,6 +1585,90 @@ test('the model picker offers every provider and its models, and picking one mov
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('the order of the bots: as they were made, the one last talked with first, or the owner’s own, dragged or moved from the keyboard', async () => {
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Kumi')
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
+  const settings = async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).settings
+  const alder = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Alder', provider: 'mock', look: { creature: 'cat' } })
+  const birch = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Birch', provider: 'mock', look: { creature: 'bear' } })
+  await showsBot(win, 'Birch')
+  /** The bots as the sidebar lists them. */
+  const listed = () => win.locator('.sidebar .row.bot .name').allInnerTexts()
+  const row = (name) => win.locator('.sidebar .row.bot', { hasText: name })
+  const order = async (name) => {
+    await win.getByRole('button', { name: 'Order of the bots' }).click()
+    await win.getByRole('menuitemradio', { name }).click()
+  }
+
+  // As they were made: the newest last. Nothing is dragged in this order.
+  assert.deepEqual((await listed()).slice(-2), ['Alder', 'Birch'])
+  assert.equal((await listed())[0], 'Kumi')
+  assert.equal(await row('Alder').locator('xpath=..').getAttribute('draggable'), 'false')
+
+  // The one last talked with first; a bot nothing was said to yet goes by when it was made.
+  await order('Last message')
+  await until(async () => (await listed()).slice(0, 2).join() === 'Birch,Alder', 10_000)
+  await row('Alder').click()
+  await win.locator('.empty h1', { hasText: 'Alder' }).waitFor()
+  await win.locator('.composer textarea').fill('Which tree are you?')
+  await win.keyboard.press('Meta+Enter')
+  await win.locator('.msg.assistant', { hasText: 'Echo: Which tree are you?' }).waitFor({ timeout: 20_000 })
+  await until(async () => (await listed()).slice(0, 2).join() === 'Alder,Birch', 10_000)
+  await win.getByRole('button', { name: 'Order of the bots' }).click()
+  assert.equal(await win.getByRole('menuitemradio', { name: 'Last message' }).getAttribute('aria-checked'), 'true')
+  await shot('bot-order-menu')
+  await win.keyboard.press('Escape')
+
+  // Their own order starts as what is showing, and is kept on the server, for the phone to list them the same.
+  const before = await listed()
+  await order('My own order')
+  await until(async () => (await settings()).botSort === 'manual', 10_000)
+  assert.deepEqual(await listed(), before)
+  assert.deepEqual((await settings()).botOrder.slice(0, 2), [alder.id, birch.id])
+
+  // A bot is dragged to its place: onto the upper half of another puts it before that one.
+  await row('Birch').dragTo(row('Alder'), { targetPosition: { x: 40, y: 4 } })
+  await until(async () => (await listed()).slice(0, 2).join() === 'Birch,Alder', 10_000)
+  await until(async () => (await settings()).botOrder.slice(0, 2).join() === `${birch.id},${alder.id}`, 10_000)
+  // And below the last one, to the end.
+  const last = (await listed()).at(-1)
+  await row('Birch').dragTo(row(last), { targetPosition: { x: 40, y: 28 } })
+  await until(async () => (await listed()).at(-1) === 'Birch', 10_000)
+  await shot('bot-order-own')
+
+  // From the keyboard, a place at a time, the row keeping the keyboard.
+  await row('Birch').focus()
+  await win.keyboard.press('Alt+ArrowUp')
+  await until(async () => (await listed()).at(-2) === 'Birch', 10_000)
+  await until(() => win.evaluate(() => document.activeElement?.textContent?.includes('Birch')), 10_000)
+  // Talking with a bot does not move it now.
+  assert.equal((await listed())[0], 'Alder')
+
+  // The settings have the choice too, found by searching, and put it back.
+  await win.evaluate(() => (location.hash = '/settings/general'))
+  await win.getByLabel('Search settings').fill('order of the bots')
+  await win.locator('.set-results button', { hasText: 'Order of the bots' }).click()
+  const choice = win.getByRole('combobox', { name: 'Order of the bots' })
+  assert.equal(await choice.inputValue(), 'manual')
+  await choice.selectOption('created')
+  await until(async () => (await settings()).botSort === 'created', 10_000)
+  await win.keyboard.press('Escape')
+  await win.keyboard.press('Escape')
+  await showsBot(win, 'Kumi')
+  assert.deepEqual((await listed()).slice(-2), ['Alder', 'Birch'])
+  // The owner's order is kept for when it is chosen again, without the bots that are gone.
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${alder.id}`)
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${birch.id}`)
+  const kept = (await settings()).botOrder
+  assert.ok(kept.length && !kept.includes(alder.id) && !kept.includes(birch.id))
+  await ask(LOCAL_PORT, 'local-home', 'PATCH', '/api/settings', { botOrder: [] })
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('master prompt: each bot’s line set from one page, and all a bot is told read there, with nothing to change it', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()

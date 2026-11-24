@@ -1,5 +1,6 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
+import { useBotOrder } from '@openkumi/client/bots'
 import { browsingThread, control, windowOf } from '@openkumi/client/browser'
 import { screen } from '@openkumi/client/telemetry'
 import { BrowserPane, BrowserPip } from './BrowserPane'
@@ -86,11 +87,12 @@ export function App() {
   }, [missing, connected, route.threadId])
   const bot = bots.find((b) => b.id === (thread?.botId ?? route.botId))
 
-  // Land on the first bot when the URL names nothing that exists.
+  // Land on the first bot, as the sidebar lists them, when the URL names nothing that exists.
+  const first = useBotOrder().bots[0]?.id
   useEffect(() => {
     // Not while the settings are showing: they may have been opened directly, with no chat underneath yet.
-    if (loaded && !current.settings && !page && !bot && bots.length) navigate(bots[0].id)
-  }, [loaded, bot, bots, current.settings, page])
+    if (loaded && !current.settings && !page && !bot && first) navigate(first)
+  }, [loaded, bot, first, current.settings, page])
 
   const pane = bot && !page ? panes[bot.id] : undefined
   // The pane shows the window of the thread the chat shows, unless one was docked from picture in picture.

@@ -468,7 +468,16 @@ export interface Settings {
    * (apps/server/src/telemetry.ts). Null until its owner has been asked: nothing is sent before.
    */
   telemetry: boolean | null
+  /**
+   * The order the bots are listed in, in the sidebar and on the phone: as they were made, the one
+   * last talked with first, or the owner's own order (`botOrder`). The same on every device.
+   */
+  botSort: BotSort
+  /** The owner's own order, as bot ids. A bot that is not in it comes after the ones that are, as they were made. */
+  botOrder: string[]
 }
+
+export type BotSort = 'created' | 'recent' | 'manual'
 
 /** One thing a server sent to OpenKumi's makers, as it was sent. */
 export interface TelemetryEvent {

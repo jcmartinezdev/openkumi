@@ -168,6 +168,7 @@ const PATHS: Record<string, ReactNode> = {
   code: <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />,
   steps: <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />,
   chart: <path d="M4 20h16M7 16v-5M12 16V5M17 16v-8" />,
+  sort: <path d="M7 5v14M3.500 8.500 7 5l3.500 3.500M17 19V5M13.500 15.500 17 19l3.500-3.500" />,
 }
 
 export function Icon({ name, size = 16 }: { name: keyof typeof PATHS; size?: number }) {

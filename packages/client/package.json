@@ -29,7 +29,8 @@
     "./dictation": "./src/dictation.ts",
     "./calls": "./src/calls.ts",
     "./telemetry": "./src/telemetry.ts",
-    "./usage": "./src/usage.ts"
+    "./usage": "./src/usage.ts",
+    "./bots": "./src/bots.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

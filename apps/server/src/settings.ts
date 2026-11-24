@@ -26,6 +26,8 @@ export const DEFAULTS: Settings = {
   debugEngines: false,
   autoUpdate: true,
   telemetry: null,
+  botSort: 'created',
+  botOrder: [],
 }
 
 const FILE = path.join(HOME, 'settings.json')
@@ -60,6 +62,9 @@ const ACCEPT: { [K in keyof Settings]: (v: unknown) => Settings[K] | undefined }
   autoUpdate: bool,
   // Answered once, it is yes or no from then on: there is no going back to not having been asked.
   telemetry: bool,
+  botSort: oneOf('created', 'recent', 'manual') as (v: unknown) => Settings['botSort'] | undefined,
+  // Ids as bots have them (bots.ts), each once.
+  botOrder: (v) => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(x)))].slice(0, 1000) : undefined),
 }
 
 function clean(input: Record<string, unknown>): Partial<Settings> {
