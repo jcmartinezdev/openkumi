@@ -622,7 +622,6 @@ function Addresses({ environment, report, inUse, busy, change, typing, typed }: 
   useEffect(() => {
     if (!typing) return
     field.current?.focus()
-    field.current?.scrollIntoView({ block: 'nearest' })
     typed()
   }, [typing])
   const add = async () => {
