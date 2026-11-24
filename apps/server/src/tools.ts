@@ -456,6 +456,12 @@ const automationTools: Tool[] = [
         title: str('A short name, e.g. "Morning news brief"'),
         prompt: str('Complete, self-contained instructions for each run, including what to report'),
         ...startsOn,
+        model: str(
+          'The model each run works on, by name (e.g. "haiku"), when it should not be the model of the bot that does it: a lighter one ' +
+            'for a simple check that runs often, a stronger one for hard work, or the one the user asked for. Leave it out and it runs on ' +
+            'what that bot runs on, whatever that is at the time. A name that fits no model is answered with the models there are.',
+        ),
+        effort: str('With model: how hard that model thinks (minimal, low, medium, high, xhigh or max; not every model takes each). Leave it out for the model\'s own.'),
         bot_id: str('The main assistant only: the bot that does it, if not you'),
       },
       ['title', 'prompt'],
@@ -465,7 +471,7 @@ const automationTools: Tool[] = [
   {
     name: 'update_automation',
     description:
-      'Change an automation you made (the main assistant can change any): its name, its prompt or what starts it, ' +
+      'Change an automation you made (the main assistant can change any): its name, its prompt, what starts it or the model it runs on, ' +
       'or pause or resume it. Giving one of at, in_minutes, time, every_minutes, watch or hook replaces what starts it.',
     parameters: params(
       {
@@ -474,6 +480,8 @@ const automationTools: Tool[] = [
         prompt: str('New instructions for each run'),
         paused: { type: 'boolean', description: 'true pauses it, false resumes it' },
         ...startsOn,
+        model: str('A model for its runs, by name, or "same" to go back to the model of the bot that does it'),
+        effort: str('How hard its own model thinks: minimal, low, medium, high, xhigh or max'),
         bot_id: str('The main assistant only: move it to this bot'),
       },
       ['id'],

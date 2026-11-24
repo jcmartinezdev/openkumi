@@ -70,7 +70,8 @@ that stays logged in.
   conversation. See [Calls](/calls/).
 - **Automations.** A bot can work without being asked: at set times, when a page or one of its
   apps changes (OpenKumi looks, at no cost, and starts the bot only on a change), or the moment an
-  app calls a webhook. It tells you in its conversation what came of it. See
+  app calls a webhook. It tells you in its conversation what came of it. Each automation runs on
+  its bot's model, or on one of its own, such as a lighter one for a simple check. See
   [Automations](/automations/).
 - **See what it all uses.** Usage, on the computer and the phone, shows how many tokens your bots'
   models used by provider, model and bot, what that would have cost as API calls, and how much of

@@ -4,14 +4,17 @@
 // One starts at a time, when something it watches changes, or when one of the bot's apps calls. The
 // form makes watches on web pages; a watch on one of a bot's apps is set up by the bot, which knows
 // its tools, and can be changed here. An app that calls is offered once its webhook is set up, on
-// the app's page under Superpowers.
+// the app's page under Superpowers. Its runs work on what its bot runs on, or on a model chosen for
+// it here with the picker the conversation has.
 import { useState } from 'react'
-import type { Automation, Bot, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
+import type { Automation, Bot, RunsOn, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
+import { runsOnLabel, useModelLists } from '@openkumi/client/models'
 import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, lookLabel, madeBy, nextRun, runStatus, runTime, standing, triggerLabel, trouble, useRuns, watchLabel } from '@openkumi/client/automations'
 import { Icon } from './Icon'
 import { Page, Pick, Row, Section, Switch } from './settingsUi'
 import { api, openAutomations, useStore } from './store'
 import { BotHead } from './Mascot'
+import { ModelPicker } from './ModelPicker'
 
 export function Automations({ path, openNav }: { path: string[]; openNav: () => void }) {
   const id = path[0] ?? ''
@@ -77,6 +80,8 @@ function AutomationCard({ automation }: { automation: Automation }) {
   const zone = useStore((s) => s.about.timeZone)
   const [error, setError] = useState('')
   const bot = bots.find((b) => b.id === automation.botId)
+  const providers = useStore((s) => s.providers)
+  const lists = useModelLists(automation.runsOn ? [automation.runsOn.provider] : [])
   const { runs } = useRuns(automation.id)
   const act = (fn: () => Promise<unknown>) => fn().then(() => setError(''), (e) => setError(e.message))
   const running = automation.lastStatus === 'running'
@@ -88,7 +93,7 @@ function AutomationCard({ automation }: { automation: Automation }) {
             {bot ? <BotHead bot={bot} /> : <span className="avatar">🤖</span>}
             <span className="set-row-text">
               <h3>{automation.title}</h3>
-              <p>{triggerLabel(automation.trigger, zone)} · {bot?.name ?? automation.botId} · made by {madeBy(automation, bots)}</p>
+              <p>{triggerLabel(automation.trigger, zone)} · {bot?.name ?? automation.botId}{automation.runsOn && ` on ${runsOnLabel(automation.runsOn, lists, providers)}`} · made by {madeBy(automation, bots)}</p>
               <p className="set-status">{standing(automation)}</p>
             </span>
           </a>
@@ -113,6 +118,8 @@ interface Draft {
   botId: string
   title: string
   prompt: string
+  /** What its runs work on, or null for what its bot runs on. */
+  runsOn: RunsOn | null
   enabled: boolean
   /** How it goes by the clock, what it watches (a web page, or one of the bot's apps, which only a bot sets up), or the app whose calls start it. */
   kind: Schedule['type'] | 'page' | 'app' | `hook:${string}`
@@ -151,6 +158,7 @@ function draftOf(automation: Automation | undefined, botId: string): Draft {
     botId: automation?.botId ?? botId,
     title: automation?.title ?? '',
     prompt: automation?.prompt ?? '',
+    runsOn: automation?.runsOn ?? null,
     enabled: automation?.enabled ?? true,
     kind: trigger?.kind === 'hook' ? `hook:${trigger.hook.power}` : watch ? (watch.on === 'tool' ? 'app' : 'page') : (s?.type ?? 'daily'),
     at: fieldTime(s?.type === 'once' ? s.at : nextHour.getTime()),
@@ -181,7 +189,7 @@ function bodyOf(d: Draft) {
           : d.kind === 'daily' ? { type: 'daily', time: d.time, days: d.days }
           : { type: 'interval', minutes: d.every * (d.unit === 'hours' ? 60 : 1) },
       }
-  return { botId: d.botId, title: d.title.trim(), prompt: d.prompt.trim(), enabled: d.enabled, trigger }
+  return { botId: d.botId, title: d.title.trim(), prompt: d.prompt.trim(), runsOn: d.runsOn, enabled: d.enabled, trigger }
 }
 
 /** `botId` is the bot a new automation is for, when it was made from that bot's settings. */
@@ -277,6 +285,14 @@ function Editor({ automation, botId }: { automation?: Automation; botId?: string
             onChange={(e) => change({ prompt: e.target.value })}
           />
         </Row>
+        {/* An environment that has not been updated yet runs every automation on its bot's model, and says nothing of it. */}
+        {bot && (!automation || automation.runsOn !== undefined) && (
+          <Row
+            title="Model"
+            description={draft.runsOn ? `What each run works on. What came of a run is still told to you by ${bot.name}, on its own model.` : `What each run works on. It follows ${bot.name}: change the bot’s model and its automations run on that. A run can have a model of its own instead, such as a lighter one for a simple check.`}
+            control={<ModelPicker key={bot.id} bot={bot} own={{ value: draft.runsOn, onChange: (runsOn) => change({ runsOn }) }} />}
+          />
+        )}
       </Section>
 
       <Section title="When">

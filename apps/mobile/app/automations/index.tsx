@@ -6,6 +6,7 @@ import { Stack, useRouter } from 'expo-router'
 import type { Automation } from '@openkumi/shared'
 import { api, useStore } from '@openkumi/client/store'
 import { localZone, standing, triggerLabel, trouble } from '@openkumi/client/automations'
+import { runsOnLabel, useModelLists } from '@openkumi/client/models'
 import { useSession } from '../../src/session'
 import { Avatar, Note, Row, Section, SettingsPage } from '../../src/SettingsUi'
 import { useTheme } from '../../src/theme'
@@ -44,6 +45,9 @@ function AutomationRow({ automation }: { automation: Automation }) {
   const router = useRouter()
   const bot = useStore((s) => s.bots.find((b) => b.id === automation.botId))
   const zone = useStore((s) => s.about.timeZone)
+  // One with a model of its own names it, after the bot that does it.
+  const providers = useStore((s) => s.providers)
+  const lists = useModelLists(automation.runsOn ? [automation.runsOn.provider] : [])
   const problem = trouble(automation)
   return (
     <Row
@@ -51,7 +55,7 @@ function AutomationRow({ automation }: { automation: Automation }) {
       label={automation.title}
       detail={
         <>
-          <Text style={{ color: theme.faint, fontSize: 13.5, lineHeight: 18 }} numberOfLines={2}>{triggerLabel(automation.trigger, zone)} · {bot?.name ?? automation.botId}</Text>
+          <Text style={{ color: theme.faint, fontSize: 13.5, lineHeight: 18 }} numberOfLines={2}>{triggerLabel(automation.trigger, zone)} · {bot?.name ?? automation.botId}{automation.runsOn ? ` on ${runsOnLabel(automation.runsOn, lists, providers)}` : ''}</Text>
           <Text style={{ color: problem ? theme.err : automation.lastStatus === 'running' ? theme.run : theme.faint, fontSize: 13.5, lineHeight: 18 }} numberOfLines={2}>{automation.lastStatus === 'running' ? 'Running now' : standing(automation)}</Text>
         </>
       }

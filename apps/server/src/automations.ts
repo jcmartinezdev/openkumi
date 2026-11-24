@@ -5,11 +5,13 @@
 // tools, within the rules at the end of this file: a bot makes them only for itself and changes or
 // deletes only what it made, except the main assistant (the first bot), which may do all of that
 // for every bot.
-import type { Automation, Bot, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
+import type { Automation, Bot, Effort, ModelInfo, RunsOn, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
 import * as agent from './agent.ts'
-import { getBot, mainBot } from './bots.ts'
+import { EFFORTS, getBot, mainBot } from './bots.ts'
 import * as db from './db.ts'
 import * as hooks from './hooks.ts'
+import { getProvider, listModels, modelName, providerInfos } from './providers/index.ts'
+import { settings } from './settings.ts'
 import { track } from './telemetry.ts'
 import * as watching from './watch.ts'
 
@@ -110,6 +112,18 @@ async function cleanTrigger(botId: string, input: any): Promise<Trigger> {
   throw new Error('An automation starts at a "time", on a "watch" or on a "hook".')
 }
 
+/**
+ * What an automation's runs work on, from what was sent, checked. Nothing, or null, is what its bot
+ * runs on. The model is taken as it is given, as a bot's is: whether the provider has it shows when
+ * a run starts, and a provider may gain a model its list does not show yet.
+ */
+function cleanRunsOn(input: any): RunsOn | null {
+  if (input === null || input === undefined || input === '') return null
+  const provider = getProvider(String(input.provider ?? ''))
+  if (settings().disabledProviders.includes(provider.id)) throw new Error(`${provider.info().name} is switched off in Settings.`)
+  return { provider: provider.id, model: typeof input.model === 'string' ? input.model.slice(0, 100) : '', effort: (EFFORTS.includes(input.effort) ? input.effort : '') as Effort }
+}
+
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 /** What a trigger looks at, apart from how often: a watch that only looks more or less often still knows what it saw. */
 const looksAt = (t: Trigger) => (t.kind === 'watch' ? { ...t.watch, every: 0 } : null)
@@ -161,6 +175,7 @@ export async function createAutomation(input: Record<string, any>, by: string): 
     title: input.title,
     prompt: input.prompt,
     trigger: await cleanTrigger(botId, input.trigger),
+    runsOn: cleanRunsOn(input.runsOn),
     enabled: input.enabled !== false,
     createdBy: by,
     nextRunAt: null,
@@ -190,6 +205,8 @@ export async function updateAutomation(automation: Automation, patch: Record<str
   if (typeof patch.title === 'string') next.title = patch.title
   if (typeof patch.prompt === 'string') next.prompt = patch.prompt
   if (typeof patch.enabled === 'boolean') next.enabled = patch.enabled
+  // Given to another bot, it keeps what it runs on: a model of its own is not the bot's.
+  if (patch.runsOn !== undefined) next.runsOn = cleanRunsOn(patch.runsOn)
   if (!getBot(next.botId)) throw new Error(`No bot with id ${next.botId}.`)
   // Moved to another bot, a watched tool has to be one that bot has too, and so has a webhook; one turned on again has to be there still.
   const resumed = next.enabled && !automation.enabled
@@ -245,7 +262,9 @@ function start(automation: Automation, scheduled: boolean, told = ''): Automatio
     return db.saveAutomation({ ...automation, nextRunAt: next })
   }
   const conversation = agent.conversation(automation.botId)
-  const thread = db.createThread({ botId: automation.botId, parentId: conversation.id, kind: 'automation', automationId: automation.id, title: automation.title })
+  // A model of its own is the run's from its start to its end, whatever the automation is changed to meanwhile.
+  const on = automation.runsOn
+  const thread = db.createThread({ botId: automation.botId, parentId: conversation.id, kind: 'automation', automationId: automation.id, title: automation.title, ...(on ? { provider: on.provider, model: on.model, effort: on.effort } : {}) })
   const saved = db.saveAutomation({ ...automation, nextRunAt: next, lastRunAt: now, lastStatus: 'running', lastError: null, lastThreadId: thread.id })
   agent.postMessage(thread.id, { source: 'trigger', text: automation.prompt + told })
   // Every run is kept, however many there are; the apps are only ever sent a page of them.
@@ -524,6 +543,65 @@ function triggerFrom(a: Record<string, any>): Record<string, unknown> | null {
   return { kind: 'watch', watch: { ...on, track: watch.track, every: watch.every_minutes } }
 }
 
+/** A name as it is compared: its letters and digits alone, so that "opus 5.5" finds "Claude Opus 5.5". */
+const plain = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/** The models every provider that is ready to use offers, the provider of the bot that does the automation first. */
+async function offered(doer: Bot): Promise<{ id: string; name: string; models: ModelInfo[] }[]> {
+  const ready = providerInfos().filter((p) => p.connected && p.enabled !== false)
+  // Asked for now rather than as last heard: a model may have been added since, and the automation is then shown by its model's name.
+  const lists = await Promise.all(ready.map(async (p) => ({ id: p.id, name: p.name, models: await listModels(getProvider(p.id)).catch(() => []) })))
+  return lists.sort((a, b) => Number(b.id === doer.provider) - Number(a.id === doer.provider))
+}
+
+/**
+ * The model a bot named, by its name or its id, among those of every provider that is ready. A name
+ * that fits exactly comes before one that only contains what was written, a model of the bot's own
+ * provider before another's, and a model's latest version before an earlier one.
+ */
+function modelCalled(name: string, lists: Awaited<ReturnType<typeof offered>>): { provider: string; info: ModelInfo } {
+  const want = plain(name)
+  for (const exact of [true, false]) {
+    for (const list of want ? lists : []) {
+      const fits = (text: string) => (exact ? plain(text) === want : plain(text).includes(want))
+      const found = list.models.filter((m) => fits(m.id) || fits(m.name))
+      const info = found.find((m) => !m.older) ?? found[0]
+      if (info) return { provider: list.id, info }
+    }
+  }
+  const there = lists.map((list) => `${list.name}: ${list.models.filter((m) => !m.older).map((m) => (m.name === m.id ? m.id : `${m.name} (${m.id})`)).join(', ')}`)
+  throw new Error(`No model is called "${name}". There are these. ${there.join('. ')}. Or give "same", to run on the model of the bot that does it.`)
+}
+
+/**
+ * What a bot asked an automation to run on, with its tool's arguments: undefined when it said
+ * nothing about it, null for what the bot that does it runs on. `before` is what the automation
+ * runs on now, when it is being changed: there, a level of reasoning alone is for the model it has.
+ */
+async function runsOnFrom(doer: Bot, a: Record<string, any>, before?: RunsOn | null): Promise<RunsOn | null | undefined> {
+  if (!given(a.model) && !given(a.effort)) return undefined
+  const follows = given(a.model) ? /^same$/i.test(String(a.model).trim()) : !before
+  if (follows) {
+    if (given(a.effort)) throw new Error('effort goes with a model of its own: give model too, by name. An automation on the model of the bot that does it thinks as hard as that bot does.')
+    return null
+  }
+  const lists = await offered(doer)
+  // A model its provider itself calls "default" is kept as no model, which is the same thing and is how the apps keep it.
+  const on: RunsOn = given(a.model) ? (({ provider, info }) => ({ provider, model: /^default$/i.test(info.id) ? '' : info.id, effort: '' as Effort }))(modelCalled(String(a.model), lists)) : before!
+  if (!given(a.effort)) return on
+  const effort = String(a.effort).trim().toLowerCase()
+  const models = lists.find((list) => list.id === on.provider)?.models ?? []
+  const takes: string[] = (on.model ? models.find((m) => m.id === on.model) : models[0])?.efforts ?? EFFORTS.slice(1)
+  if (!takes.includes(effort)) throw new Error(takes.length ? `effort is one of ${takes.join(', ')} for that model.` : 'That model has no levels of reasoning: leave effort out.')
+  return { ...on, effort: effort as Effort }
+}
+
+/** What an automation runs on, as a bot is shown it and can give it again: "same" for the model of the bot that does it. */
+function ranOn(on: RunsOn | null): { model: string; effort?: string } {
+  if (!on) return { model: 'same' }
+  return { model: modelName(on) || on.model || `the default of ${providerInfos().find((p) => p.id === on.provider)?.name ?? on.provider}`, ...(on.effort ? { effort: on.effort } : {}) }
+}
+
 const seenAt = (check: NonNullable<Automation['lastCheck']>) =>
   `${when(check.at)}, ${check.outcome === 'baseline' ? 'first look' : check.outcome}${check.detail && check.outcome !== 'changed' ? `: ${check.detail}` : ''}`
 
@@ -543,6 +621,7 @@ function view(automation: Automation, bot: Bot) {
     ...(watch ? { next_look: automation.nextRunAt ? when(automation.nextRunAt) : null, last_look: automation.lastCheck ? seenAt(automation.lastCheck) : null } : { next_run: automation.nextRunAt ? when(automation.nextRunAt) : null }),
     last_run: automation.lastRunAt ? `${when(automation.lastRunAt)}, ${automation.lastStatus}${automation.lastError ? `: ${automation.lastError}` : ''}` : null,
     you_can_change_it: mayChange(bot, automation),
+    ...ranOn(automation.runsOn),
     prompt: automation.prompt,
   }
 }
@@ -565,7 +644,8 @@ export function listAs(bot: Bot): string {
 export async function createAs(bot: Bot, a: Record<string, any>): Promise<string> {
   const trigger = triggerFrom(a)
   if (!trigger) throw new Error('Say what starts it: give one of at, in_minutes, time or every_minutes, or a watch, or a hook.')
-  const automation = await createAutomation({ botId: target(bot, a.bot_id), title: a.title, prompt: a.prompt, trigger }, bot.id)
+  const botId = target(bot, a.bot_id)
+  const automation = await createAutomation({ botId, title: a.title, prompt: a.prompt, trigger, runsOn: await runsOnFrom(getBot(botId)!, a) }, bot.id)
   const { trigger: starts } = automation
   const made = starts.kind === 'watch' ? `Watching. ${automation.lastCheck?.detail ?? ''}` : starts.kind === 'hook' ? `Waiting for ${starts.hook.app} to call.` : 'Scheduled.'
   return `${made.trim()} It is now ${now()}.\n${JSON.stringify(view(automation, bot), null, 1)}`
@@ -580,6 +660,8 @@ export async function updateAs(bot: Bot, a: Record<string, any>): Promise<string
   if (a.bot_id !== undefined && a.bot_id !== automation.botId) patch.botId = target(bot, a.bot_id)
   const trigger = triggerFrom(a)
   if (trigger) patch.trigger = trigger
+  const on = await runsOnFrom(getBot(String(patch.botId ?? automation.botId)) ?? bot, a, automation.runsOn)
+  if (on !== undefined) patch.runsOn = on
   const saved = await updateAutomation(automation, patch)
   return `Changed. It is now ${now()}.\n${JSON.stringify(view(saved, bot), null, 1)}`
 }

@@ -7,7 +7,7 @@
 // reporting back) waits in the thread's queue and is let in one message at a time: the bot answers each in a
 // turn of its own. The owner can have a waiting message read at once, by the bot as it works.
 import crypto from 'node:crypto'
-import type { Attachment, Bot, Item, ItemData, Partial, Queued, Said, Thread } from '@openkumi/shared'
+import type { Attachment, Bot, Item, ItemData, Partial, Queued, RunsOn, Said, Thread } from '@openkumi/shared'
 import { attach, discard, handOver, outgoing, stageCopy, toShow, unstage, withFiles } from './attachments.ts'
 import { getBot, listBots } from './bots.ts'
 import { browserFor, retireWindow } from './browser.ts'
@@ -91,6 +91,16 @@ function team(bot: Bot): string {
   return bots.filter((b) => b.id !== bot.id).map(line).join('\n')
 }
 
+/**
+ * What a thread runs on. A run of an automation that was given a model of its own, and every
+ * subagent of such a run, is on exactly that; any other thread is on what its bot runs on now, a
+ * subagent with the model it was started on in place of the bot's.
+ */
+export function runsOn(thread: Pick<Thread, 'provider' | 'model' | 'effort'>, bot: Bot): RunsOn {
+  if (thread.provider) return { provider: thread.provider, model: thread.model ?? '', effort: thread.effort ?? '' }
+  return { provider: bot.provider, model: thread.model || bot.model, effort: bot.effort }
+}
+
 /** Whether a thread's bot can message the other bots from it: from its own conversation, while that is switched on. */
 export const canMessage = (thread: Thread) => thread.kind === 'chat' && settings().botMessages
 
@@ -101,7 +111,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
   const by = automation?.createdBy ?? ''
   return masterPrompt({
     bot_name: bot.name,
-    model: modelName(bot, thread.model ?? ''),
+    model: modelName(runsOn(thread, bot)),
     today: new Date().toDateString(),
     other_bots: team(bot),
     main: isMain(bot),
@@ -113,7 +123,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     subagent: thread.kind === 'subagent',
     call,
     shared: sharedComputer(),
-    codex: bot.provider === 'codex',
+    codex: runsOn(thread, bot).provider === 'codex',
     rules: bot.rules,
     time_zone: TIME_ZONE,
     instructions_limit: String(settings().instructionsLimit),
@@ -358,7 +368,7 @@ async function giveNow(state: Run, engine: EngineTurn, thread: Thread, id: numbe
   if (!waiting || !bot) return
   if (engine.steering.deliver) {
     const { message } = withCopies(waiting, thread)
-    const files = toShow(bot.id, thread.id, message.attachments ?? [], getProvider(bot.provider).sees)
+    const files = toShow(bot.id, thread.id, message.attachments ?? [], getProvider(runsOn(thread, bot).provider).sees)
     const taken = await engine.steering.deliver(told([message]), files).catch(() => false)
     const still = db.getQueued(id)
     if (taken && still) {
@@ -445,7 +455,9 @@ async function loop(threadId: string, state: Run) {
     running.delete(threadId)
     // The server stopping is not the run's own end.
     if (!closing) {
-      const engine = getBot(db.getThread(threadId)?.botId ?? '')?.provider
+      const ended = db.getThread(threadId)
+      const owner = ended && getBot(ended.botId)
+      const engine = ended && owner ? runsOn(ended, owner).provider : undefined
       track('run finished', { engine, outcome: status === 'error' ? 'failed' : broken ? 'stopped' : 'done', seconds: (Date.now() - state.startedAt) / 1000, steps: state.steps, error })
       // What it cost in tokens, whether it finished or not: counted by model, never by conversation.
       for (const [model, sum] of state.used) track('tokens used', { engine, model: modelSent(engine ?? '', model), input_tokens: sum.input, cached_tokens: sum.cached, output_tokens: sum.output, total_tokens: sum.input + sum.output })
@@ -486,9 +498,10 @@ async function turn(threadId: string, state: Run) {
     const { maxSteps, disabledProviders } = settings()
     if (step >= maxSteps) throw new Error(`Stopped after ${maxSteps} steps without finishing. The limit is in Settings, under Advanced.`)
 
-    const provider = getProvider(bot.provider)
+    const on = runsOn(thread, bot)
+    const provider = getProvider(on.provider)
     if (disabledProviders.includes(provider.id)) throw new Error(`${provider.info().name} is switched off in Settings.`)
-    const model = thread.model || bot.model || (await provider.models())[0]?.id
+    const model = on.model || (await provider.models())[0]?.id
     // What the model is called, for the bot to say what powers it.
     await learnModels(provider)
     if (!model) throw new Error(`No model is available from ${provider.info().name}. Check Settings.`)
@@ -559,7 +572,7 @@ async function turn(threadId: string, state: Run) {
           session: sessionId,
           cwd: workspaceDir(bot.id),
           toolsUrl: engine.endpoint.url,
-          effort: bot.effort,
+          effort: on.effort,
           // Looking something up is work too: on a call it is passed on.
           webSearch: bot.webSearch && !passing,
           signal: AbortSignal.any([signal, engine.cut.signal]),
@@ -607,7 +620,7 @@ async function turn(threadId: string, state: Run) {
         instructions: system,
         items: prepare(items),
         tools: tools.map(({ name, description, parameters }) => ({ name, description, parameters })),
-        effort: bot.effort,
+        effort: on.effort,
         webSearch: bot.webSearch && !call,
         sessionId: threadId,
         signal,
@@ -813,7 +826,10 @@ export function spawnSubagent(parent: Thread, opts: { task: string; name: string
     parentId: parent.id,
     kind: 'subagent',
     title: opts.name.slice(0, 60) || 'Subagent',
-    model: opts.model || null,
+    // A run that was given a model of its own passes it on, so the work it hands out is done on that too.
+    provider: parent.provider,
+    model: opts.model || (parent.provider ? parent.model : null),
+    effort: parent.effort,
   })
   postMessage(child.id, { source: 'parent', text: opts.task })
   return child

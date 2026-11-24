@@ -3,29 +3,49 @@
 // them, each with what it is for; the bot's own model opens up to show its reasoning levels. Typing
 // searches the models of every provider, and picking a model of another provider moves the bot to
 // that provider. Each choice is saved at once and the sheet stays open, so a model and its
-// reasoning can be picked in one go.
+// reasoning can be picked in one go. Opened from an automation's form (with `for`), it chooses what
+// that automation's runs work on instead: nothing about the bot changes, the choice goes into
+// the form, for the form's Save, and the first choice is to run on whatever the bot runs on.
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, type LayoutChangeEvent, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
-import type { Bot, Effort, ModelInfo } from '@openkumi/shared'
-import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, switchTo, useModelLists } from '@openkumi/client/models'
+import type { Bot, Effort, ModelInfo, RunsOn } from '@openkumi/shared'
+import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, modelOf, switchTo, useModelLists } from '@openkumi/client/models'
 import { api, useStore } from '@openkumi/client/store'
 import { toggleFavorite, useFavorites } from '../../src/favorites'
+import { handedOver } from '../../src/handoff'
 import { Glyph, ProviderIcon } from '../../src/icons'
 import { type Theme, useTheme } from '../../src/theme'
 
 export default function ModelSheet() {
   const theme = useTheme()
   const router = useRouter()
-  const { botId } = useLocalSearchParams<{ botId: string }>()
-  const stored = useStore((s) => s.bots.find((b) => b.id === botId))
+  const { botId, for: form } = useLocalSearchParams<{ botId: string; for?: string }>()
+  const bots = useStore((s) => s.bots)
+  /** The form this was opened from, when it is an automation's model that is being chosen. */
+  const held = form ? handedOver(form) : undefined
+  /** What that automation runs on, as the form has it: null while it follows its bot. */
+  const [own, setOwn] = useState<RunsOn | null>(() => {
+    try {
+      return JSON.parse(held?.text() || 'null')
+    } catch {
+      return null
+    }
+  })
+  const found = bots.find((b) => b.id === botId)
+  /** An automation that runs on what its bot runs on: no model in the list is its own. */
+  const follows = !!form && !own
+  // A model picked for an automation that followed its bot starts at that model's own level of reasoning, not the bot's.
+  const stored = found && form ? { ...found, ...(own ?? { effort: '' as Effort }) } : found
   // Providers that are switched off in Settings are not offered at all.
   const providers = useStore((s) => s.providers).filter((p) => p.enabled !== false)
   const favorites = useFavorites()
   /** What was just picked, shown at once instead of when the server has said so. */
   const [picked, setPicked] = useState<Partial<Bot> | null>(null)
   const [tab, setTab] = useState(() => (providers.some((p) => p.id === stored?.provider) ? stored!.provider : (providers[0]?.id ?? '')))
+  /** Picks for the automation: a model with its reasoning, or null to follow its bot again. */
+  const pick = (next: RunsOn | null) => (void Haptics.selectionAsync(), setOwn(next), held?.change(next ? JSON.stringify(next) : ''))
   const [query, setQuery] = useState('')
   const [more, setMore] = useState(false)
   const tabs = useRef<ScrollViewInstance>(null)
@@ -41,10 +61,14 @@ export default function ModelSheet() {
   // The server's word replaces what was shown in the meantime.
   useEffect(() => setPicked(null), [stored])
 
-  if (!stored) return null
+  if (!stored || !found) return null
   const bot = { ...stored, ...picked }
   const all = ready.flatMap((p) => choicesOf(p, lists.get(p.id) ?? [], bot))
-  const isCurrent = (c: Choice) => c.provider.id === bot.provider && c.model === bot.model
+  const isCurrent = (c: Choice) => !follows && c.provider.id === bot.provider && c.model === bot.model
+  // What the bot itself runs on, for the choice that follows it.
+  const botsOwn = found && modelOf(found, lists.get(found.provider) ?? [])
+  const botsProvider = providers.find((p) => p.id === found?.provider)
+  const botsModel = botsOwn && botsOwn.name !== 'Default' ? botsOwn.name : found?.model || `${botsProvider?.name ?? found?.provider} default`
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   const searching = words.length > 0
   const inTab = all.filter((c) => (tab === 'favorites' ? favorites.includes(c.key) : c.provider.id === tab))
@@ -54,12 +78,13 @@ export default function ModelSheet() {
   const provider = providers.find((p) => p.id === tab)
 
   const save = (patch: Partial<Bot>) => {
+    if (form) return pick({ provider: bot.provider, model: bot.model, effort: bot.effort, ...patch })
     setPicked((before) => ({ ...before, ...patch }))
     api('PATCH', `/api/bots/${bot.id}`, patch).catch((e) => (setPicked(null), Alert.alert('Not saved', (e as Error).message)))
   }
   const choose = (choice: Choice) => {
     if (isCurrent(choice)) return
-    void Haptics.selectionAsync()
+    if (!form) void Haptics.selectionAsync()
     save(switchTo(bot, choice))
   }
   const show = (next: string) => (setTab(next), setQuery(''), setMore(false))
@@ -116,11 +141,24 @@ export default function ModelSheet() {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+        {/* For an automation, the first choice is no model of its own. */}
+        {!!form && !searching && (
+          <View style={[styles.row, styles.same, { borderBottomColor: theme.border }]}>
+            <Pressable accessibilityRole="button" accessibilityState={{ selected: follows }} style={({ pressed }) => [styles.pick, { paddingRight: 20 }, pressed && { backgroundColor: theme.bubble }]} onPress={() => follows || pick(null)}>
+              {botsProvider && <ProviderIcon provider={botsProvider} size={20} color={theme.text} />}
+              <View style={styles.rowText}>
+                <Text style={[styles.name, { color: theme.text, fontWeight: follows ? '600' : '400' }]} numberOfLines={1}>Same as {found.name}</Text>
+                <Text style={{ color: theme.faint, fontSize: 13, lineHeight: 17 }} numberOfLines={2}>Follows {found.name}’s model: {botsModel} now</Text>
+              </View>
+              {follows && <Glyph name="check" size={18} color={theme.text} weight={2.2} />}
+            </Pressable>
+          </View>
+        )}
         {shown.map((choice) => (
           <View key={choice.key}>
             <Row choice={choice} current={isCurrent(choice)} favorite={favorites.includes(choice.key)} named={searching || tab === 'favorites'} theme={theme} onPress={() => choose(choice)} />
             {/* The reasoning levels belong to the model, so they are shown with it. Not inside the row's button, which would stop them being pressed on their own. */}
-            {isCurrent(choice) && <Reasoning model={choice.info} effort={bot.effort} theme={theme} set={(effort) => (void Haptics.selectionAsync(), save({ effort }))} />}
+            {isCurrent(choice) && <Reasoning model={choice.info} effort={bot.effort} theme={theme} set={(effort) => (form || void Haptics.selectionAsync(), save({ effort }))} />}
           </View>
         ))}
         {!searching && (folded.length > 0 || (more && inTab.some((c) => c.info.older))) && (
@@ -236,6 +274,8 @@ const styles = StyleSheet.create({
   tab: { flexDirection: 'row', alignItems: 'center', gap: 7, height: 34, paddingHorizontal: 13, borderRadius: 17 },
   caption: { fontSize: 12.5, paddingHorizontal: 20, paddingBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'stretch' },
+  // The choice to follow the bot is set apart from the models under it.
+  same: { borderBottomWidth: StyleSheet.hairlineWidth, marginBottom: 4 },
   pick: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingLeft: 20, paddingRight: 8, paddingVertical: 10 },
   rowText: { flex: 1, gap: 2 },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },

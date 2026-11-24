@@ -24,6 +24,24 @@ conversation what came of it.
 An automation has a name, the bot that runs it, what starts it, and a **prompt**: what the bot
 should do each time. A run sees nothing of the conversation, so the prompt has to stand on its own.
 
+## The model it runs on
+
+An automation runs on what its bot runs on, whatever that is when a run starts: change the bot's
+model and its automations follow.
+
+Each automation can have a model of its own instead, with how hard that model thinks: a lighter one
+for a simple check that runs often, a stronger one for hard work. It can be any model of any
+[provider](/setup/providers/) that is ready, not only the bot's own.
+
+- **In the app**, choose it under **Model** on the automation's page. **Same as** the bot goes back
+  to following the bot.
+- **Ask the bot**: "check my inbox every hour, on Haiku". A bot can give a model to the automations
+  it may change, and names it the way you would.
+
+Only the run is on that model, and so is the work the run hands to subagents. What came of it is
+still told to you by the bot in its conversation, on the bot's own model. When the provider of an
+automation's model is switched off or no longer signed in, its runs fail and the bot tells you so.
+
 ## What starts one
 
 ### A time

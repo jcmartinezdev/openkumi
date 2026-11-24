@@ -3,7 +3,7 @@
 // pickers open with what is already known and fill in the rest. Shared by the desktop app's model
 // picker and the phone's model sheet, so both offer the same choices by the same rules.
 import { useEffect, useSyncExternalStore } from 'react'
-import type { Bot, Effort, ModelInfo, ProviderInfo } from '@openkumi/shared'
+import type { Bot, Effort, ModelInfo, ProviderInfo, RunsOn } from '@openkumi/shared'
 import { api, onEnvironmentChange } from './store'
 
 const known = new Map<string, ModelInfo[]>()
@@ -71,4 +71,17 @@ export function choicesOf(provider: ProviderInfo, models: ModelInfo[], bot: Bot)
 export function switchTo(bot: Bot, choice: Choice): Partial<Bot> {
   const keeps = !bot.effort || effortsOf(choice.info).includes(bot.effort)
   return { provider: choice.provider.id, model: choice.model, ...(keeps ? {} : { effort: '' }) }
+}
+
+/** The model something runs on, of those its provider lists: the provider's first when none is named. */
+export const modelOf = (on: Pick<RunsOn, 'model'>, models: ModelInfo[]): ModelInfo | undefined => (on.model ? models.find((m) => m.id === on.model) : models[0])
+
+/**
+ * What something runs on, in a few words: its model by name, and how hard it thinks when that was
+ * chosen ("Claude Haiku 5.5 · Low"). Until the provider's models are known, the model as it is kept.
+ */
+export function runsOnLabel(on: RunsOn, lists: Map<string, ModelInfo[]>, providers: ProviderInfo[]): string {
+  const info = modelOf(on, lists.get(on.provider) ?? [])
+  const name = info && info.name !== 'Default' ? info.name : on.model || `${providers.find((p) => p.id === on.provider)?.name ?? on.provider} default`
+  return on.effort ? `${name} · ${EFFORT_LABEL[on.effort]}` : name
 }

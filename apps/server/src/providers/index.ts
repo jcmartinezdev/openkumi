@@ -150,6 +150,13 @@ export async function learnModels(provider: Provider) {
   }
 }
 
+/** A provider's models as it lists them now, which is also learnt as what they are called. */
+export async function listModels(provider: Provider): Promise<ModelInfo[]> {
+  const models = await provider.models()
+  named.set(provider.id, { at: Date.now(), models })
+  return models
+}
+
 /**
  * What the model a bot runs on is called, for people ("Claude Opus 5.5"), as far as it is known:
  * the one chosen for it (or for the thread, with `chosen`), or its provider's usual one. Empty

@@ -1530,6 +1530,73 @@ test('automations: run by hand, paused and resumed, checked, and quiet when ther
   assert.ok(!(await api('GET', '/api/automations')).some((t) => t.id === hourly.id))
 })
 
+test('automations: one runs on what its bot runs on, or on a model of its own of any provider, and its subagents with it', async () => {
+  const id = await fresh()
+  const all = async () => api('GET', '/api/automations')
+  /** Runs an automation now, and gives its run and what the run said once it is over. */
+  const ran = async (automation) => {
+    await api('POST', `/api/automations/${automation.id}/run`)
+    await until(async () => (await all()).find((a) => a.id === automation.id).lastStatus === 'completed')
+    const { runs } = await api('GET', `/api/automations/${automation.id}/runs`)
+    return { run: runs[0], said: lastText((await api('GET', `/api/threads/${runs[0].id}`)).items.map((i) => i.data)) }
+  }
+
+  // Left alone it follows its bot, which here runs on the scripted model: nothing is kept for the run itself.
+  const made = await api('POST', '/api/automations', { botId: bot.id, title: 'Model', prompt: '!args', trigger: { kind: 'time', schedule: { type: 'interval', minutes: 60 } } })
+  assert.equal(made.runsOn, null)
+  const followed = await ran(made)
+  assert.deepEqual([followed.run.provider, followed.run.model, followed.run.effort, followed.said], [null, null, null, 'Echo: !args'])
+
+  // Given a model of its own, of another provider than its bot's, the run is on that, at the level of reasoning chosen with it.
+  const sonnet = { provider: 'claude-code', model: 'sonnet', effort: 'high' }
+  assert.deepEqual((await api('PATCH', `/api/automations/${made.id}`, { runsOn: sonnet })).runsOn, sonnet)
+  const own = await ran(made)
+  const started = JSON.parse(own.said)
+  assert.deepEqual([own.run.provider, own.run.model, own.run.effort, started.model, started.flags.includes('--effort')], ['claude-code', 'sonnet', 'high', 'sonnet', true])
+  assert.equal((await api('GET', '/api/state')).bots.find((b) => b.id === bot.id).provider, 'mock', 'the bot itself stays on what it ran on')
+
+  // What such a run hands to a subagent is done on the same model.
+  await api('PATCH', `/api/automations/${made.id}`, { prompt: '!tool spawn_subagent {"name":"Helper","task":"hello"}' })
+  const handing = await ran(made)
+  const helper = await until(async () => (await api('GET', '/api/state')).threads.find((t) => t.parentId === handing.run.id))
+  assert.deepEqual([helper.kind, helper.provider, helper.model, helper.effort], ['subagent', 'claude-code', 'sonnet', 'high'])
+
+  // A provider's default is kept as no model at all, and nothing at all goes back to following the bot.
+  assert.deepEqual((await api('PATCH', `/api/automations/${made.id}`, { runsOn: { provider: 'claude-code' } })).runsOn, { provider: 'claude-code', model: '', effort: '' })
+  assert.equal((await api('PATCH', `/api/automations/${made.id}`, { runsOn: null })).runsOn, null)
+  const refused = await fetch(`${BASE}/api/automations/${made.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...auth() }, body: JSON.stringify({ runsOn: { provider: 'nothing' } }) })
+  assert.equal(refused.status, 400, 'a provider there is not')
+  await api('DELETE', `/api/automations/${made.id}`)
+  // Once the subagent has reported to its run, and the bot has told the user about each run, the bot is free to be asked something.
+  await until(async () => {
+    const { threads, queue } = await api('GET', '/api/state')
+    const own = threads.filter((t) => [t.id, t.parentId].includes(id) || t.id === helper.id)
+    return own.every((t) => t.status !== 'running' && !queue.some((w) => w.threadId === t.id)) && own.find((t) => t.id === helper.id)?.reported
+  })
+
+  // A bot names the model, as people call it or by its id, among those of every provider that is ready.
+  // (Claude Code's own list is asked for behind what goes on: until it has answered, the usual models stand in.)
+  await until(async () => (await api('GET', '/api/providers/claude-code/models')).some((m) => m.name === 'Claude Haiku 9'))
+  const set = await tool('create_automation', { title: 'Light check', prompt: 'x', every_minutes: 60, model: 'haiku' })
+  assert.match(set, /"model": "Claude Haiku 9",\n "prompt"/)
+  const light = (await all()).find((a) => a.title === 'Light check')
+  assert.deepEqual(light.runsOn, { provider: 'claude-code', model: 'haiku', effort: '' })
+  // A level of reasoning is one that model takes.
+  assert.match(await tool('update_automation', { id: light.id, effort: 'low' }), /^Error: That model has no levels of reasoning/)
+  assert.match(await tool('update_automation', { id: light.id, model: 'sonnet 9', effort: 'max' }), /"model": "Claude Sonnet 9",\n "effort": "max"/)
+  assert.match(await tool('update_automation', { id: light.id, effort: 'minimal' }), /^Error: effort is one of low, medium, high, xhigh, max for that model\./)
+  assert.match(await tool('update_automation', { id: light.id, effort: 'low' }), /"model": "Claude Sonnet 9",\n "effort": "low"/)
+  assert.deepEqual((await all()).find((a) => a.id === light.id).runsOn, { provider: 'claude-code', model: 'sonnet', effort: 'low' })
+  // A name that fits no model is answered with the models there are.
+  assert.match(await tool('update_automation', { id: light.id, model: 'nope' }), /^Error: No model is called "nope"\. There are these\. .*Claude Sonnet 9 \(sonnet\), Claude Haiku 9 \(haiku\).*Or give "same"/)
+  // "same" goes back to the model of the bot that does it, and that one thinks as hard as the bot does.
+  assert.match(await tool('update_automation', { id: light.id, model: 'same' }), /"model": "same",\n "prompt"/)
+  assert.equal((await all()).find((a) => a.id === light.id).runsOn, null)
+  assert.match(await tool('update_automation', { id: light.id, effort: 'low' }), /^Error: effort goes with a model of its own/)
+  assert.match(await tool('create_automation', { title: 'X', prompt: 'x', in_minutes: 5, effort: 'low' }), /^Error: effort goes with a model of its own/)
+  await api('DELETE', `/api/automations/${light.id}`)
+})
+
 test('automations: bots make them for themselves, and only the main assistant makes them for others or touches what it did not make', async () => {
   const main = (await api('GET', '/api/state')).bots[0]
   assert.equal(main.name, 'Kumi', 'the first bot is the main assistant')

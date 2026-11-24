@@ -4,10 +4,14 @@
 // the phone. Typing searches the models of every provider, and picking a model of another provider
 // moves the bot to that provider. A click keeps the picker open, so a model and its reasoning can be
 // picked in one go; Enter and Command (Control elsewhere) with a number pick and close it.
+//
+// An automation's page uses the same picker for what its runs work on (`own`). Nothing about the
+// bot changes there: what is picked goes to the page, for its Save, and the first choice is to
+// run on whatever the bot runs on. Away from the composer, the popup opens below its button.
 import { Fragment, useEffect, useRef, useState } from 'react'
-import type { Bot, Effort, ModelInfo } from '@openkumi/shared'
+import type { Bot, Effort, ModelInfo, RunsOn } from '@openkumi/shared'
 import { Icon } from './Icon'
-import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, switchTo, useModelLists } from '@openkumi/client/models'
+import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, modelOf, switchTo, useModelLists } from '@openkumi/client/models'
 import { setPrefs, usePrefs } from './prefs'
 import { ProviderIcon } from './ProviderIcon'
 import { api, openSettings, useStore } from './store'
@@ -15,12 +19,20 @@ import { api, openSettings, useStore } from './store'
 /** Shortcuts are shown, and read, the way this kind of computer writes them. */
 const mac = navigator.platform.startsWith('Mac')
 
-export function ModelPicker({ bot: stored }: { bot: Bot }) {
+/** What an automation's runs work on, chosen with the picker: null is what its bot runs on. */
+interface Own {
+  value: RunsOn | null
+  onChange: (value: RunsOn | null) => void
+}
+
+export function ModelPicker({ bot: stored, own }: { bot: Bot; own?: Own }) {
   // Providers that are switched off in Settings are not offered at all.
   const providers = useStore((s) => s.providers).filter((p) => p.enabled !== false)
   const favorites = usePrefs().favoriteModels
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<string>(stored.provider)
+  /** An automation that runs on what its bot runs on: no model in the list is its own. */
+  const follows = !!own && !own.value
+  const [tab, setTab] = useState<string>(own?.value?.provider ?? stored.provider)
   const [query, setQuery] = useState('')
   /** The row lit by the arrow keys or the pointer. Null until one of them is used: then the bot's own model is lit. */
   const [active, setActive] = useState<number | null>(null)
@@ -33,14 +45,15 @@ export function ModelPicker({ bot: stored }: { bot: Bot }) {
   const [picked, setPicked] = useState<Partial<Bot> | null>(null)
   // The server's word replaces what was shown in the meantime.
   useEffect(() => setPicked(null), [stored])
-  const bot = { ...stored, ...picked }
+  // A model picked for an automation that followed its bot starts at that model's own level of reasoning, not the bot's.
+  const bot: Bot = own ? { ...stored, ...(own.value ?? { effort: '' }) } : { ...stored, ...picked }
 
   const current = providers.find((p) => p.id === bot.provider)
   const ready = providers.filter((p) => p.connected)
   // Closed, only the bot's own provider is needed (for the button). Open, all of them.
   const lists = useModelLists(open ? ready.map((p) => p.id) : current?.connected ? [current.id] : [])
   const all = ready.flatMap((p) => choicesOf(p, lists.get(p.id) ?? [], bot))
-  const isCurrent = (c: Choice) => c.provider.id === bot.provider && c.model === bot.model
+  const isCurrent = (c: Choice) => !follows && c.provider.id === bot.provider && c.model === bot.model
   const chosen = all.find(isCurrent)
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   const searching = words.length > 0
@@ -55,6 +68,7 @@ export function ModelPicker({ bot: stored }: { bot: Bot }) {
   const show = (change: () => void) => (change(), setActive(null), search.current?.focus())
 
   const save = (patch: Partial<Bot>) => {
+    if (own) return own.onChange({ provider: bot.provider, model: bot.model, effort: bot.effort, ...patch })
     setPicked((before) => ({ ...before, ...patch }))
     api('PATCH', `/api/bots/${bot.id}`, patch).catch((e) => (setPicked(null), alert(e.message)))
   }
@@ -69,6 +83,7 @@ export function ModelPicker({ bot: stored }: { bot: Bot }) {
     if (!open) return
     // Starts on the bot's own provider, with the models asked for afresh: one may have been added since.
     setTab(bot.provider)
+    if (own) root.current?.querySelector('.model-pop')?.scrollIntoView({ block: 'nearest' })
     setQuery('')
     setMore(false)
     setActive(null)
@@ -94,13 +109,16 @@ export function ModelPicker({ bot: stored }: { bot: Bot }) {
   }
 
   // The button says what the bot runs on now, and how hard it is set to think when that was chosen.
-  const name = chosen?.info.name ?? (bot.model || 'Default')
+  const name = follows ? `Same as ${stored.name}` : (chosen?.info.name ?? (bot.model || 'Default'))
+  // What the bot itself runs on, for the choice that follows it.
+  const botsOwn = modelOf(stored, lists.get(stored.provider) ?? [])
+  const botsModel = botsOwn && botsOwn.name !== 'Default' ? botsOwn.name : stored.model || `${providers.find((p) => p.id === stored.provider)?.name ?? stored.provider} default`
   return (
-    <div className="model-picker" ref={root}>
-      <button type="button" className="model-button" aria-label="Model" aria-haspopup="dialog" aria-expanded={open} title={current ? `${current.name} · ${name}` : name} onClick={() => setOpen(!open)}>
+    <div className={`model-picker ${own ? 'own' : ''}`} ref={root}>
+      <button type="button" className="model-button" aria-label="Model" aria-haspopup="dialog" aria-expanded={open} title={follows ? `${name} · ${botsModel}` : current ? `${current.name} · ${name}` : name} onClick={() => setOpen(!open)}>
         {current && <ProviderIcon provider={current} size={15} />}
         <span className="model-button-name">{name}</span>
-        {bot.effort && <span className="model-button-effort">{EFFORT_LABEL[bot.effort]}</span>}
+        {!follows && bot.effort && <span className="model-button-effort">{EFFORT_LABEL[bot.effort]}</span>}
         <Icon name="chevron" size={11} />
       </button>
       {open && (
@@ -122,6 +140,17 @@ export function ModelPicker({ bot: stored }: { bot: Bot }) {
                 <input ref={search} value={query} placeholder="Search models…" aria-label="Search models" spellCheck={false} onChange={(e) => show(() => setQuery(e.target.value))} />
               </label>
               <div className="model-list" role="listbox" aria-label="Models">
+                {/* For an automation, the first choice is no model of its own. It is a button, so the keyboard reaches it with Tab. */}
+                {own && !searching && (
+                  <button type="button" role="option" aria-selected={follows} title={`Runs on whatever ${stored.name} runs on when a run starts`} className="model-row model-same" onMouseDown={(e) => e.preventDefault()} onClick={() => own.onChange(null)}>
+                    {current && <ProviderIcon provider={providers.find((p) => p.id === stored.provider) ?? current} size={18} />}
+                    <span className="model-text">
+                      <span className="model-line"><span className="model-name">Same as {stored.name}</span></span>
+                      <span className="model-desc">Follows {stored.name}’s model: {botsModel} now</span>
+                    </span>
+                    {follows && <Icon name="check" size={16} />}
+                  </button>
+                )}
                 {shown.map((choice, i) => (
                   <Fragment key={choice.key}>
                     <div

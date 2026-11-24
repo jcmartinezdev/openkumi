@@ -3,14 +3,16 @@
 // settings, an automation is saved when it is whole, as on the computer. One that watches something,
 // or starts when an app calls, shows that; it is set up on the computer or by a bot and kept as it is here.
 // The prompt is written on a screen of its own (prompt.tsx), into this form; leaving the form with
-// changes not saved asks first.
+// changes not saved asks first. What its runs work on is its bot's model, or one picked for it in the
+// model sheet, which writes into this form too.
 import { useEffect, useState } from 'react'
 import { ActionSheetIOS, ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import * as Haptics from 'expo-haptics'
-import type { Schedule, Automation } from '@openkumi/shared'
+import type { Schedule, Automation, RunsOn } from '@openkumi/shared'
 import { api, useStore } from '@openkumi/client/store'
+import { runsOnLabel, useModelLists } from '@openkumi/client/models'
 import { DAY_LETTERS, DAY_NAMES, STATUS_LABEL, WEEK, localZone, lookLabel, madeBy, moment, nextRun, runStatus, runTime, trouble, useRuns, watchEvery, watchLabel } from '@openkumi/client/automations'
 import { useHandoff } from '../../src/handoff'
 import { Avatar, Field, Note, Row, Section, Segments, SettingsPage, SwitchRow } from '../../src/SettingsUi'
@@ -20,6 +22,8 @@ interface Draft {
   botId: string
   title: string
   prompt: string
+  /** What its runs work on, or null for what its bot runs on. */
+  runsOn: RunsOn | null
   enabled: boolean
   /** How it goes by the clock, or 'watch' for one that does not: it runs when something changes, or when an app calls. */
   kind: Schedule['type'] | 'watch'
@@ -43,6 +47,7 @@ function draftOf(automation: Automation | undefined, botId: string): Draft {
     botId: automation?.botId ?? botId,
     title: automation?.title ?? '',
     prompt: automation?.prompt ?? '',
+    runsOn: automation?.runsOn ?? null,
     enabled: automation?.enabled ?? true,
     kind: trigger && trigger.kind !== 'time' ? 'watch' : (s?.type ?? 'daily'),
     at: s?.type === 'once' ? s.at : nextHour.getTime(),
@@ -59,7 +64,7 @@ function bodyOf(d: Draft) {
     d.kind === 'once' ? { type: 'once', at: d.at }
     : d.kind === 'daily' ? { type: 'daily', time: d.time, days: d.days }
     : { type: 'interval', minutes: Number(d.every) * (d.unit === 'hours' ? 60 : 1) }
-  return { botId: d.botId, title: d.title.trim(), prompt: d.prompt.trim(), enabled: d.enabled, trigger: d.kind === 'watch' ? undefined : { kind: 'time' as const, schedule } }
+  return { botId: d.botId, title: d.title.trim(), prompt: d.prompt.trim(), runsOn: d.runsOn, enabled: d.enabled, trigger: d.kind === 'watch' ? undefined : { kind: 'time' as const, schedule } }
 }
 
 /** A time of day as the picker takes it: today, at that time. Only the hours and minutes are read back. */
@@ -88,6 +93,11 @@ export default function AutomationPage() {
   const bot = bots.find((b) => b.id === draft.botId)
   const promptKey = `automation:${id}`
   useHandoff(promptKey, draft.prompt, (prompt) => change({ prompt }))
+  // The model sheet reads what the runs work on from here, and writes what is picked there back.
+  const modelKey = `automation-model:${id}`
+  useHandoff(modelKey, draft.runsOn ? JSON.stringify(draft.runsOn) : '', (picked) => change({ runsOn: picked ? JSON.parse(picked) : null }))
+  const providers = useStore((s) => s.providers)
+  const lists = useModelLists(draft.runsOn ? [draft.runsOn.provider] : [])
   /** Set once leaving is meant: after Discard, or once the automation is made or deleted. */
   const [leaving, setLeaving] = useState(false)
   const unsaved = id === 'new' ? !!(draft.title.trim() || draft.prompt.trim()) : !!automation && JSON.stringify(bodyOf(draft)) !== JSON.stringify(bodyOf(draftOf(automation, automation.botId)))
@@ -144,6 +154,10 @@ export default function AutomationPage() {
     ])
   const pickBot = () =>
     ActionSheetIOS.showActionSheetWithOptions({ title: 'The bot that does the automation', options: [...bots.map((b) => `${b.emoji} ${b.name}`), 'Cancel'], cancelButtonIndex: bots.length }, (i) => i < bots.length && change({ botId: bots[i].id }))
+  // An environment that has not been updated yet runs every automation on its bot's model, and says nothing of it.
+  const ownModel = !automation || automation.runsOn !== undefined
+  // The sheet the composer opens, here for the automation: its first choice is the bot's own model.
+  const pickModel = () => bot && router.push({ pathname: '/model/[botId]', params: { botId: bot.id, for: modelKey } })
   const toggleDay = (day: number) => (void Haptics.selectionAsync(), change({ days: draft.days.includes(day) ? draft.days.filter((d) => d !== day) : [...draft.days, day].sort((a, b) => a - b) }))
 
   return (
@@ -186,7 +200,10 @@ export default function AutomationPage() {
       )}
 
       {/* The prompt opens on a screen of its own, so it does not fill this one; the row says only how it stands. */}
-      <Section title="Automation">
+      <Section
+        title="Automation"
+        footer={!ownModel ? undefined : draft.runsOn ? `Its runs work on a model of their own. What came of a run is still told to you by ${bot?.name ?? 'the bot'}, on its own model.` : `Its runs work on what ${bot?.name ?? 'the bot'} runs on, whatever that is at the time.`}
+      >
         <Row leading={bot && <Avatar bot={bot} size={28} />} label="Bot" value={bot?.name ?? 'Choose a bot'} opens onPress={pickBot} />
         <Field label="Name" value={draft.title} placeholder="Morning brief" onChange={(title) => change({ title })} autoCapitalize="sentences" />
         <Row
@@ -195,6 +212,7 @@ export default function AutomationPage() {
           opens
           onPress={() => router.push({ pathname: '/automations/prompt', params: { key: promptKey, title: draft.title.trim() || automation?.title || '', bot: bot?.name ?? '' } })}
         />
+        {ownModel && <Row label="Model" value={draft.runsOn ? runsOnLabel(draft.runsOn, lists, providers) : `Same as ${bot?.name ?? 'the bot'}`} opens disabled={!bot} onPress={pickModel} />}
       </Section>
 
       <Section
