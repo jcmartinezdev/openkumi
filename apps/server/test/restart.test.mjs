@@ -10,7 +10,8 @@ import { test } from 'node:test'
 /** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
 const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
 
-const PORT = 5000 + Math.floor(Math.random() * 90)
+// Below 5060 and 5061, which fetch refuses to connect to (they are SIP's).
+const PORT = 5000 + Math.floor(Math.random() * 60)
 
 /** The servers that are running. A test that fails part-way leaves one behind, and the tests would then never end. */
 const running = new Set()
