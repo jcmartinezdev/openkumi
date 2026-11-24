@@ -64,7 +64,7 @@ export function NewBot({ close, created }: { close: () => void; created: (bot: B
 
   const save = async () => {
     try {
-      // What it runs on is left to the server: the default from Settings, else the first provider that is connected.
+      // What it runs on is left to the server: the engine from Settings, else what the main assistant runs on.
       created(await api<Bot>('POST', '/api/bots', { ...form, ...dress }))
     } catch (e: any) {
       setError(e.message)

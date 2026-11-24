@@ -7,7 +7,7 @@
 // for every bot.
 import type { Automation, Bot, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
 import * as agent from './agent.ts'
-import { getBot, listBots } from './bots.ts'
+import { getBot, mainBot } from './bots.ts'
 import * as db from './db.ts'
 import * as hooks from './hooks.ts'
 import { track } from './telemetry.ts'
@@ -424,8 +424,7 @@ export function finishRun(thread: Thread) {
 
 // ---- what bots may do
 
-/** The main assistant: the first bot, which may make, see, change and delete automations for every bot. */
-export const mainBot = (): Bot | undefined => listBots()[0]
+/** Whether a bot is the main assistant, which may make, see, change and delete automations for every bot. */
 export const isMain = (bot: Bot) => bot.id === mainBot()?.id
 
 /** The automations a bot can see: those it does and those it made. The main assistant sees them all. */

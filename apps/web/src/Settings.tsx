@@ -268,6 +268,8 @@ const DeviceNote = () => <p className="set-intro">These apply to this device onl
 
 function General() {
   const providers = useStore((s) => s.providers)
+  // The first bot is the main assistant.
+  const main = useStore((s) => s.bots[0]?.name) ?? 'the main assistant'
   const runsOn = useSetting('defaultProvider')
   const webSearch = useSetting('defaultWebSearch')
   const showBrowser = useSetting('defaultShowBrowser')
@@ -279,9 +281,9 @@ function General() {
         <Row
           id="default-provider"
           title="Run on"
-          description="What a new bot runs on. You can change it for each bot afterwards."
+          description={`What a new bot runs on. Same as ${main} gives it ${main}’s model and reasoning effort too. You can change it for each bot afterwards.`}
           reset={runsOn.reset}
-          control={<Pick label="New bots run on" value={runsOn.value} options={[['', 'The first one connected'], ...usable.map((p) => [p.id, p.name] as const)]} onChange={runsOn.set} />}
+          control={<Pick label="New bots run on" value={runsOn.value} options={[['', `Same as ${main}`], ...usable.map((p) => [p.id, p.name] as const)]} onChange={runsOn.set} />}
         />
         <Row id="default-web-search" title="Web search" description="New bots may use the model’s built-in web search." reset={webSearch.reset} control={<Switch label="Web search for new bots" checked={webSearch.value} onChange={webSearch.set} />} />
         <Row

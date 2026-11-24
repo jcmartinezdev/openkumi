@@ -1489,6 +1489,27 @@ test('the model picker offers every provider and its models, and picking one mov
   await until(async () => (await kumi()).model === '', 10_000)
   await win.locator('.model-button', { hasText: 'Claude Opus 9' }).waitFor()
 
+  // A new bot runs as Kumi, the main assistant, does, until Settings names an engine for new bots.
+  await ask(LOCAL_PORT, 'local-home', 'PATCH', `/api/bots/${(await kumi()).id}`, { effort: 'high' })
+  await win.evaluate(() => (location.hash = '/settings/general'))
+  const runsOn = win.getByLabel('New bots run on')
+  await runsOn.waitFor()
+  assert.equal(await runsOn.locator('option:checked').innerText(), 'Same as Kumi')
+  assert.match(await win.locator('#default-provider').innerText(), /Same as Kumi gives it Kumi’s model and reasoning effort too\./)
+  if (process.env.OPENKUMI_TEST_SHOTS) await win.locator('#default-provider').screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, 'new-bots-run-on.png') })
+  await win.evaluate(() => (location.hash = '/kumi'))
+  await win.getByRole('button', { name: 'New bot' }).click()
+  await win.getByPlaceholder('Name').fill('Like Kumi')
+  await win.getByRole('button', { name: 'Create', exact: true }).click()
+  const made = async () => (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Like Kumi')
+  await until(made, 10_000)
+  const like = await made()
+  assert.deepEqual([like.provider, like.model, like.effort], ['claude-code', '', 'high'])
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/bots/${like.id}`)
+  await ask(LOCAL_PORT, 'local-home', 'PATCH', `/api/bots/${(await kumi()).id}`, { effort: '' })
+  await win.evaluate(() => (location.hash = '/kumi'))
+  await win.locator('.model-button', { hasText: 'Claude Opus 9' }).waitFor()
+
   // A model can be starred to keep it at hand.
   await open()
   await win.getByRole('tab', { name: 'Grok' }).click()

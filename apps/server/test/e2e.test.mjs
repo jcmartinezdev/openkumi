@@ -455,7 +455,7 @@ test('a long conversation is shortened for the model: a summary stands in for it
 test('bots are created from chat by the main assistant alone, on the owner’s word, and can be started on a first message', async () => {
   const main = (await api('GET', '/api/state')).bots[0]
   assert.equal(main.name, 'Kumi')
-  await api('PATCH', `/api/bots/${main.id}`, { provider: 'mock' })
+  await api('PATCH', `/api/bots/${main.id}`, { provider: 'mock', model: 'mock-1', effort: 'high' })
   // Only the main assistant is offered it, and only in its conversation with the owner.
   assert.doesNotMatch(await told('!tools'), /create_bot/)
   assert.match(await told('!tools', main.id), /list_bots create_bot message_bot/)
@@ -465,14 +465,14 @@ test('bots are created from chat by the main assistant alone, on the owner’s w
   assert.doesNotMatch(lastText(await settle(child.id)), /create_bot|message_bot/, 'a subagent neither makes bots nor messages them')
   await settle(id)
 
-  // A new bot runs on what new bots run on, not on what its maker does.
+  // An engine named in Settings comes before what the main assistant runs on, with that engine's own model.
   await api('PATCH', '/api/settings', { defaultProvider: 'claude-code' })
   try {
     const items = await say(await fresh(main.id), '!tool create_bot {"name":"Researcher","description":"Looks things up.","instructions":"Dig deep.","emoji":"🔎","first_message":"find out about herons"}')
     assert.match(lastText(items), /Created bot[\s\S]*It has your first message and has started on it/)
     const { bots } = await api('GET', '/api/state')
     const made = bots.find((b) => b.name === 'Researcher')
-    assert.deepEqual([made.emoji, made.provider, made.id, made.description], ['🔎', 'claude-code', 'researcher', 'Looks things up.'])
+    assert.deepEqual([made.emoji, made.provider, made.model, made.effort, made.id, made.description], ['🔎', 'claude-code', '', '', 'researcher', 'Looks things up.'])
     assert.match(fs.readFileSync(path.join(dataOf(home), 'bots', 'researcher', 'workspace', 'AGENTS.md'), 'utf8'), /Dig deep\./, 'the instructions start its own file')
     // The first message is in its own conversation, which is named after it, and it has set to work.
     const started = await until(() => conversationOf('researcher'))
@@ -488,12 +488,21 @@ test('bots are created from chat by the main assistant alone, on the owner’s w
     await api('PATCH', '/api/settings', { defaultProvider: '' })
   }
 
+  // Otherwise a new bot runs as the main assistant does: its engine, model and effort.
+  await say(await fresh(main.id), '!tool create_bot {"name":"Twin","description":"x","instructions":"y"}')
+  const twin = (await api('GET', '/api/state')).bots.find((b) => b.id === 'twin')
+  assert.deepEqual([twin.provider, twin.model, twin.effort], ['mock', 'mock-1', 'high'])
+  // Made with an engine of its own, it has that engine's defaults, not the main assistant's model.
+  const given = await api('POST', '/api/bots', { name: 'Given', provider: 'claude-code' })
+  assert.deepEqual([given.provider, given.model, given.effort], ['claude-code', '', ''])
+
   // Asked by another bot, the main assistant makes none: that is not the owner's word.
   await say(await fresh(), `!tool message_bot ${JSON.stringify({ bot_id: main.id, message: '!tool create_bot {"name":"Sneak","description":"x","instructions":"y"}' })}`)
   const asked = await settle((await conversationOf(main.id)).id)
   assert.match(asked.findLast((d) => d.type === 'function_call_output').output, /^Error: A bot can only be created when the user has just asked you for one\./)
   assert.ok(!(await api('GET', '/api/state')).bots.some((b) => b.name === 'Sneak'))
-  for (const made of ['researcher', 'plain']) await api('DELETE', `/api/bots/${made}`)
+  for (const made of ['researcher', 'plain', 'twin', 'given']) await api('DELETE', `/api/bots/${made}`)
+  await api('PATCH', `/api/bots/${main.id}`, { model: '', effort: '' })
 })
 
 test('looks: a new bot\'s own model dresses it, and the owner changes it a part at a time', async () => {

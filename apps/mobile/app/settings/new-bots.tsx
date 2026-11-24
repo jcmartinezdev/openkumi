@@ -14,6 +14,8 @@ export default function NewBotSettings() {
   const { server } = useSession()
   const settings = useStore((s) => s.settings)
   const providers = useStore((s) => s.providers)
+  // The first bot is the main assistant.
+  const main = useStore((s) => s.bots[0]?.name) ?? 'the main assistant'
   // What a new bot could run on: what is ready, plus what is chosen now.
   const usable = providers.filter((p) => (p.connected && p.enabled !== false) || p.id === settings.defaultProvider)
   const save = (patch: Partial<Settings>) => saveSettings(patch).catch((e) => Alert.alert('Not saved', (e as Error).message))
@@ -25,8 +27,8 @@ export default function NewBotSettings() {
 
   return (
     <SettingsPage title="New bots" subtitle={server?.name}>
-      <Section title="Run on" inset={ICON_INSET} footer="What a new bot runs on. Each bot can be moved to another afterwards.">
-        <Row icon="cpu" label="The first one connected" checked={!settings.defaultProvider} onPress={() => runOn('')} />
+      <Section title="Run on" inset={ICON_INSET} footer={`What a new bot runs on. Same as ${main} gives it ${main}’s model and reasoning effort too. Each bot can be moved to another afterwards.`}>
+        <Row icon="cpu" label={`Same as ${main}`} checked={!settings.defaultProvider} onPress={() => runOn('')} />
         {usable.map((p) => (
           <Row
             key={p.id}

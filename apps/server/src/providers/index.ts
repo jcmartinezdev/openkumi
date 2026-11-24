@@ -106,7 +106,7 @@ const mock: Provider = {
   },
 }
 
-// The order is the order of preference when a new bot is given "the first one connected".
+// The order is the order of preference when a new bot runs on neither what Settings names nor what the main assistant runs on.
 const providers: Provider[] = [codex, claudeCode, grok, localModels, openaiCompat, ...(process.env.OPENKUMI_MOCK ? [mock] : [])]
 
 export function getProvider(id: string): Provider {
