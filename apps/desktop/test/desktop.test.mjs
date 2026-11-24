@@ -955,17 +955,23 @@ test('an environment has several addresses: one where something else answers is 
     await address('http://127.0.0.1:1').locator('button:has-text("Remove")').click()
     await address('http://127.0.0.1:1').waitFor({ state: 'detached' })
     assert.ok(!saved().some((a) => a.url === 'http://127.0.0.1:1'))
-    // Enter pressed again while the address is still being asked (here, something that never
-    // answers) does not keep it twice.
-    const silent = net.createServer(() => {})
-    servers.push(silent)
-    const quiet = await listen(silent)
+    // Enter pressed again while the address is still being asked does not keep it twice. What
+    // answers there holds the questions until two have come, then says it is not OpenKumi to both.
+    const held = []
+    let asked = 0
+    const holding = http.createServer((req, res) => {
+      held.push(res)
+      if (++asked >= 2) held.splice(0).forEach((r) => r.writeHead(200, { 'Content-Type': 'application/json' }).end('{}'))
+    })
+    servers.push(holding)
+    const quiet = await listen(holding)
     await typed.fill(quiet.replace('http://', ''))
     await typed.press('Enter')
     await typed.press('Enter')
-    await until(() => saved().some((a) => a.url === quiet))
     await row.locator('text=Added. Nothing answers there right now').waitFor()
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    // Both were answered at the same moment: the second is saved by now, if it was going to be.
+    await until(() => saved().some((a) => a.url === quiet))
+    await new Promise((resolve) => setTimeout(resolve, 500))
     assert.equal(saved().filter((a) => a.url === quiet).length, 1, 'kept once')
     await address(quiet).locator('button:has-text("Remove")').click()
     await address(quiet).waitFor({ state: 'detached' })

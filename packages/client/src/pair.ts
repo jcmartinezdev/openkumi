@@ -25,8 +25,7 @@ export function parseAddress(address: unknown): string {
   if (!/^[A-Za-z0-9.-]+(:\d{1,5})?$|^\[[0-9a-fA-F:]+\](:\d{1,5})?$/.test(host)) throw new Error('That does not look like an address. It should be like 192.168.1.20:4317')
   const scheme = (found![1] || (plainAllowed(`http://${host}`) ? 'http' : 'https')).toLowerCase()
   // OpenKumi's usual port, unless one was given or the address is a secure one.
-  // A name in capitals is the same computer, and the same address.
-  return `${scheme}://${host.toLowerCase()}${/:\d+$/.test(host) || scheme === 'https' ? '' : ':4317'}`
+  return `${scheme}://${host}${/:\d+$/.test(host) || scheme === 'https' ? '' : ':4317'}`
 }
 
 /** What a pairing link or QR code carries: the address and the code. Null when the text is not one. */
