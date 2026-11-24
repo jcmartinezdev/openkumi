@@ -132,7 +132,8 @@ if (!hasColumn('held')) db.exec('ALTER TABLE threads ADD COLUMN held INTEGER NOT
 // An automation may run on a model of its own, which its runs, and their subagents, are then on.
 // Older versions do not look at these: there, such an automation runs on what its bot runs on.
 if (!hasColumn('runs_on', 'automations')) db.exec('ALTER TABLE automations ADD COLUMN runs_on TEXT')
-if (!hasColumn('provider')) db.exec('ALTER TABLE threads ADD COLUMN provider TEXT; ALTER TABLE threads ADD COLUMN effort TEXT')
+if (!hasColumn('provider')) db.exec('ALTER TABLE threads ADD COLUMN provider TEXT')
+if (!hasColumn('effort')) db.exec('ALTER TABLE threads ADD COLUMN effort TEXT')
 
 // Nothing survives a restart mid-run, so no thread can still be running. That is a change like any
 // other, or an app's copy would show those threads at work for good.

@@ -93,8 +93,8 @@ function team(bot: Bot): string {
 
 /**
  * What a thread runs on. A run of an automation that was given a model of its own, and every
- * subagent of such a run, is on exactly that; any other thread is on what its bot runs on now, a
- * subagent with the model it was started on in place of the bot's.
+ * subagent of such a run, is on exactly that from start to end; any other thread is on what its
+ * bot runs on now, a subagent with the model it was started on in place of the bot's.
  */
 export function runsOn(thread: Pick<Thread, 'provider' | 'model' | 'effort'>, bot: Bot): RunsOn {
   if (thread.provider) return { provider: thread.provider, model: thread.model ?? '', effort: thread.effort ?? '' }
@@ -827,9 +827,10 @@ export function spawnSubagent(parent: Thread, opts: { task: string; name: string
     kind: 'subagent',
     title: opts.name.slice(0, 60) || 'Subagent',
     // A run that was given a model of its own passes it on, so the work it hands out is done on that too.
+    // A subagent given another model thinks as hard as that model does by itself: the run's level was chosen for the run's.
     provider: parent.provider,
     model: opts.model || (parent.provider ? parent.model : null),
-    effort: parent.effort,
+    effort: opts.model ? null : parent.effort,
   })
   postMessage(child.id, { source: 'parent', text: opts.task })
   return child

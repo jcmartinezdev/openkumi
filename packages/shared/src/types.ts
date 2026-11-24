@@ -387,7 +387,7 @@ export interface Automation {
   trigger: Trigger
   /**
    * What its runs work on, when that is not what its bot runs on. Null follows the bot: whatever
-   * the bot runs on when a run starts.
+   * the bot runs on at the time.
    */
   runsOn: RunsOn | null
   /** Paused when false. */

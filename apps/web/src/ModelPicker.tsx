@@ -63,7 +63,8 @@ export function ModelPicker({ bot: stored, own }: { bot: Bot; own?: Own }) {
   const shown = searching ? all.filter((c) => words.every((word) => `${c.info.name} ${c.info.id} ${c.provider.name}`.toLowerCase().includes(word))) : inTab.filter((c) => !folded.includes(c))
   const viewed = providers.find((p) => p.id === tab)
   // The row that is lit: the one last pointed at, kept inside the list as it is now, else the bot's own model.
-  const lit = active === null ? Math.max(0, shown.findIndex(isCurrent)) : Math.min(active, shown.length - 1)
+  // While an automation follows its bot no model is its own, so none is lit, and Enter picks nothing.
+  const lit = active === null ? (follows ? -1 : Math.max(0, shown.findIndex(isCurrent))) : Math.min(active, shown.length - 1)
   /** Shows other models. Whatever was lit belonged to the list that is being left. */
   const show = (change: () => void) => (change(), setActive(null), search.current?.focus())
 
@@ -104,7 +105,7 @@ export function ModelPicker({ bot: stored, own }: { bot: Bot; own?: Own }) {
     if ((mac ? e.metaKey : e.ctrlKey) && /^[1-9]$/.test(e.key) && shown[Number(e.key) - 1]) return (e.preventDefault(), choose(shown[Number(e.key) - 1], true))
     // The arrows and Enter move through the list from the search box. On the reasoning levels they are the buttons' own.
     if (e.target !== search.current) return
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') (e.preventDefault(), setActive((shown.length ? lit + (e.key === 'ArrowDown' ? 1 : shown.length - 1) : 0) % Math.max(1, shown.length)))
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') (e.preventDefault(), setActive(lit < 0 ? (e.key === 'ArrowDown' ? 0 : Math.max(0, shown.length - 1)) : (shown.length ? lit + (e.key === 'ArrowDown' ? 1 : shown.length - 1) : 0) % Math.max(1, shown.length)))
     else if (e.key === 'Enter' && shown[lit]) (e.preventDefault(), choose(shown[lit], true))
   }
 
@@ -142,7 +143,7 @@ export function ModelPicker({ bot: stored, own }: { bot: Bot; own?: Own }) {
               <div className="model-list" role="listbox" aria-label="Models">
                 {/* For an automation, the first choice is no model of its own. It is a button, so the keyboard reaches it with Tab. */}
                 {own && !searching && (
-                  <button type="button" role="option" aria-selected={follows} title={`Runs on whatever ${stored.name} runs on when a run starts`} className="model-row model-same" onMouseDown={(e) => e.preventDefault()} onClick={() => own.onChange(null)}>
+                  <button type="button" role="option" aria-selected={follows} title={`Runs on whatever ${stored.name} runs on at the time`} className="model-row model-same" onMouseDown={(e) => e.preventDefault()} onClick={() => own.onChange(null)}>
                     {current && <ProviderIcon provider={providers.find((p) => p.id === stored.provider) ?? current} size={18} />}
                     <span className="model-text">
                       <span className="model-line"><span className="model-name">Same as {stored.name}</span></span>
