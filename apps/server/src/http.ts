@@ -174,7 +174,7 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     home: HOME_LABEL,
     settings: settings(),
     defaults: DEFAULTS,
-    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT, protocol: PROTOCOL, telemetry: telemetry.telemetryInfo(), person: PERSON },
+    about: { version: VERSION, node: process.version, platform: `${SYSTEMS[process.platform] ?? process.platform} ${os.release()}`, port: PORT, lanForced: LAN, timeZone: automations.TIME_ZONE, hooksPort: hooks.HOOKS_PORT, protocol: PROTOCOL, telemetry: telemetry.telemetryInfo(), person: PERSON, computer: computerName() },
     update: updateInfo(),
   }
 })
@@ -211,10 +211,11 @@ route('GET', '/api/addresses', async () => ({
 }))
 // A code for pairing one more computer. It works once, for a few minutes.
 // Who gets in is decided at this computer, not by a computer that was let in.
+/** The name of the computer this runs on, as people call it: its host name without the network's part ("mac-mini", not "mac-mini.fritz.box"). */
+const computerName = () => os.hostname().split('.')[0] || 'OpenKumi'
 /** What a computer that was just paired calls this server, unless its person names it otherwise: the computer it is on, and whose it is where several people have one there. */
 function placeName(): string {
-  const computer = os.hostname().replace(/\.local$/, '') || 'OpenKumi'
-  return people().length > 1 ? `${shown(PERSON)} on ${computer}` : computer
+  return people().length > 1 ? `${shown(PERSON)} on ${computerName()}` : computerName()
 }
 const ownerOnly = ({ req, url }: Call) => whoIs(req, url) === 'owner' || fail(403, 'Computers are paired and removed on the computer running OpenKumi.')
 route('POST', '/api/pairing', (_, __, call) => (ownerOnly(call), newPairingCode()))

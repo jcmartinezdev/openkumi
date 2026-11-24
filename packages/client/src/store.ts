@@ -300,7 +300,7 @@ export function useApp(info: AppInfo) {
 }
 export const appInfo = () => app
 
-let learn: (id: string, learned: { serverId?: string; addresses?: string[] }) => void = () => {}
+let learn: (id: string, learned: { serverId?: string; addresses?: string[]; person?: string }) => void = () => {}
 /**
  * `fn` is told what was learned about the environment being shown: its server's id, once an
  * address has shown it, and the addresses the server reports. The app keeps them with the environment.
@@ -514,6 +514,8 @@ async function opened() {
   }
   // The server says where else it can be reached; the app keeps that, for when this address stops answering.
   const shown = link
+  // And whose bots it holds, to show them as that person's while another environment is showing.
+  if (shown && !shown.local && state.about?.person) learn(shown.id, { person: state.about.person })
   if (shown && !shown.local)
     void api<{ addresses?: string[] }>('GET', '/api/addresses')
       .then(({ addresses }) => mine === opens && Array.isArray(addresses) && learn(shown.id, { addresses }))

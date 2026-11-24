@@ -203,7 +203,7 @@ test('the first person is called what they said where they were asked, and a pai
       const begun = await post('/api/pair/begin', { nonce })
       return post('/api/pair/finish', { nonce, serverNonce: begun.nonce, proof: sign('computer', nonce, begun.nonce), name })
     }
-    const computer = os.hostname().replace(/\.local$/, '')
+    const computer = os.hostname().split('.')[0]
     assert.equal((await pairAs('Laptop')).name, computer)
 
     // The commands, as the app asks them.

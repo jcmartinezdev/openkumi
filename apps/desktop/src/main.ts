@@ -127,7 +127,7 @@ function state(): DesktopState {
     platform: process.platform,
     fullScreen: !!win?.isFullScreen(),
     local: { enabled: config.local.enabled, state: config.local.enabled ? local.state : 'off', error: local.error, startedHere: !!local.child, nobodyYet: local.state === 'running' ? undefined : nobodyYet(), ...whoIsHere() },
-    environments: config.environments.map(({ id, name, addresses, enabled }) => ({ id, name, addresses, enabled })),
+    environments: config.environments.map(({ id, name, addresses, enabled, person }) => ({ id, name, addresses, enabled, person })),
     current: showing(),
     connection: connection(),
     catchesSignIns,
@@ -241,7 +241,8 @@ async function add(input: { address?: unknown; code?: unknown; name?: unknown })
   const url = parseAddress(input?.address)
   const refused = refusal(url)
   if (refused) throw new Error(refused)
-  const { key, serverId, called } = await pair(url, input?.code, os.hostname().replace(/\.local$/, ''))
+  // Listed there by this computer's name, without the network's part ("mac-mini", not "mac-mini.fritz.box").
+  const { key, serverId, called } = await pair(url, input?.code, os.hostname().split('.')[0] || 'Computer')
   // Pairing again with a computer that is already listed replaces the key it gave before, and the
   // address is added to the ones it had. An older server has no id: then it is known by the address.
   const listed =
@@ -284,12 +285,14 @@ function removeAddress(id: string, url: string) {
   changed()
 }
 
-/** What the window learned about an environment: its server's id, and the addresses the server reports. */
-function learn(id: string, learned: { serverId?: unknown; addresses?: unknown }) {
+/** What the window learned about an environment: its server's id, the addresses the server reports, and whose bots it holds. */
+function learn(id: string, learned: { serverId?: unknown; addresses?: unknown; person?: unknown }) {
   const environment = find(id)
   if (!environment) return
   const before = JSON.stringify(environment)
   if (typeof learned?.serverId === 'string') environment.serverId ??= learned.serverId
+  // A name as people have one on a computer: small letters, digits and dashes.
+  if (typeof learned?.person === 'string' && /^[a-z0-9][a-z0-9-]{0,29}$/.test(learned.person)) environment.person = learned.person
   if (Array.isArray(learned?.addresses)) environment.addresses = withFound(environment.addresses, learned.addresses)
   if (JSON.stringify(environment) !== before) changed()
 }
