@@ -167,13 +167,23 @@ internet.
    computer a certificate for its name, as in `https://mac-mini.tail1234.ts.net` (see Tailscale's
    own documentation on HTTPS and `tailscale serve`). On the internet, a reverse proxy or tunnel
    with a certificate, such as `https://kumi.example.com`. Either way it has to pass requests on to
-   the server on this computer, at `127.0.0.1:4317`, and say on each one that it passed it on, with
-   an `X-Forwarded-For` (or `Forwarded`, `X-Forwarded-Host`, `X-Real-IP`) header, as
-   `tailscale serve` and the usual proxies do. Without one, the server takes the request for this
+   the server on this computer, at `127.0.0.1:4317`, and say on every request, the live
+   connection at `/ws` included, that it passed it on, with an `X-Forwarded-For` (or `Forwarded`,
+   `X-Forwarded-Host`, `X-Real-IP`) header. Without one, the server takes the request for this
    computer itself, and a paired device could use what only this computer may, such as opening a
-   bot's folder in this computer's file manager. It also has to pass on WebSocket upgrades (the
-   live connection at `/ws`): `tailscale serve` does, while nginx, for one, needs
-   `proxy_http_version 1.1` and the `Upgrade` and `Connection` headers set.
+   bot's folder in this computer's file manager. It also has to pass on the WebSocket upgrade at
+   `/ws`. `tailscale serve` does both by itself; other proxies may have to be told. In nginx, for
+   one, neither is done unless set:
+
+   ```nginx
+   location / {
+       proxy_pass http://127.0.0.1:4317;
+       proxy_set_header X-Forwarded-For $remote_addr;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection "upgrade";
+   }
+   ```
 
 2. On each device, open **Settings → Environments**, press **N addresses** under the environment,
    type the address and press **Add address**. On the iPhone, it is the server's page in Settings.
