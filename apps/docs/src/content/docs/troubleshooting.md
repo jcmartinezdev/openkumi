@@ -41,7 +41,7 @@ anything private.
 | The app says a server is older or newer than it | Update the one it names. For a server that is behind, **Update it** beside the environment asks it to update itself. |
 | **…answers at …, but no longer lets this device in. Pair them again.** | This device was removed on the computer that runs the bots, or that server's data was reset. Pair again. |
 | **The OpenKumi at … does not know this device, so it may be a different one. Its key was not sent there.** | Something else answers at that address, such as another OpenKumi server or a device that got the same home address. Check the address. |
-| A remote environment never connects away from home | Turn Tailscale on, on both. Or add an `https` address of your own under its addresses. See [Servers and addresses](/connections/). |
+| A remote environment never connects away from home | Away from home it needs an `https` address (on Tailscale or the internet), added under its addresses. A plain `http` Tailscale address is refused. See [Away from home](/connections/#away-from-home). |
 | A remote environment never connects at home | **Let other devices connect** must be on, on the computer that runs the bots (`openkumi lan on`). Check that both are on the same network, and that a firewall lets port 4317 in (and the port of each other person's server there, 4327 and on). |
 
 ## Pairing fails

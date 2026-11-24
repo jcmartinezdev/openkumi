@@ -16,7 +16,7 @@ import { FIRST, FROM_REPOSITORY, HOME, HOME_LABEL, LAN, PERSON, PORT, ROOT, acce
 import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, proveTo, removeComputer } from './clients.ts'
 import * as mcp from './mcp.ts'
 import * as db from './db.ts'
-import { homeAddresses, nearby, tailscaleAddresses } from './network.ts'
+import { homeAddresses, served, tailscaleAddresses } from './network.ts'
 import { announceProviders, callsInfo, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
 import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower, superpowerCategories, superpowerFile } from './superpowers.ts'
@@ -203,12 +203,10 @@ route('GET', '/api/update', () => updateInfo())
 // Fetches the newest version and starts it: at once with `now`, else when no bot is working.
 route('POST', '/api/update', (_, body) => updateNow(body.now === true).catch((e) => fail(409, e.message)))
 // How other computers get in: whether they can reach this one, where, and which ones are paired.
-route('GET', '/api/access', async () => ({ on: lanOn(), port: PORT, addresses: homeAddresses(), tailscale: await tailscaleAddresses(), computers: listComputers() }))
-// Where the other devices can reach this server, for them to keep: the local network first, then
-// Tailscale. A device learns these while connected, and tries them in that order from then on.
-route('GET', '/api/addresses', async () => ({
-  addresses: lanOn() ? [...homeAddresses(), ...(await tailscaleAddresses())].map((host) => `http://${host}:${PORT}`) : [],
-}))
+route('GET', '/api/access', () => ({ on: lanOn(), port: PORT, addresses: homeAddresses(), computers: listComputers() }))
+// Where the other devices can reach this server on the local network, for them to keep. A device
+// learns these while connected. Away from home it uses an https address its owner added by hand.
+route('GET', '/api/addresses', () => ({ addresses: lanOn() ? homeAddresses().map((host) => `http://${host}:${PORT}`) : [] }))
 // A code for pairing one more computer. It works once, for a few minutes.
 // Who gets in is decided at this computer, not by a computer that was let in.
 /** The name of the computer this runs on, as people call it: its host name without the network's part ("mac-mini", not "mac-mini.fritz.box"). */
@@ -590,11 +588,12 @@ function createServer() {
       json(e instanceof HttpError ? e.status : 500, { error: String(e?.message ?? e).split('\n')[0] })
     }
   })
-  // Only this computer, the local network and Tailscale are served. Over the internet, plain http
-  // would show every device's key to whoever is in between, so such a connection is closed before
-  // anything is read from it.
+  // Only this computer and the local network are served. Anywhere else, Tailscale included, a
+  // device's key goes only over https, through an address put in front of this server, which
+  // connects from this computer. So a connection straight from there is closed before anything is
+  // read from it.
   server.on('connection', (socket) => {
-    if (!nearby(socket.remoteAddress ?? '')) socket.destroy()
+    if (!served(socket.remoteAddress ?? '')) socket.destroy()
   })
 
   const wss = new WebSocketServer({ noServer: true })

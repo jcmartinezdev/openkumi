@@ -1941,7 +1941,7 @@ test('webhooks: an app’s call is taken only when it is signed, an automation r
     assert.deepEqual(desk.hooks, { events: [{ id: 'ticket.opened', name: 'A ticket is opened' }, { id: 'ticket.changed', name: 'A ticket is changed' }], setup: ['Enter {address} in Desk.'] })
     assert.equal((await api('GET', '/api/superpowers')).find((p) => p.id === 'notion').hooks, null)
     assert.equal((await api('GET', '/api/state')).about.hooksPort, hooksPort)
-    assert.equal((await api('GET', '/api/hooks/address')).port, hooksPort)
+    assert.deepEqual(await api('GET', '/api/hooks/address'), { port: hooksPort, suggestion: 'https://test-mac.tail0000.ts.net' }, 'the Tailscale name, from its program')
     // Where the internet reaches that port is the owner's to say: an https address, kept without what follows it.
     assert.equal((await api('PATCH', '/api/settings', { hookAddress: 'https://mac.example.ts.net/' })).hookAddress, 'https://mac.example.ts.net')
     assert.equal((await api('PATCH', '/api/settings', { hookAddress: 'http://mac.example.ts.net' })).hookAddress, 'https://mac.example.ts.net', 'apps only call https')
@@ -2703,13 +2703,13 @@ test('access: another computer is let in by pairing, with a key of its own that 
   assert.deepEqual((await ask('a key nobody was given')).said.device, { known: false })
   assert.equal('device' in (await (await fetch(`${far}/api/hello?challenge=zz&device=${tagOf(paired.key)}`)).json()), false, 'a challenge has to be a made-up value')
 
-  // Where else it can be reached: the local network, then Tailscale, name first.
+  // Where else it can be reached: the local network only. Tailscale is never reported, as plain
+  // http goes nowhere but home; away from home a device uses an https address its owner added.
   const reported = (await (await viaNetwork(paired.key, '/api/addresses')).json()).addresses
-  const place = (url) => reported.indexOf(url)
-  assert.ok(place(far) >= 0, 'the address it was reached at')
-  assert.ok(place(far) < place(`http://test-mac.tail0000.ts.net:${PORT}`) && place(`http://test-mac.tail0000.ts.net:${PORT}`) < place(`http://100.101.102.103:${PORT}`), reported.join(' '))
+  assert.ok(reported.includes(far), 'the address it was reached at')
+  assert.ok(reported.every((url) => url.startsWith('http://') && !/ts\.net|\/\/100\./.test(url)), reported.join(' '))
   assert.equal((await viaNetwork(undefined, '/api/addresses')).status, 401, 'only a paired computer is told')
-  assert.deepEqual((await api('GET', '/api/access')).tailscale.slice(0, 2), ['test-mac.tail0000.ts.net', '100.101.102.103'])
+  assert.equal('tailscale' in (await api('GET', '/api/access')), false)
 
   // The paired computer is in with its own key, which is stored here only as a hash.
   assert.equal((await viaNetwork(paired.key)).status, 200)

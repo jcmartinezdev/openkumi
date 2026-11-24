@@ -1,10 +1,11 @@
 // Where a paired server can be reached, and making sure an address is that server before its key
-// is sent there. A server can have several addresses: on the home network, on Tailscale, or one its
-// owner put in front of it. They are tried in that order, and the first that shows it is the server
-// is used. Whatever answers at an address is asked who it is without being sent the key: it has to
-// sign a value made up here with the key's hash, which only that server and this device know (the
-// server's side is in apps/server/src/clients.ts). Something else, or another OpenKumi server,
-// answering at a saved address is told nothing it could use.
+// is sent there. A server can have several addresses: on the home network, which it reports itself,
+// and https ones its owner put in front of it, on Tailscale or elsewhere. They are tried in that
+// order, and the first that shows it is the server is used. Whatever answers at an address is
+// asked who it is without being sent the key: it has to sign a value made up here with the key's
+// hash, which only that server and this device know (the server's side is in
+// apps/server/src/clients.ts). Something else, or another OpenKumi server, answering at a saved
+// address is told nothing it could use.
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { compatible } from '@openkumi/shared/protocol'
@@ -46,13 +47,21 @@ export function kindOf(url: string): Kind {
   return 'internet'
 }
 
+/** Whether plain http may be used at this address: only on this computer and the home network. */
+export const plainAllowed = (url: string) => ['this computer', 'home'].includes(kindOf(url))
+
 /**
- * Why a key may never go to this address, or null. Plain http is only for this computer, the home
- * network and Tailscale (which encrypts on its own): anywhere else, whoever is in between could read it.
+ * Why a key may never go to this address, or null. Plain http is only for this computer and the
+ * home network. Anywhere else the address has to be https, however its owner gets that: Tailscale
+ * gives a computer a certificate for its name, and any other way will do.
  */
 export function refusal(url: string): string | null {
   if (!/^https?:\/\//i.test(url) || !hostOf(url)) return `${url} is not an address.`
-  return /^http:/i.test(url) && kindOf(url) === 'internet' ? `${new URL(url).host} is on the internet, where plain http would let others read this device’s key. Use an https address, or reach it over Tailscale.` : null
+  if (!/^http:/i.test(url) || plainAllowed(url)) return null
+  const host = new URL(url).host
+  return kindOf(url) === 'tailscale'
+    ? `${host} is on Tailscale, where this device only uses https. Use the computer’s https address on Tailscale.`
+    : `${host} is on the internet, where plain http would let others read this device’s key. Use an https address.`
 }
 
 const RANK: Record<Kind, number> = { 'this computer': 0, home: 1, tailscale: 2, internet: 3 }
@@ -68,12 +77,13 @@ export function ordered(addresses: SavedAddress[]): string[] {
 /**
  * The saved addresses with the ones the server reports now in place of the ones it reported before,
  * so an address it no longer has goes away. Those put in by hand are never touched. Only home
- * network and Tailscale addresses are taken from a server, and only a handful.
+ * network addresses are taken from a server, and only a handful: an https address in front of it
+ * is its owner's to add.
  */
 export function withFound(saved: SavedAddress[], reported: unknown[]): SavedAddress[] {
   const typed = saved.filter((address) => !address.found)
   const found = reported
-    .filter((url): url is string => typeof url === 'string' && !refusal(url) && ['home', 'tailscale'].includes(kindOf(url)))
+    .filter((url): url is string => typeof url === 'string' && !refusal(url) && kindOf(url) === 'home')
     .map((url) => url.replace(/\/+$/, ''))
     .filter((url, i, all) => all.indexOf(url) === i && !typed.some((address) => address.url === url))
     .slice(0, 8)

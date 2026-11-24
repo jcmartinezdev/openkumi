@@ -4,35 +4,44 @@ import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
 import http from 'node:http'
 import { test } from 'node:test'
-import { nearby, onTailscale } from '../src/network.ts'
+import { nearby, onTailscale, served } from '../src/network.ts'
 import { checkNew, deviceTag, kindOf, ordered, probe, reach, refusal, verdict, withFound } from '../../../packages/client/src/addresses.ts'
 import { PROTOCOL } from '../../../packages/shared/src/protocol.ts'
 
-test('the server answers this computer, the local network and Tailscale, and nothing on the internet', () => {
+test('the server answers only this computer and the local network: Tailscale and the internet come through https', () => {
   for (const ip of ['127.0.0.1', '::1', '::ffff:127.0.0.1', '10.0.0.4', '172.16.5.5', '172.31.255.1', '192.168.1.20', '::ffff:192.168.1.20', '169.254.10.1', '100.101.102.103', 'fd7a:115c:a1e0::1', 'fe80::1'])
     assert.equal(nearby(ip), true, ip)
   for (const ip of ['203.0.113.9', '8.8.8.8', '172.32.0.1', '100.128.0.1', '::ffff:8.8.8.8', '2001:db8::1']) assert.equal(nearby(ip), false, ip)
   assert.deepEqual(['100.64.0.1', '100.127.255.255', '100.63.0.1', 'fd7a:115c:a1e0::5'].map(onTailscale), [true, true, false, true])
+  for (const ip of ['127.0.0.1', '::1', '192.168.1.20', '::ffff:192.168.1.20', '10.0.0.4', 'fe80::1', 'fd12:3456::1']) assert.equal(served(ip), true, ip)
+  for (const ip of ['100.101.102.103', '::ffff:100.101.102.103', 'fd7a:115c:a1e0::1', '8.8.8.8', '2001:db8::1']) assert.equal(served(ip), false, ip)
 })
 
-test('addresses: what network each is on, which may be sent a key over plain http, and the order they are tried in', () => {
+test('addresses: what network each is on, which may be sent a key over plain http (only home), and the order they are tried in', () => {
   assert.deepEqual(
     ['http://127.0.0.1:4317', 'http://192.168.1.20:4317', 'http://mac-mini.local:4317', 'http://mac-mini:4317', 'http://100.101.102.103:4317', 'http://mac.tail1234.ts.net:4317', 'https://bots.example.com', 'http://[fe80::1]:4317'].map(kindOf),
     ['this computer', 'home', 'home', 'home', 'tailscale', 'tailscale', 'internet', 'home'],
   )
   assert.equal(refusal('http://192.168.1.20:4317'), null)
-  assert.equal(refusal('http://mac.tail1234.ts.net:4317'), null)
+  assert.equal(refusal('http://mac-mini.local:4317'), null)
+  assert.equal(refusal('http://127.0.0.1:4317'), null)
+  assert.equal(refusal('https://mac.tail1234.ts.net'), null)
   assert.equal(refusal('https://bots.example.com'), null)
+  assert.match(refusal('http://mac.tail1234.ts.net:4317'), /on Tailscale, where this device only uses https/)
+  assert.match(refusal('http://100.101.102.103:4317'), /on Tailscale, where this device only uses https/)
   assert.match(refusal('http://bots.example.com:4317'), /plain http would let others read this device’s key/)
   assert.match(refusal('http://203.0.113.9:4317'), /Use an https address/)
 
   // Home first, then Tailscale, then the rest; within each, the server's own before the typed ones.
-  const saved = [{ url: 'https://bots.example.com' }, { url: 'http://mac.tail1234.ts.net:4317', found: true }, { url: 'http://192.168.1.9:4317' }, { url: 'http://192.168.1.20:4317', found: true }]
-  assert.deepEqual(ordered(saved), ['http://192.168.1.20:4317', 'http://192.168.1.9:4317', 'http://mac.tail1234.ts.net:4317', 'https://bots.example.com'])
+  const saved = [{ url: 'https://bots.example.com' }, { url: 'https://mac.tail1234.ts.net' }, { url: 'http://192.168.1.9:4317' }, { url: 'http://192.168.1.20:4317', found: true }]
+  assert.deepEqual(ordered(saved), ['http://192.168.1.20:4317', 'http://192.168.1.9:4317', 'https://mac.tail1234.ts.net', 'https://bots.example.com'])
 
-  // The server's own are replaced by what it reports now; typed ones stay. Only home and Tailscale addresses are taken from it.
-  assert.deepEqual(withFound(saved, ['http://192.168.1.30:4317', 'http://192.168.1.9:4317', 'https://elsewhere.example', 'http://8.8.8.8:4317', 42]), [
+  // The server's own are replaced by what it reports now; typed ones stay. Only home addresses are
+  // taken from it, so a Tailscale one an older server reported goes away.
+  const older = [...saved, { url: 'http://mac.tail1234.ts.net:4317', found: true }, { url: 'http://100.101.102.103:4317', found: true }]
+  assert.deepEqual(withFound(older, ['http://192.168.1.30:4317', 'http://192.168.1.9:4317', 'https://elsewhere.example', 'http://8.8.8.8:4317', 'http://mac.tail1234.ts.net:4317', 'https://mac.tail1234.ts.net', 42]), [
     { url: 'https://bots.example.com' },
+    { url: 'https://mac.tail1234.ts.net' },
     { url: 'http://192.168.1.9:4317' },
     { url: 'http://192.168.1.30:4317', found: true },
   ])

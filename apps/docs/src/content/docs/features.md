@@ -77,7 +77,7 @@ that stays logged in.
   models used by provider, model and bot, what that would have cost as API calls, and how much of
   your Claude and ChatGPT plans is used up. See [Usage](/using/usage/).
 - **From anywhere.** Pair another computer or an iPhone with a one-time code, and reach your bots
-  at home directly and away over Tailscale. See [Other computers and your phone](/environments/).
+  at home directly and away through an `https` address, on Tailscale or elsewhere. See [Other computers and your phone](/environments/).
 - **Bots for everyone in the house.** One computer can run bots for several people: each gets a
   server of their own, with bots, conversations, settings and paired devices apart from everyone
   else's, on the same Claude, ChatGPT or Grok plan. Add someone, and pick whose bots to show, in

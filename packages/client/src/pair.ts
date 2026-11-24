@@ -4,6 +4,7 @@
 // is given a key of its own. The server's side is in apps/server/src/clients.ts.
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
+import { plainAllowed } from './addresses'
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 const sign = (code: string, who: 'server' | 'computer', ours: string, theirs: string) => hex(hmac(sha256, new TextEncoder().encode(code), new TextEncoder().encode(`${who}:${ours}:${theirs}`)))
@@ -12,14 +13,17 @@ const same = (a: string, b: string) => a.length === b.length && [...a].reduce((d
 
 const unreachable = (url: string) => `Could not reach OpenKumi at ${url}. Check that the other computer is on, that “Let other devices connect” is switched on in its Settings, under Profile & devices, and that both are on the same network.`
 
-/** The server's address as typed: with or without http://, with or without the port. */
+/**
+ * The server's address as typed: with or without http:// or https://, with or without the port.
+ * Without one, it is http on this computer and the home network, and https anywhere else.
+ */
 export function parseAddress(address: unknown): string {
   const text = String(address ?? '').trim()
   if (!text) throw new Error('Enter the address of the other computer.')
   const found = text.match(/^(https?):\/\/([^/?#]+)/i) ?? text.match(/^()([^/?#\s]+)$/)
   const host = found?.[2] ?? ''
   if (!/^[A-Za-z0-9.-]+(:\d{1,5})?$|^\[[0-9a-fA-F:]+\](:\d{1,5})?$/.test(host)) throw new Error('That does not look like an address. It should be like 192.168.1.20:4317')
-  const scheme = (found![1] || 'http').toLowerCase()
+  const scheme = (found![1] || (plainAllowed(`http://${host}`) ? 'http' : 'https')).toLowerCase()
   // OpenKumi's usual port, unless one was given or the address is a secure one.
   return `${scheme}://${host}${/:\d+$/.test(host) || scheme === 'https' ? '' : ':4317'}`
 }

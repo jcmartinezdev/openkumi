@@ -14,8 +14,8 @@ app. From a clone of the repository, the same commands run as `npm run openkumi 
 | `openkumi service remove` | stops that, and removes the service. Your bots and data are untouched. |
 | `openkumi service status` | whether the background service is set up and running |
 | `openkumi status` | whether the server runs and which version, where its data is, whether other computers can reach it, what the bots can run on, whether Chrome was found, and whether an update is waiting |
-| `openkumi pair` | a pairing code and this computer's addresses, for the app on another computer or phone (**Settings → Environments → Add environment**). The code works once, for ten minutes. |
-| `openkumi lan on` / `off` | whether other computers on your network (and Tailscale) can reach it. Each still needs a code to get in. |
+| `openkumi pair` | a pairing code and this computer's home network addresses, for the app on another computer or phone (**Settings → Environments → Add environment**). The code works once, for ten minutes. |
+| `openkumi lan on` / `off` | whether other computers on your network can reach it. Each still needs a code to get in. From elsewhere, Tailscale included, they come through an `https` address you put in front of it. |
 | `openkumi telemetry on` / `off` | whether it tells OpenKumi's makers how it is used and what goes wrong, never what you or your bots write. Without `on` or `off`, how that stands. See [Usage and error reports](/telemetry/). |
 | `openkumi update` | fetches the newest version and starts it once no bot is working. Where several people have bots on this computer, their servers start it too, each once none of its own bots is working. |
 | `openkumi update --now` | the same, without waiting for the bots: those at work are stopped |

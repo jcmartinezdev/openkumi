@@ -39,18 +39,20 @@ not come from:
 
 - this computer;
 - a private home or office network (`10.x`, `172.16–31.x`, `192.168.x`, link-local addresses, and
-  their IPv6 equivalents);
-- Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`).
+  their IPv6 equivalents).
 
-A connection from anywhere else on the internet never gets an answer. Over the internet, plain
-`http` would show every device's key to whoever is in between.
+A connection from anywhere else, Tailscale (`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) included,
+never gets an answer: the server only speaks plain `http`, which goes no further than the home
+network. Devices away from home come through an `https` address their owner put in front of the
+server (Tailscale's own certificate for the computer's name, or a proxy or tunnel), which passes
+requests on from this computer.
 
 | From | The API, port 4317 | A turn's tools, `/mcp/…` | Webhooks, port 4318 |
 | --- | --- | --- | --- |
 | This computer | the access code, or a paired key | the turn's address only | signed calls only |
-| Home network, Tailscale | a paired key, with **Let other computers connect** on | refused | not listening |
-| The internet | closed at once | closed at once | only through a tunnel you set up, signed calls only |
-| A proxy or tunnel on this computer | a paired key, never the access code | refused | signed calls only |
+| Home network | a paired key, with **Let other computers connect** on | refused | not listening |
+| Tailscale, the internet | closed at once | closed at once | only through a tunnel you set up, signed calls only |
+| A proxy or tunnel on this computer (`tailscale serve` among them) | a paired key, never the access code | refused | signed calls only |
 
 The last row matters: a tunnel or web server on this computer connects from this computer too, but
 says it passes requests on from elsewhere, and such a request is never taken for this computer.
@@ -109,7 +111,7 @@ knows it. See
 
 ## Before a key is sent anywhere
 
-A paired device keeps several addresses for its server (home network, Tailscale, any you added),
+A paired device keeps several addresses for its server (home network, and any you added),
 and an address can come to point at something else: another device that got the same home address
 on another network, or another OpenKumi server. So before a device sends its key to an address,
 whatever answers there has to prove it is the server the key came from, without the key being
@@ -138,12 +140,11 @@ The details: the tag is a SHA-256 of the key's hash, and the signature is an HMA
 server's id and the made-up value, keyed with the key's hash. The check is made for every address,
 every time the device connects or moves to another address. A redirect, or an answer from another
 origin, counts as no answer. Addresses a server tells its devices about are kept only when they are
-on a home network or Tailscale, eight at most; an address where something else answers cannot be
-added at all.
+on a home network, eight at most; an address where something else answers cannot be added at all.
 
-**Plain `http`** is used only on this computer, home networks (including names ending in `.local`,
-`.lan` or `.home`, and names without dots) and Tailscale, which encrypts the connection itself.
-Any other address has to be `https`.
+**Plain `http`** is used only on this computer and home networks (including names ending in
+`.local`, `.lan`, `.home`, `.internal` or `.home.arpa`, and names without dots). Any other address,
+Tailscale included, has to be `https`.
 
 [Servers and addresses](/connections/) explains in what order a device tries a server's
 addresses, and how it learns new ones.
@@ -173,5 +174,5 @@ read these files and use what they open.
 <Aside type="caution" title="On a home network, keys travel in plain http">
   Pairing does not give its code away to someone listening, but a paired device's key travels with
   each request. Someone who can watch your home network could copy it. Use OpenKumi on networks you
-  trust, prefer Tailscale (which encrypts) when you are away, and remove devices you no longer use.
+  trust, and remove devices you no longer use. Away from home, keys only travel over `https`.
 </Aside>

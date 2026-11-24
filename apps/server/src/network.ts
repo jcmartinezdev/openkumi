@@ -1,6 +1,6 @@
 // Where this computer can be reached from its owner's other devices: its addresses on the local
-// network, and on Tailscale, which reaches it from anywhere over a connection of its own that is
-// encrypted. Nothing else is served: a connection from the internet at large is closed at once.
+// network, over plain http. From anywhere else, Tailscale included, they come through an https
+// address their owner put in front of it, which passes their requests on from this computer.
 import { execFile } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
@@ -14,9 +14,8 @@ export function onTailscale(ip: string): boolean {
 }
 
 /**
- * Whether a connection from this address is served: this computer, the local network (and its
- * link-local addresses) and Tailscale. On the internet, plain http would show every device's key
- * to whoever is in between.
+ * Whether this address is close by: this computer, the local network (and its link-local
+ * addresses) or Tailscale. Places a bot's watch must not reach (see watch.ts).
  */
 export function nearby(ip: string): boolean {
   const n = v4(ip)
@@ -29,25 +28,34 @@ export function nearby(ip: string): boolean {
   return six === '::1' || /^f[cd]/.test(six) || /^fe[89ab]/.test(six)
 }
 
-/** This computer's addresses on the local network. */
+/**
+ * Whether a connection from this address is served: this computer and the local network. Plain
+ * http goes nowhere else, so whatever comes straight from Tailscale or the internet is closed.
+ */
+export const served = (ip: string) => nearby(ip) && !onTailscale(ip)
+
+/** This computer's addresses on the local network: not Tailscale's, nor a public one it may have. */
 export const homeAddresses = () =>
   Object.values(os.networkInterfaces())
     .flat()
-    .filter((i) => i && i.family === 'IPv4' && !i.internal && !onTailscale(i.address))
+    .filter((i) => i && i.family === 'IPv4' && !i.internal && served(i.address))
     .map((i) => i!.address)
 
 // ---- Tailscale
-// Its own program says what this computer is called on the owner's tailnet. The name stays the
-// same, and it is there even while Tailscale is off, so a device that learns it now can use it
-// once Tailscale is on. Without the program, the address is still found among the network's.
+// Its own program says what this computer is called on the owner's tailnet, for suggesting the
+// https address Tailscale can give it. Without the program, the address is still found among the
+// network's.
 
 /** Where the program usually is: the Mac app's own copy, or one on the PATH. A test names its own. */
 const PROGRAMS = process.env.OPENKUMI_TAILSCALE_BIN ? [process.env.OPENKUMI_TAILSCALE_BIN] : ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale']
 const PATH = [process.env.PATH ?? '', '/opt/homebrew/bin', '/usr/local/bin'].join(path.delimiter)
+// The Mac app's copy only acts as the command when it sees a terminal type. Without one, as in a
+// server the OpenKumi app started, it tries to open its window instead, and says nothing.
+const TERM = process.env.TERM || 'dumb'
 
 function status(program: string): Promise<any> {
   return new Promise((resolve) =>
-    execFile(program, ['status', '--json'], { timeout: 3000, env: { ...process.env, PATH } }, (_error, stdout) => {
+    execFile(program, ['status', '--json'], { timeout: 3000, env: { ...process.env, PATH, TERM } }, (_error, stdout) => {
       try {
         resolve(JSON.parse(stdout))
       } catch {

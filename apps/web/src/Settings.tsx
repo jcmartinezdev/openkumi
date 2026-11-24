@@ -593,7 +593,8 @@ export function EnvironmentList({ adding: addingFirst = false }: { adding?: bool
 
 /**
  * Where a remote environment can be reached, tried from the top: its home network, then Tailscale,
- * then any put in by hand. The ones it reports itself are kept up to date by themselves.
+ * then the rest. It reports its home network addresses itself, and they are kept up to date by
+ * themselves; anything else is an https address put in by hand.
  */
 function Addresses({ environment, report, inUse, busy, change }: { environment: RemoteEnvironment; report?: EnvironmentReport; inUse: string | null; busy: boolean; change: (fn: () => Promise<void>) => Promise<boolean> }) {
   const [address, setAddress] = useState('')
@@ -623,11 +624,11 @@ function Addresses({ environment, report, inUse, busy, change }: { environment: 
         )
       })}
       <div className="set-link-row">
-        <input className="set-input wide" spellCheck={false} autoCapitalize="off" aria-label={`Another address for ${environment.name}`} value={address} placeholder="mac-mini.tail1234.ts.net:4317, or an https address" onChange={(e) => setAddress(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && address.trim() && void add()} />
+        <input className="set-input wide" spellCheck={false} autoCapitalize="off" aria-label={`Another address for ${environment.name}`} value={address} placeholder="https://mac-mini.tail1234.ts.net" onChange={(e) => setAddress(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && address.trim() && void add()} />
         <button disabled={busy || !address.trim()} onClick={() => void add()}>Add address</button>
       </div>
       {note && <p className="faint">{note}</p>}
-      <p className="faint">This computer’s key goes to an address only after whatever answers there has shown it is {environment.name}. Plain http works on the home network and over Tailscale; anywhere else the address needs https.</p>
+      <p className="faint">This computer’s key goes to an address only after whatever answers there has shown it is {environment.name}. Plain http works only on the home network; anywhere else, Tailscale included, the address needs https.</p>
     </div>
   )
 }
@@ -672,15 +673,13 @@ interface AccessInfo {
   port: number
   /** On the local network. */
   addresses: string[]
-  /** Its name and address on Tailscale, when it is on it. Missing from older servers. */
-  tailscale?: string[]
   computers: PairedComputer[]
 }
 
 const clock = (time: number) => new Date(time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 
 /** A pairing code with the addresses it is used at, and both as a picture for a phone to scan. Under it, what is to be known about it. */
-function PairingCode({ code, port, addresses, tailscale, children }: { code: string; port: number; addresses: string[]; tailscale: string[]; children: ReactNode }) {
+function PairingCode({ code, port, addresses, children }: { code: string; port: number; addresses: string[]; children: ReactNode }) {
   return (
     <div className="set-below set-links">
       <div className="set-link-row">
@@ -695,14 +694,7 @@ function PairingCode({ code, port, addresses, tailscale, children }: { code: str
           <CopyButton text={`${ip}:${port}`} />
         </div>
       ))}
-      {tailscale.map((host) => (
-        <div key={host} className="set-link-row">
-          <span className="faint">Tailscale</span>
-          <code>{host}:{port}</code>
-          <CopyButton text={`${host}:${port}`} />
-        </div>
-      ))}
-      {!addresses.length && !tailscale.length && <p className="faint">This computer is not connected to a network right now.</p>}
+      {!addresses.length && <p className="faint">This computer is not connected to a network right now.</p>}
       {addresses[0] && (
         <div className="pair-qr">
           <Qr text={pairingLink(`${addresses[0]}:${port}`, code)} />
@@ -836,7 +828,7 @@ function Devices({ name }: { name: string }) {
         <Row
           id="lan"
           title="Let other devices connect"
-          description={`${name}’s other computers and phone can use these bots once they are paired: on the same network, or from anywhere over Tailscale. On the local network the connection is not encrypted, so use it only on networks you trust; Tailscale encrypts it.`}
+          description={`${name}’s other computers and phone can use these bots once they are paired: on the same network, or from anywhere through an https address you put in front of this computer (Tailscale can give it one). On the local network the connection is not encrypted, so use it only on networks you trust.`}
           status={
             about.lanForced
               ? 'OpenKumi was started with --lan, which keeps this on. Start it without that to control it here.'
@@ -860,8 +852,8 @@ function Devices({ name }: { name: string }) {
               control={local && <button onClick={() => run(async () => setPairing(await api('POST', '/api/pairing')))}>{pairing ? 'New code' : 'Pair a device'}</button>}
             >
               {pairing && (
-                <PairingCode code={pairing.code} port={info.port} addresses={info.addresses} tailscale={info.tailscale ?? []}>
-                  The code works once, until {clock(pairing.expiresAt)}. Whatever is paired with it sees {name}’s bots, and nobody else’s. This closes by itself when the device has used it. Paired once, it learns this computer’s other addresses by itself, so it also finds it over Tailscale.
+                <PairingCode code={pairing.code} port={info.port} addresses={info.addresses}>
+                  The code works once, until {clock(pairing.expiresAt)}. Whatever is paired with it sees {name}’s bots, and nobody else’s. This closes by itself when the device has used it. Paired once, it learns this computer’s other addresses on the home network by itself. To reach it from anywhere else, add an https address there.
                 </PairingCode>
               )}
             </Row>

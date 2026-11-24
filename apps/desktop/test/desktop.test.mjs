@@ -909,11 +909,18 @@ test('an environment has several addresses: one where something else answers is 
     await address(pretending).locator('text=Something else answers').waitFor()
     assert.ok(heard.length > 0 && !heard.some((line) => line.includes(given.key)), 'what answered at the first address was asked who it is, and never given the key')
 
-    // Connected, it learns the server's other addresses, local network and Tailscale, and keeps them.
+    // Connected, it learns the server's other addresses on the local network, and keeps them. Never
+    // Tailscale ones, though the server is on a tailnet: away from home only https is used.
     const saved = () => JSON.parse(fs.readFileSync(`${tmp}/app/desktop.json`, 'utf8')).environments[0].addresses
-    await until(() => saved().some((a) => a.url === `http://test-mac.tail0000.ts.net:${REMOTE_PORT}` && a.found))
+    const homeIp = Object.values(os.networkInterfaces())
+      .flat()
+      .find((i) => i?.family === 'IPv4' && !i.internal && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(i.address))?.address
+    if (homeIp) {
+      await until(() => saved().some((a) => a.url === `http://${homeIp}:${REMOTE_PORT}` && a.found))
+      await address(`http://${homeIp}:${REMOTE_PORT}`).locator('text=reported by it').waitFor()
+    } else await new Promise((resolve) => setTimeout(resolve, 2000))
+    assert.ok(!saved().some((a) => /ts\.net|\/\/100\./.test(a.url)), saved().map((a) => a.url).join(' '))
     assert.deepEqual(saved().filter((a) => !a.found), [{ url: pretending }, { url: relayed }, { url: direct }], 'the ones put in by hand stay as they were')
-    await address(`http://test-mac.tail0000.ts.net:${REMOTE_PORT}`).locator('text=reported by it').waitFor()
 
     // The way in use is cut: the app goes on through the next address that shows it is the server.
     through.close()
