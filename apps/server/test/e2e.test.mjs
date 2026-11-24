@@ -495,13 +495,16 @@ test('bots are created from chat by the main assistant alone, on the owner’s w
   // Made with an engine of its own, it has that engine's defaults, not the main assistant's model.
   const given = await api('POST', '/api/bots', { name: 'Given', provider: 'claude-code' })
   assert.deepEqual([given.provider, given.model, given.effort], ['claude-code', '', ''])
+  // An engine given as nothing is none given.
+  const blank = await api('POST', '/api/bots', { name: 'Blank', provider: '' })
+  assert.deepEqual([blank.provider, blank.model, blank.effort], ['mock', 'mock-1', 'high'])
 
   // Asked by another bot, the main assistant makes none: that is not the owner's word.
   await say(await fresh(), `!tool message_bot ${JSON.stringify({ bot_id: main.id, message: '!tool create_bot {"name":"Sneak","description":"x","instructions":"y"}' })}`)
   const asked = await settle((await conversationOf(main.id)).id)
   assert.match(asked.findLast((d) => d.type === 'function_call_output').output, /^Error: A bot can only be created when the user has just asked you for one\./)
   assert.ok(!(await api('GET', '/api/state')).bots.some((b) => b.name === 'Sneak'))
-  for (const made of ['researcher', 'plain', 'twin', 'given']) await api('DELETE', `/api/bots/${made}`)
+  for (const made of ['researcher', 'plain', 'twin', 'given', 'blank']) await api('DELETE', `/api/bots/${made}`)
   await api('PATCH', `/api/bots/${main.id}`, { model: '', effort: '' })
 })
 

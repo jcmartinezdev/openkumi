@@ -171,7 +171,7 @@ function newBotEngine(): Engine {
  * exists (and the emoji on its sign too, when none was given).
  */
 export async function createBot(input: Record<string, unknown>, by: 'user' | 'bot' | 'server' = 'user'): Promise<Bot> {
-  const { look, ...patch } = clean(input)
+  const { look, provider, ...patch } = clean(input)
   const name = patch.name?.trim()
   if (!name) throw new Error('A bot needs a name')
   const purpose = typeof input.purpose === 'string' ? input.purpose.slice(0, 8000) : ''
@@ -184,7 +184,7 @@ export async function createBot(input: Record<string, unknown>, by: 'user' | 'bo
     voice: '',
     rules: '',
     // A model and effort go with their engine: a bot given only an engine has that engine's defaults.
-    ...(patch.provider ? { provider: patch.provider, model: '', effort: '' as const } : newBotEngine()),
+    ...(provider ? { provider, model: '', effort: '' as const } : newBotEngine()),
     webSearch: app.defaultWebSearch,
     headless: !app.defaultShowBrowser,
     createdAt: Date.now(),
