@@ -265,12 +265,13 @@ apps/
     src/
       store.ts               the window's copy of the environment it shows
       connection.worker.ts   the connection to the environment, on a thread of its own
+      Switcher.tsx           whose bots the window shows, picked at the top of the sidebar and the settings
   desktop/           the desktop app (Electron)
     src/
-      main.ts          the window, the menu, and what the window may ask for
+      main.ts          the window, the menu, what the window may ask for, and whose bots it shows
       local.ts         the local environment: the server, in a process of its own, and the
                        servers of the other people on this computer
-      people.ts        Settings → Environments → People on this computer, through `openkumi people`
+      people.ts        adding, renaming and removing people from the app, through `openkumi people`
       environments.ts  the list of environments and their access codes
       protocol.ts      hands the interface to the window under the app's own address
       preload.ts       the bridge between the window and the app

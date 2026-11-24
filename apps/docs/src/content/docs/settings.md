@@ -8,8 +8,14 @@ description: "What each settings page holds, which settings belong to the device
 Everything is set from the Settings page, which saves each change as you make it. The search box at
 its top finds any setting by name. Each page has **Restore defaults**.
 
+Above the search, the switcher says whose settings these are, and picks someone else: on the
+computer that runs the bots, anyone with bots there; anywhere, one of the other computers. The
+pages under that person's name belong to their server and change with whoever is picked. The
+pages under **This app** are the same whoever is picked.
+
 | Page | What it holds |
 | --- | --- |
+| **Profile & devices** | whose bots these are: their name (**Rename**), **Let other devices connect**, **Pair a device**, the paired devices, and **Remove** for someone else on this computer. See [Other computers and your phone](/environments/). |
 | **General** | **New bots**: what they run on, whether they have web search, whether their browser window is shown. **Confirm before deleting a conversation**. |
 | **Appearance** | theme (light, dark or the system's), message text size, a wide conversation |
 | **Chat** | whether **Enter sends the message**, suggestions in a new chat, how much detail a step shows |
@@ -18,7 +24,7 @@ its top finds any setting by name. Each page has **Restore defaults**.
 | **Superpowers** | every superpower, what each does, which bots have it, and webhooks. See [Superpowers](/superpowers/). |
 | **Master prompt** | what each bot is for, and everything a bot is told, to read. See [What every bot is told](/how-it-works/what-a-bot-is-told/). |
 | **Browser** | the browser program the bots drive, whether the live view opens when a bot starts browsing, and which bots have a browser running now |
-| **Environments** | the local environment, remote environments, **Let other computers connect**, **Pair a computer**, the paired computers, and **People on this computer**. See [Other computers and your phone](/environments/). |
+| **Environments** | the local environment and the other computers this app is paired with, with their addresses. See [Other computers and your phone](/environments/). |
 | **Advanced** | **Steps per turn**, **Subagents at once**, **Subagent levels**, **Size of a bot's own instructions**, **Length of a conversation**, **Log what the engines print**, the data folder, **Delete all conversations** |
 | **Privacy** | **Send how OpenKumi is used and what goes wrong**, this computer's id, and everything that was sent. See [Usage and error reports](/telemetry/). |
 | **About** | the version of the app and of the environment it shows, their updates, **Update by itself** for a server installed alone, and a note on the alpha |

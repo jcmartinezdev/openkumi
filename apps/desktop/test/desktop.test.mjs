@@ -82,6 +82,20 @@ async function pairWith(port, home, name = 'Test computer') {
   return post('/api/pair/finish', { nonce, serverNonce: begun.nonce, proof: sign('computer', nonce, begun.nonce), name })
 }
 
+/**
+ * Waits until an element is in the same place in the window twice in a row, a moment apart. A click
+ * goes where the element was when the click was worked out, so one that is still moving is missed.
+ */
+async function holdsStill(locator) {
+  let last = null
+  await until(async () => {
+    const box = JSON.stringify(await locator.boundingBox())
+    const still = box === last
+    last = box
+    return still
+  }, 10_000)
+}
+
 async function until(check, timeoutMs = 40_000) {
   const deadline = Date.now() + timeoutMs
   while (!(await check())) {
@@ -106,7 +120,20 @@ const settings = async (win) => {
   await win.evaluate(() => (location.hash = '/settings/environments'))
   await win.waitForSelector('#local-environment .switch')
 }
-const menu = () => app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find((i) => i.label === 'Environment').submenu.items.map((i) => `${i.checked ? '*' : ''}${i.label}`))
+/** Whose bots the window can show, as the app's menu lists them: everyone on this computer, then the other computers. */
+const menu = () => app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find((i) => i.label === 'People').submenu.items.filter((i) => i.type !== 'separator').map((i) => `${i.checked ? '*' : ''}${i.label}`))
+/** What the switcher at the top of the sidebar (or of the settings) offers, the one showing marked with a star. Opened and closed again. */
+async function switcher(win, where = '.sidebar') {
+  await win.locator(`${where} .switcher-current`).click()
+  const items = await win.locator(`${where} .switcher-item`).evaluateAll((all) => all.map((item) => `${item.getAttribute('aria-checked') === 'true' ? '*' : ''}${item.querySelector('.grow').textContent}`))
+  await win.locator(`${where} .switcher-current`).click()
+  return items
+}
+/** Picks, by its whole name, whose bots to show (or what else to do) in the switcher at the top of the sidebar (or of the settings). */
+async function pick(win, name, where = '.sidebar') {
+  await win.locator(`${where} .switcher-current`).click()
+  await win.locator(`${where} .switcher-item`).filter({ has: win.locator('.grow').getByText(name, { exact: true }) }).click()
+}
 const processes = () => app.evaluate(({ app }) => app.getAppMetrics().map((m) => m.name || m.type))
 
 before(async () => {
@@ -206,7 +233,7 @@ test('the local environment can be turned on and off, and remote environments ad
     await win.click('button:has-text("Pair and add")')
     await remoteRow(win).waitFor()
     await remoteRow(win).locator(`p:has-text("Connected · via Home network · ${address}:${REMOTE_PORT}")`).waitFor()
-    assert.deepEqual(await menu().then((m) => m.slice(0, 2)), ['*This computer', 'Other Mac'], 'adding an environment does not leave the one that is showing')
+    assert.deepEqual(await menu().then((m) => m.slice(0, 2)), ['*Juan Cruz', 'Other Mac'], 'adding an environment does not leave the one that is showing')
 
     // The key this computer was given is kept in a file only the owner can read. It is a key of
     // its own: the other server's access code never left that computer, and the code is used up.
@@ -219,12 +246,14 @@ test('the local environment can be turned on and off, and remote environments ad
     // The other computer lists this one by its name.
     assert.equal((await ask(REMOTE_PORT, 'remote-home', 'GET', '/api/access')).computers.length, 1)
 
-    // Open the remote environment; both are then offered in the sidebar and in the menu.
+    // Open the remote environment; both are then offered in the sidebar's switcher and in the menu.
     await remoteRow(win).locator('button:has-text("Open")').click()
     await win.evaluate(() => (location.hash = '/'))
     await showsBot(win, 'Far Helper')
-    assert.deepEqual(await win.locator('select.environment option').allInnerTexts(), ['This computer', 'Other Mac'])
-    assert.deepEqual(await menu().then((m) => m.slice(0, 2)), ['This computer', '*Other Mac'])
+    assert.deepEqual(await switcher(win), ['Juan Cruz', 'Add a person', '*Other Mac', 'Connect to another computer'])
+    assert.deepEqual(await menu().then((m) => m.slice(0, 2)), ['Juan Cruz', '*Other Mac'])
+    // The switcher says whose bots these are, by the name their server gives, and where they are.
+    assert.match(await win.locator('.sidebar .switcher-text').innerText(), /^Someone\s+Other Mac$/)
 
     // Turning the local environment off stops the server on this computer; the remote one keeps showing.
     await settings(win)
@@ -235,7 +264,8 @@ test('the local environment can be turned on and off, and remote environments ad
     // ...and turning it on again starts it, without leaving the environment that is showing.
     await win.click('#local-environment .switch')
     await until(() => up(LOCAL_PORT))
-    assert.deepEqual(await menu().then((m) => m.slice(0, 2)), ['This computer', '*Other Mac'])
+    await until(async () => (await menu())[0] === 'Juan Cruz')
+    assert.deepEqual(await menu().then((m) => m.slice(0, 2)), ['Juan Cruz', '*Other Mac'])
 
     // Turning off the environment that is showing moves the window to one that is still on.
     await remoteRow(win).locator('.switch').click()
@@ -275,11 +305,11 @@ test('the local environment can be turned on and off, and remote environments ad
       assert.ok(!(await processes()).includes('OpenKumi Server'), 'the app does not start a second one')
       await settings(win)
       assert.match(await win.locator('#local-environment').innerText(), /started outside this app/)
-      // The people here are shown, but this app does not run their servers, so it is not where they are added or removed.
-      const people = win.locator('.set-section', { has: win.locator('h2:has-text("People on this computer")') })
-      await people.locator('.set-row', { hasText: 'Juan Cruz' }).waitFor()
-      assert.match(await people.locator('#people').innerText(), /people are added and removed there: “openkumi people add <name>”/)
-      assert.equal(await people.getByRole('button', { name: 'Add a person' }).count() + (await people.locator('summary').count()), 0)
+      // The people here are offered, but this app does not run their servers, so it is not where they are added, renamed or removed.
+      assert.deepEqual(await switcher(win, '.set-nav'), ['*Juan Cruz', 'Connect to another computer'])
+      await win.evaluate(() => (location.hash = '/settings/profile'))
+      assert.match(await win.locator('#person').innerText(), /people are added, renamed and removed there: “openkumi people” in a terminal/)
+      assert.equal(await win.getByRole('button', { name: 'Rename' }).count(), 0)
       await app.close()
       await new Promise((r) => setTimeout(r, 1500))
       assert.equal(await up(LOCAL_PORT), true)
@@ -465,10 +495,20 @@ test('replies are drawn with code in colour, diagrams, formulas and tables, and 
   await until(async () => (await win.locator('.page-frame').evaluate((el) => el.offsetHeight)) > 200, 10_000)
   // The page stands for the call that showed it, which is not listed as a step.
   assert.equal(await win.locator('.activity', { hasText: 'show_page' }).count(), 0)
-  // The reply after it is written out first, so the page has stopped moving.
+  // The reply after it is written out first, so the page has stopped moving; and the turn is over,
+  // so nothing below it comes or goes (the "Working" line) and moves it while its link is clicked.
   await win.locator('.msg.assistant[data-item]', { hasText: 'Tool result: Shown “Sales”' }).waitFor()
+  await win.getByRole('button', { name: 'Stop', exact: true }).waitFor({ state: 'detached' })
+  await holdsStill(inside.locator('#out'))
+  // What the app saw when the page said its link was clicked, to tell a missed click from a refused one.
+  await win.evaluate(() => {
+    window.pageSaid = []
+    addEventListener('message', (e) => e.data?.openkumi === 'open' && window.pageSaid.push({ focused: document.activeElement?.tagName, clicked: navigator.userActivation?.isActive }))
+  })
   await inside.locator('#out').click()
-  await until(async () => (await app.evaluate(() => globalThis.opened)).includes('https://example.com/more'), 5000)
+  await until(async () => (await app.evaluate(() => globalThis.opened)).includes('https://example.com/more'), 5000).catch(async () => {
+    throw new Error(`The page's link was not opened. What the app was told: ${JSON.stringify(await win.evaluate(() => window.pageSaid))}`)
+  })
 
   // It is a site of its own: it cannot reach the app, what the app is given, or the network.
   const page = win.frames().find((f) => f.url().startsWith('openkumi://page/'))
@@ -517,10 +557,10 @@ test('files go up and come down, and another computer is paired and removed from
   await win.getByRole('button', { name: 'Download' }).click()
   await until(() => fs.existsSync(`${tmp}/saved.txt`) && fs.readFileSync(`${tmp}/saved.txt`, 'utf8') === 'kept on the other side', 15_000)
 
-  // Letting another computer in: a code is shown here, with this computer's address...
-  await settings(win)
+  // Letting another computer in, on the profile of whoever's bots are shown: a code is shown there, with this computer's address...
+  await win.evaluate(() => (location.hash = '/settings/profile'))
   await win.locator('#lan .switch').click()
-  await win.getByRole('button', { name: 'Pair a computer' }).click()
+  await win.getByRole('button', { name: 'Pair a device' }).click()
   const code = await win.locator('.pair-code').innerText()
   assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/)
   // ...and when the other computer has used it, it is listed, and the code is put away.
@@ -534,7 +574,7 @@ test('files go up and come down, and another computer is paired and removed from
   await win.locator('.pair-code').waitFor({ state: 'detached' })
   // Removing it shuts it out.
   await row.getByRole('button', { name: 'Remove' }).click()
-  await win.waitForSelector('#paired-computers:has-text("No computers are paired")')
+  await win.waitForSelector('#paired-computers:has-text("No devices are paired")')
   assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/access')).computers.length, 0)
   assert.ok(key)
 
@@ -542,113 +582,137 @@ test('files go up and come down, and another computer is paired and removed from
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
-test('people: someone else gets bots of their own on this computer, a code for their own devices, and a server nobody else’s bots are on', async () => {
+test('people: someone else gets bots of their own on this computer, picked at the top to show them, with a code for their own devices on their profile, and a server nobody else’s bots are on', async () => {
   let win = await launch()
   await showsBot(win, 'Kumi')
   const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
   const listed = () => JSON.parse(fs.readFileSync(`${tmp}/local-home/people.json`, 'utf8'))
-  const section = () => win.locator('.set-section', { has: win.locator('h2:has-text("People on this computer")') })
-  const row = (name) => section().locator('.set-row', { has: win.locator(`h3:has-text("${name}")`) })
+  /** The profile of whoever's bots are shown, once it is theirs. */
+  const profile = async (name) => {
+    await win.evaluate(() => (location.hash = '/settings/profile'))
+    await win.locator('#person', { hasText: name }).waitFor({ timeout: 60_000 })
+  }
+  const showing = () => win.locator('.sidebar .switcher-text').innerText()
   const mine = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Mine Only', provider: 'mock' })
 
-  // ---- the first person is whoever answered the welcome, and the local environment is theirs
-  await settings(win)
-  await row('Juan Cruz').waitFor()
-  assert.match(await row('Juan Cruz').innerText(), new RegExp(`Juan Cruz\\s*You\\s*juan-cruz · port ${LOCAL_PORT}`))
-  assert.equal(await row('Juan Cruz').getByRole('button', { name: 'Pair a device' }).count(), 0, 'their own devices are paired above, as before')
-  await win.evaluate(() => (location.hash = '/settings/about'))
-  await win.locator('#person', { hasText: 'Juan Cruz' }).waitFor()
+  // ---- the first person is whoever answered the welcome, and the local environment is theirs; the switcher says so
+  await showsBot(win, 'Mine Only')
+  assert.match(await showing(), /^Juan Cruz\s+This computer$/)
+  await profile('Juan Cruz')
+  assert.match(await win.locator('#person').innerText(), new RegExp(`Juan Cruz\\s*juan-cruz · bots on this computer · port ${LOCAL_PORT}`))
+  assert.equal(await win.locator('#remove-person').count(), 0, 'nobody removes the first person from here')
+  // The settings are grouped by whose they are: the person picked, then this app.
+  assert.deepEqual(await win.locator('.set-nav-group h3').allInnerTexts(), ['Juan Cruz', 'This app'])
 
-  // ---- someone else: a name is all it takes. Their server starts beside the first person's, and a code for their own device is shown at once.
-  await settings(win)
-  await section().getByRole('button', { name: 'Add a person' }).click()
+  // ---- someone else: a name is all it takes. Their server starts beside the first person's, and the app shows their bots, on their profile.
+  await pick(win, 'Add a person', '.set-nav')
   const name = win.locator('input[aria-label="Name of the person to add"]')
   await name.fill('Juan Cruz')
-  await section().getByRole('button', { name: 'Add', exact: true }).click()
-  await section().locator('.notice.error', { hasText: 'juan-cruz has bots here already' }).waitFor()
+  await win.getByRole('button', { name: 'Add', exact: true }).click()
+  await win.locator('.dialog .notice.error', { hasText: 'juan-cruz has bots here already' }).waitFor()
   await name.fill('Ana')
-  await section().getByRole('button', { name: 'Add', exact: true }).click()
-  await row('Ana').locator('.pair-code').waitFor({ timeout: 60_000 })
+  await win.getByRole('button', { name: 'Add', exact: true }).click()
+  await profile('Ana')
   const ana = listed()[1]
   assert.deepEqual([listed().length, ana.name], [2, 'ana'])
   assert.ok(ana.port !== LOCAL_PORT && (await up(ana.port)), 'their server runs on a port of its own')
   assert.ok((await processes()).includes('OpenKumi Server (ana)'), 'in a process of its own inside the app, like the first person’s')
-  const code = await row('Ana').locator('.pair-code').innerText()
+  assert.match(await win.locator('#person').innerText(), new RegExp(`ana · bots on this computer · port ${ana.port}`))
+  assert.deepEqual(await win.locator('.set-nav-group h3').allInnerTexts(), ['Ana', 'This app'])
+  assert.deepEqual(await menu().then((m) => m.slice(0, 2)), ['Juan Cruz', '*Ana'])
+  // Their server has a first bot of its own, and none of the first person's.
+  await win.evaluate(() => (location.hash = '/'))
+  await showsBot(win, 'Kumi')
+  assert.equal(await win.locator('.sidebar .item', { hasText: 'Mine Only' }).count(), 0)
+  assert.match(await showing(), /^Ana\s+This computer$/)
+
+  // ---- a code for one of their own devices, made by their server, on their profile
+  await profile('Ana')
+  await win.getByRole('button', { name: 'Pair a device' }).click()
+  const code = await win.locator('.pair-code').innerText()
   assert.match(code, /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/)
   const [address] = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/access')).addresses
   assert.ok(address, 'this test needs the computer to be on a network')
   // The address shown is their server's, and so is what the picture for a phone carries.
-  await row('Ana').locator('.set-link-row', { hasText: `${address}:${ana.port}` }).waitFor()
-  await row('Ana').locator('svg.qr').waitFor()
-  assert.match(await row('Ana').innerText(), /for one of Ana’s own computers or phones/)
+  await win.locator('#pair .set-link-row', { hasText: `${address}:${ana.port}` }).waitFor()
+  await win.locator('#pair svg.qr').waitFor()
+  assert.match(await win.locator('#pair').innerText(), /Whatever is paired with it sees Ana’s bots, and nobody else’s/)
   await shot('people')
 
-  // ---- the code lets a computer into their server and no other: this app pairs with it as their own computer would
+  // ---- the code lets a device into their server and no other: this app pairs with it as their own computer would
   const begin = (port) => fetch(`http://127.0.0.1:${port}/api/pair/begin`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nonce: 'ab'.repeat(16) }) }).then((r) => r.status)
   assert.deepEqual([await begin(ana.port), await begin(LOCAL_PORT)], [200, 403], 'the first person’s server made no code')
-  await win.click('.set-section-head button:has-text("Add environment")')
+  await pick(win, 'Connect to another computer', '.set-nav')
   await win.fill('input[aria-label="Address of the other computer"]', `${address}:${ana.port}`)
   await win.fill('input[aria-label="Pairing code"]', code)
   await win.click('button:has-text("Pair and add")')
   // Given no name, it is called what the server says it is: whose, and on which computer.
   const theirs = () => win.locator('.set-row', { has: win.locator('h3:has-text("Ana on ")') })
   await theirs().waitFor()
-  await row('Ana').getByRole('button', { name: 'Done' }).click()
-  await row('Ana').locator('.pair-code').waitFor({ state: 'detached' })
-  await theirs().locator('button:has-text("Open")').click()
+  const elsewhere = (await theirs().locator('h3').innerText()).replace(/\s*Showing now$/, '').trim()
+  // Her profile lists it among her devices, and the code is put away.
+  await profile('Ana')
+  await win.locator('#paired-computers:not(:has-text("No devices are paired"))').waitFor({ timeout: 15_000 })
+  await win.locator('.pair-code').waitFor({ state: 'detached' })
+  // Picked in the switcher, her bots are reached over the network, as from her own computer.
+  await pick(win, elsewhere, '.set-nav')
   await win.evaluate(() => (location.hash = '/'))
-  // Their server has a first bot of its own, and none of the first person's.
   await showsBot(win, 'Kumi')
-  await until(async () => (await win.locator('select.environment').inputValue()) !== 'local')
+  await until(async () => (await showing()) === `Ana\n${elsewhere}`)
   assert.equal(await win.locator('.sidebar .item', { hasText: 'Mine Only' }).count(), 0)
-  await win.evaluate(() => (location.hash = '/settings/about'))
-  await win.locator('#person', { hasText: 'Ana' }).waitFor()
-  // People are looked after at the computer that runs the bots, for everyone there: the list is the same whichever environment shows.
-  await settings(win)
-  await row('Ana').waitFor()
-  await win.locator('#local-environment button:has-text("Open")').click()
-  await win.evaluate(() => (location.hash = '/'))
+  // People are looked after at the computer that runs the bots: everyone here is offered whichever shows.
+  assert.deepEqual(await switcher(win), ['Juan Cruz', 'Ana', 'Add a person', `*${elsewhere}`, 'Connect to another computer'])
+  await pick(win, 'Juan Cruz')
   await showsBot(win, 'Mine Only')
+  await pick(win, 'Ana')
+  await until(async () => (await showing()) === 'Ana\nThis computer')
+  await showsBot(win, 'Kumi')
 
-  // ---- everyone's servers stop with the app, and start with it
+  // ---- everyone's servers stop with the app, and start with it; whoever was picked is shown again
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)) && !(await up(ana.port)), 15_000)
   win = await launch()
-  await showsBot(win, 'Mine Only')
   await until(() => up(ana.port))
+  await until(async () => (await showing().catch(() => '')) === 'Ana\nThis computer', 60_000)
+  await showsBot(win, 'Kumi')
+  assert.equal(await win.locator('.sidebar .item', { hasText: 'Mine Only' }).count(), 0)
 
-  // ---- another name: their server is stopped for it, their folder is renamed with them, and what was paired stays paired
-  await settings(win)
-  await row('Ana').locator('summary').click()
-  await row('Ana').getByRole('button', { name: 'Rename' }).click()
+  // ---- another name, on their profile: their server is stopped for it, their folder is renamed with them, the app goes on showing them, and what was paired stays paired
+  await profile('Ana')
+  await win.getByRole('button', { name: 'Rename' }).click()
   await win.fill('input[aria-label="Name of ana"]', 'Anna')
   await win.keyboard.press('Enter')
-  await row('Anna').waitFor({ timeout: 60_000 })
+  await profile('Anna')
   assert.deepEqual([listed().map((p) => p.name), fs.readdirSync(`${tmp}/local-home/people`).sort()], [['juan-cruz', 'anna'], ['anna', 'juan-cruz']])
-  await until(() => up(ana.port))
   assert.ok((await processes()).includes('OpenKumi Server (anna)') && !(await processes()).includes('OpenKumi Server (ana)'))
+  assert.match(await showing(), /^Anna\s+This computer$/)
+  await settings(win)
   await theirs().locator('p:has-text("Connected")').waitFor({ timeout: 30_000 })
 
   // ---- the first person's own name: the local environment is stopped for it and comes back as theirs
-  await row('Juan Cruz').locator('summary').click()
-  assert.equal(await row('Juan Cruz').getByRole('button', { name: 'Remove' }).count(), 0, 'nobody removes themselves from here')
-  await row('Juan Cruz').getByRole('button', { name: 'Rename' }).click()
+  await pick(win, 'Juan Cruz', '.set-nav')
+  await profile('Juan Cruz')
+  await win.getByRole('button', { name: 'Rename' }).click()
   await win.fill('input[aria-label="Name of juan-cruz"]', 'juan')
   await win.keyboard.press('Enter')
   await until(async () => listed()[0].name === 'juan' && (await up(LOCAL_PORT)), 60_000)
+  await profile('Juan')
   await win.evaluate(() => (location.hash = '/'))
   await showsBot(win, 'Mine Only')
   assert.ok(fs.existsSync(`${tmp}/local-home/people/juan/bots/${mine.id}/bot.md`) && !fs.existsSync(`${tmp}/local-home/people/juan-cruz`))
 
-  // ---- removed, their server stops and they are off the list; what it held is kept
-  await settings(win)
-  await row('Anna').locator('summary').click()
-  await row('Anna').getByRole('button', { name: 'Remove' }).click()
-  await row('Anna').waitFor({ state: 'detached', timeout: 30_000 })
+  // ---- removed from their profile: their server stops, they are off the list, what it held is kept, and the app goes back to the first person's bots
+  await pick(win, 'Anna')
+  await profile('Anna')
+  await win.locator('#remove-person').getByRole('button', { name: 'Remove' }).click()
+  await until(() => listed().length === 1, 30_000)
   await until(async () => !(await up(ana.port)), 15_000)
   assert.deepEqual(listed().map((p) => p.name), ['juan'])
   assert.ok(fs.existsSync(`${tmp}/local-home/people/anna/auth.json`), 'nothing of theirs was deleted')
+  await profile('Juan')
+  assert.match(await showing(), /^Juan\s+This computer$/)
   // The environment that was paired with it is this app's own business, and is taken away here.
+  await settings(win)
   await theirs().locator('summary').click()
   await theirs().locator('button:has-text("Remove")').click()
   await theirs().waitFor({ state: 'detached' })

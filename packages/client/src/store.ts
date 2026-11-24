@@ -315,7 +315,8 @@ export function onLearn(fn: typeof learn) {
  */
 export function follow(next: Link | null) {
   // An environment whose server turned out to be another one (the phone paired with another computer) is another environment.
-  const same = next && link && next.id === link.id && (!next.serverId || !link.serverId || next.serverId === link.serverId)
+  // Someone else's bots on the same computer are another environment too.
+  const same = next && link && next.id === link.id && next.person === link.person && (!next.serverId || !link.serverId || next.serverId === link.serverId)
   if (next && link && same) {
     // The same environment with its addresses brought up to date, or with a new access code: what
     // is on screen stays. An address it no longer has is left; a new code is used from now on.

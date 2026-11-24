@@ -72,7 +72,7 @@ occasion with it (HMAC-SHA256), so neither can be fooled by something else at th
     { id: 'server', label: 'The server', sub: 'it showed the code', kind: 'ours' },
   ]}
   steps={[
-    { note: ['Pair a computer: a code that works', 'once, for ten minutes'], over: ['server'], kind: 'ours' },
+    { note: ['Pair a device: a code that works', 'once, for ten minutes'], over: ['server'], kind: 'ours' },
     { from: 'device', to: 'server', text: 'begin, with a value it made up: A' },
     { from: 'server', to: 'device', text: ['its own made-up value B, and', '“server:A:B” signed with the code'], reply: true },
     { note: ['Wrong signature? Stop: this is not the server', 'that showed the code. Nothing more is sent.'], over: ['device'], kind: 'danger' },
@@ -85,8 +85,8 @@ occasion with it (HMAC-SHA256), so neither can be fooled by something else at th
   caption="The server learns that the device was given the code; the device learns that this is the server the code came from. Someone listening learns neither the code nor anything to work it out from."
 />
 
-**Settings → Environments → Paired computers**, on the computer that runs the bots, lists every
-device, with when it was paired and last seen. **Remove** deletes its key's hash and ends its open
+**Settings → Profile & devices**, on the computer that runs the bots, lists every device paired
+with the person shown, with when it was paired and last seen. **Remove** deletes its key's hash and ends its open
 connections at once.
 
 ## Several people on one computer
@@ -102,7 +102,9 @@ anyone else.
 
 What keeps the people apart is the servers, not the computer: everyone's runs under the same
 account there, and that account can read every person's access code. The app on that computer
-uses this to make pairing codes for each person. See
+uses this to show anyone's bots there, picked in its switcher, with no lock between people: it
+reads the access code from that person's folder, and gives it only to a server that has shown it
+knows it. See
 [Known limits](/security/limits/#your-computer-account-is-the-boundary).
 
 ## Before a key is sent anywhere

@@ -34,8 +34,8 @@ Bots belong to a person, and each person on a computer has a server of their own
 from the others': see
 [Bots for someone else in the house](/environments/#bots-for-someone-else-in-the-house). You are
 the first, made when OpenKumi first started, and the commands above are about your server. The
-desktop app does the same from **Settings → Environments** on a computer where it runs the bots
-itself.
+desktop app does the same from the switcher at the top of the sidebar and each person's **Settings
+→ Profile & devices**, on a computer where it runs the bots itself.
 
 | Command | What it does |
 | --- | --- |

@@ -23,7 +23,8 @@ export interface Environment {
 const upgraded = ({ url, ...rest }: Environment & { url?: string }): Environment => ({ ...rest, addresses: rest.addresses ?? (url ? [{ url }] : []) })
 
 interface Config {
-  local: { enabled: boolean }
+  /** `person`: whose bots the window shows on this computer, when it is not the first person's. */
+  local: { enabled: boolean; person?: string }
   environments: Environment[]
   /** The environment the window shows: "local" or the id of a remote one. */
   current: string | null
@@ -42,7 +43,10 @@ function read(): Config {
         current: saved.current ?? null,
       }
     }
-    if (saved.local && Array.isArray(saved.environments)) return { local: { enabled: !!saved.local.enabled }, environments: saved.environments.map(upgraded), current: saved.current ?? null }
+    if (saved.local && Array.isArray(saved.environments)) {
+      const local = { enabled: !!saved.local.enabled, ...(typeof saved.local.person === 'string' ? { person: saved.local.person } : {}) }
+      return { local, environments: saved.environments.map(upgraded), current: saved.current ?? null }
+    }
   } catch {
     // First run: nothing chosen yet.
   }

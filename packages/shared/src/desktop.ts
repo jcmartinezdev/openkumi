@@ -26,6 +26,15 @@ export interface LocalEnvironment {
    * their account on the computer. Missing once someone has, and from older apps.
    */
   nobodyYet?: string
+  /**
+   * Who has bots on this computer, the first person first. Each one's bots are shown in this app
+   * by picking them. Known only while the local environment runs.
+   */
+  people?: string[]
+  /** Whose bots the window shows when it shows this computer: one of `people`. */
+  person?: string
+  /** The first person here, whose server the local environment is: it starts the others', and cannot be removed. */
+  first?: string
 }
 
 /**
@@ -40,19 +49,6 @@ export interface PersonHere {
   /** The person the local environment is: whoever sits at this app. */
   me: boolean
   running: boolean
-}
-
-/** A code that lets one computer or phone into a person's server, and where that server is reached. */
-export interface PersonPairing {
-  code: string
-  expiresAt: number
-  port: number
-  /** Whether other computers can reach their server at all. */
-  on: boolean
-  /** On the local network. */
-  addresses: string[]
-  /** Its name and address on Tailscale, when this computer is on it. */
-  tailscale: string[]
 }
 
 /** What the window needs to talk to the environment it shows. */
@@ -71,6 +67,11 @@ export interface Link {
   local: boolean
   /** The server's own id, once known: another server answering at one of the addresses is not it. */
   serverId?: string
+  /**
+   * Whose bots these are, when the server is on this computer: each person there has a server of
+   * their own, so another person here is another environment to the window.
+   */
+  person?: string
 }
 
 /** How the app stands with its own updates (apps/desktop/src/updates.ts). */
@@ -131,8 +132,8 @@ export interface DesktopBridge {
   onState(listener: (state: DesktopState) => void): () => void
   /** Asks each remote environment, at each of its addresses, whether it is there and still accepts this computer. */
   statuses(): Promise<Record<string, EnvironmentReport>>
-  /** Show another environment. */
-  open(id: string): Promise<void>
+  /** Show another environment. On this computer ("local"), `person` picks whose bots it shows. */
+  open(id: string, person?: string): Promise<void>
   /**
    * Turn the local environment on (OpenKumi runs on this computer) or off (it does not). `name` is
    * what the first person here is called, when nobody has bots here yet (`nobodyYet`).
@@ -141,18 +142,15 @@ export interface DesktopBridge {
   /**
    * The people with bots on this computer, looked after from here: only the app on the computer
    * that runs the bots can, never one connected from elsewhere. Every change resolves with the
-   * list as it is then. Changes need the local environment to have been started by this app; the
-   * list and a pairing code only need it running. Missing from older apps.
+   * list as it is then, and needs the local environment to have been started by this app.
+   * Missing from older apps.
    */
   people?: {
-    list(): Promise<PersonHere[]>
-    /** Bots of their own for someone else: their server is started too. */
+    /** Bots of their own for someone else: their server is started, and the window shows them. */
     add(name: string): Promise<PersonHere[]>
     rename(name: string, to: string): Promise<PersonHere[]>
-    /** Stops their server. What it held is kept. */
+    /** Stops their server. What it held is kept. The window goes back to the first person's bots if it showed theirs. */
     remove(name: string): Promise<PersonHere[]>
-    /** A code for one of their own computers or phones. */
-    pairing(name: string): Promise<PersonPairing>
   }
   /** Start the local environment again after it failed. */
   retry(): Promise<void>

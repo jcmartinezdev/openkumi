@@ -42,7 +42,7 @@ export default function Pair() {
       <ScreenTitle title="Pair with your computer" />
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <Text style={[styles.lead, { color: theme.muted }]}>
-          On the computer that runs your bots, open Settings, then Environments, switch on “Let other computers connect” and choose “Pair a computer”.
+          On the computer that runs your bots, open Settings, then Profile & devices, switch on “Let other devices connect” and choose “Pair a device”.
         </Text>
         <Pressable accessibilityRole="button" style={[styles.button, { backgroundColor: theme.primary }]} onPress={() => router.push('/scan')}>
           <Text style={[styles.buttonText, { color: theme.onPrimary }]}>Scan the code</Text>

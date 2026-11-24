@@ -6,6 +6,7 @@
 //     environment it shows; its connection and the drawing of a bot's browser run on a worker thread.
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, app, dialog, ipcMain, nativeTheme, shell } from 'electron'
 import type { DesktopState, Link } from '@openkumi/shared/desktop'
+import { shownName } from '@openkumi/shared/people'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -13,9 +14,9 @@ import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresse
 import { pair, parseAddress } from '@openkumi/client/pair'
 import { canDictate, cancelDictation, microphone, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
 import { askToUpdate, config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
-import { local, managing, onLocalChange, retryLocal, startLocal, stopLocal } from './local.ts'
+import { local, managing, me, onLocalChange, peopleHere, retryLocal, serverOf, startLocal, stopLocal } from './local.ts'
 import { ASSUME_YES, CATCH_SIGN_INS, FAKE_MICROPHONE, HIDDEN, PRELOAD } from './paths.ts'
-import { addPerson, pairingFor, people, removePerson, renamePerson, workingHere } from './people.ts'
+import { addPerson, people, removePerson, renamePerson, workingHere } from './people.ts'
 import { APP_URL, keepPage, serveInterface } from './protocol.ts'
 import { checkForUpdate, installUpdate, onUpdateChange, startUpdates, updateState } from './updates.ts'
 
@@ -43,12 +44,57 @@ function signInReturned(url: string) {
   app.focus({ steal: true })
 }
 
+// ---- whose bots the window shows on this computer
+// Each person here has a server of their own (local.ts). The window shows one of them at a time:
+// the first person's, which is the local environment's own server, or someone else's, picked at the
+// top of the settings or of the sidebar. Anyone at this computer can pick anyone here; their data
+// is this computer user's to read in any case.
+
+/**
+ * The person picked while they are being renamed: the window waits for their server under the new
+ * name, rather than showing the first person's bots meanwhile.
+ */
+let renaming: string | null = null
+
+/** Whose bots the window shows on this computer: the one picked while they still have bots here, else the first person's. */
+function picked(): string {
+  const chosen = config.local.person
+  return chosen && (chosen === renaming || peopleHere().some((p) => p.name === chosen)) ? chosen : me()
+}
+
+/** The server of the person picked, when that is not the first person: found once it has shown it is theirs. */
+let theirs: { name: string; port: number; token: string } | null = null
+/** Counts the looks for it, so that only the newest one's answer is kept. */
+let looks = 0
+let lookAgain: ReturnType<typeof setTimeout> | undefined
+
+/** Looks for the server of the person picked, and tells the window. Asked again by itself while it does not answer. */
+async function findTheirs() {
+  const look = ++looks
+  clearTimeout(lookAgain)
+  const who = local.state === 'running' ? picked() : ''
+  const found = who && who !== me() ? await serverOf(who) : null
+  if (look !== looks) return
+  const before = JSON.stringify(theirs)
+  theirs = found && { name: who, ...found }
+  if (JSON.stringify(theirs) !== before) announce()
+  // Their server may be starting, or may come back: the window waits for it meanwhile.
+  if (who && who !== me() && !found && config.current === 'local') lookAgain = setTimeout(() => void findTheirs(), 3000)
+}
+
 // ---- what the window is told
 
 /** How the window reaches the environment it shows, once there is something to reach. */
 function connection(): Link | null {
   const id = showing()
-  if (id === 'local') return local.state === 'running' ? { id, name: nameOf(id), addresses: [`http://127.0.0.1:${local.port}`], token: local.token, local: true } : null
+  if (id === 'local') {
+    if (local.state !== 'running') return null
+    const who = picked()
+    // A server from before people had names has no list of them.
+    const person = peopleHere().length ? who : undefined
+    if (who === me()) return { id, name: nameOf(id), addresses: [`http://127.0.0.1:${local.port}`], token: local.token, local: true, person }
+    return theirs?.name === who ? { id, name: nameOf(id), addresses: [`http://127.0.0.1:${theirs.port}`], token: theirs.token, local: true, person } : null
+  }
   const environment = find(id)
   return environment ? { id: environment.id, name: environment.name, addresses: ordered(environment.addresses), token: environment.token, local: false, serverId: environment.serverId } : null
 }
@@ -68,13 +114,19 @@ function nobodyYet(): string | undefined {
   return name || 'me'
 }
 
+/** Who has bots on this computer, whose the window shows, and who came first: known while the local environment runs. */
+function whoIsHere(): { people?: string[]; person?: string; first?: string } {
+  const everyone = config.local.enabled && local.state === 'running' ? peopleHere().map((p) => p.name) : []
+  return everyone.length ? { people: everyone, person: picked(), first: me() } : {}
+}
+
 function state(): DesktopState {
   return {
     version: app.getVersion(),
     update: updateState(),
     platform: process.platform,
     fullScreen: !!win?.isFullScreen(),
-    local: { enabled: config.local.enabled, state: config.local.enabled ? local.state : 'off', error: local.error, startedHere: !!local.child, nobodyYet: local.state === 'running' ? undefined : nobodyYet() },
+    local: { enabled: config.local.enabled, state: config.local.enabled ? local.state : 'off', error: local.error, startedHere: !!local.child, nobodyYet: local.state === 'running' ? undefined : nobodyYet(), ...whoIsHere() },
     environments: config.environments.map(({ id, name, addresses, enabled }) => ({ id, name, addresses, enabled })),
     current: showing(),
     connection: connection(),
@@ -88,7 +140,8 @@ function announce() {
   if (win && !win.isDestroyed()) win.webContents.send('desktop:state', state())
 }
 
-onLocalChange(announce)
+// The person picked may be found, or lost, with any change to the servers here.
+onLocalChange(() => (announce(), void findTheirs()))
 onUpdateChange(announce)
 
 /** Saves a change to the environments and tells the window. */
@@ -99,10 +152,61 @@ function changed() {
 
 // ---- changes to the environments
 
-function open(id: string) {
+function open(id: string, person?: unknown) {
   if (!turnedOn().includes(id)) return
   config.current = id
+  if (id === 'local' && typeof person === 'string' && peopleHere().some((p) => p.name === person)) config.local.person = person === me() ? undefined : person
   changed()
+  if (id === 'local') void findTheirs()
+}
+
+/** Shows the bots of someone who was just added: the next thing is to pair their devices, or set up their bots. */
+async function addSomeone(name: unknown) {
+  const before = peopleHere().map((p) => p.name)
+  const now = await addPerson(name)
+  const added = now.find((p) => !before.includes(p.name))
+  if (added) open('local', added.name)
+  return now
+}
+
+/** Another name for someone here. When the window shows their bots, it goes on showing them under the new name. */
+async function renameSomeone(name: unknown, to: unknown) {
+  const before = peopleHere().map((p) => p.name)
+  if (typeof name === 'string' && config.local.person === name) renaming = name
+  let now
+  try {
+    now = await renamePerson(name, to)
+  } finally {
+    renaming = null
+  }
+  const renamed = now.find((p) => !before.includes(p.name))
+  if (renamed && config.local.person === name) {
+    config.local.person = renamed.name
+    changed()
+    void findTheirs()
+  }
+  return now
+}
+
+/** Takes someone off this computer, once the person at it has said so. The window goes back to the first person's bots if it showed theirs. */
+async function removeSomeone(name: unknown) {
+  if (!(await confirmed(`Remove ${shownName(String(name))}?`, 'Their server stops, and the computers and phones paired with it lose it. What it held is kept on this computer.', 'Remove'))) return people()
+  const now = await removePerson(name)
+  if (config.local.person === name) {
+    config.local.person = undefined
+    changed()
+    void findTheirs()
+  }
+  return now
+}
+
+/**
+ * Looks again at the server the window shows on this computer. Someone else's is not started from
+ * here: it may be stopped on purpose, for another name, and two servers must never share a folder.
+ */
+async function retry() {
+  await retryLocal()
+  await findTheirs()
 }
 
 /** Asks the person at the computer, in a dialog of the app itself. */
@@ -250,15 +354,13 @@ function answer(channel: string, handler: (...args: any[]) => unknown) {
 
 ipcMain.on('desktop:initial', (event) => (event.returnValue = fromApp(event) ? state() : null))
 answer('desktop:statuses', () => statuses())
-answer('desktop:open', (id) => open(String(id)))
+answer('desktop:open', (id, person) => open(String(id), person))
 answer('desktop:set-local', (on, name) => setLocal(!!on, typeof name === 'string' ? name.slice(0, 60) : ''))
 // The people with bots on this computer (people.ts): asked of the app, never of a server over the network.
-answer('desktop:people', () => people())
-answer('desktop:people-add', (name) => addPerson(name))
-answer('desktop:people-rename', (name, to) => renamePerson(name, to))
-answer('desktop:people-remove', async (name) => ((await confirmed(`Remove ${String(name)}?`, 'Their server stops, and the computers and phones paired with it lose it. What it held is kept on this computer.', 'Remove')) ? removePerson(name) : people()))
-answer('desktop:people-pairing', (name) => pairingFor(name))
-answer('desktop:retry', () => retryLocal())
+answer('desktop:people-add', (name) => addSomeone(name))
+answer('desktop:people-rename', (name, to) => renameSomeone(name, to))
+answer('desktop:people-remove', (name) => removeSomeone(name))
+answer('desktop:retry', () => retry())
 answer('desktop:add', (input) => add(input))
 answer('desktop:update', (id, patch) => update(String(id), patch))
 answer('desktop:remove', (id) => remove(String(id)))
@@ -347,13 +449,20 @@ function buildMenu() {
   const appMenu: MenuItemConstructorOptions[] = mac
     ? [{ label: app.name, submenu: [{ role: 'about' }, ...updates, { type: 'separator' }, settings, { type: 'separator' }, { role: 'services' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit' }] }]
     : []
-  const environments: MenuItemConstructorOptions[] = turnedOn().map((id) => ({ label: nameOf(id), type: 'radio', checked: id === config.current, click: () => open(id) }))
+  // Whose bots to show: each person on this computer, then the other computers.
+  const { people: here = [], person } = whoIsHere()
+  const radio = (label: string, checked: boolean, click: () => void): MenuItemConstructorOptions => ({ label, type: 'radio', checked, click })
+  const onThisComputer = here.length
+    ? here.map((name) => radio(shownName(name), config.current === 'local' && name === person, () => open('local', name)))
+    : config.local.enabled ? [radio(nameOf('local'), config.current === 'local', () => open('local'))] : []
+  const elsewhere = config.environments.filter((e) => e.enabled).map((e) => radio(e.name, config.current === e.id, () => open(e.id)))
+  const groups = [onThisComputer, elsewhere].filter((group) => group.length)
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       ...appMenu,
       {
-        label: 'Environment',
-        submenu: [...environments, ...(environments.length ? [{ type: 'separator' } as const] : []), { label: 'Manage Environments…', click: () => goTo('environments') }, ...(mac ? [] : [{ type: 'separator' } as const, settings, ...updates])],
+        label: 'People',
+        submenu: [...groups.flatMap((group) => [...group, { type: 'separator' } as const]), { label: 'Manage Environments…', click: () => goTo('environments') }, ...(mac ? [] : [{ type: 'separator' } as const, settings, ...updates])],
       },
       { role: 'editMenu' },
       { role: 'viewMenu' },

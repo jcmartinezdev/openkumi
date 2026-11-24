@@ -42,14 +42,14 @@ anything private.
 | **…answers at …, but no longer lets this device in. Pair them again.** | This device was removed on the computer that runs the bots, or that server's data was reset. Pair again. |
 | **The OpenKumi at … does not know this device, so it may be a different one. Its key was not sent there.** | Something else answers at that address, such as another OpenKumi server or a device that got the same home address. Check the address. |
 | A remote environment never connects away from home | Turn Tailscale on, on both. Or add an `https` address of your own under its addresses. See [Servers and addresses](/connections/). |
-| A remote environment never connects at home | **Let other computers connect** must be on, on the computer that runs the bots (`openkumi lan on`). Check that both are on the same network, and that a firewall lets port 4317 in (and the port of each other person's server there, 4327 and on). |
+| A remote environment never connects at home | **Let other devices connect** must be on, on the computer that runs the bots (`openkumi lan on`). Check that both are on the same network, and that a firewall lets port 4317 in (and the port of each other person's server there, 4327 and on). |
 
 ## Pairing fails
 
 - **The pairing code was not right, or it has run out.** A code works once, for ten minutes, and
   five wrong tries use it up. Asking for a new code replaces the old one. Make a new one on the
   computer that runs the bots and type it again (any case, with or without the dashes).
-- **There is no pairing code to use right now.** No code is waiting. Choose **Pair a computer**
+- **There is no pairing code to use right now.** No code is waiting. Choose **Pair a device**
   (or `openkumi pair`) first.
 - **Computers are paired and removed on the computer running OpenKumi.** Pairing and removing
   devices are only done there, not from a paired device.
@@ -64,8 +64,8 @@ anything private.
 | **OpenKumi was started outside this app on this computer, so its people are looked after there** | The app uses a server you installed alone, or started in a terminal, and leaves people to it: `openkumi people add <name>` there. |
 | **…people.json is not a list of the people with bots on this computer…** | The file in `~/.openkumi` that says who has bots, and on which port, is damaged, and nothing starts until it is put right. It is a list like `[{ "name": "sam", "port": 4317 }, { "name": "ana", "port": 4327 }]`, the first person first. |
 | **The data in ~/.openkumi was written by a newer version of OpenKumi** | An OpenKumi from before people had folders was started after a newer one had moved the data into them. Nothing was changed: update the older one. |
-| Someone's bots are not in the app on the computer that runs them | That app shows the first person's. Everyone else uses theirs from their own computer or phone, paired with their own server. |
-| A person's server does not start | **Settings → Environments → People on this computer**, on that computer, marks it **not running**, and its log says why (see above). With a server installed alone, `openkumi people` says whether each one runs, and `openkumi logs --for <name>` what it printed. |
+| Someone's bots are not in the app on the computer that runs them | Pick them in the switcher at the top of the sidebar. Their own computers and phones are paired with their own server, on their **Profile & devices** page. |
+| **Waiting for …'s bots on this computer…** | Their server has not started, or has stopped. The app starts everyone's with yours and looks again every few seconds; **Show …'s bots instead** goes back to yours. Their log says why it does not start (see above). With a server installed alone, `openkumi people` says whether each one runs, and `openkumi logs --for <name>` what it printed. |
 
 ## The browser
 
