@@ -279,8 +279,11 @@ apps/
   mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, calls, a bot's
                      browser, settings and automations. `modules/call-audio` is its one native module
                      of its own (Swift): where a call's sound comes out
-  marketing/         the website at openkumi.ai (Astro, built to static pages), and the script that
-                     draws every app's icon from the mascot (`npm run icons -w @openkumi/marketing`)
+  marketing/         the website at openkumi.ai (Astro, built to static pages), and the scripts
+                     that make what it shows: every app's icon, drawn from the mascot (`npm run icons`),
+                     the app's screenshots, taken from the real app with scripted bots (`npm run
+                     screenshots`), and the film on the front page (`npm run video`, which needs
+                     ffmpeg), each with `-w @openkumi/marketing`
   docs/              the documentation at docs.openkumi.ai (Astro with Starlight, built to static
                      pages); its pages are the Markdown files in `src/content/docs`, and its
                      diagrams are drawn at build time from `src/components/diagram` (see below)

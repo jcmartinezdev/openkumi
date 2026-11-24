@@ -1,0 +1,196 @@
+/* The film's look: the website's light colours (src/styles/global.css), on a 1920×1080 stage.
+   Everything that moves is placed here and moved by film.js, which sets transforms and opacity
+   from the time alone. Nothing here animates by itself, so a frame is the same however it is reached. */
+:root {
+  --bg: #faf8f4;
+  --raised: #ffffff;
+  --sunk: #f2efe8;
+  --text: #17171c;
+  --muted: #5d5b66;
+  --faint: #8d8a95;
+  --border: #e6e2d9;
+  --border-strong: #d6d1c5;
+  --sky: #2f9cf4;
+  --sky-ink: #1769b8;
+  --sky-soft: #dceeff;
+  --orange: #f07a2c;
+  --orange-ink: #a8461a;
+  --orange-soft: #ffe8d6;
+  --green: #22a55b;
+  --green-soft: #ddf3e5;
+  --red: #e5484d;
+  --shadow: 0 1px 2px rgb(23 23 28 / 0.04), 0 12px 32px -12px rgb(23 23 28 / 0.14);
+  --shadow-lg: 0 2px 4px rgb(23 23 28 / 0.04), 0 30px 80px -24px rgb(23 23 28 / 0.28);
+  --display: Display, Text, system-ui, sans-serif;
+  --body: Text, system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+body { color: var(--text); font: 400 24px/1.4 var(--body); -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; }
+#stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+.scene { position: absolute; inset: 0; display: none; }
+.scene > * { position: absolute; }
+svg { display: block; }
+
+/* ---- the soft light behind everything */
+.glow { position: absolute; left: 0; top: 0; border-radius: 50%; }
+.glow.sky { width: 1500px; height: 1500px; margin: -750px 0 0 -750px; background: radial-gradient(closest-side, rgb(47 156 244 / 0.17), rgb(47 156 244 / 0.09) 45%, rgb(47 156 244 / 0.03) 75%, rgb(47 156 244 / 0)); }
+.glow.orange { width: 1300px; height: 1300px; margin: -650px 0 0 -650px; background: radial-gradient(closest-side, rgb(240 122 44 / 0.13), rgb(240 122 44 / 0.065) 45%, rgb(240 122 44 / 0.02) 75%, rgb(240 122 44 / 0)); }
+
+/* ---- words */
+.caption { left: 120px; right: 120px; text-align: center; }
+.caption h2 { margin: 0; font: 700 76px/1.06 var(--display); letter-spacing: -0.03em; text-wrap: balance; }
+.caption p { margin: 20px auto 0; max-width: 1300px; font: 400 32px/1.35 var(--body); color: var(--muted); text-wrap: balance; }
+.caption.big h2 { font-size: 112px; letter-spacing: -0.04em; }
+.caption.big p { font-size: 38px; margin-top: 22px; }
+.caption .w { display: inline-block; }
+.caption p span { display: inline-block; }
+
+/* ---- mascots: film.js moves the body and blinks the eyes */
+.mascot { line-height: 0; transform-origin: 0 0; }
+.mascot svg { width: 100%; height: 100%; overflow: visible; }
+.mascot .m-body { transform-box: fill-box; transform-origin: 50% 100%; }
+.mascot .m-eyes { transform-box: fill-box; transform-origin: 50% 50%; }
+.mascot svg > ellipse { transform-box: fill-box; transform-origin: 50% 50%; }
+.tag { padding: 6px 18px; border-radius: 999px; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow); font: 600 24px/1.3 var(--body); white-space: nowrap; transform-origin: 50% 0; }
+
+/* A bot's head with its sign held up at the corner, as the app shows it in lists (apps/web/src/Mascot.tsx). */
+.head { position: relative; display: inline-block; flex: none; line-height: 0; }
+.head svg { width: 100%; height: 100%; }
+.head-sign { position: absolute; display: grid; place-items: center; line-height: 1; transform: rotate(-6deg); box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.22), 0 1px 2px rgb(0 0 0 / 0.3); }
+.head-sign i { position: absolute; top: 50%; transform: translateY(-50%); border-radius: 50%; border: 0.5px solid; }
+
+/* ---- the app's window, as the website frames its screenshots */
+.lens { left: 0; top: 0; width: 1920px; height: 1080px; }
+.window { position: absolute; left: 0; top: 0; width: 1600px; height: 1000px; transform-origin: 0 0; border-radius: 14px; overflow: hidden; background: var(--raised); border: 1px solid var(--border-strong); box-shadow: var(--shadow-lg); }
+.window img { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ---- a call */
+.call { left: 330px; top: 350px; width: 1260px; height: 590px; border-radius: 32px; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); overflow: hidden; }
+.call-left { position: absolute; left: 0; top: 0; width: 440px; height: 100%; background: radial-gradient(closest-side, rgb(47 156 244 / 0.22), rgb(47 156 244 / 0.06) 70%, rgb(47 156 244 / 0)), var(--sunk); }
+.call-left .mascot { position: absolute; left: 60px; top: 116px; width: 320px; height: 358px; }
+.call-right { position: absolute; left: 504px; top: 64px; right: 60px; bottom: 56px; }
+.call-name { font: 700 52px/1 var(--display); letter-spacing: -0.02em; }
+.call-status { margin-top: 16px; display: flex; align-items: center; gap: 12px; font: 500 24px/1 var(--body); color: var(--muted); }
+.call-status i { width: 12px; height: 12px; border-radius: 50%; background: var(--green); }
+.bars { position: absolute; left: 0; top: 150px; width: 100%; height: 130px; display: flex; align-items: center; gap: 9px; }
+.bars i { flex: 1; height: 14px; border-radius: 99px; background: var(--border-strong); }
+.said { position: absolute; left: 0; right: 0; display: flex; gap: 16px; font: 400 29px/1.35 var(--body); }
+.said b { flex: none; width: 78px; font: 600 22px/1 var(--body); text-transform: uppercase; letter-spacing: 0.06em; padding-top: 10px; }
+.said.you b { color: var(--orange-ink); }
+.said.bot b { color: var(--sky-ink); }
+.said span { display: inline-block; }
+.said.you { top: 330px; }
+.said.bot { top: 396px; }
+.call-buttons { position: absolute; right: 0; top: 0; display: flex; gap: 20px; }
+.call-buttons span { width: 76px; height: 76px; border-radius: 50%; display: grid; place-items: center; background: var(--sunk); color: var(--text); }
+.call-buttons span.end { background: var(--red); color: #fff; }
+.call-buttons svg { width: 34px; height: 34px; }
+
+/* ---- automations */
+.auto { top: 380px; width: 520px; height: 420px; padding: 34px 36px; border-radius: 24px; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.auto .ring { position: absolute; inset: -1px; border-radius: 24px; border: 3px solid var(--sky); box-shadow: 0 0 0 8px rgb(47 156 244 / 0.12); }
+.auto-kind { display: flex; align-items: center; gap: 16px; font: 600 21px/1 var(--body); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.chip { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; flex: none; }
+.chip svg { width: 30px; height: 30px; }
+.chip.sky { background: var(--sky-soft); color: var(--sky-ink); }
+.chip.orange { background: var(--orange-soft); color: var(--orange-ink); }
+.chip.green { background: var(--green-soft); color: #17703e; }
+.auto-big { margin-top: 26px; font: 700 38px/1.1 var(--display); letter-spacing: -0.02em; }
+.auto-visual { position: absolute; left: 36px; right: 36px; top: 206px; height: 70px; display: flex; align-items: center; }
+.days { display: flex; gap: 8px; }
+.days span { width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center; font: 600 21px/1 var(--body); background: var(--sunk); color: var(--faint); }
+.days span.on { background: var(--sky-soft); color: var(--sky-ink); }
+.fare { display: flex; align-items: center; gap: 18px; width: 100%; height: 64px; padding: 0 20px; border-radius: 14px; background: var(--sunk); font: 500 22px/1 var(--body); color: var(--muted); }
+.fare .price { position: relative; margin-left: auto; width: 96px; height: 34px; font: 700 30px/34px var(--body); color: var(--text); text-align: right; }
+.fare .price span { position: absolute; right: 0; top: 0; }
+.fare .price .new { color: var(--green); }
+.hook { display: flex; align-items: center; width: 100%; }
+.hook img { width: 58px; height: 58px; border-radius: 15px; flex: none; }
+.hook .line { position: relative; flex: 1; height: 0; margin: 0 16px; border-top: 3px dashed var(--border-strong); }
+.hook .dot { position: absolute; left: 0; top: -9px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 6px rgb(34 165 91 / 0.18); }
+.auto-foot { position: absolute; left: 36px; right: 36px; bottom: 32px; height: 56px; display: flex; align-items: center; gap: 16px; font: 400 20px/1.25 var(--body); color: var(--muted); }
+.auto-foot b { display: block; color: var(--text); font-size: 22px; font-weight: 600; }
+.state { position: relative; margin-left: auto; width: 140px; height: 40px; flex: none; }
+.state span { position: absolute; right: 0; top: 0; height: 40px; padding: 0 14px; border-radius: 99px; display: flex; align-items: center; gap: 8px; font: 600 19px/1 var(--body); white-space: nowrap; }
+.state .idle { background: var(--sunk); color: var(--muted); }
+.state .run { background: var(--sky-soft); color: var(--sky-ink); }
+.state .done { background: var(--green-soft); color: #17703e; }
+.state i { width: 9px; height: 9px; border-radius: 50%; background: currentColor; }
+.state svg { width: 18px; height: 18px; }
+
+/* ---- superpowers */
+.bot-card { left: 170px; top: 352px; width: 500px; height: 560px; }
+.bot-card .mascot { position: absolute; left: 140px; top: 0; width: 220px; height: 246px; }
+.bot-card .tag { position: absolute; left: 50%; top: 262px; transform: translateX(-50%); }
+.toggles { position: absolute; left: 0; right: 0; top: 336px; padding: 10px 26px; border-radius: 22px; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.toggle { display: flex; align-items: center; gap: 18px; height: 66px; font: 500 25px/1 var(--body); }
+.toggle + .toggle { border-top: 1px solid var(--border); }
+.toggle img { width: 40px; height: 40px; border-radius: 11px; }
+.switch { position: relative; margin-left: auto; width: 58px; height: 34px; border-radius: 99px; background: var(--border-strong); }
+.switch i { position: absolute; left: 4px; top: 4px; width: 26px; height: 26px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.25); }
+.grid { left: 770px; top: 372px; width: 980px; height: 488px; }
+.power { position: absolute; width: 100px; height: 100px; }
+.power img { width: 100%; height: 100%; border-radius: 24px; box-shadow: 0 0 0 1px rgb(23 23 28 / 0.08), 0 8px 20px -10px rgb(23 23 28 / 0.35); }
+.power .on { position: absolute; inset: -7px; border-radius: 30px; border: 4px solid var(--green); }
+.power .tick { position: absolute; right: -12px; top: -12px; width: 38px; height: 38px; border-radius: 50%; background: var(--green); color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 4px var(--bg); }
+.power .tick svg { width: 22px; height: 22px; }
+
+/* ---- bots working together */
+.convo { top: 350px; width: 690px; height: 580px; border-radius: 24px; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); overflow: hidden; }
+.convo-head { display: flex; align-items: center; gap: 18px; height: 88px; padding: 0 28px; border-bottom: 1px solid var(--border); font: 700 32px/1 var(--display); letter-spacing: -0.01em; }
+.convo-body { position: absolute; left: 28px; right: 28px; top: 112px; bottom: 24px; }
+.convo-body > * { position: absolute; left: 0; right: 0; }
+.ask { left: auto !important; max-width: 580px; padding: 14px 22px; border-radius: 22px; background: var(--sunk); font: 400 23px/1.4 var(--body); }
+.reply { font: 400 23px/1.45 var(--body); }
+.note { padding: 16px 20px 18px; border-radius: 18px; border: 1px solid var(--border-strong); background: var(--raised); font: 400 23px/1.45 var(--body); }
+.note-label { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font: 400 19px/1 var(--body); color: var(--muted); }
+.note-label b { font-weight: 600; font-size: 18px; letter-spacing: 0.07em; text-transform: uppercase; }
+.note-label svg { width: 20px; height: 20px; }
+.note.out { border-color: rgb(47 156 244 / 0.45); background: #f4f9ff; }
+.note.in { border-color: rgb(240 122 44 / 0.45); background: #fff8f2; }
+.working { display: flex; align-items: center; gap: 14px; font: 400 23px/1 var(--body); color: var(--muted); }
+.working i { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
+.flyer { left: 0; top: 0; width: 64px; height: 64px; margin: -32px 0 0 -32px; border-radius: 50%; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow-lg); display: grid; place-items: center; z-index: 3; }
+.flyer svg { width: 30px; height: 30px; color: var(--sky-ink); }
+.routes { left: 0; top: 0; width: 1920px; height: 1080px; overflow: visible; }
+
+/* ---- everywhere */
+.devices { left: 0; top: 0; width: 1920px; height: 1080px; }
+.devices > * { position: absolute; }
+.laptop { left: 210px; top: 530px; width: 480px; height: 330px; }
+.laptop .lid { position: absolute; left: 30px; top: 0; width: 420px; height: 310px; border-radius: 18px 18px 6px 6px; background: #1d1c22; padding: 11px; }
+.laptop .base { position: absolute; left: 0; top: 308px; width: 480px; height: 22px; border-radius: 4px 4px 14px 14px; background: linear-gradient(#e7e4dd, #c9c5bb); box-shadow: 0 16px 30px -18px rgb(23 23 28 / 0.5); }
+.laptop .base::after { content: ''; position: absolute; left: 190px; top: 0; width: 100px; height: 7px; border-radius: 0 0 8px 8px; background: #bdb8ad; }
+.screen { position: relative; width: 100%; height: 100%; border-radius: 9px; overflow: hidden; background: var(--raised); }
+.mini-side { position: absolute; left: 0; top: 0; bottom: 0; width: 30%; background: var(--sunk); border-right: 1px solid var(--border); padding: 16px 12px; display: flex; flex-direction: column; gap: 12px; }
+.mini-row { display: flex; align-items: center; gap: 8px; }
+.mini-row u { display: block; height: 8px; flex: 1; border-radius: 4px; background: var(--border-strong); text-decoration: none; }
+.mini-chat { position: absolute; left: 30%; right: 0; top: 0; bottom: 0; padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.mini-chat u { display: block; height: 9px; border-radius: 5px; background: var(--border); text-decoration: none; }
+.mini-chat .me { align-self: flex-end; width: 55%; height: 28px; border-radius: 12px; background: var(--sunk); }
+.home { left: 740px; top: 470px; width: 440px; height: 400px; }
+.home .mascot { position: absolute; }
+.home .box { position: absolute; left: 0; top: 296px; width: 440px; height: 96px; border-radius: 24px; background: linear-gradient(#f1eee8, #d6d2c8); box-shadow: inset 0 1px 0 #fff, 0 16px 30px -18px rgb(23 23 28 / 0.5); }
+.home .box i { position: absolute; left: 30px; bottom: 22px; width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 4px rgb(34 165 91 / 0.18); }
+.phone { left: 1360px; top: 430px; width: 220px; height: 430px; border-radius: 44px; background: #1d1c22; padding: 11px; box-shadow: 0 20px 40px -24px rgb(23 23 28 / 0.6); }
+.phone .screen { border-radius: 34px; }
+.phone .notch { position: absolute; left: 50%; top: 14px; width: 70px; height: 20px; margin-left: -35px; border-radius: 99px; background: #1d1c22; }
+.phone .mini-chat { left: 0; top: 30px; padding: 16px 14px; }
+.phone .who { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); font: 600 14px/1 var(--body); }
+.device-label { top: 900px; width: 400px; margin-left: -200px; text-align: center; font: 600 28px/1.2 var(--body); }
+.device-label small { display: block; margin-top: 6px; font: 400 22px/1.2 var(--body); color: var(--muted); }
+
+/* ---- what bots run on */
+.plan { top: 400px; width: 310px; height: 270px; border-radius: 24px; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.plan svg { width: 84px; height: 84px; margin-bottom: 26px; color: var(--text); }
+.plan b { font: 700 36px/1.1 var(--display); letter-spacing: -0.02em; }
+.plan small { margin-top: 10px; font: 400 23px/1.3 var(--body); color: var(--muted); }
+.pill { height: 66px; padding: 0 30px 0 22px; border-radius: 99px; display: flex; align-items: center; gap: 12px; background: var(--green-soft); color: #17703e; font: 600 30px/1 var(--body); white-space: nowrap; }
+.pill svg { width: 30px; height: 30px; }
+
+/* ---- the end */
+.scene-end .mascot { left: 795px; top: 150px; width: 330px; height: 370px; }
+.wordmark { left: 0; right: 0; top: 548px; text-align: center; font: 700 140px/1 var(--display); letter-spacing: -0.045em; }
+.end-line { left: 0; right: 0; top: 718px; text-align: center; font: 400 40px/1.2 var(--body); color: var(--muted); }
+.url { height: 78px; padding: 0 38px; border-radius: 99px; display: flex; align-items: center; background: var(--sky-soft); color: var(--sky-ink); font: 700 38px/1 var(--body); letter-spacing: -0.01em; white-space: nowrap; }

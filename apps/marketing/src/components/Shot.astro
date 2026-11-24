@@ -9,26 +9,36 @@ interface Props {
   alt: string
   /** Shown above the fold: loaded at once rather than when scrolled to. */
   eager?: boolean
-  /** How wide it is drawn, for picking the picture's size. */
+  /** How wide the whole picture is drawn, for picking its size: wider than the frame when cropped. */
   sizes?: string
   caption?: string
+  /**
+   * Only part of the picture, as fractions of its width and height, so that what matters is shown
+   * large enough to read: the window is 1440 points wide, and the page often has half that.
+   */
+  crop?: { x: number; y: number; w: number; h: number }
   class?: string
 }
 
-const { name, alt, eager = false, sizes = '(max-width: 1200px) 100vw, 1160px', caption, class: className } = Astro.props
+const { name, alt, eager = false, sizes = '(max-width: 1200px) 100vw, 1160px', caption, crop, class: className } = Astro.props
 const shots = import.meta.glob<{ default: ImageMetadata }>('../assets/screenshots/*.png', { eager: true })
 const find = (theme: string) => shots[`../assets/screenshots/${name}-${theme}.png`]?.default
 const light = find('light') ?? find('dark')
 const dark = find('dark') ?? find('light')
-const widths = [800, 1400, 2000]
+const widths = [800, 1400, 2000, 2880]
 const make = async (src: ImageMetadata | undefined) =>
   src && (await Promise.all(widths.filter((w) => w <= src.width).map(async (w) => [await getImage({ src, width: w, format: 'webp', quality: 82 }), w] as const)))
 const [lightSet, darkSet] = await Promise.all([make(light), make(dark)])
 const srcset = (set: NonNullable<typeof lightSet>) => set.map(([img, w]) => `${img.src} ${w}w`).join(', ')
+// The frame takes the shape of the part shown; the picture is drawn larger and moved, so the rest falls outside.
+const cropped =
+  crop && light
+    ? `aspect-ratio: ${(crop.w * light.width).toFixed(0)} / ${(crop.h * light.height).toFixed(0)}; --w: ${(100 / crop.w).toFixed(3)}%; --x: ${((-crop.x / crop.w) * 100).toFixed(3)}%; --y: ${((-crop.y / crop.h) * 100).toFixed(3)}%`
+    : undefined
 ---
 
 <figure class:list={['shot', className]}>
-  <div class="frame">
+  <div class:list={['frame', { cropped }]} style={cropped}>
   {
     light && lightSet && darkSet ? (
       <picture>
@@ -58,6 +68,16 @@ const srcset = (set: NonNullable<typeof lightSet>) => set.map(([img, w]) => `${i
   img {
     width: 100%;
     height: auto;
+  }
+  .cropped {
+    position: relative;
+  }
+  .cropped img {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    width: var(--w);
+    max-width: none;
   }
   figcaption {
     margin-top: 14px;

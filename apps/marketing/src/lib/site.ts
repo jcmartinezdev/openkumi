@@ -20,6 +20,12 @@ export const DOWNLOAD_URL = `${RELEASES_URL}/download/OpenKumi-mac-arm64.dmg`
  * docs/mobile-releases.md). It is not in the App Store while OpenKumi is an alpha.
  */
 export const IPHONE_BETA_URL = 'https://testflight.apple.com/join/dvcBQvNu'
+/**
+ * The film on the front page, made from the app's screenshots and mascots by scripts/video.mjs
+ * (`npm run video -w @openkumi/marketing`): an AV1 WebM for the browsers that play it, about half
+ * the size, and an H.264 MP4 for the rest. `length` is said beside the button that plays it.
+ */
+export const FILM = { webm: '/film/openkumi.webm', mp4: '/film/openkumi.mp4', poster: '/film/poster.jpg', length: '0:55' }
 /** What installs the server on a Mac or Linux computer that runs the bots with no app in front of it (public/install.sh). */
 export const INSTALL_COMMAND = 'curl -fsSL https://openkumi.ai/install.sh | sh'
 
@@ -64,7 +70,7 @@ export const ISSUES_URL = `${GITHUB_URL}/issues`
 
 export const NAV = [
   { href: '/#features', label: 'Features' },
-  { href: '/#superpowers', label: 'Superpowers' },
+  { href: '/integrations', label: 'Integrations' },
   { href: '/#privacy', label: 'Privacy' },
   { href: '/#faq', label: 'FAQ' },
   { href: DOCS_URL, label: 'Docs' },

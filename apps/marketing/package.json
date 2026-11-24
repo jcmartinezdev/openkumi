@@ -10,7 +10,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "icons": "node scripts/icons.mjs",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "video": "node scripts/video.mjs"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",

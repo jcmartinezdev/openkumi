@@ -1,0 +1,357 @@
+---
+// One superpower: its page in the app (README.md), what it can do, how it connects, and others like it.
+// In a folder of its own, so it is built as integrations/<id>/index.html and served at /integrations/<id>.
+import Layout from '../../../layouts/Layout.astro'
+import { DOCS_URL } from '../../../lib/site'
+import { superpowers, type Superpower } from '../../../lib/superpowers'
+
+export function getStaticPaths() {
+  return superpowers.map((power) => ({ params: { id: power.id }, props: { power } }))
+}
+
+const { power } = Astro.props as { power: Superpower }
+const { Content } = power
+// Others in its first group, so the visitor can go on looking.
+const group = power.categories[0]
+const related = superpowers.filter((other) => other !== power && group && other.categories.includes(group)).slice(0, 4)
+const siteName = power.site && new URL(power.site).host.replace(/^www\./, '')
+---
+
+<Layout title={`${power.name} for your AI bots · OpenKumi`} description={`${power.tagline} A superpower an OpenKumi bot can have${power.app ? `, signed in to ${power.name} with an account of its own` : ', with nothing to sign in to'}.`}>
+  <article class="container page">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="/integrations">Integrations</a><span aria-hidden="true">/</span><span aria-current="page">{power.name}</span></nav>
+
+    <header class="title">
+      {power.icon ? <img src={power.icon} alt="" width="72" height="72" /> : <span class="letter">{power.name[0]}</span>}
+      <div>
+        <h1>{power.name}</h1>
+        <p>{power.tagline}</p>
+        <div class="tags">
+          <span class:list={['kind', { app: power.app }]}>{power.app ? 'App' : 'Know-how'}</span>
+          {power.categories.map((name) => <a href={`/integrations?group=${encodeURIComponent(name)}`}>{name}</a>)}
+        </div>
+      </div>
+    </header>
+
+    <div class="body">
+      <div class="main">
+        {Content && <div class="prose"><Content /></div>}
+        <h2>What it can do</h2>
+        <ul class="checks">{power.can.map((line) => <li>{line}</li>)}</ul>
+      </div>
+
+      <aside class="side" aria-label="At a glance">
+        <dl>
+          <div>
+            <dt>How it connects</dt>
+            <dd>{power.app ? <>Through {power.name}’s own service ({power.service}). Switching it on signs the bot in with an account of its own.</> : 'Nothing to sign in to: switch it on for a bot and ask.'}</dd>
+          </div>
+          {
+            power.hooks.length > 0 && (
+              <div>
+                <dt>Webhooks</dt>
+                <dd>
+                  {power.name} can start an automation when something happens there: {power.hooks.map((name) => name.charAt(0).toLowerCase() + name.slice(1)).join(', ')}. <a href={`${DOCS_URL}/webhooks/`}>Setting it up</a>
+                </dd>
+              </div>
+            )
+          }
+          <div>
+            <dt>Who can use it</dt>
+            <dd>Only the bots you switch it on for. A bot cannot switch it on for itself.</dd>
+          </div>
+          {
+            power.site && (
+              <div>
+                <dt>{power.app ? 'The app' : 'Where it comes from'}</dt>
+                <dd><a href={power.site} rel="noopener">{siteName} ↗</a></dd>
+              </div>
+            )
+          }
+        </dl>
+        <a class="button primary" href="/#download">Get OpenKumi</a>
+        <a class="docs" href={`${DOCS_URL}/superpowers/`}>How superpowers work</a>
+      </aside>
+    </div>
+
+    {
+      related.length > 0 && (
+        <section class="related" aria-labelledby="related-title">
+          <h2 id="related-title">More in {group}</h2>
+          <ul>
+            {related.map((other) => (
+              <li>
+                <a href={`/integrations/${other.id}`}>
+                  {other.icon ? <img src={other.icon} alt="" width="36" height="36" /> : <span class="letter small">{other.name[0]}</span>}
+                  <span>
+                    <strong>{other.name}</strong>
+                    <small>{other.tagline}</small>
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+          <a class="all" href="/integrations">All {superpowers.length} superpowers</a>
+        </section>
+      )
+    }
+  </article>
+</Layout>
+
+<style>
+  .page {
+    padding-top: 40px;
+    padding-bottom: 112px;
+  }
+  .crumbs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 32px;
+    color: var(--faint);
+    font-size: 14px;
+  }
+  .crumbs a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  .crumbs a:hover {
+    color: var(--text);
+  }
+  .title {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    padding-bottom: 36px;
+    border-bottom: 1px solid var(--border);
+  }
+  .title img,
+  .letter {
+    width: 72px;
+    height: 72px;
+    flex: none;
+  }
+  .letter {
+    display: grid;
+    place-items: center;
+    border-radius: 18px;
+    background: var(--bg-sunk);
+    font: 700 30px var(--display);
+  }
+  .letter.small {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    font-size: 16px;
+  }
+  h1 {
+    font-size: clamp(36px, 5vw, 52px);
+  }
+  .title p {
+    margin-top: 10px;
+    font-size: 19px;
+    color: var(--muted);
+  }
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+  }
+  .tags > * {
+    padding: 4px 11px;
+    border-radius: 999px;
+    background: var(--bg-sunk);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .tags a:hover {
+    color: var(--text);
+  }
+  .tags .kind {
+    background: color-mix(in srgb, var(--green) 14%, transparent);
+    color: color-mix(in srgb, var(--green) 70%, var(--text));
+  }
+  .tags .kind.app {
+    background: var(--sky-soft);
+    color: color-mix(in srgb, var(--sky) 75%, var(--text));
+  }
+  @media (max-width: 560px) {
+    .title {
+      flex-direction: column;
+      gap: 18px;
+    }
+  }
+
+  .body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 56px;
+    align-items: start;
+    padding-top: 40px;
+  }
+  @media (max-width: 860px) {
+    .body {
+      grid-template-columns: 1fr;
+      gap: 40px;
+    }
+  }
+  .main h2 {
+    margin: 40px 0 16px;
+    font-size: 24px;
+  }
+  .prose {
+    font-size: 18px;
+    color: var(--muted);
+  }
+  .prose :global(p) {
+    margin: 0 0 18px;
+  }
+  .prose :global(ul) {
+    margin: 0 0 22px;
+  }
+  /* The first list is what to ask it: shown as things said to the bot. */
+  .prose :global(ul:first-of-type) {
+    display: grid;
+    gap: 10px;
+    padding: 0;
+    list-style: none;
+  }
+  .prose :global(ul:first-of-type li) {
+    padding: 12px 16px;
+    border-radius: 14px 14px 14px 4px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 16px;
+  }
+  .prose :global(code) {
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--bg-sunk);
+    color: var(--text);
+  }
+  .prose :global(a) {
+    color: var(--text);
+  }
+  .checks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+  }
+  .checks li {
+    position: relative;
+    padding-left: 32px;
+    color: var(--muted);
+  }
+  .checks li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--green) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M6 10.5l2.5 2.5L14 7.5' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
+  }
+
+  .side {
+    position: sticky;
+    top: 88px;
+    display: grid;
+    gap: 14px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-raised);
+    box-shadow: var(--shadow);
+  }
+  @media (max-width: 860px) {
+    .side {
+      position: static;
+    }
+  }
+  dl {
+    display: grid;
+    gap: 18px;
+    margin: 0 0 6px;
+  }
+  dt {
+    margin-bottom: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+  dd {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  dd a {
+    color: var(--text);
+  }
+  .docs {
+    justify-self: center;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  .related {
+    margin-top: 80px;
+    padding-top: 40px;
+    border-top: 1px solid var(--border);
+  }
+  .related h2 {
+    margin-bottom: 20px;
+    font-size: 26px;
+  }
+  .related ul {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  @media (max-width: 700px) {
+    .related ul {
+      grid-template-columns: 1fr;
+    }
+  }
+  .related li a {
+    display: flex;
+    gap: 14px;
+    height: 100%;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-raised);
+    text-decoration: none;
+  }
+  .related li a:hover {
+    border-color: var(--border-strong);
+  }
+  .related img {
+    flex: none;
+  }
+  .related li span {
+    display: grid;
+    gap: 2px;
+  }
+  .related small {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .all {
+    display: inline-block;
+    margin-top: 20px;
+    font-weight: 600;
+  }
+</style>
