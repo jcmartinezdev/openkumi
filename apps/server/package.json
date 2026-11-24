@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/server",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "The OpenKumi server: runs the bots, their browsers and their files. It has no interface of its own.",
   "private": true,
   "type": "module",

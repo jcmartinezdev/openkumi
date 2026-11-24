@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/client",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "What every OpenKumi app needs to talk to a server: the connection, the state kept from it, and pairing.",
   "private": true,
   "type": "module",
