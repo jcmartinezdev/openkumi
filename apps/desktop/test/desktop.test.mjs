@@ -933,14 +933,23 @@ test('an environment has several addresses: one where something else answers is 
     await win.evaluate(() => dispatchEvent(new Event('online')))
     await address(relayed).locator('text=In use').waitFor({ timeout: 20_000 })
 
-    // Adding an address: another server answers there, so it is not added, and is not sent the key.
+    // The menu also leads there: with the list closed, Add address… opens it with the cursor in the field.
     const typed = win.locator('input[aria-label="Another address for Many Mac"]')
+    await row.locator('button', { hasText: /\d+ addresses/ }).click()
+    await typed.waitFor({ state: 'detached' })
+    await row.locator('summary[aria-label="More for Many Mac"]').click()
+    await row.locator('.set-menu-items button', { hasText: 'Add address…' }).click()
+    await until(() => typed.evaluate((input) => input === document.activeElement).catch(() => false))
+    assert.equal(await row.locator('details.set-menu').getAttribute('open'), null, 'the menu closes')
+    const addButton = row.locator('.set-addresses button', { hasText: 'Add address' })
+
+    // Adding an address: another server answers there, so it is not added, and is not sent the key.
     await typed.fill(elsewhere.replace('http://', ''))
-    await win.click('button:has-text("Add address")')
+    await addButton.click()
     await win.waitForSelector(`.notice.error:has-text("Something else answers at ${elsewhere.replace('http://', '')}, not Many Mac")`)
     // Where nothing answers yet, it is added, and only ever sent the key once it shows it is the server.
     await typed.fill('127.0.0.1:1')
-    await win.click('button:has-text("Add address")')
+    await addButton.click()
     await row.locator('text=Added. Nothing answers there right now').waitFor()
     await address('http://127.0.0.1:1').waitFor()
     await address('http://127.0.0.1:1').locator('button:has-text("Remove")').click()

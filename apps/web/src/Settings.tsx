@@ -1,6 +1,6 @@
 // The settings: a full-window view with its sections down the left and one page of settings on the
 // right. App-wide settings are kept by the environment; settings marked "this device" stay in the app.
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Bot, PairedComputer, ProviderInfo, Settings } from '@openkumi/shared'
 import type { EnvironmentReport, EnvironmentStatus, LocalEnvironment, RemoteEnvironment } from '@openkumi/shared/desktop'
 import { shownName, typedName } from '@openkumi/shared/people'
@@ -486,6 +486,8 @@ export function EnvironmentList({ adding: addingFirst = false }: { adding?: bool
   const [renaming, setRenaming] = useState<string | null>(null)
   /** The environment whose addresses are open below it. */
   const [opened, setOpened] = useState<string | null>(null)
+  /** The environment whose field for another address is to get the cursor, asked for from its menu. */
+  const [typing, setTyping] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   /** What an environment said when it was asked to update itself. */
@@ -590,13 +592,14 @@ export function EnvironmentList({ adding: addingFirst = false }: { adding?: bool
                     <summary className="icon" title="More" aria-label={`More for ${environment.name}`}><Icon name="more" /></summary>
                     <div className="set-menu-items">
                       <button onClick={(e) => (e.currentTarget.closest('details')!.removeAttribute('open'), setRenaming(environment.id))}>Rename</button>
+                      <button onClick={(e) => (e.currentTarget.closest('details')!.removeAttribute('open'), setOpened(environment.id), setTyping(environment.id))}>Add address…</button>
                       <button className="danger" onClick={() => change(() => desktop.remove(environment.id))}>Remove</button>
                     </div>
                   </details>
                 </>
               }
             >
-              {opened === environment.id && <Addresses environment={environment} report={report} inUse={via ?? null} busy={busy} change={change} />}
+              {opened === environment.id && <Addresses environment={environment} report={report} inUse={via ?? null} busy={busy} change={change} typing={typing === environment.id} typed={() => setTyping(null)} />}
             </Row>
           )
         })}
@@ -609,11 +612,18 @@ export function EnvironmentList({ adding: addingFirst = false }: { adding?: bool
 /**
  * Where a remote environment can be reached, tried from the top: its home network, then Tailscale,
  * then the rest. It reports its home network addresses itself, and they are kept up to date by
- * themselves; anything else is an https address put in by hand.
+ * themselves; anything else is an https address put in by hand. `typing` puts the cursor in the
+ * field for another one (Add address… in the environment's menu), and `typed` says it is there.
  */
-function Addresses({ environment, report, inUse, busy, change }: { environment: RemoteEnvironment; report?: EnvironmentReport; inUse: string | null; busy: boolean; change: (fn: () => Promise<void>) => Promise<boolean> }) {
+function Addresses({ environment, report, inUse, busy, change, typing, typed }: { environment: RemoteEnvironment; report?: EnvironmentReport; inUse: string | null; busy: boolean; change: (fn: () => Promise<void>) => Promise<boolean>; typing: boolean; typed: () => void }) {
   const [address, setAddress] = useState('')
   const [note, setNote] = useState('')
+  const field = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!typing) return
+    field.current?.focus()
+    typed()
+  }, [typing])
   const add = async () => {
     setNote('')
     let checked = true
@@ -639,7 +649,7 @@ function Addresses({ environment, report, inUse, busy, change }: { environment: 
         )
       })}
       <div className="set-link-row">
-        <input className="set-input wide" spellCheck={false} autoCapitalize="off" aria-label={`Another address for ${environment.name}`} value={address} placeholder="https://mac-mini.tail1234.ts.net" onChange={(e) => setAddress(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && address.trim() && void add()} />
+        <input ref={field} className="set-input wide" spellCheck={false} autoCapitalize="off" aria-label={`Another address for ${environment.name}`} value={address} placeholder="https://mac-mini.tail1234.ts.net" onChange={(e) => setAddress(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && address.trim() && void add()} />
         <button disabled={busy || !address.trim()} onClick={() => void add()}>Add address</button>
       </div>
       {note && <p className="faint">{note}</p>}
