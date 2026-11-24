@@ -2364,10 +2364,11 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
     const report = (await settle(now)).find((d) => d.source === 'subagent')
     assert.match(report.text, /^<subagent_notification>\nSubagent "After the call" \(id: [^)]+\) — completed\nNoted after the call: that I take my tea without sugar\n<\/subagent_notification>$/)
     // It was told what the voice did hand over, so as not to do that again, and shown what came after the last of it.
+    // The voice speaking the bot's answer can come before or after the user goes on, as fast as the bot was.
     const after = (await beneath()).find((t) => t.id !== looked.id)
     assert.match(
       (await api('GET', `/api/threads/${after.id}`)).items[0].data.text,
-      /none of them is to be done again:\n- !say Noted\.\n\nThis part of the call, after the last of them, was not passed on to you:\n\nYou: On it\.\n[\s\S]*\nUser: Please remember that I take my tea without sugar\n/,
+      /none of them is to be done again:\n- !say Noted\.\n\nThis part of the call, after the last of them, was not passed on to you:\n\nYou: On it\.\n(?:[\s\S]*\n)?User: Please remember that I take my tea without sugar\n/,
     )
     // A few words are gone over too, in whatever language; a call on which the user said nothing more after the last thing handed over is not.
     const short = await api('POST', `/api/bots/${caller.id}/call`, { sdp: offer('a=chat:誕生日を覚えて') })
