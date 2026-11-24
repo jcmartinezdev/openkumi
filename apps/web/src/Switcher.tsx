@@ -39,10 +39,15 @@ export function useShowing(): { name: string; where: string } {
  * itself. A name it was given here instead is kept as it is.
  */
 function placeOf(label: string, whose: string, computer?: string): string {
+  // The name pairing gave ends in the computer, whoever it names first: it is kept when she is
+  // renamed, so "Ana on mac-mini" can be Bea's. Paired before the computer left the network's
+  // part out of its name, it is "mac-mini.fritz.box".
+  const on = label.lastIndexOf(' on ')
+  const tail = on < 0 ? label : label.slice(on + ' on '.length)
+  if (computer && tail.split('.')[0].toLowerCase() === computer.toLowerCase()) return computer
+  // An older server does not say what its computer is called: only their own name is left out.
   const prefix = `${shownName(whose)} on `
-  const place = label.startsWith(prefix) ? label.slice(prefix.length) : label
-  // Paired before the computer left the network's part out of its name: "mac-mini.fritz.box".
-  return computer && place.split('.')[0].toLowerCase() === computer.toLowerCase() ? computer : place
+  return label.startsWith(prefix) ? label.slice(prefix.length) : label
 }
 
 /** One choice in the list: `mark` is whose name the mark is drawn from, when that is not what is shown. */
