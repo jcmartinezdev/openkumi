@@ -59,7 +59,7 @@ export default function ServerSettings() {
         title="Addresses"
         footer={
           note ||
-          `Tried from the top: the home network, then Tailscale, then the rest. The ones the server reports itself stay up to date by themselves. This phone’s key goes to an address only after whatever answers there has shown it is ${server.name}. Plain http works at home and over Tailscale; anywhere else the address needs https.`
+          `Tried from the top: the home network, then Tailscale, then the rest. The ones the server reports itself stay up to date by themselves. This phone’s key goes to an address only after whatever answers there has shown it is ${server.name}. Plain http works only at home; anywhere else, Tailscale included, the address needs https.`
         }
       >
         {ordered(server.addresses).map((url) => {
@@ -75,7 +75,7 @@ export default function ServerSettings() {
             />
           )
         })}
-        <Field key={server.addresses.length} label="Add" value="" placeholder="mac-mini.tail1234.ts.net:4317" autoCapitalize="none" keyboardType="url" onCommit={(address) => void add(address)} />
+        <Field key={server.addresses.length} label="Add" value="" placeholder="https://mac-mini.tail1234.ts.net" autoCapitalize="none" keyboardType="url" onCommit={(address) => void add(address)} />
       </Section>
 
       <Section footer="This phone has a key of its own, kept in its keychain. The computer can shut it out at any time, in Settings › Profile & devices.">

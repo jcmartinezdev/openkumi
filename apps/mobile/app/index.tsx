@@ -61,7 +61,7 @@ export default function Home() {
         : newer
           ? `${name} runs a newer OpenKumi than this app can work with. Update the app on this phone.`
           : failures >= 2
-            ? `${name} cannot be reached. Check that this phone is on the same network, or that Tailscale is on, on both. Still trying…`
+            ? `${name} cannot be reached. Check that this phone is on the same network, or, away from home, that it has an https address for it under Settings. Still trying…`
             : 'Connecting…'
     return (
       <View style={styles.center}>

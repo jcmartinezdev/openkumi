@@ -21,8 +21,13 @@
       "bundleIdentifier": "ai.openkumi.mobile",
       "infoPlist": {
         "NSAppTransportSecurity": {
-          "NSAllowsArbitraryLoads": true,
-          "NSAllowsLocalNetworking": true
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "lan": { "NSIncludesSubdomains": true, "NSExceptionAllowsInsecureHTTPLoads": true },
+            "home": { "NSIncludesSubdomains": true, "NSExceptionAllowsInsecureHTTPLoads": true },
+            "internal": { "NSIncludesSubdomains": true, "NSExceptionAllowsInsecureHTTPLoads": true },
+            "home.arpa": { "NSIncludesSubdomains": true, "NSExceptionAllowsInsecureHTTPLoads": true }
+          }
         },
         "NSLocalNetworkUsageDescription": "OpenKumi connects to the computer on your network that runs your bots.",
         "NSMicrophoneUsageDescription": "OpenKumi listens while you dictate a message to a bot, and while you are on a call with one. Dictation is written down on this iPhone and never leaves it as sound; on a call, your voice goes to the speech model that answers you.",

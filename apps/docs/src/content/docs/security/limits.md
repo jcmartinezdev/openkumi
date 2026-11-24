@@ -38,8 +38,8 @@ On a home network the apps talk to the server over plain `http`. Pairing gives n
 paired device's key travels with each request, so someone who can watch that network could copy
 it.
 
-**What to do:** pair and use OpenKumi on networks you trust, use Tailscale (which encrypts) away
-from home, and remove devices you no longer use.
+**What to do:** pair and use OpenKumi on networks you trust (away from home it only works over
+`https`), and remove devices you no longer use.
 
 ## Your computer account is the boundary
 
@@ -64,7 +64,8 @@ lie side by side in `~/.openkumi/people/`.
 
 The desktop app keeps the keys of remote environments in `desktop.json`, readable only by your
 account, rather than in the system's keychain. (The iPhone app uses the keychain.) Someone who can
-read your files can use those keys from your home network or Tailscale.
+read your files can use those keys from your home network, or through an `https` address you put
+in front of the server.
 
 ## Pages can load from the web
 

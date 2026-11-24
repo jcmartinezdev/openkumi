@@ -60,21 +60,21 @@ computer that runs the bots: a paired computer cannot pair another.
 
 ## Reaching it from anywhere
 
-An environment can have several addresses: its address on your home network, its address on
-[Tailscale](https://tailscale.com), and any you add yourself, such as a public `https` address. The
-app asks them all at once and uses the first, in that order, that proves it is your server.
+An environment can have several addresses: its address on your home network, and any `https`
+address you add yourself, on [Tailscale](https://tailscale.com) or on the internet. The app asks
+them all at once and uses the first, in that order, that proves it is your server.
 
 <Reaching caption="At home the app goes straight there; away from home it goes over Tailscale. Whatever answers has to prove who it is before any key is sent." />
 
-- **You only pair once, wherever you are.** While connected, the server tells the devices paired
-  with it its other addresses, its Tailscale name among them, and they keep them up to date (a new
-  address on the home network replaces the old one). With Tailscale on both, nothing else needs
-  setting up. Addresses you added yourself are only changed by you.
+- **You only pair once.** While connected, the server tells the devices paired with it its other
+  home network addresses, and they keep them up to date (a new address on the home network
+  replaces the old one). Addresses you added yourself are only changed by you.
 - **It moves back home by itself.** While connected, the app looks again every minute and whenever
   the network changes, and moves to a better address as soon as one answers.
-- **Plain http only where it is safe enough.** On the home network and on Tailscale (which
-  encrypts the connection itself) the app uses plain `http`. Any other address you add has to be
-  `https`, behind a proxy or tunnel of your own.
+- **Plain http only at home.** On the home network the app uses plain `http`. Any other address,
+  Tailscale included, has to be `https`, and how you get one is up to you: Tailscale can give the
+  computer a certificate for its name, or put a proxy or tunnel of your own in front. See
+  [Away from home](/connections/#away-from-home).
 
 [Servers and addresses](/connections/) explains all of it in detail: how each address is
 recognised, what is tried first and how long each is waited for, how addresses are found by

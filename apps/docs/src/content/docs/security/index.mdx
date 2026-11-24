@@ -19,8 +19,9 @@ its own tools, and nothing it reads counts as your word.
 
 - Every request to the server carries a key. Nothing is trusted for where it comes from, and there
   are no cookies, so a web page open in a browser has no way in.
-- The server answers only this computer, your home network and Tailscale. A connection from
-  anywhere else on the internet is closed before anything is read from it.
+- The server answers only this computer and your home network, over plain `http`. A connection
+  straight from Tailscale or anywhere else on the internet is closed before anything is read from
+  it: from there, devices come through an `https` address you put in front of it.
 - Pairing never sends its code over the network, and a device makes the server prove who it is
   before it sends its key to any address.
 - Only the computer that runs the bots can let a new device in, or shut one out.
@@ -65,8 +66,8 @@ its own tools, and nothing it reads counts as your word.
 - **Put what must hold in its rules, not in a conversation.** Rules in `bot.md` are out of the
   bot's reach; its own instructions are not. Read **Workspace → Changes** now and then, and undo
   what you did not want.
-- **Pair over networks you trust**, and use Tailscale away from home rather than opening a port to
-  the internet. Remove devices you no longer use.
+- **Pair over networks you trust**, and away from home use an `https` address on Tailscale rather
+  than opening a port to the internet. Remove devices you no longer use.
 - **Keep your computer account to yourself.** There are no user accounts in OpenKumi: whoever can
   use your account on the computer that runs it can use your bots. Someone else in the house who
   has bots on the same computer is kept apart in the apps, but not from that account (see

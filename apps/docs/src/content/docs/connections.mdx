@@ -61,17 +61,18 @@ for a server, each of one kind:
 | --- | --- | --- |
 | **This computer** | `127.x.x.x`, `localhost`, `::1` | yes |
 | **Home network** | `10.x`, `172.16–31.x`, `192.168.x`, `169.254.x`; IPv6 local addresses; a computer's own name (`mac-mini`, `mac-mini.local`, or ending in `.lan`, `.home`, `.internal`, `.home.arpa`) | yes |
-| **Tailscale** | `100.64.x.x` to `100.127.x.x`, `fd7a:115c:a1e0:…`, or a name ending in `.ts.net` | yes: Tailscale encrypts the connection itself |
+| **Tailscale** | `100.64.x.x` to `100.127.x.x`, `fd7a:115c:a1e0:…`, or a name ending in `.ts.net` | no: `https` only |
 | **Internet** | anything else: a public IP or a domain | no: `https` only |
 
 They come from three places:
 
 1. **The address you paired with**, from the code or QR code.
 2. **The server itself.** Every time a device connects, it asks the server where else it can be
-   reached, and the server tells it its home network addresses and its Tailscale name and
-   addresses. (A server that does not let other computers connect reports none.)
-3. **You.** Any address you add by hand: a Tailscale name, an IP, or a public `https` address in
-   front of the server.
+   reached, and the server tells it its home network addresses. (A server that does not let other
+   computers connect reports none.)
+3. **You.** Any address you add by hand: an IP or name on the home network, or an `https` address
+   in front of the server, on Tailscale or on the internet. See
+   [Away from home](#away-from-home).
 
 <Reaching caption="Each address is tried in turn: the home network first, then Tailscale, then any public address. Before any key is sent, whatever answers has to prove it is that server." />
 
@@ -144,40 +145,38 @@ between: what you were looking at stays on the screen from the copy the app keep
 You pair once, wherever you are, and do not have to type an address again:
 
 - **The server reports its addresses** each time a device connects: its addresses on every home
-  network it is on, and its name and addresses on Tailscale. The device keeps them, in place of the
-  ones it reported before, so a server that got a new home address (a new router, a move) is found
-  at the new one, and one it no longer has goes away. At most eight are kept, and only home network
-  and Tailscale addresses are taken from a server; a public address is only ever yours to add.
+  network it is on. The device keeps them, in place of the ones it reported before, so a server
+  that got a new home address (a new router, a move) is found at the new one, and one it no longer
+  has goes away. At most eight are kept, and only home network addresses are taken from a server;
+  an `https` address, on Tailscale or elsewhere, is only ever yours to add.
 - **Addresses you added are never touched** by what the server reports.
-- **Tailscale is found by itself.** The server asks the Tailscale program on its computer (the Mac
-  app's own copy, or `tailscale` on the `PATH`; `OPENKUMI_TAILSCALE_BIN` names another) for this
-  computer's name and addresses on your tailnet, and also notices any Tailscale address the
-  computer has. It knows the name even while Tailscale is off, so a phone that learns it at home
-  can use it as soon as Tailscale is on, away from home. With Tailscale on both devices, there is
-  nothing to set up.
 - **A server that reports nothing** (one reached through a tunnel, say) never takes away the way to
   it.
 
-## A public address
+## Away from home
 
-Tailscale is the easy way to reach your bots from anywhere, and the one we recommend. If you would
-rather use an address of your own on the internet:
+Plain `http` is only used on the home network. Anywhere else, Tailscale included, a device needs an
+`https` address for the server, and how you get one is up to you. A plain `http` address there is
+refused ("Needs https"), and the server closes connections that come straight from Tailscale or the
+internet.
 
 <Steps>
 
-1. Put a reverse proxy or tunnel with a certificate in front of port 4317 on the computer that runs
-   the bots (or the port of the person's server it is for), so it answers at an `https` address,
-   such as `https://kumi.example.com`. A plain `http` address on the internet is refused ("Needs
-   https"): whoever is in between could read the device's key.
+1. Put something that answers at an `https` address in front of port 4317 on the computer that runs
+   the bots (or the port of the person's server it is for). On Tailscale, Tailscale can give the
+   computer a certificate for its name, as in `https://mac-mini.tail1234.ts.net` (see Tailscale's
+   own documentation on HTTPS and `tailscale serve`). On the internet, a reverse proxy or tunnel
+   with a certificate, such as `https://kumi.example.com`. Either way it has to pass requests on to
+   the server on this computer, at `127.0.0.1:4317`.
 
 2. On each device, open **Settings → Environments**, press **N addresses** under the environment,
-   type the address and press **Add address**.
+   type the address and press **Add address**. On the iPhone, it is the server's page in Settings.
 
 </Steps>
 
-The server treats what comes through a proxy as coming from elsewhere: a paired device's key works
-there, the access code of the computer itself never does, and pairing or removing devices still
-only happens at that computer. But the API's door is then on the internet, guarded by the paired
+The server treats what comes through such a proxy as coming from elsewhere: a paired device's key
+works there, the access code of the computer itself never does, and pairing or removing devices
+still only happens at that computer. On the internet, the API's door is then guarded by the paired
 keys alone, so prefer Tailscale where you can.
 
 ## The settings
@@ -194,9 +193,10 @@ keys alone, so prefer Tailscale where you can.
   "reported by it" for those the server keeps up to date;
 - **Remove** takes away an address you added (the ones the server reported cannot be removed: it
   keeps them up to date);
-- **Add address** takes another. Type it as you like: `mac-mini.tail1234.ts.net`,
-  `192.168.1.20`, or `https://kumi.example.com`. When you leave them out, `http://` and the port
-  `4317` are added (no port is added to an `https` address). Another person's server on that
+- **Add address** takes another. Type it as you like: `192.168.1.20`, `mac-mini.local`,
+  `mac-mini.tail1234.ts.net` or `https://kumi.example.com`. When you leave it out, `http://` and
+  the port `4317` are added to a home network address, and `https://` to any other (no port is
+  added to an `https` address). Another person's server on that
   computer has a port of its own: type it, as in `192.168.1.20:4327`.
 
 An address is checked when you add it. If something else answers there, it is refused and nothing
@@ -207,8 +207,9 @@ and proves itself.
 
 **Settings → Profile & devices → Let other devices connect** (or `openkumi lan on`) lets other devices
 reach it at all; off, it listens on this computer only and reports no addresses. Below it, **Pair a
-device** shows the computer's home network addresses and Tailscale names, for typing in; the QR
-code carries the first home network address, and the device learns the rest once it connects.
+device** shows the computer's home network addresses, for typing in; the QR code carries the
+first one, and the device learns the rest once it connects. Pair at home, or type the code with an
+`https` address of your own.
 
 ### On the iPhone
 
@@ -216,8 +217,8 @@ In the phone's Settings, the server's name at the top opens its page: **Addresse
 the order they are tried, with which one is in use, and **Add** takes another, the same way.
 
 <Aside title="Troubleshooting">
-  An environment never connects away from home: turn Tailscale on, on both, or add a public `https`
-  address. Never at home: **Let other devices connect** has to be on, and a firewall must let
+  An environment never connects away from home: it needs an `https` address (on Tailscale or on
+  the internet), added under its addresses; see [Away from home](#away-from-home). Never at home: **Let other devices connect** has to be on, and a firewall must let
   port 4317 in (and 4327, 4337 and so on, for the other people with bots on that computer). See
   [When something is wrong](/troubleshooting/#the-app-cannot-connect).
 </Aside>

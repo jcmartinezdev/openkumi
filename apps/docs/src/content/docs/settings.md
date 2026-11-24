@@ -59,7 +59,7 @@ wins.
 | `OPENKUMI_HOME` | `~/.openkumi`; `~/.openkumi-dev` run from a clone of the repository | the folder everything is kept in: each person's data folder is `people/<name>/` in it |
 | `OPENKUMI_BROWSER_CHANNEL` | from Settings | the browser program: `chrome`, `msedge`, or `chromium` for the one that comes with OpenKumi |
 | `OPENKUMI_CLAUDE_BIN`, `OPENKUMI_CODEX_BIN`, `OPENKUMI_GROK_BIN` | from Settings, else found on `PATH` | where the `claude`, `codex` and `grok` programs are |
-| `OPENKUMI_TAILSCALE_BIN` | the Tailscale app, else `tailscale` on `PATH` | the Tailscale program, asked for this computer's name on Tailscale |
+| `OPENKUMI_TAILSCALE_BIN` | the Tailscale app, else `tailscale` on `PATH` | the Tailscale program, asked for this computer's name on Tailscale, for the webhook address it suggests |
 | `OPENKUMI_DEBUG` | from Settings | `1` logs everything an engine prints |
 | `OPENKUMI_RELEASES_URL` | this project's releases on GitHub | where a server installed alone, and its installer, look for versions |
 | `OPENKUMI_DESKTOP_UPDATES_URL` | this project's releases on GitHub | another place for the desktop app to look for versions of itself |
