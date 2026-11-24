@@ -256,6 +256,10 @@ const socialCard = new URL('/social-card.png', Astro.site)
     border-bottom: 1px solid var(--border);
     background: var(--bg);
     box-shadow: var(--shadow-lg);
+    /* A phone on its side has less height than the menu: it scrolls instead of running off the screen. */
+    max-height: calc(100dvh - 64px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   .menu-panel a:not(.button) {
     display: flex;

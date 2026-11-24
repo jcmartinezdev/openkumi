@@ -1,8 +1,9 @@
 ---
 // One superpower: its page in the app (README.md), what it can do, how it connects, and others like it.
-import Layout from '../../layouts/Layout.astro'
-import { DOCS_URL, DOWNLOAD_URL } from '../../lib/site'
-import { superpowers, type Superpower } from '../../lib/superpowers'
+// In a folder of its own, so it is built as integrations/<id>/index.html and served at /integrations/<id>.
+import Layout from '../../../layouts/Layout.astro'
+import { DOCS_URL } from '../../../lib/site'
+import { superpowers, type Superpower } from '../../../lib/superpowers'
 
 export function getStaticPaths() {
   return superpowers.map((power) => ({ params: { id: power.id }, props: { power } }))
@@ -68,7 +69,7 @@ const siteName = power.site && new URL(power.site).host.replace(/^www\./, '')
             )
           }
         </dl>
-        <a class="button primary" href={DOWNLOAD_URL} data-download><span data-download-label>Get OpenKumi</span></a>
+        <a class="button primary" href="/#download">Get OpenKumi</a>
         <a class="docs" href={`${DOCS_URL}/superpowers/`}>How superpowers work</a>
       </aside>
     </div>
@@ -96,13 +97,6 @@ const siteName = power.site && new URL(power.site).host.replace(/^www\./, '')
     }
   </article>
 </Layout>
-
-<script is:inline>
-  // The button gives a Mac's installer, which most visitors need; elsewhere it goes to the list of every system's.
-  if (/Windows|Linux|X11|CrOS|Android|iPhone|iPad|iPod/.test(navigator.userAgent)) {
-    for (const button of document.querySelectorAll('[data-download]')) button.href = '/#download'
-  }
-</script>
 
 <style>
   .page {

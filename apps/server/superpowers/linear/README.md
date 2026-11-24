@@ -7,8 +7,8 @@ Lets a bot work in your Linear workspace, through Linear's own service. Ask it t
 Activating it signs the bot in: you approve it on
 Linear's own page. The bot sees what your Linear account sees.
 
-Linear can also call OpenKumi the moment an issue or a comment is created or changed, so that an
-automation starts at once instead of at its next look. That is a webhook, set up on this page in
+Linear can also call OpenKumi the moment an issue is created, changed or removed, or a comment is
+written, so that an automation starts at once instead of at its next look. That is a webhook, set up on this page in
 the app, once for each bot; it needs an admin of the Linear workspace, and an address the internet
 can reach this computer by.
 
