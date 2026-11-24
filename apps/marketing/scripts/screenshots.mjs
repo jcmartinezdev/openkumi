@@ -106,7 +106,10 @@ try {
   await api('POST', '/api/automations', { botId: bots.inbox.id, title: 'Morning briefing', prompt: 'Go through what came in overnight and tell me what needs me today.', trigger: { kind: 'time', schedule: { type: 'daily', time: '07:30', days: [1, 2, 3, 4, 5] } } })
   for (const power of ['weather', 'exchange-rates', 'holidays']) await api('PUT', `/api/bots/${bots.researcher.id}/superpowers/${power}`, { on: true })
   // The other two ways an automation starts: a page that changes, on a lighter model of its own, and an app that calls.
-  await api('POST', '/api/automations', { botId: kumi.id, title: 'What’s new in OpenKumi', prompt: 'Read the new release notes and tell me in three lines what changed for me.', trigger: { kind: 'watch', watch: { on: 'page', url: 'https://github.com/jcmartinezdev/openkumi/releases', every: 360 } }, runsOn: { provider: 'claude-code', model: 'haiku' } })
+  // A watch looks at its page once when it is made, which needs the internet: without it, the other scenes are still taken.
+  await api('POST', '/api/automations', { botId: kumi.id, title: 'What’s new in OpenKumi', prompt: 'Read the new release notes and tell me in three lines what changed for me.', trigger: { kind: 'watch', watch: { on: 'page', url: 'https://github.com/jcmartinezdev/openkumi/releases', every: 360 } }, runsOn: { provider: 'claude-code', model: 'haiku' } }).catch((e) =>
+    console.warn(`The automations picture will have no page watch: ${e.message}`),
+  )
   // Linear is switched on as a sign-in would, there being no account to sign in with: only the automation's card shows it.
   fs.writeFileSync(path.join(dataOf(home), 'bots', kumi.id, 'superpowers.json'), JSON.stringify({ on: ['linear'] }))
   await api('PUT', `/api/bots/${kumi.id}/hooks/linear`, {})

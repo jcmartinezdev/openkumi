@@ -62,7 +62,7 @@ if (opts.page) {
 const stills = opts.still?.split(',').map(Number)
 if (stills?.some((t) => !Number.isFinite(t))) throw new Error(`--still takes seconds, such as 7.4 or 1,7.4,12; not "${opts.still}"`)
 const part = opts.from != null || opts.to != null
-const encoders = stills ? null : needFfmpeg()
+if (!stills) needFfmpeg()
 
 /** ffmpeg is a program of its own, not a package: say how to get it rather than fail halfway. */
 function needFfmpeg() {
@@ -76,7 +76,11 @@ function needFfmpeg() {
     console.error(`The ffmpeg found has no H.264 encoder (libx264), which the film is made with. ${how}`)
     process.exit(1)
   }
-  return { av1: found.stdout.includes('libsvtav1') }
+  // The website lists the AV1 copy as well, so the whole film is not made without it.
+  if (!part && !found.stdout.includes('libsvtav1')) {
+    console.error(`The ffmpeg found has no AV1 encoder (libsvtav1), which the website's WebM copy is made with. ${how}`)
+    process.exit(1)
+  }
 }
 
 /** Runs ffmpeg to the end, with its own messages kept quiet unless it fails. */
@@ -209,18 +213,10 @@ try {
       }
       console.log(`${path.relative(process.cwd(), file)} (${mb(file)}, ${film.length} s, ${took()})`)
 
-      // The AV1 copy, kept only when it is clearly the smaller of the two.
+      // The AV1 copy, which the browsers that play it take first.
       const webm = path.join(FILM, 'openkumi.webm')
-      if (encoders.av1) {
-        await ffmpeg(['-i', master, ...COLOURS, '-c:v', 'libsvtav1', '-preset', '5', '-crf', String(AV1_CRF), '-g', '90', '-an', webm]).done
-        if (fs.statSync(webm).size > fs.statSync(file).size * 0.8) {
-          console.log(`openkumi.webm came out ${mb(webm)}, too close to the MP4 to be worth a second file, so it is left out.`)
-          fs.rmSync(webm)
-        } else console.log(`${path.relative(process.cwd(), webm)} (${mb(webm)}, ${took()})`)
-      } else {
-        fs.rmSync(webm, { force: true })
-        console.log('The ffmpeg found has no AV1 encoder (libsvtav1), so there is no openkumi.webm this time; the MP4 plays everywhere.')
-      }
+      await ffmpeg(['-i', master, ...COLOURS, '-c:v', 'libsvtav1', '-preset', '5', '-crf', String(AV1_CRF), '-g', '90', '-an', webm]).done
+      console.log(`${path.relative(process.cwd(), webm)} (${mb(webm)}, ${took()})`)
 
       // The poster: as good a JPEG as fits.
       const png = await frame(first, film.poster)

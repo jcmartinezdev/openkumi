@@ -58,7 +58,7 @@ const anatomy = {
   right: [
     { icon: ICON.bolt, title: 'Powers you hand out', text: `Notion, Linear, Todoist and ${superpowers.length - 3} more, switched on for one bot at a time.` },
     { icon: ICON.fork, title: 'Help with big jobs', text: 'It splits a big job between subagents that work at the same time, and brings their results together.' },
-    { icon: ICON.clock, title: 'Work while you’re away', text: 'At set times, when a page changes, or the moment an app calls, and it tells you what came of it.' },
+    { icon: ICON.clock, title: 'Work while you’re away', text: 'At set times, when a page changes, or when Linear calls, and it tells you what came of it.' },
   ],
 }
 
@@ -80,11 +80,11 @@ const faq = [
   },
   {
     q: 'Can I talk to my bots out loud?',
-    a: 'Yes, in two ways. The microphone in the message box writes down what you say, on the device itself (macOS 26 or iOS 26 and later), so no sound leaves it. And the phone button calls the bot: it talks back at once, and you can interrupt it. The voice comes with a ChatGPT plan, through Codex, and works for a bot on any engine.',
+    a: 'Yes, in two ways. The microphone in the message box writes down what you say, on the device itself (macOS 26 or iOS 26 and later), so no sound leaves it. And the phone button calls the bot: it talks back at once, and you can interrupt it. The voice comes with a ChatGPT plan, through Codex, so the sound of a call goes to OpenAI, and it works for a bot on any engine.',
   },
   {
     q: 'Where does my data live?',
-    a: 'On the computer that runs your bots, in plain files and a database in ~/.openkumi. There is no OpenKumi account, and none of it is kept anywhere else. What you say to a bot goes to the model provider that bot runs on, and nowhere else. OpenKumi asks before it tells its makers anything, and then only how it is used and where it breaks, never what you or your bots write.',
+    a: 'On the computer that runs your bots, in plain files and a database in ~/.openkumi. There is no OpenKumi account, and none of it is kept anywhere else. What you write to a bot goes to the model provider that bot runs on, and nowhere else; on a call, your voice and the last few messages of the conversation also go to OpenAI, whose voice the call uses. OpenKumi asks before it tells its makers anything, and then only how it is used and where it breaks, never what you or your bots write.',
   },
   {
     q: 'Could a bot do something I did not want?',
@@ -239,6 +239,7 @@ const faq = [
             <p>Press the phone button and talk. It answers out loud, at once, and you can cut in as you would with a person. What needs work goes to the bot, or to another bot, and what comes back is read out.</p>
             <ul class="checks">
               <li>The voice comes with your ChatGPT plan, through Codex. No API key, and it works for a bot on any engine.</li>
+              <li>Your voice, and the last few messages of the conversation, go to OpenAI for the call. Dictation stays on the device.</li>
               <li>On the computer and the iPhone. The call goes on while you look at something else.</li>
               <li>What was asked and said is kept in the conversation.</li>
             </ul>
@@ -361,7 +362,7 @@ const faq = [
           </li>
           <li>
             <span class="trigger-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
-            <span><strong>When an app calls</strong>Linear and other apps call the bot’s webhook, and it starts the moment they do.</span>
+            <span><strong>When an app calls</strong>Linear calls the bot’s webhook when something happens there, and the bot starts on it. Calls that come close together are answered together.</span>
           </li>
         </ul>
         <p class="note">Each automation runs on its bot’s model, or on one of its own, such as a lighter one for a simple check.</p>
@@ -448,7 +449,7 @@ const faq = [
         <p>What a bot can do is yours to decide: its model, its rules and its superpowers sit where only you can change them. What it knows is its own, kept as plain files it writes itself, with a history you can undo.</p>
         <ul class="checks">
           <li>No OpenKumi account. Your bots and everything you say to them live in <code>~/.openkumi</code>, and nowhere else.</li>
-          <li>What you say to a bot goes only to the model provider it runs on.</li>
+          <li>What you write to a bot goes only to the model provider it runs on. On a call, your voice and the last few messages also go to OpenAI, whose voice the call uses.</li>
           <li>OpenKumi asks before it tells its makers anything: how it is used and where it breaks, never what you write. <a href="https://docs.openkumi.ai/telemetry/">All of it is listed</a>.</li>
           <li>Logins stay in the bot’s private folder, where even the bot cannot read them.</li>
         </ul>
@@ -656,6 +657,8 @@ const faq = [
       event.preventDefault()
       const still = matchMedia('(prefers-reduced-motion: reduce)').matches
       document.querySelector('#film').scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'center' })
+      // The keyboard goes with the eye, to the player's controls.
+      film.focus({ preventScroll: true })
       film.play().catch(() => {})
     })
   }
