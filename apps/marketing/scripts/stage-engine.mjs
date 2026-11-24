@@ -19,8 +19,17 @@ if (args[0] === 'auth' && args[1] === 'status') {
   print({ loggedIn: true, authMethod: 'claude.ai', subscriptionType: 'max' })
   process.exit(0)
 }
-// Asked which models it offers.
+// Asked something about itself: which models it offers, or how much of the plan is used.
 if (args.includes('--input-format') && !args.includes('--system-prompt-file')) {
+  const { value: line } = await readline.createInterface({ input: process.stdin })[Symbol.asyncIterator]().next()
+  const asked = JSON.parse(line ?? '{}').request?.subtype
+  if (asked === 'get_usage') {
+    // A Max plan a fair way into its week, as the usage page shows it.
+    const inHours = (hours) => new Date(Date.now() + hours * 3_600_000).toISOString()
+    const rate_limits = { five_hour: { utilization: 18, resets_at: inHours(3.2) }, seven_day: { utilization: 46, resets_at: inHours(62) }, model_scoped: [{ display_name: 'Opus', utilization: 31, resets_at: inHours(62) }] }
+    print({ type: 'control_response', response: { subtype: 'success', request_id: asked, response: { subscription_type: 'max', rate_limits_available: true, rate_limits } } })
+    process.exit(0)
+  }
   const levels = ['low', 'medium', 'high', 'xhigh', 'max']
   const models = [
     { value: 'default', resolvedModel: 'claude-opus-5-5', displayName: 'Default (recommended)', description: 'Opus 5.5 · Best for everyday tasks', supportedEffortLevels: levels },
@@ -28,7 +37,7 @@ if (args.includes('--input-format') && !args.includes('--system-prompt-file')) {
     { value: 'sonnet', resolvedModel: 'claude-sonnet-5-5', displayName: 'Sonnet 5.5', description: 'Fast, for everyday tasks', supportedEffortLevels: levels },
     { value: 'haiku', resolvedModel: 'claude-haiku-5-5', displayName: 'Haiku 5.5', description: 'Fastest' },
   ]
-  print({ type: 'control_response', response: { subtype: 'success', request_id: 'models', response: { models } } })
+  print({ type: 'control_response', response: { subtype: 'success', request_id: asked ?? 'models', response: { models } } })
   process.exit(0)
 }
 
@@ -72,6 +81,23 @@ async function answer(prompt) {
       await tool('spawn_subagent', { name: city, task: `Weekend in ${city}, last weekend of March, from Berlin: the weather, the flights and what a decent hotel costs a night. Report in three lines.` })
     }
     return null
+  }
+  // Kumi asks Travel for hotels, and passes on what comes back.
+  if (prompt.includes('Can you ask Travel')) {
+    const travel = JSON.parse(await tool('list_bots', {})).find((bot) => bot.name === 'Travel')
+    await tool('message_bot', { bot_id: travel.id, message: 'Find two hotels in Lisbon for 27–29 March, under €160 a night and close to the river. Say what each costs and why it fits.', reply_wanted: true })
+    return 'I’ve asked Travel to look. I’ll tell you what it finds.'
+  }
+  // Travel writes back to the bot that asked, as a real model would, with the same tool.
+  if (prompt.includes('<bot_message from="Kumi"')) {
+    await sleep(1500)
+    const kumi = /<bot_message from="Kumi" bot_id="([^"]+)"/.exec(prompt)[1]
+    // Plain words: a message between bots is shown as it was written, without Markdown.
+    await tool('message_bot', { bot_id: kumi, message: 'Two that fit, both a short walk from the river. Hotel Bairro Alto, €148 a night: quiet rooms over the old town, and the tram stops at the door. Memmo Príncipe Real, €156 a night: a pool with a view of the castle, and breakfast is included.' })
+    return 'I sent Kumi two hotels by the river: Hotel Bairro Alto at €148 a night, and Memmo Príncipe Real at €156.'
+  }
+  if (prompt.includes('<bot_message from="Travel"')) {
+    return 'Travel found two, both close to the river: **Hotel Bairro Alto** at €148 a night, by the tram, and **Memmo Príncipe Real** at €156, with a pool and breakfast. Shall I ask it to book the first?'
   }
   const city = /Weekend in (\w+),/.exec(prompt)?.[1]
   if (city) {
