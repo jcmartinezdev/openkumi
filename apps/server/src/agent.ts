@@ -830,7 +830,7 @@ export function spawnSubagent(parent: Thread, opts: { task: string; name: string
     // A subagent given another model thinks as hard as that model does by itself: the run's level was chosen for the run's.
     provider: parent.provider,
     model: opts.model || (parent.provider ? parent.model : null),
-    effort: opts.model ? null : parent.effort,
+    effort: opts.model && opts.model !== parent.model ? null : parent.effort,
   })
   postMessage(child.id, { source: 'parent', text: opts.task })
   return child

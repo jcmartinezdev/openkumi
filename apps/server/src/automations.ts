@@ -586,9 +586,10 @@ async function runsOnFrom(doer: Bot, a: Record<string, any>, before?: RunsOn | n
     return null
   }
   const lists = await offered(doer)
-  // A provider's first model is its default, kept as no model, as the apps keep it: their pickers show it as that one.
+  // The model that was named is the one kept, also when it is its provider's default just now. One its provider itself
+  // only calls "default" is kept as no model, which is the same thing.
   const named = given(a.model) ? modelCalled(String(a.model), lists) : null
-  const on: RunsOn = named ? { provider: named.provider, model: named.info === lists.find((list) => list.id === named.provider)?.models[0] ? '' : named.info.id, effort: '' } : before!
+  const on: RunsOn = named ? { provider: named.provider, model: /^default$/i.test(named.info.id) ? '' : named.info.id, effort: '' } : before!
   if (!given(a.effort)) return on
   const effort = String(a.effort).trim().toLowerCase()
   const models = lists.find((list) => list.id === on.provider)?.models ?? []
@@ -664,7 +665,9 @@ export async function updateAs(bot: Bot, a: Record<string, any>): Promise<string
   const on = await runsOnFrom(getBot(String(patch.botId ?? automation.botId)) ?? bot, a, automation.runsOn)
   if (on !== undefined) patch.runsOn = on
   // Asking the providers for their models took a while: the automation is read again, as a run may have started or ended meanwhile.
-  const saved = await updateAutomation(on === undefined ? automation : changeable(bot, a.id), patch)
+  const current = on === undefined ? automation : changeable(bot, a.id)
+  if (!same(current.runsOn, automation.runsOn)) throw new Error('What this automation runs on was changed just now. Look at it with list_automations and try again.')
+  const saved = await updateAutomation(current, patch)
   return `Changed. It is now ${now()}.\n${JSON.stringify(view(saved, bot), null, 1)}`
 }
 

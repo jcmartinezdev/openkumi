@@ -53,7 +53,8 @@ export function ModelPicker({ bot: stored, own }: { bot: Bot; own?: Own }) {
   // Closed, only the bot's own provider is needed (for the button). Open, all of them.
   const lists = useModelLists(open ? ready.map((p) => p.id) : current?.connected ? [current.id] : [])
   const all = ready.flatMap((p) => choicesOf(p, lists.get(p.id) ?? [], bot))
-  const isCurrent = (c: Choice) => !follows && c.provider.id === bot.provider && c.model === bot.model
+  // A provider's first model is kept as "" when it is picked here; a bot that named it for an automation keeps it by its id.
+  const isCurrent = (c: Choice) => !follows && c.provider.id === bot.provider && (c.model === bot.model || (c.isDefault && c.info.id === bot.model))
   const chosen = all.find(isCurrent)
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
   const searching = words.length > 0

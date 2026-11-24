@@ -1587,9 +1587,9 @@ test('automations: one runs on what its bot runs on, or on a model of its own of
   assert.match(await tool('update_automation', { id: light.id, effort: 'minimal' }), /^Error: effort is one of low, medium, high, xhigh, max for that model\./)
   assert.match(await tool('update_automation', { id: light.id, effort: 'low' }), /"model": "Claude Sonnet 9",\n "effort": "low"/)
   assert.deepEqual((await all()).find((a) => a.id === light.id).runsOn, { provider: 'claude-code', model: 'sonnet', effort: 'low' })
-  // A provider's first model is its default, which is kept as no model, as the apps keep it.
+  // The model that was named is the one kept, also when it is its provider's default just now.
   assert.match(await tool('update_automation', { id: light.id, model: 'mock 1' }), /"model": "Mock 1",\n "prompt"/)
-  assert.deepEqual((await all()).find((a) => a.id === light.id).runsOn, { provider: 'mock', model: '', effort: '' })
+  assert.deepEqual((await all()).find((a) => a.id === light.id).runsOn, { provider: 'mock', model: 'mock-1', effort: '' })
   // A name that fits no model is answered with the models there are.
   assert.match(await tool('update_automation', { id: light.id, model: 'nope' }), /^Error: No model is called "nope"\. There are these\. .*Claude Sonnet 9 \(sonnet\), Claude Haiku 9 \(haiku\).*Or give "same"/)
   // "same" goes back to the model of the bot that does it, and that one thinks as hard as the bot does.

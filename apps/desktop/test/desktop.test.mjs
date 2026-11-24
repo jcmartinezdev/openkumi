@@ -1306,9 +1306,14 @@ test('automations: made on their page, run, and each run opened from beneath its
   assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.id === helper.id).effort, '', 'nothing about the bot changed')
   await win.getByRole('button', { name: 'All automations' }).click()
   assert.match(await win.locator('.automation-card', { hasText: 'Morning hello' }).locator('.automation-head').innerText(), /Mon, Wed, Fri at 07:30 · Helper on Mock 1 · Low · made by you/)
+  // A bot that named its provider's first model keeps it by its id: the picker shows that one as picked, with its reasoning.
+  await ask(LOCAL_PORT, 'local-home', 'PATCH', `/api/automations/${automation.id}`, { runsOn: { provider: 'mock', model: 'mock-1', effort: '' } })
+  await win.locator('.automation-head', { hasText: 'Helper on Mock 1 · made by you' }).waitFor()
   // Back to its bot's.
   await win.locator('.automation-open', { hasText: 'Morning hello' }).click()
   await win.getByRole('button', { name: 'Model', exact: true }).click()
+  assert.equal(await win.getByRole('option', { name: /^Mock 1/ }).getAttribute('aria-selected'), 'true')
+  await win.getByRole('radiogroup', { name: 'Reasoning' }).waitFor()
   await win.getByRole('option', { name: /^Same as Helper/ }).click()
   await win.keyboard.press('Escape')
   await win.getByRole('button', { name: 'Save', exact: true }).click()

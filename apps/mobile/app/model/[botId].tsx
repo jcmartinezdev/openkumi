@@ -64,7 +64,8 @@ export default function ModelSheet() {
   if (!stored || !found) return null
   const bot = { ...stored, ...picked }
   const all = ready.flatMap((p) => choicesOf(p, lists.get(p.id) ?? [], bot))
-  const isCurrent = (c: Choice) => !follows && c.provider.id === bot.provider && c.model === bot.model
+  // A provider's first model is kept as "" when it is picked here; a bot that named it for an automation keeps it by its id.
+  const isCurrent = (c: Choice) => !follows && c.provider.id === bot.provider && (c.model === bot.model || (c.isDefault && c.info.id === bot.model))
   // What the bot itself runs on, for the choice that follows it.
   const botsOwn = found && modelOf(found, lists.get(found.provider) ?? [])
   const botsProvider = providers.find((p) => p.id === found?.provider)
