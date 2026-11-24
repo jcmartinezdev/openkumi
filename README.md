@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://openkumi.ai">Website</a> ·
+  <a href="https://openkumi.ai/#film">Watch the film</a> ·
   <a href="#install">Install</a> ·
   <a href="#documentation">Documentation</a> ·
   <a href="https://github.com/jcmartinezdev/openkumi/releases/latest">Releases</a>
@@ -87,9 +88,9 @@ All of it, at more length: [What OpenKumi does](https://docs.openkumi.ai/feature
     <td width="50%">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="apps/marketing/src/assets/screenshots/tasks-dark.png">
-        <img src="apps/marketing/src/assets/screenshots/tasks-light.png" alt="Automations: a weekday morning briefing and a weekly dinner plan.">
+        <img src="apps/marketing/src/assets/screenshots/tasks-light.png" alt="Automations: a weekday morning briefing, a weekly dinner plan, a watch on a page, and new Linear issues sorted as they come in.">
       </picture>
-      <p align="center"><sub>Automations that run in the background and report back.</sub></p>
+      <p align="center"><sub>Automations: at set times, when a page changes, or when an app calls.</sub></p>
     </td>
     <td width="50%">
       <picture>
@@ -97,6 +98,22 @@ All of it, at more length: [What OpenKumi does](https://docs.openkumi.ai/feature
         <img src="apps/marketing/src/assets/screenshots/bot-settings-light.png" alt="A bot's settings: its name, what it is for, and the editor for its mascot's look.">
       </picture>
       <p align="center"><sub>Every bot has a mascot. Choose its look, or let it pick.</sub></p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="apps/marketing/src/assets/screenshots/together-dark.png">
+        <img src="apps/marketing/src/assets/screenshots/together-light.png" alt="Kumi's conversation: asked for a hotel, it passes the job to the Travel bot, and reports the two hotels Travel sent back.">
+      </picture>
+      <p align="center"><sub>Bots that pass work to each other, in view.</sub></p>
+    </td>
+    <td width="50%">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="apps/marketing/src/assets/screenshots/usage-dark.png">
+        <img src="apps/marketing/src/assets/screenshots/usage-light.png" alt="The usage page: tokens used this month, their cost as API calls, and how much of the Claude plan is used.">
+      </picture>
+      <p align="center"><sub>What the bots use, and how much of your plans.</sub></p>
     </td>
   </tr>
 </table>
