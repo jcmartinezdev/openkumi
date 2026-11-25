@@ -25,7 +25,11 @@ export interface Parts<Server> {
   onMessage: (fn: (server: Server, message: FromServer | { type: 'gone' }) => void) => void
   /** Stops the servers cleanly, puts the new version in place and opens it (main.ts). */
   restart: () => void
-  /** How long to wait for the new version to be fetched, and before restarting once the answer is out. */
+  /**
+   * How long to wait for the new version to be fetched, and before restarting: once the answer is
+   * out, and once no bot works, counted again then. A bot that is done may hand on to another at
+   * once (a subagent's report, an automation's result), and the count is 0 in between.
+   */
   waitMs?: number
   answerMs?: number
 }
@@ -97,9 +101,9 @@ export function startUpdateRequests<Server>({ state, check, onChange, servers, w
     settle()
   })
   onMessage((server, message) => {
-    if (message.type === 'update' && Number.isInteger(message.id)) return void updateAsked(server, message.id, message.now === true)
+    if (message?.type === 'update' && Number.isInteger(message.id)) return void updateAsked(server, message.id, message.now === true)
     // A server that has just started learns how things stand; the others hear how many bots are at work besides theirs.
     tellAll()
-    settle()
+    setTimeout(settle, answerMs)
   })
 }

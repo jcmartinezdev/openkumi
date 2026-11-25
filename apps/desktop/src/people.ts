@@ -9,7 +9,7 @@
 import { utilityProcess } from 'electron'
 import type { PersonHere } from '@openkumi/shared/desktop'
 import { hello } from './environments.ts'
-import { codeIn, local, me, peopleHere, restartLocal, runHere, serverEnv, shows, startOther, startOthers, stopOther } from './local.ts'
+import { local, me, peopleHere, restartLocal, serverEnv, startOther, startOthers, stopOther } from './local.ts'
 import { CLI } from './paths.ts'
 
 const address = (port: number) => `http://127.0.0.1:${port}`
@@ -97,30 +97,4 @@ export async function removePerson(name: unknown): Promise<PersonHere[]> {
     await startOthers()
   }
   return people()
-}
-
-/** Asks a server on this computer with its access code. What answers is what was asked: an answer passed on from somewhere else is none. */
-const asked = (port: number, code: string, method: string, route: string, timeoutMs: number) =>
-  fetch(address(port) + route, { method, headers: { Authorization: `Bearer ${code}` }, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' })
-
-/**
- * How many bots are at work in the servers this app runs, everyone's: what quitting the app would
- * cut off. Null when one of them did not say, or could not show it is the server it was started
- * as, which is not the same as none.
- */
-export async function workingHere(): Promise<number | null> {
-  const servers = [...(local.child ? [{ port: local.port, code: local.token }] : []), ...runHere().map(({ port, home }) => ({ port, code: codeIn(home) }))]
-  const counts = await Promise.all(
-    servers.map(async ({ port, code }) => {
-      try {
-        if (!(await shows(port, code))) return null
-        const res = await asked(port, code, 'GET', '/api/update', 3000)
-        const working = res.ok ? (await res.json()).working : null
-        return typeof working === 'number' ? working : null
-      } catch {
-        return null
-      }
-    }),
-  )
-  return counts.some((n) => n === null) ? null : counts.reduce<number>((sum, n) => sum + n!, 0)
 }

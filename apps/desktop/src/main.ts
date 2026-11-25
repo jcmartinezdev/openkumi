@@ -14,9 +14,9 @@ import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresse
 import { pair, parseAddress } from '@openkumi/client/pair'
 import { canDictate, cancelDictation, microphone, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
 import { askToUpdate, config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
-import { local, managing, me, onLocalChange, onServerMessage, peopleHere, retryLocal, runningHere, serverOf, startLocal, stopLocal, tell, workingIn } from './local.ts'
+import { local, managing, me, onLocalChange, onServerMessage, peopleHere, retryLocal, runningHere, serverOf, startLocal, stopLocal, tell, workingIn, workingInApp } from './local.ts'
 import { ASSUME_YES, CATCH_SIGN_INS, FAKE_MICROPHONE, HIDDEN, PRELOAD } from './paths.ts'
-import { addPerson, people, removePerson, renamePerson, workingHere } from './people.ts'
+import { addPerson, people, removePerson, renamePerson } from './people.ts'
 import { APP_URL, keepPage, serveInterface } from './protocol.ts'
 import { startUpdateRequests } from './updateAsked.ts'
 import { checkForUpdate, installUpdate, onUpdateChange, startUpdates, updateState } from './updates.ts'
@@ -396,7 +396,7 @@ let quitting = false
  */
 async function restartForUpdate() {
   if (updateState().state !== 'ready') return
-  const working = await workingHere()
+  const working = workingInApp()
   const asked = working === null ? 'Bots may be working on this computer.' : working ? `${working === 1 ? '1 bot is' : `${working} bots are`} working on this computer.` : ''
   if (asked && !(await confirmed(asked, 'Restarting stops them. What they have done so far is kept.', 'Restart'))) return
   await restartIntoUpdate()

@@ -61,7 +61,7 @@ const HOW: Record<ServerUpdate['how'], string> = {
   installed: 'It was installed on its own, and keeps itself up to date.',
 }
 /** A server inside a desktop app that updates itself: asking it to update has that app restart into its new version. */
-const IN_APP = 'It is part of the desktop app on that computer. Updating it updates that app, which restarts, and the bots of everyone on that computer with it.'
+const IN_APP = 'It is part of the desktop app on that computer. Updating it has that app restart into the new version once no bot there is working.'
 
 /** How this app stands with its own updates, and the button for what there is to do about it. */
 export function AppUpdateRow() {

@@ -2190,7 +2190,7 @@ test('updates: the app finds a newer version of itself, and an environment this 
   }
 })
 
-test('updates from another computer: the server inside the app on that computer is asked to update, and has its app fetch the new version', async () => {
+test('updates from another computer: the server inside the app on that computer is asked to update, and has its app look for the new version', async () => {
   const configure = (config) => (fs.mkdirSync(`${tmp}/app`, { recursive: true }), fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify(config)))
   // A stand-in for the project's releases, offering at first only the version the app already is.
   const own = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8')).version
@@ -2230,9 +2230,10 @@ test('updates from another computer: the server inside the app on that computer 
     await showsBot(win, 'Kumi')
     await win.evaluate(() => (location.hash = '/settings/about'))
     const row = win.locator('#server-update', { hasText: 'Mini' })
-    await row.locator('p', { hasText: 'It is part of the desktop app on that computer. Updating it updates that app, which restarts' }).waitFor()
+    await row.locator('p', { hasText: 'It is part of the desktop app on that computer. Updating it has that app restart into the new version once no bot there is working.' }).waitFor()
 
-    // A new version comes out. Asked from here, the app there looks for it and fetches it, and its server reports that as its own.
+    // A new version comes out. Asked from here, the app there looks for it, and its server reports what it finds as its own.
+    // (Run from the repository, the app goes no further than finding it: it has no installer of its own to download for.)
     offered = '9.9.9'
     const looked = asked.length
     await row.getByRole('button', { name: /^(Check for updates|Update)$/ }).click()

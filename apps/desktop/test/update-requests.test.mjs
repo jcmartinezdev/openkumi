@@ -75,8 +75,24 @@ test('bots at work in any of the servers hold the restart off until they are don
   assert.equal(it.said.a.filter((m) => m.type === 'app-update').at(-1).elsewhere, 1)
   assert.equal(it.said.b.filter((m) => m.type === 'app-update').at(-1).elsewhere, 2)
   it.working('a', 0)
+  await wait(150)
   assert.equal(it.restarts.length, 0)
   it.working('b', 0)
+  await wait(150)
+  assert.equal(it.restarts.length, 1)
+})
+
+test('a bot that is done and hands on to another at once (a report, an automation’s result) is not taken for none at work', async () => {
+  const it = app('ready')
+  it.working('a', 1)
+  await it.ask('a')
+  // The count goes through 0 on the way from one to the next.
+  it.working('a', 0)
+  it.working('a', 1)
+  await wait(150)
+  assert.equal(it.restarts.length, 0)
+  it.working('a', 0)
+  await wait(150)
   assert.equal(it.restarts.length, 1)
 })
 

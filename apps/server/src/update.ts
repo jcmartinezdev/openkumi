@@ -328,6 +328,7 @@ function fromApp(): ServerUpdate {
  * with where it has got to: what happens after reaches whoever asked as `update` events.
  */
 async function askApp(now: boolean): Promise<ServerUpdate> {
+  if (!app) throw new Error('OpenKumi on that computer has only just started. Try again in a moment.')
   if (!fromApp().updatable) throw new Error(WHY_NOT.app)
   const id = ++asked
   await new Promise<void>((resolve) => {
@@ -340,12 +341,19 @@ async function askApp(now: boolean): Promise<ServerUpdate> {
 
 /** Hears what the app says, and tells it how many bots are at work here whenever that changes. */
 function listenToApp() {
+  /** What the apps connected here were told last. */
+  let shown = ''
+  const show = () => {
+    const now = fromApp()
+    if (JSON.stringify(now) === shown) return
+    shown = JSON.stringify(now)
+    emit({ type: 'update', update: now })
+  }
   APP!.on('message', ({ data }) => {
     if (data?.type === 'updated') return waiting.get(data.id)?.()
     if (data?.type !== 'app-update') return
-    const before = JSON.stringify(fromApp())
     app = data
-    if (JSON.stringify(fromApp()) !== before) emit({ type: 'update', update: fromApp() })
+    show()
   })
   let said = -1
   const tell = () => {
@@ -353,6 +361,7 @@ function listenToApp() {
     if (now === said) return
     said = now
     APP!.postMessage({ type: 'working', working: now })
+    show()
   }
   tell()
   onEvent((event) => event.type !== 'update' && tell())

@@ -74,6 +74,14 @@ function listen(child: UtilityProcess) {
 export const runningHere = (): UtilityProcess[] => [...(local.child ? [local.child] : []), ...[...others.values()].map((other) => other.child)]
 /** How many bots are at work in a server this app runs, as it said last. */
 export const workingIn = (child: UtilityProcess) => counts.get(child) ?? 0
+/**
+ * How many bots are at work in the servers this app runs, everyone's: what quitting the app would
+ * cut off. Null while one of them has not said yet, which is not the same as none.
+ */
+export function workingInApp(): number | null {
+  const all = runningHere()
+  return all.some((child) => !counts.has(child)) ? null : all.reduce((sum, child) => sum + workingIn(child), 0)
+}
 /** Tells a server this app runs something. One that has just ended is not there to tell. */
 export function tell(child: UtilityProcess, message: ToServer) {
   try {
@@ -372,8 +380,6 @@ const others = new Map<string, Other>()
 
 /** Whether this app runs any server at the moment, or is about to: what quitting has to stop first. */
 export const managing = () => !!local.child || others.size > 0 || !!starting
-/** The servers of the other people here that this app runs: known from when each was started, whatever has become of the first person's since. */
-export const runHere = (): { port: number; home: string }[] => [...others.values()].map(({ port, home }) => ({ port, home }))
 
 /**
  * Starts the server of someone else here, and resolves once it listens. One this app already
