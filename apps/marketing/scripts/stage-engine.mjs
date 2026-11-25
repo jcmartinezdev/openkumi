@@ -99,6 +99,34 @@ async function answer(prompt) {
   if (prompt.includes('<bot_message from="Travel"')) {
     return 'Travel found two, both close to the river: **Hotel Bairro Alto** at €148 a night, by the tram, and **Memmo Príncipe Real** at €156, with a pool and breakfast. Shall I ask it to book the first?'
   }
+  // Inbox needs a choice before it can answer the landlord, so it asks with a card of answers.
+  if (prompt.includes('Answer the landlord')) {
+    await tool('ask_user', {
+      questions: [
+        {
+          header: 'Repair',
+          question: 'When can the engineer come to fix the boiler?',
+          options: [
+            { label: 'Tuesday morning', description: '8:00–12:00, when you work from home' },
+            { label: 'Wednesday after 16:00', description: 'After your last meeting' },
+            { label: 'Saturday, 10:00–13:00', description: 'The landlord said weekends cost extra' },
+          ],
+          multiple: true,
+        },
+        {
+          header: 'Keys',
+          question: 'Can a neighbour let the engineer in if you are out?',
+          options: [{ label: 'No, I’ll be there' }, { label: 'Yes, Ana in 2B', description: 'She has your spare key' }],
+        },
+      ],
+    })
+    return 'I’ll write to the landlord once you’ve picked.'
+  }
+  // Kumi needs a key it does not have, and asks for it in a card that keeps it out of the conversation. Still waiting when the picture is taken.
+  if (prompt.includes('visited my blog')) {
+    await tool('ask_secret', { name: 'plausible', site: 'plausible.io', what: 'Plausible API key', where: 'https://plausible.io/settings/api-keys' })
+    return null
+  }
   const city = /Weekend in (\w+),/.exec(prompt)?.[1]
   if (city) {
     await sleep(Number(CITIES[city][0]))

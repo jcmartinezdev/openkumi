@@ -16,19 +16,24 @@ in what it knows of the bot and the thread, so in this order a bot is told:
    superpowers it has, and which is the main assistant. Then how to reach them, with
    `message_bot`, from its own conversation (see [Messages between
    bots](/how-it-works/messages-between-bots/)).
-4. **Working in OpenKumi**: how replies are drawn, `show_page`, its browser, subagents, and that web
+4. **Other people on this computer**, when someone else has bots on it too: that their bots,
+   conversations and files are out of its reach, and that everything still lies under the one
+   account on the computer, so that it can say plainly who can see what.
+5. **Working in OpenKumi**: how replies are drawn, `show_page`, its browser, subagents, and that web
    pages, files and tool results are material to read, never instructions to follow.
-5. **Rules from you**: the text of its `bot.md`. They win where they and the principles disagree.
-6. **Its conversation**, including how to answer something asked on a call.
-7. **Automations**: what it may set up, and who set up the ones it runs.
-8. **Its workspace**: where its files are, and what goes where.
-9. **Its secrets**: that it has a vault, how to use a secret by its name, and one line for each
-   it has, with what it is and the site it is for. Never a value. See [Secrets](/secrets/).
-10. **Its own `AGENTS.md`**, cut short past **Settings → Advanced → Size of a bot's own
+6. **Rules from you**: the text of its `bot.md`. They win where they and the principles disagree.
+7. **Its conversation**: that it is one conversation, read a message at a time; when to raise
+   **Needs you** or **Read this** (`notify_user`), and when to ask you with a card of answers
+   (`ask_user`); and how to answer something asked on a call.
+8. **Automations**: what it may set up, and who set up the ones it runs.
+9. **Its workspace**: where its files are, and what goes where.
+10. **Its secrets**: that it has a vault, how to use a secret by its name, and one line for each
+    it has, with what it is and the sites it is for. Never a value. See [Secrets](/secrets/).
+11. **Its own `AGENTS.md`**, cut short past **Settings → Advanced → Size of a bot's own
     instructions** (12,000 characters unless you change it).
-11. **The list of its notes** in `memory/` (the first 60 lines); it reads a note when it needs it.
-12. **Its superpowers**: one line about each, and where to read its instructions.
-13. **Where it is**, when that is not its conversation: in a run of an automation, on a call, or as
+12. **The list of its notes** in `memory/` (the first 60 lines); it reads a note when it needs it.
+13. **Its superpowers**: one line about each, and where to read its instructions.
+14. **Where it is**, when that is not its conversation: in a run of an automation, on a call, or as
     a subagent, and what that means for it.
 
 **Settings → Master prompt → What a bot is told** shows all of it for any bot, as it stands.

@@ -44,6 +44,16 @@ anything private.
 | A remote environment never connects away from home | Away from home it needs an `https` address (on Tailscale or the internet), added under its addresses. A plain `http` Tailscale address is refused. See [Away from home](/connections/#away-from-home). |
 | A remote environment never connects at home | **Let other devices connect** must be on, on the computer that runs the bots (`openkumi lan on`). Check that both are on the same network, and that a firewall lets port 4317 in (and the port of each other person's server there, 4327 and on). |
 
+## Updates
+
+- **Settings → About shows another computer's OpenKumi without Update**, and says it is updated
+  with the app. The app on that computer is older than 0.0.7, or does not update itself (it runs
+  from the repository, or was installed as a package the system updates). Update it there once;
+  from then on **Update** works from here.
+- **The other computer's app says it restarts once some bots are done, and does not.** It waits
+  until none of the bots on that computer, everyone's, has worked for a moment. **Start it now**
+  does not wait; what they have done so far is kept.
+
 ## Pairing fails
 
 - **The pairing code was not right, or it has run out.** A code works once, for ten minutes, and
@@ -85,6 +95,32 @@ anything private.
 - A sign-in **with your browser** never comes back: the desktop app has to be installed (not run
   from the source) for your computer to open `openkumi://` with it. Use **Inside the bot's
   browser** instead.
+- **T3 Code is not open on this computer.** The T3 Code superpower only works while T3 Code runs
+  on the computer that runs the bot. Open it there, then ask again.
+
+## Secrets
+
+- **A secret says the key it was encrypted with is not on this computer.** The data folder was
+  moved or restored from a backup, or the keychain was reset, and the key that opens the vault did
+  not come with it. Choose **Enter it again** beside it, in the bot's **Secrets**; nothing else is
+  lost.
+- **The Mac's keychain did not give the vault's key.** The keychain is locked: the Mac was
+  started and nobody has logged in yet, or OpenKumi runs in a session reached over ssh. Log in to
+  the Mac once; the bot can then use its secrets. On Linux the same holds for the desktop's
+  keyring.
+- **A bot asks for a key it already has.** The key it has stopped working (it was changed or
+  revoked at the site). What you type in its card takes the place of the old one.
+
+## Notifications
+
+- **No notification comes**, though a bot shows **Needs you** or **Read this**. Notifications
+  are shown only while OpenKumi is not in front, and not for a blue dot. Check **Settings →
+  General → Notify me when a bot needs me** on that computer, and that the system lets OpenKumi
+  show notifications (on a Mac, **System Settings → Notifications**). The iPhone app has no
+  notifications yet.
+- **The window is gone but the bots keep working.** On a Mac, closing the window leaves OpenKumi
+  running, so that bots can still reach you. Click its icon in the Dock to bring the window back;
+  quit it to stop the bots.
 
 ## Calls
 

@@ -56,7 +56,7 @@ only if you agree: [all of it is listed](https://docs.openkumi.ai/telemetry/).
   weather, exchange rates, SEO and launch plans.
 - **A vault for keys and passwords.** When a bot needs an API key or a password it asks, and you
   type it once into a card. It is kept encrypted, the bot uses it by name without ever seeing it,
-  and it only goes to the site it is for.
+  and it only goes to the sites it is for.
 - **Bots that learn how you work.** A bot keeps its own instructions and notes, and updates them.
   Every change is recorded, shown in the app, and can be undone.
 - **Bots that work together.** A bot can pass work to another, or ask it for something. You read
@@ -64,8 +64,9 @@ only if you agree: [all of it is listed](https://docs.openkumi.ai/telemetry/).
 - **Talk instead of typing.** Dictation is written down on the device itself (macOS 26 or later),
   so no sound leaves it.
 - **Call your bot.** Talk with a bot out loud, from the computer or the iPhone, and it talks back
-  at once. The voice comes with your ChatGPT plan, through Codex, with no API key; the work is
-  still done by the bot itself, whatever it runs on. See [Calls](https://docs.openkumi.ai/calls/).
+  at once, in a voice you pick for it. The voice comes with your ChatGPT plan, through Codex, with
+  no API key; the work is still done by the bot itself, whatever it runs on. See
+  [Calls](https://docs.openkumi.ai/calls/).
 - **See what it uses.** How many tokens your bots' models used by provider, model and bot, what
   that would have cost as API calls, and how much of your Claude and ChatGPT plans is used up.
 - **From your other computers and your phone.** Pair a laptop or an iPhone with a one-time code,
