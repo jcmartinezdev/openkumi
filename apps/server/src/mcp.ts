@@ -419,8 +419,9 @@ async function drop(botId: string, id: string) {
 
 /** A service stopped answering on connection `from`: the app shows why, and it is connected again when next needed. */
 async function gone(botId: string, id: string, e: unknown, from: Live) {
-  // Unless a newer connection has already taken its place.
-  if ((await live.get(key(botId, id))?.catch(() => undefined)) !== from) return
+  // Unless a newer connection has already taken its place, also while this waited.
+  const entry = live.get(key(botId, id))
+  if ((await entry?.catch(() => undefined)) !== from || live.get(key(botId, id)) !== entry) return
   await drop(botId, id)
   setStatus(botId, id, { state: 'error', tools: 0, error: unreachable(needService(id), e) })
 }
