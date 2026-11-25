@@ -68,6 +68,8 @@ export function Questions({ bot, thread, connected, keyboard, onError }: { bot: 
         accessibilityLabel="An answer of your own"
         style={[styles.own, { color: theme.text, backgroundColor: theme.raised, borderColor: theme.border }]}
         value={reply.written}
+        // Writing instead, right after choosing, stays on this question.
+        onFocus={() => clearTimeout(onward.current)}
         onChangeText={answering.write}
         placeholder={!question.options.length ? 'Your answer' : question.multiple ? 'Something else, too…' : 'Something else…'}
         placeholderTextColor={theme.faint}

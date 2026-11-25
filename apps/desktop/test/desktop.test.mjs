@@ -1375,14 +1375,17 @@ test('what a bot has for its owner: a mark beside each bot, gone once its conver
   await card.getByRole('checkbox', { name: 'Meal' }).click()
   await card.locator('.question-own').fill('A vegetarian one')
   await shot('questions-any-that-fit')
-  await card.getByRole('button', { name: 'Next' }).click()
+  // Enter in the field goes on, and leaves the keyboard in the next question's field.
+  await card.locator('.question-own').press('Enter')
   // One with nothing to choose from is written, or left out: what was answered before is kept, and enough to send.
   await card.locator('.question-text', { hasText: 'Who travels with you?' }).waitFor()
   assert.equal(await card.locator('.question-option').count(), 0)
+  assert.equal(await card.locator('.question-own').evaluate((field) => field === document.activeElement && field.value === ''), true)
   await card.getByRole('button', { name: 'Back' }).click()
   assert.equal(await card.getByRole('checkbox', { name: 'Meal' }).getAttribute('aria-checked'), 'true')
   assert.equal(await card.locator('.question-own').inputValue(), 'A vegetarian one')
   await card.getByRole('button', { name: 'Next' }).click()
+  await card.locator('.question-text', { hasText: 'Who travels with you?' }).waitFor()
   await sendAnswers.click()
   // The answers are a message from the owner: the card and the mark go, and the bot goes on with them.
   await card.waitFor({ state: 'detached' })

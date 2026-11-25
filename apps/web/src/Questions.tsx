@@ -18,6 +18,14 @@ export function Questions({ bot, thread, connected, setError }: { bot: Bot; thre
   // Going on to the next question by itself, a moment after one answer was chosen, so that the choice is seen.
   const onward = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(onward.current), [])
+  // Going on with Enter from the field for an answer of one's own leaves the keyboard in the next question's field.
+  const own = useRef<HTMLInputElement>(null)
+  const typing = useRef(false)
+  const shown = answering?.at
+  useEffect(() => {
+    if (typing.current) own.current?.focus()
+    typing.current = false
+  }, [shown])
   if (!answering) return null
   const { at, question, reply, last } = answering
   const several = questions.length > 1
@@ -64,16 +72,20 @@ export function Questions({ bot, thread, connected, setError }: { bot: Bot; thre
       <input
         // A field of its own for each question, so that one's words are never left in the next.
         key={at}
+        ref={own}
         className="question-own"
         value={reply.written}
         placeholder={!question.options.length ? 'Your answer' : question.multiple ? 'Something else, too…' : 'Something else…'}
         aria-label="An answer of your own"
+        // Writing instead, right after choosing, stays on this question.
+        onFocus={() => clearTimeout(onward.current)}
         onChange={(e) => answering.write(e.target.value)}
         onKeyDown={(e) => {
           if (e.key !== 'Enter' || e.nativeEvent.isComposing) return
           e.preventDefault()
-          if (last) send()
-          else go(at + 1)
+          if (last) return send()
+          typing.current = true
+          go(at + 1)
         }}
       />
       <div className="questions-foot">
