@@ -60,6 +60,16 @@ The same holds between the people with bots on one computer
 bots are kept apart in the app, but all their servers run under the one account, and their folders
 lie side by side in `~/.openkumi/people/`.
 
+## A bot's secrets are encrypted, the rest is not
+
+What a bot keeps in its [vault](/secrets/) is encrypted, with a key that is kept outside the data
+folder: in the Mac's keychain, by Windows for your account, in a Linux desktop's keyring, or
+otherwise in a file under `~/.config/openkumi/keys/`. A copy of the data folder cannot be read
+without it. A program that runs under your account can still ask for the key, as OpenKumi does.
+
+Nothing else in the folder is encrypted yet: not the sign-ins of superpowers, the access code or
+an API key in `auth.json`, nor the conversations.
+
 ## Keys on the desktop are in a file, not the keychain
 
 The desktop app keeps the keys of remote environments in `desktop.json`, readable only by your

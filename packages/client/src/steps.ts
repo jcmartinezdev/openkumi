@@ -20,14 +20,17 @@ export function describe(call: { name: string; arguments: string }): string {
     case 'browser_navigate': return `Open ${site(a.url)}`
     case 'browser_snapshot': return 'Look at the page'
     case 'browser_click': return 'Click on the page'
-    case 'browser_type': return `Type “${String(a.text ?? '').slice(0, 60)}”`
+    case 'browser_type': return a.secret ? `Type the secret “${a.secret}”` : `Type “${String(a.text ?? '').slice(0, 60)}”`
     case 'browser_select': return `Select “${a.option ?? ''}”`
     case 'browser_press_key': return `Press ${a.key ?? ''}`
     case 'browser_scroll': return `Scroll ${a.direction ?? ''}`
     case 'browser_back': return 'Go back'
     case 'browser_read': return 'Read the page'
     case 'browser_eval': return 'Run a script in the page'
-    case 'web_fetch': return `Fetch ${site(a.url)}`
+    // An address may name a secret where its value goes; what is said of it stops before that.
+    case 'web_fetch': return `${a.method && a.method !== 'GET' ? 'Send to' : 'Fetch'} ${site(String(a.url ?? '').split(/[?#]/)[0])}`
+    case 'ask_secret': return `Ask for ${a.what || 'a secret'}`
+    case 'save_secret': return a.value ? `Keep ${a.what || 'a secret'} in its vault` : `Make up a password for ${a.site ?? 'a site'}`
     case 'spawn_subagent': return `Start subagent “${a.name ?? ''}”`
     case 'wait_subagents': return 'Wait for subagents'
     case 'list_subagents': return 'Check on subagents'

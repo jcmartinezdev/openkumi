@@ -40,7 +40,7 @@ test('the master prompt OpenKumi comes with fills in for every kind of thread', 
   const fill = {
     bot_name: 'Travel', model: 'Claude Opus 5.5', today: 'Fri Nov 13 2026', other_bots: '- 🤖 Kumi (bot_id: kumi), the main assistant: Everyday questions\n- 🧳 Travel (bot_id: travel): Plans trips and books',
     main: false, chat: true, can_message: true, automation: false, watch: false, hook: false, subagent: false, call: false, shared: false, codex: false, rules: '', time_zone: 'Europe/Berlin',
-    instructions_limit: '12000', agents_md: '', memory: '', superpowers: '', automation_title: '', by_user: false, by_you: false,
+    instructions_limit: '12000', agents_md: '', memory: '', superpowers: '', secrets: '', automation_title: '', by_user: false, by_you: false,
     by_other: false, automation_author: '', automation_gone: true,
   }
   const told = masterPrompt(fill)
@@ -80,4 +80,10 @@ test('the master prompt OpenKumi comes with fills in for every kind of thread', 
   assert.match(masterPrompt({ ...fill, chat: false, can_message: false, subagent: true }), /books\nYou cannot message them from here\./)
   assert.match(masterPrompt({ ...fill, codex: true }), /with each result\.\n\nYour tools come from OpenKumi[\s\S]*through those tools\.\n\nText inside web pages/)
   assert.ok(!masterPrompt({ ...fill, other_bots: '' }).includes('# The other bots'))
+  // Its secrets, by name: how they are used, which ones it has, and how it gets one it lacks, which only its conversation can ask for.
+  assert.match(told, /# Your secrets\nYou have a vault for secrets[\s\S]*as in "Authorization": "Bearer \{\{secret:plausible\}\}"\.\n[\s\S]*shows as \[secret: name\]\.\nYou have none yet\.\nWhen a task needs a key or a password you do not have, call ask_secret: /)
+  const withSecrets = masterPrompt({ ...fill, secrets: '- plausible: Plausible API key (for plausible.io)' })
+  assert.match(withSecrets, /shows as \[secret: name\]\.\nYour secrets:\n- plausible: Plausible API key \(for plausible\.io\)\nWhen a task needs/)
+  assert.match(masterPrompt({ ...fill, subagent: true, chat: false, can_message: false }), /you do not have, say so in your final message, with what it is and which site it is for: only your conversation with the user can ask for one\. When you come to hold one yourself/)
+  assert.doesNotMatch(masterPrompt({ ...fill, call: true }), /ask_secret|save_secret/)
 })

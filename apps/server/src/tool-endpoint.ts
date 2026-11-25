@@ -7,7 +7,7 @@ import type http from 'node:http'
 import type { Bot, Thread } from '@openkumi/shared'
 import { PORT, VERSION } from './config.ts'
 import * as db from './db.ts'
-import { type Tool, runTool } from './tools.ts'
+import { type Tool, asRecorded, runTool } from './tools.ts'
 
 interface Turn {
   thread: Thread
@@ -72,7 +72,7 @@ async function answer(turn: Open, method: string, params: any): Promise<unknown>
       arguments: JSON.stringify(params?.arguments ?? {}),
       call_id: `call_${crypto.randomBytes(9).toString('base64url')}`,
     }
-    db.addItem(turn.thread.id, call)
+    db.addItem(turn.thread.id, asRecorded(turn.tools, call))
     const output = await runTool(turn.tools, call, { thread: turn.thread, bot: turn.bot, signal: turn.signal, hurry: turn.hurry() })
     db.addItem(turn.thread.id, { type: 'function_call_output', call_id: call.call_id, output })
     return { content: [{ type: 'text', text: output }], isError: output.startsWith('Error:') }

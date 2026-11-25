@@ -46,7 +46,7 @@ export const SEARCH: { page: PageId; id: string; title: string; also?: string; s
   { page: 'providers', id: 'provider-local', sub: 'local', title: 'Local models', also: 'ollama lm studio offline private free' },
   { page: 'providers', id: 'provider-claude-code', sub: 'claude-code', title: 'Claude Code', also: 'anthropic claude plan program path sign in' },
   { page: 'providers', id: 'provider-openai-compatible', sub: 'openai-compatible', title: 'Other models', also: 'api key base url ollama openrouter' },
-  { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot workspace files memory instructions agents.md changes history' },
+  { page: 'bots', id: 'bots', title: 'Bots', also: 'rules model delete new bot workspace files memory instructions agents.md changes history secrets vault api keys passwords tokens' },
   { page: 'bots', id: 'bot-messages', title: 'Bots can message each other', also: 'messages between bots talk work together pass hand over' },
   { page: 'prompt', id: 'team', title: 'What each bot is for', also: 'description team hand over handoff delegate other bots' },
   { page: 'prompt', id: 'told', title: 'What a bot is told', also: 'master prompt system prompt principles instructions behaviour behavior all bots preview read' },

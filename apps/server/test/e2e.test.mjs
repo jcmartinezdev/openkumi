@@ -784,7 +784,9 @@ test('master prompt: every bot is told the one OpenKumi comes with, filled in, a
   // In the file's order, with its comment left out and every part filled in.
   const at = ['# Principles', '# The other bots', '# Working in OpenKumi', '# Your conversation', '# Automations', '# Your workspace', '# Your instructions (AGENTS.md)', '# Your notes (memory/)'].map((h) => prompt.indexOf(`\n${h}\n`))
   assert.ok(at.every((n, i) => n > 0 && (i === 0 || n > at[i - 1])), `in order: ${at}`)
-  assert.ok(!/\{\{|<!--|\n\n\n/.test(prompt), 'no tag, comment or run of empty lines is left')
+  // {{secret:name}} is no tag of the file's: it is how a bot is told to name a secret in a request.
+  assert.ok(!/\{\{[#^/]?\w+\}\}|<!--|\n\n\n/.test(prompt), 'no tag, comment or run of empty lines is left')
+  assert.match(prompt, /# Your secrets\nYou have a vault for secrets[\s\S]*write \{\{secret:name\}\} where the value goes[\s\S]*\nYou have none yet\.\n/)
   assert.ok(!prompt.includes('# You are running'), 'a conversation is neither a run of an automation nor a subagent')
 
   // It is the same for every bot, and there is nothing to change it with.
@@ -1259,6 +1261,9 @@ test('superpowers: an app on this computer that refuses the desktop app’s way 
       await api('POST', `/api/bots/${bot.id}/superpowers/check`)
       await until(async () => (await state())?.state === 'needs-login', 10_000)
       assert.equal(moved.seen.registered, 0)
+      // The window of the sign-in before closes by itself a moment after it is done. Nobody signs in again in that
+      // instant, but a test does: started in a window on its way out, the sign-in would never come back.
+      await until(async () => !(await api('GET', '/api/state')).browsers[bot.id]?.windows.some((w) => w.threadId?.startsWith('sign-in:')))
       await api('POST', `/api/bots/${bot.id}/superpowers/mill/login`, { via: 'bot' })
       await until(async () => moved.seen.tokens === 1 && (await state())?.state === 'connected', 20_000)
       assert.equal(moved.seen.registered, 1, 'registered anew at the new address')

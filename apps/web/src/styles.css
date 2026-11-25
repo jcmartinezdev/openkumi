@@ -411,6 +411,17 @@ summary.report-title { cursor: pointer; }
 summary.report-title:hover > .ic, details[open] > summary.report-title > .ic { opacity: 0.7; }
 details[open] > summary.report-title > .ic { transform: rotate(90deg); }
 .report-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+/* A bot asking for a secret: a card like a report, with a field in it while the bot waits. */
+.msg.secret-card { padding: 8px 14px 10px; border-radius: 14px; border: 1px solid var(--border); }
+.msg.secret-card.waiting { padding-bottom: 14px; border-color: var(--border-strong); }
+.secret-head { display: flex; align-items: center; gap: 6px; height: 24px; margin-bottom: 2px; color: var(--faint); }
+.secret-head .eyebrow { margin: 0; color: inherit; }
+.secret-what { font-weight: 600; }
+.secret-card p { margin: 4px 0 12px; font-size: 13px; line-height: 1.5; color: var(--muted); text-wrap: pretty; }
+.secret-card p strong { color: var(--text); font-weight: 600; }
+.secret-entry { display: flex; flex-wrap: wrap; gap: 8px; }
+.secret-entry input { flex: 1 1 220px; min-width: 0; height: 32px; padding: 0 10px; font-size: 13px; }
+.secret-card small.err { display: block; margin-top: 8px; }
 /* What waits for the bot, under what it is doing now. */
 .waiting { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 12px; border: 1px dashed var(--border-strong); border-radius: 14px; }
 .waiting-head { display: flex; align-items: center; gap: 10px; min-height: 28px; }
@@ -1396,6 +1407,15 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .hook-steps li button { height: 24px; padding: 0 8px; font-size: 12px; vertical-align: middle; }
 .hook-address { overflow-wrap: anywhere; color: var(--text); }
 .hook-secret { display: flex; gap: 8px; flex-wrap: wrap; }
+/* A bot's secrets in its settings: the fields of one, and its value when its owner asks to see it. */
+.secret-form { display: grid; gap: 12px; max-width: 420px; margin-top: 12px; }
+.secret-form label { display: grid; gap: 5px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.secret-form label small { font-weight: 400; color: var(--faint); }
+.secret-form .set-input { width: 100%; }
+.secret-form-actions { display: flex; gap: 8px; }
+.secret-value { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.secret-value code { padding: 5px 9px; border-radius: 7px; background: var(--hover); overflow-wrap: anywhere; user-select: all; }
+.secret-value button { height: 28px; padding: 0 9px; font-size: 12px; }
 .skill-files { display: flex; flex-wrap: wrap; gap: 4px; }
 .skill-files .file-row { width: auto; max-width: 100%; padding: 0 10px; border: 1px solid var(--border); }
 .skill-view { min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); overflow: hidden; }

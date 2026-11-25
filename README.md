@@ -54,6 +54,9 @@ only if you agree: [all of it is listed](https://docs.openkumi.ai/telemetry/).
 - **Superpowers.** Switch on, for one bot at a time, what it can do beyond chatting and browsing:
   work in Notion, Linear, Jira, Todoist and some twenty other apps, or know-how such as the
   weather, exchange rates, SEO and launch plans.
+- **A vault for keys and passwords.** When a bot needs an API key or a password it asks, and you
+  type it once into a card. It is kept encrypted, the bot uses it by name without ever seeing it,
+  and it only goes to the site it is for.
 - **Bots that learn how you work.** A bot keeps its own instructions and notes, and updates them.
   Every change is recorded, shown in the app, and can be undone.
 - **Bots that work together.** A bot can pass work to another, or ask it for something. You read

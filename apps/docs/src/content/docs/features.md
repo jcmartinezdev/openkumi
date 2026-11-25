@@ -36,6 +36,9 @@ that stays logged in.
   until you **Take control**: then the page is yours to use, from the computer or the phone, and
   the bot can only read it until you **Hand back**. A bot that needs you for a sign-in or a CAPTCHA
   asks, and waits. See [A bot's browser](/using/browser/).
+- **A vault for keys and passwords.** When a bot needs an API key or a password, it asks in a card
+  and you type it once. It is kept encrypted, the bot uses it by name without ever seeing it, and
+  it is sent only to the site it is for. See [Secrets](/secrets/).
 - **Bots that write their own instructions.** A bot keeps an `AGENTS.md` and a `memory/` folder
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone. See [Making and shaping a bot](/setup/bots/).

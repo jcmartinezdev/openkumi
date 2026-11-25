@@ -136,7 +136,7 @@ export function SwitchRow({ value, onChange, disabled, ...row }: Omit<RowProps, 
  * over as it is typed (`onChange`). One line has its label beside it, as the phone's own forms do;
  * several lines are a box of their own, with the label as the placeholder.
  */
-export function Field({ label, value, placeholder, onCommit, onChange, multiline, required, maxLength, autoCapitalize, keyboardType }: {
+export function Field({ label, value, placeholder, onCommit, onChange, multiline, required, maxLength, autoCapitalize, keyboardType, secure }: {
   label: string
   value: string
   placeholder?: string
@@ -148,6 +148,8 @@ export function Field({ label, value, placeholder, onCommit, onChange, multiline
   maxLength?: number
   autoCapitalize?: 'none' | 'sentences' | 'words'
   keyboardType?: 'default' | 'number-pad' | 'url'
+  /** What is typed is not shown: a password, a key. */
+  secure?: boolean
 }) {
   const theme = useTheme()
   const [typed, setTyped] = useState(value)
@@ -195,6 +197,10 @@ export function Field({ label, value, placeholder, onCommit, onChange, multiline
         autoCapitalize={autoCapitalize}
         autoCorrect={false}
         keyboardType={keyboardType}
+        secureTextEntry={secure}
+        // A bot's key is not a password of the phone's owner: said to be a one-time code, the phone neither offers one of its own nor asks to keep this one in Passwords.
+        textContentType={secure ? 'oneTimeCode' : undefined}
+        autoComplete={secure ? 'off' : undefined}
         returnKeyType="done"
         textAlign="right"
         clearButtonMode="while-editing"

@@ -135,6 +135,36 @@ export interface Hook {
   refusedAt: number | null
 }
 
+/** Where the key that a person's secrets are encrypted with is kept: the Mac's keychain, the Linux desktop's keyring, Windows' protection for the account, or a file only the account can read. */
+export type VaultKeeper = 'keychain' | 'keyring' | 'windows' | 'file'
+
+/**
+ * A secret in a bot's vault (an API key, a password, a token), as the apps are shown it: never
+ * its value. The bot uses it by name and does not see the value either; the server puts it in as
+ * a request leaves, and only to the sites the secret is for.
+ */
+export interface Secret {
+  name: string
+  /** What it is, in a few words: "Plausible API key". */
+  what: string
+  /** The sites it may be sent to: each a host, with its port when that is not the usual one. */
+  sites: string[]
+  /** Who put it there: the owner, or the bot itself (a key a page showed it, a password it had made up). */
+  by: 'owner' | 'bot'
+  createdAt: number
+  /** When its value was last given. */
+  changedAt: number
+  usedAt: number | null
+  /** Why it cannot be read right now, when it cannot: its key is not on this computer, or cannot be had. */
+  problem?: string
+}
+
+/** A bot's secrets, and where the key they are encrypted with is kept (null before the first one). */
+export interface Secrets {
+  secrets: Secret[]
+  kept: VaultKeeper | null
+}
+
 /** How a bot's connection to a superpower's service stands. */
 export interface SuperpowerStatus {
   state: 'connecting' | 'connected' | 'needs-login' | 'error'
@@ -286,6 +316,11 @@ export interface Thread {
   readTo?: number
   /** A bot's conversation: what the bot raised to reach its owner, until that is dealt with. */
   flag?: Flag | null
+  /**
+   * How often something that was already in the thread was rewritten (a secret taken out of it).
+   * An app that holds items of the thread from before a rewrite fetches them afresh. Missing from older servers.
+   */
+  rewrites?: number
   createdAt: number
   updatedAt: number
 }
@@ -772,6 +807,8 @@ export type ServerEvent =
   | { type: 'hook.upsert'; hook: Hook }
   | { type: 'hook.delete'; id: string }
   | { type: 'item.add'; item: Item }
+  /** Something already in a conversation was rewritten: a secret that had been written out in it was taken out. */
+  | { type: 'item.change'; item: Item }
   /** A message began to wait for a bot, or one that waits changed. */
   | { type: 'queue.upsert'; message: Queued }
   /** A waiting message went into its conversation, or was taken back. */
@@ -788,6 +825,8 @@ export type ServerEvent =
   | { type: 'superpowers'; superpowers: Superpower[]; categories: string[] }
   | { type: 'superpower.status'; botId: string; id: string; status: SuperpowerStatus | null }
   | { type: 'files.changed'; botId: string }
+  /** A bot's secrets changed: one was added, replaced or removed. */
+  | { type: 'secrets.changed'; botId: string }
   | { type: 'browser.state'; botId: string; state: BrowserState }
 
 /** Another computer that was paired with this server and may use it. */

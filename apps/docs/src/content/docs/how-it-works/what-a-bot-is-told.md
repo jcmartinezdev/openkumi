@@ -22,11 +22,13 @@ in what it knows of the bot and the thread, so in this order a bot is told:
 6. **Its conversation**, including how to answer something asked on a call.
 7. **Automations**: what it may set up, and who set up the ones it runs.
 8. **Its workspace**: where its files are, and what goes where.
-9. **Its own `AGENTS.md`**, cut short past **Settings → Advanced → Size of a bot's own
-   instructions** (12,000 characters unless you change it).
-10. **The list of its notes** in `memory/` (the first 60 lines); it reads a note when it needs it.
-11. **Its superpowers**: one line about each, and where to read its instructions.
-12. **Where it is**, when that is not its conversation: in a run of an automation, on a call, or as
+9. **Its secrets**: that it has a vault, how to use a secret by its name, and one line for each
+   it has, with what it is and the site it is for. Never a value. See [Secrets](/secrets/).
+10. **Its own `AGENTS.md`**, cut short past **Settings → Advanced → Size of a bot's own
+    instructions** (12,000 characters unless you change it).
+11. **The list of its notes** in `memory/` (the first 60 lines); it reads a note when it needs it.
+12. **Its superpowers**: one line about each, and where to read its instructions.
+13. **Where it is**, when that is not its conversation: in a run of an automation, on a call, or as
     a subagent, and what that means for it.
 
 **Settings → Master prompt → What a bot is told** shows all of it for any bot, as it stands.

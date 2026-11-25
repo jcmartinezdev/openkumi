@@ -1,6 +1,7 @@
 // One bot's settings, as pages inside Settings. Each tab only reads and writes the bot's folder on
-// the server: the owner's settings (Bot), what more the bot may do (Superpowers) and what the bot
-// itself keeps (Workspace: its instructions, its memory and its working files).
+// the server: the owner's settings (Bot), what more the bot may do (Superpowers), the keys and
+// passwords it works with (Secrets) and what the bot itself keeps (Workspace: its instructions,
+// its memory and its working files).
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Bot, Effort, FileEntry, HistoryEntry, Look } from '@openkumi/shared'
 import { Icon } from './Icon'
@@ -16,11 +17,13 @@ import { FileLinks, Markdown } from './Markdown'
 import { Mascot } from './Mascot'
 import { Field, Page, Pick, Row, Section, Switch, onServer } from './settingsUi'
 import { api, download, openAutomations, openSettings, request, useChanges, useFiles, useStore } from './store'
+import { useSecrets } from '@openkumi/client/secrets'
+import { Secrets } from './Secrets'
 import { SuperpowerCatalog, SuperpowerPage } from './Superpowers'
 import { VoiceControl, VoicePage } from './Voices'
 
-export type BotTab = 'bot' | 'superpowers' | 'workspace'
-export const TABS: [BotTab, string][] = [['bot', 'Bot'], ['superpowers', 'Superpowers'], ['workspace', 'Workspace']]
+export type BotTab = 'bot' | 'superpowers' | 'secrets' | 'workspace'
+export const TABS: [BotTab, string][] = [['bot', 'Bot'], ['superpowers', 'Superpowers'], ['secrets', 'Secrets'], ['workspace', 'Workspace']]
 
 const workspaceLink = (botId: string, path = '') => `#/settings/bots/${encodeURIComponent(botId)}/workspace${path ? `/${path.split('/').map(encodeURIComponent).join('/')}` : ''}`
 
@@ -69,8 +72,9 @@ export function BotPage({ botId, tab, file, power, voice }: { botId: string; tab
   useEffect(() => {
     if (!bot) openSettings('bots')
   }, [bot])
+  const secrets = useSecrets(botId).data?.secrets.length
   if (!bot) return null
-  const counts: Partial<Record<BotTab, number>> = { superpowers: bot.superpowers.length }
+  const counts: Partial<Record<BotTab, number>> = { superpowers: bot.superpowers.length, secrets }
   return (
     <>
       <div className="tabbar" role="tablist">
@@ -83,6 +87,7 @@ export function BotPage({ botId, tab, file, power, voice }: { botId: string; tab
       </div>
       {tab === 'bot' && (voice ? <VoicePage bot={bot} /> : <General bot={bot} />)}
       {tab === 'superpowers' && (power ? <SuperpowerPage id={power} bot={bot} /> : <SuperpowerCatalog bot={bot} />)}
+      {tab === 'secrets' && <Secrets bot={bot} />}
       {tab === 'workspace' && <Workspace key={file} bot={bot} initial={file} />}
     </>
   )

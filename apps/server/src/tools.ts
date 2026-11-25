@@ -1,4 +1,5 @@
 // Function tools the model can call. Each returns a string that goes back to the model.
+import crypto from 'node:crypto'
 import type { Bot, ItemData, Thread } from '@openkumi/shared'
 import * as agent from './agent.ts'
 import { createBot, getBot, listBots, updateBot } from './bots.ts'
@@ -10,6 +11,7 @@ import { serviceTools, superpowerOfTool } from './mcp.ts'
 import { track, whereOf } from './telemetry.ts'
 import * as db from './db.ts'
 import { PAGE_GUIDE, makePage } from './pages.ts'
+import * as secrets from './secrets.ts'
 import * as automations from './automations.ts'
 import { htmlText } from './watch.ts'
 import * as ws from './workspace.ts'
@@ -20,12 +22,16 @@ export interface ToolContext {
   signal: AbortSignal
   /** Fires when the owner wants the bot to read a message now: a tool that is only waiting gives way to it. */
   hurry: AbortSignal
+  /** The call being carried out, as it is in the conversation: what the owner answers there (a secret typed into its card) finds the tool by it. */
+  callId?: string
 }
 
 export interface Tool {
   name: string
   description: string
   parameters: Record<string, unknown>
+  /** Arguments that are not written into the conversation with the call: a value on its way into the vault. */
+  hidden?: string[]
   run(args: Record<string, any>, ctx: ToolContext): Promise<string> | string
 }
 
@@ -48,6 +54,18 @@ async function page(ctx: ToolContext, { leaving = false, reading = false } = {})
   if (!leaving && !isWebPage(tab.url())) throw new Error('This tab is not showing a web page, so it cannot be read. Open a web address with browser_navigate.')
   return tab
 }
+
+/**
+ * A script of a bot's, made to run only in a page of the site that was checked: where it stops
+ * otherwise, with `word`, before anything of the bot's has run. The line in front calls nothing
+ * and makes nothing: whatever the script declares further down (a function named Error, say)
+ * exists by then, but only what is called is run. And `location` cannot be given another meaning
+ * by a script: declaring it stops the whole script before its first line.
+ */
+/** Among the sites a window's scripts ran on: all of them. No host is written like this. */
+const EVERY_SITE = '*'
+
+export const onlyOn = (host: string, script: string, word: string) => `if (location.host !== ${JSON.stringify(host)}) throw ${JSON.stringify(word)};\n${script}`
 
 /** How long browser_ask_user waits for the owner: less than the half hour Claude Code, Codex and Grok wait for a tool. */
 const ASK_TIMEOUT = 25 * 60_000
@@ -685,24 +703,71 @@ const browserTools: Tool[] = withNews([
   },
   {
     name: 'browser_type',
-    description: 'Replace the contents of an input, textarea or editable element. Set submit to press Enter afterwards.',
+    description:
+      'Replace the contents of an input, textarea or editable element. Set submit to press Enter afterwards. ' +
+      'For a password or a key, give secret instead of text: the name of one of your secrets, which is typed without you seeing it.',
     parameters: params(
       {
         ref: { type: 'number', description: 'Element ref from the latest snapshot' },
         text: str('Text to enter'),
+        secret: str('Instead of text: the name of one of your secrets. Its value is typed for you, and only into a page of the site the secret is for.'),
         submit: { type: 'boolean', description: 'Press Enter after typing' },
       },
-      ['ref', 'text'],
+      ['ref'],
     ),
     run: async (a, ctx) => {
       const p = await page(ctx)
       const el = byRef(p, a.ref)
-      await el.fill(String(a.text), { timeout: 8000 }).catch(async () => {
-        await el.click({ timeout: 8000 })
-        await p.keyboard.type(String(a.text))
-      })
-      if (!a.submit) return 'Typed.'
-      await el.press('Enter')
+      const bySecret = a.secret != null && a.secret !== ''
+      if (bySecret && a.text != null && a.text !== '') throw new Error('Give text or secret, not both.')
+      if (!bySecret && a.text == null) throw new Error('Give the text to type, or the name of a secret.')
+      if (bySecret) {
+        // A secret goes into the very field that was found, in the document whose site was checked. The
+        // field is held on to first: if the page goes elsewhere meanwhile, the field is gone and nothing
+        // is put anywhere. And the value is set in the field itself, not typed at whatever has the
+        // focus: something else on the page (an advertisement in a frame of its own) could take the
+        // focus in the moment between.
+        const field = await el.elementHandle({ timeout: 8000 })
+        const frame = await field.ownerFrame()
+        if (!frame) throw new Error('That field is no longer on the page. Take a new snapshot.')
+        const where = new URL(frame.url())
+        // A script of the bot's that ran on this site in this window may still be there, in this page or in the
+        // one that opened it, and would read what is put in.
+        const marks = browserFor(ctx.bot.id).marks(ctx.thread.id)
+        if (marks.scripted.has(where.host) || marks.scripted.has(EVERY_SITE)) {
+          throw new Error(`You ran a script of your own on ${where.host} in this browser window, or in a page that may belong to it, and it could read what is put into the page. A secret is only typed where no script of yours has run: have a subagent do this step, in a window of its own.`)
+        }
+        const value = await secrets.use(ctx.bot.id, String(a.secret), where)
+        // From here on the window has held this secret on this site, whatever becomes of the secret.
+        marks.secrets.add(where.host)
+        const put = await field
+          .evaluate((el, value) => {
+            const plain = ['text', 'password', 'email', 'search', 'tel', 'url', 'number']
+            if (el instanceof HTMLInputElement && plain.includes(el.type) && !el.disabled && !el.readOnly) Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value)
+            else if (el instanceof HTMLTextAreaElement && !el.disabled && !el.readOnly) Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, value)
+            else if (el instanceof HTMLElement && el.isContentEditable) el.textContent = value
+            else return false
+            // A field that did not take it as it is (one for numbers, given letters) holds something else now, or nothing.
+            if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && el.value !== value) return false
+            el.focus()
+            // As if it had been typed: the page hears of it the way it hears of typing.
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            el.dispatchEvent(new Event('change', { bubbles: true }))
+            return true
+          }, value)
+          .catch(() => false)
+        if (!put) throw new Error('The secret was not typed: that is not a field text can be put into, or it is no longer on the page.')
+        if (!a.submit) return `Typed the secret "${a.secret}".`
+        await field.press('Enter')
+      } else {
+        const text = String(a.text)
+        await el.fill(text, { timeout: 8000 }).catch(async () => {
+          await el.click({ timeout: 8000 })
+          await p.keyboard.type(text)
+        })
+        if (!a.submit) return 'Typed.'
+        await el.press('Enter')
+      }
       await p.waitForTimeout(800)
       return snapshot(p)
     },
@@ -772,7 +837,35 @@ const browserTools: Tool[] = withNews([
     description: 'Evaluate a JavaScript expression in the current page and return its JSON-serialised result. For extracting data the snapshot does not show.',
     parameters: params({ expression: str('JavaScript expression') }, ['expression']),
     run: async (a, ctx) => {
-      const result = await (await page(ctx)).evaluate(String(a.expression))
+      const p = await page(ctx)
+      // A script of the bot's own could read a secret out of a page and give it back in another shape, or send it
+      // to another site. So none is run on a site one of its secrets is for, nor on one where a secret was put
+      // into a page of this window (its owner may have removed it since, and the field still holds it). Nothing
+      // of a secret is asked of the page to decide that, only where the page is.
+      const where = new URL(p.url())
+      const host = where.host
+      const marks = browserFor(ctx.bot.id).marks(ctx.thread.id)
+      // A page with no address of its own (a blank one another page opened, or one a page made up) counts as the
+      // page's that made it: a script in it reaches into that page, and reads that site as one of its own pages
+      // would, whichever site it is. So a bot that has secrets, or a window one was put into, runs none there. A
+      // data: page is all its own.
+      const noAddress = !/^(https?|data):$/.test(where.protocol)
+      if (noAddress && (secrets.any(ctx.bot.id) || marks.secrets.size)) {
+        throw new Error('This page has no address of its own, so it may belong to a site one of your secrets is for, and no script is run in it. Carry on in it with browser_navigate, or read it with browser_snapshot.')
+      }
+      if (secrets.anyFor(ctx.bot.id, host) || marks.secrets.has(host)) {
+        throw new Error(`One of your secrets is for ${host}, and a script could read it out of a page there, so none is run on that site. Read the page with browser_snapshot or browser_read.`)
+      }
+      // A script in a page that may be any site's has run on every site, as far as this window can tell.
+      marks.scripted.add(noAddress ? EVERY_SITE : host)
+      // Where the page is was asked a moment ago, and it may have gone on to another site since (it does so by
+      // itself, if a script told it to earlier). So the page says where it is in the same breath as it runs the
+      // script, and runs nothing if that is not the site that was checked.
+      const moved = `moved-${crypto.randomBytes(9).toString('base64url')}`
+      const result = await p.evaluate(onlyOn(host, String(a.expression), moved)).catch((e) => {
+        if (String(e?.message ?? e).includes(moved)) throw new Error('The page went on to another address just as the script was to run, so it was not run. Take a new snapshot and try again.')
+        throw e
+      })
       return JSON.stringify(result, null, 1) ?? 'undefined'
     },
   },
@@ -825,34 +918,207 @@ const pageTool: Tool = {
   },
 }
 
+/** The ways web_fetch can ask. */
+const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+/** Headers a request sets for itself, or that would have it go somewhere other than its address says. */
+const NOT_SET = new Set(['host', 'content-length', 'transfer-encoding', 'connection', 'upgrade', 'expect', 'te', 'trailer', 'keep-alive', 'proxy-authorization', 'proxy-connection'])
+/** Headers that say who is asking: they do not follow the request to another site. */
+const PERSONAL = new Set(['authorization', 'cookie'])
+
 const webTools: Tool[] = [
   {
     name: 'web_fetch',
     description:
-      'Fetch a URL over plain HTTP (no browser, no logins) and return its text. Faster than the browser for public ' +
-      'pages and APIs; use the browser for sites that need JavaScript or a login.',
-    parameters: params({ url: str('Absolute http(s) URL') }, ['url']),
+      'Make an HTTP request (no browser) and return what comes back as text: a GET unless you give a method. Faster than the browser for public ' +
+      'pages and APIs; use the browser for sites that need JavaScript or a login in a page. For an API that takes a key, write {{secret:name}} ' +
+      'where the key goes (in a header, the address or the body), with the name of one of your secrets: its value is put in as the request ' +
+      'leaves, and only for the site that secret is for.',
+    parameters: params(
+      {
+        url: str('Absolute http(s) URL'),
+        method: { type: 'string', enum: METHODS, description: 'GET unless given' },
+        headers: { type: 'object', additionalProperties: { type: 'string' }, description: 'Headers to send, such as {"Authorization": "Bearer {{secret:plausible}}"}' },
+        body: str('What to send with a POST, PUT or PATCH, as text. For JSON, the JSON itself: it is sent as application/json unless you say otherwise.'),
+      },
+      ['url'],
+    ),
     run: async (a, ctx) => {
       const signal = AbortSignal.any([ctx.signal, AbortSignal.timeout(30_000)])
-      const headers = { 'User-Agent': 'Mozilla/5.0 (compatible; OpenKumi/0.1)', Accept: 'text/html,application/json,text/plain,*/*' }
-      // Redirects are followed by hand so that none of them can lead to OpenKumi's own address.
-      let url = new URL(String(a.url))
+      let method = String(a.method || 'GET').toUpperCase()
+      if (!METHODS.includes(method)) throw new Error(`The method is one of ${METHODS.join(', ')}.`)
+      const given = a.headers && typeof a.headers === 'object' && !Array.isArray(a.headers) ? Object.entries(a.headers as Record<string, unknown>).map(([name, value]) => [name, String(value ?? '')] as const) : []
+      for (const [name] of given) if (NOT_SET.has(name.toLowerCase()) || !/^[\w!#$%&'*+.^`|~-]+$/.test(name)) throw new Error(`The header "${name}" cannot be set.`)
+      // A model may give the body as the object it means instead of as text.
+      let body = a.body == null || a.body === '' ? undefined : typeof a.body === 'string' ? a.body : JSON.stringify(a.body)
+      if (body !== undefined && method === 'GET') throw new Error('A GET sends no body. Give the method, such as POST.')
+      const isJson = (text: string) => {
+        try {
+          return typeof JSON.parse(text) === 'object'
+        } catch {
+          return false
+        }
+      }
+
+      // Redirects are followed by hand so that none of them can lead to OpenKumi's own address, or take a secret to a site it is not for.
+      let address = String(a.url)
+      /** The request left the site it was made to: what says who is asking stays behind. */
+      let away = false
+      /** A redirect turned the request into one that only reads: what said what its body was goes with the body. */
+      let bodiless = false
       let res: Response
+      /** The secrets the request has carried so far. An answer may repeat one in the address it sends the request on to, where no name stands for it any more. */
+      const used = new Set<string>()
+      // In JSON a value is written as JSON writes text, and in a form as a form does, so that one with a quote or an "&" in it arrives whole.
+      const kind = (given.find(([name]) => name.toLowerCase() === 'content-type')?.[1] ?? '').toLowerCase()
+      const inBody = body !== undefined && (kind.includes('json') || (!kind && isJson(body))) ? (value: string) => JSON.stringify(value).slice(1, -1) : kind.includes('x-www-form-urlencoded') ? encodeURIComponent : undefined
       for (let hops = 0; ; hops++) {
+        // Where it goes is read before any secret is in it, and each secret is given for that site only.
+        const url = new URL(secrets.withoutPlaces(address))
         if (!/^https?:$/.test(url.protocol)) throw new Error('Only http and https addresses can be fetched.')
         if (isOwnServer(url)) throw new Error('That address is OpenKumi itself, which is not available to you.')
-        res = await fetch(url, { signal, headers, redirect: 'manual' })
+        const put = async (text: string, as?: (value: string) => string) => {
+          const filled = await secrets.fill(ctx.bot.id, text, url, as)
+          for (const name of filled.used) used.add(name)
+          return filled.text
+        }
+        const target = new URL(await put(address, encodeURIComponent))
+        if (target.host !== url.host || target.protocol !== url.protocol) throw new Error('A secret cannot be part of the name of the site.')
+        const headers = new Headers({ 'User-Agent': 'Mozilla/5.0 (compatible; OpenKumi/0.1)', Accept: 'text/html,application/json,text/plain,*/*' })
+        for (const [name, value] of given) {
+          const lower = name.toLowerCase()
+          if ((away && PERSONAL.has(lower)) || (bodiless && lower === 'content-type')) continue
+          const filled = await put(value)
+          // Said here, without the value: what fetch says of a header it cannot send repeats the header.
+          if (/[^\t\x20-\x7e\x80-\xff]/.test(filled)) throw new Error(`The header "${name}" cannot be sent: its value has a line break or a character a header cannot hold.`)
+          headers.set(name, filled)
+        }
+        const sent = body === undefined ? undefined : await put(body, inBody)
+        if (sent !== undefined && !headers.has('content-type') && isJson(sent)) headers.set('Content-Type', 'application/json')
+        res = await fetch(target, { method, headers, body: sent, signal, redirect: 'manual' })
         const next = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null
         if (!next) break
         if (hops >= 8) throw new Error('Too many redirects.')
-        url = new URL(next, url)
+        const to = new URL(next, target)
+        // Only the bot names a secret, in what it wrote itself. An answer that sends the request on to an address
+        // with a secret's name in it would have that secret put in where the bot never asked for it.
+        if (secrets.withoutPlaces(to.href) !== to.href) throw new Error(`${target.host} sent the request on to an address that names one of your secrets, which only you do, so it was not followed.`)
+        const leaves = to.host !== target.host || to.protocol !== target.protocol
+        // A secret goes to the site it is for and no further, whatever that site answers.
+        if (used.size && leaves) {
+          throw new Error(`${target.host} sent the request on to ${to.host}, which ${[...used].map((name) => `"${name}"`).join(' and ')} ${used.size > 1 ? 'are' : 'is'} not for, so it was not followed.`)
+        }
+        away ||= leaves
+        // As a browser does: after "see other", and after a POST that was moved, the next request only reads.
+        if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === 'POST')) {
+          method = 'GET'
+          bodiless = body !== undefined
+          body = undefined
+        }
+        address = to.href
       }
       let text = await res.text()
       if ((res.headers.get('content-type') ?? '').includes('html')) text = htmlText(text)
-      return `HTTP ${res.status} ${url}\n\n${text.trim()}`
+      // The address as the bot wrote it: with the names of its secrets, not their values.
+      return `HTTP ${res.status} ${address}\n\n${text.trim()}`
     },
   },
 ]
+
+/** How ask_secret and save_secret take a name and a site: as they will be kept, so that the card the owner sees says what is kept. */
+function named(a: Record<string, any>): { name: string; site: string; what: string } {
+  const name = secrets.nameOf(a.name)
+  if (name !== a.name) throw new Error(`Give the name as it will be kept: "${name}".`)
+  const site = secrets.siteOf(a.site)
+  if (site !== a.site) throw new Error(`Give the site as its host alone: "${site}".`)
+  const what = String(a.what ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
+  if (!what) throw new Error('Say what it is, in a few words, such as "Plausible API key".')
+  return { name, site, what }
+}
+
+const SECRET_PARAMS = {
+  name: str('A short name to use it by: lower-case letters, digits and "-", such as "plausible" or "github-password"'),
+  site: str('The one site it is for, as its host: "plausible.io". It is never sent anywhere else, and only the user can change that.'),
+  what: str('What it is, in a few words: "Plausible API key"'),
+}
+
+/** Only in the bot's conversation with its owner, who reads it: nobody watches a subagent or a run of an automation. */
+const askSecretTool: Tool = {
+  name: 'ask_secret',
+  description:
+    'Ask the user for a secret you need and do not have: an API key, a password, a token. They type it into a private card in the conversation. ' +
+    'It goes straight into your vault, encrypted, without passing through this conversation, and you do not see it: afterwards you use it by its name. ' +
+    'Say what you need and where they find it. It waits until they have entered it or said no. Never ask for a secret to be written in a message.',
+  parameters: params(
+    {
+      ...SECRET_PARAMS,
+      where: str('A web address where the user makes or finds it, if you know one: the card links to it'),
+      replace: { type: 'boolean', description: 'Set it to ask again for one you have, because it no longer works: what the user types takes its place, and the card says so' },
+    },
+    ['name', 'site', 'what'],
+  ),
+  run: async (a, ctx) => {
+    const { name, site, what } = named(a)
+    if (a.where != null && a.where !== '' && !/^https?:\/\//i.test(String(a.where))) throw new Error('where is a web address that begins with https://, or is left out.')
+    if (!ctx.callId) throw new Error('This cannot be asked from here.')
+    // What the user types would take the place of the one there is, which may be kept nowhere else: only when that is meant, and said on the card.
+    if (a.replace !== true && secrets.has(ctx.bot.id, name)) {
+      throw new Error(`You already have a secret named "${name}". Use it, or pick another name. If it no longer works, ask again with replace set to true: what the user types then takes its place.`)
+    }
+    if (a.replace === true && !secrets.has(ctx.bot.id, name, true)) throw new Error(`You have no secret named "${name}" to replace. Ask for it without replace.`)
+    const outcome = await secrets.ask(ctx.callId, { botId: ctx.bot.id, name, site, what, replace: a.replace === true }, ctx.signal, ctx.hurry, ASK_TIMEOUT)
+    switch (outcome) {
+      case 'saved':
+        return `Saved as "${name}", for ${site}. Use it by name: {{secret:${name}}} in web_fetch, or secret: "${name}" in browser_type.`
+      case 'declined':
+        return 'The user said no. Do not ask again for the same thing now; go on without it, or tell them what you needed.'
+      case 'hurried':
+        return 'Not entered: the user sent a message for you to read now instead. Read it, and ask again only if it is still needed.'
+      case 'timeout':
+        return `Nothing was entered in ${ASK_TIMEOUT / 60_000} minutes. End your turn and tell the user what you need; they can add it themselves in your settings, under Secrets, or you can ask again when they are back.`
+      case 'stopped':
+        throw new Error('Stopped')
+    }
+  },
+}
+
+const saveSecretTool: Tool = {
+  name: 'save_secret',
+  description:
+    'Keep a secret in your vault, encrypted, to use later by its name. Give value for one you have in front of you, such as a key a page showed you. ' +
+    'Leave value out to have a strong password made up that you never see, for signing up somewhere: type it with browser_type and its name. ' +
+    'For a secret only the user has, use ask_secret. You cannot replace or delete a secret: the user does that, in your settings.',
+  parameters: params(
+    {
+      ...SECRET_PARAMS,
+      value: str('The value to keep. Leave it out to have a password made up.'),
+      length: { type: 'number', description: 'For a made-up password: how many characters, 24 unless the site wants otherwise' },
+    },
+    ['name', 'site', 'what'],
+  ),
+  hidden: ['value'],
+  run: (a, ctx) => {
+    const { name, site } = named(a)
+    const made = a.value == null || a.value === ''
+    const value = made ? secrets.generate(a.length) : String(a.value)
+    try {
+      // What it is said to be goes as the bot wrote it: the value is taken out of it before it is tidied up.
+      secrets.save(ctx.bot.id, { name, sites: [site], value, what: a.what, by: 'bot' })
+    } catch (e: any) {
+      if (/already a secret/.test(String(e?.message))) throw new Error(`${e.message} Pick another name: only the user replaces or removes one, in your settings under Secrets.`)
+      throw e
+    }
+    if (made) return `Made up a password and kept it as "${name}", for ${site}. Type it with browser_type and secret: "${name}". The user can see it in your settings, under Secrets.`
+    // Where it was written out before now (a page that showed it, a message it was pasted into), it is taken out:
+    // in this thread, and in the ones above it, since a subagent is told what it knows by the conversation it works for.
+    const { heads, take } = secrets.eraser(value, name)
+    let rewritten = 0
+    for (let thread: Thread | undefined = ctx.thread; thread; thread = thread.parentId ? db.getThread(thread.parentId) : undefined) rewritten += db.rewriteItems(thread.id, heads, take)
+    return (
+      `Kept as "${name}", for ${site}. From now on use it by name ({{secret:${name}}} in web_fetch, secret: "${name}" in browser_type) and do not write the value anywhere.` +
+      (rewritten ? ' Where it stood earlier in this conversation, its name stands now.' : '')
+    )
+  },
+}
 
 /**
  * What a bot has when it answers something asked on a call (see calls.ts), out of what it has
@@ -940,8 +1206,28 @@ export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problem
   ]
   // Only its own conversation is the owner's to read: a subagent and a run of an automation report to it.
   const reaching = thread.kind === 'chat' ? [notifyTool, askTool] : []
-  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, pageTool, ...reaching]
+  const secretTools = [...(thread.kind === 'chat' ? [askSecretTool] : []), saveSecretTool]
+  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, ...secretTools, pageTool, ...reaching]
   return { tools: [...own, ...services.tools], problems: services.problems }
+}
+
+/**
+ * A call as it is written into the conversation: without the arguments its tool keeps out of it
+ * (`hidden`). The tool itself is given the call as the model made it.
+ */
+export function asRecorded<T extends { name: string; arguments: string }>(tools: Tool[], call: T): T {
+  const hidden = tools.find((t) => t.name === call.name)?.hidden
+  if (!hidden?.length) return call
+  let args: Record<string, unknown>
+  try {
+    args = JSON.parse(call.arguments || '{}')
+  } catch {
+    // Not read as arguments, so what is in it cannot be told apart: none of it is kept.
+    return { ...call, arguments: '{}' }
+  }
+  if (!args || typeof args !== 'object' || !hidden.some((name) => args[name] != null && args[name] !== '')) return call
+  for (const name of hidden) if (args[name] != null && args[name] !== '') args[name] = '[not written here]'
+  return { ...call, arguments: JSON.stringify(args) }
 }
 
 export async function runTool(tools: Tool[], call: Extract<ItemData, { type: 'function_call' }>, ctx: ToolContext): Promise<string> {
@@ -953,14 +1239,16 @@ export async function runTool(tools: Tool[], call: Extract<ItemData, { type: 'fu
   } catch {
     return 'Error: the tool arguments were not valid JSON.'
   }
+  // Whatever goes back to the bot, and so into the conversation, has the values of its secrets taken out: a
+  // page that shows the key it was sent, a field that still holds a password, an error that repeats one.
   try {
-    const output = await tool.run(args, ctx)
+    const output = secrets.scrub(ctx.bot.id, await tool.run(args, { ...ctx, callId: call.call_id }))
     return output.length > MAX_OUTPUT ? output.slice(0, MAX_OUTPUT) + '\n… [output truncated]' : output
   } catch (e: any) {
     if (ctx.signal.aborted) return 'Error: stopped by the user.'
     // Which tool, and where in the code: a superpower's tool is named only by its superpower.
     const superpower = superpowerOfTool(ctx.bot.id, tool.name)
     track('tool failed', superpower ? { tool: 'service', superpower, error: whereOf(e) } : { tool: tool.name, error: whereOf(e) })
-    return `Error: ${String(e?.message ?? e).split('\n').slice(0, 4).join('\n')}`
+    return secrets.scrub(ctx.bot.id, `Error: ${String(e?.message ?? e).split('\n').slice(0, 4).join('\n')}`)
   }
 }
