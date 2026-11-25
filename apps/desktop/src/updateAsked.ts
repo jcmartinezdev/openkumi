@@ -40,11 +40,11 @@ export function startUpdateRequests<Server>({ state, check, onChange, servers, w
   let asked = false
   /** And without waiting for the bots. That holds for what this request found only, as on a server installed alone. */
   let hurried = false
-  /** Requests still to be answered: the app does not restart under them. */
+  /** Requests still to be answered, or answered only a moment ago: the app does not restart under them. */
   let answering = 0
-  /** Since when no bot has been at work in any of the servers, from the latest drop to none: 0 while one is. */
-  let quietSince = Date.now()
-  const recount = () => (atWork() > 0 ? (quietSince = 0) : (quietSince ||= Date.now()))
+  /** Since when no bot has been at work in any of the servers, from the latest drop to none (on a clock the computer's time cannot move): null while one is. */
+  let quietSince: number | null = performance.now()
+  const recount = () => (atWork() > 0 ? (quietSince = null) : (quietSince ??= performance.now()))
 
   const atWork = () => servers().reduce((sum, server) => sum + workingIn(server), 0)
   const busy = () => state().state === 'checking' || state().state === 'downloading'
@@ -60,9 +60,9 @@ export function startUpdateRequests<Server>({ state, check, onChange, servers, w
     if (!asked || answering || state().state !== 'ready') return
     if (!hurried) {
       recount()
-      if (!quietSince) return
+      if (quietSince === null) return
       // None at work has to hold a moment first: a bot that is done may hand on to another at once.
-      const left = quietSince + answerMs - Date.now()
+      const left = quietSince + answerMs - performance.now()
       if (left > 0) return void setTimeout(settle, left)
     }
     asked = false
@@ -95,10 +95,12 @@ export function startUpdateRequests<Server>({ state, check, onChange, servers, w
     } finally {
       tellAll()
       tell(server, { type: 'updated', id })
-      answering--
     }
-    // The answer goes out first: the server it reaches is stopped a moment later.
-    setTimeout(settle, answerMs)
+    // The answer goes out first: the server it reaches is stopped a moment later, whatever asks for that meanwhile.
+    setTimeout(() => {
+      answering--
+      settle()
+    }, answerMs)
   }
 
   onChange(() => {

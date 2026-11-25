@@ -112,6 +112,9 @@ test('asked not to wait, it restarts with bots at work; that holds for this requ
   const hurried = app('ready')
   hurried.working('b', 3)
   await hurried.ask('a', true)
+  // Not before the server it answered has passed the answer on, whatever has the app look again meanwhile.
+  hurried.working('a', 0)
+  assert.equal(hurried.restarts.length, 0)
   await wait(150)
   assert.equal(hurried.restarts.length, 1)
 
