@@ -1,10 +1,11 @@
 // Function tools the model can call. Each returns a string that goes back to the model.
 import type { Bot, ItemData, Thread } from '@openkumi/shared'
 import * as agent from './agent.ts'
-import { createBot, getBot, listBots } from './bots.ts'
+import { createBot, getBot, listBots, updateBot } from './bots.ts'
 import { browserFor, byRef, isWebPage, snapshot } from './browser.ts'
 import { serverPorts } from './config.ts'
 import { settings } from './settings.ts'
+import { engineFor } from './models.ts'
 import { serviceTools, superpowerOfTool } from './mcp.ts'
 import { track, whereOf } from './telemetry.ts'
 import * as db from './db.ts'
@@ -169,6 +170,57 @@ function createBotTool(firstMessage: boolean): Tool {
       }
     },
   }
+}
+
+/** A bot as it stands after a change: all that update_bot can change. */
+const changedSummary = (b: Bot) => ({ ...botSummary(b), effort: b.effort || '(model default)', web_search: b.webSearch, show_browser: !b.headless })
+
+/**
+ * Changing a bot, itself among them: the main assistant's, in its conversation, and only on the
+ * owner's word, as making one is. Its rules stay the owner's own, and its instructions its own:
+ * those it is asked to change with a message.
+ */
+const updateBotTool: Tool = {
+  name: 'update_bot',
+  description:
+    "Change one of the user's bots, yourself among them: its name, its description, its emoji, the model it runs on and how hard " +
+    'that model thinks, its web search, whether its browser window shows. Give only what changes. Use this only when the user has ' +
+    'just asked you for the change: it is refused at any other time. How a bot works is in its own instructions, which it keeps ' +
+    'itself: to change those, message the bot and ask it to.',
+  parameters: params(
+    {
+      bot_id: str('The bot to change, from the list of the other bots or list_bots; your own id to change yourself'),
+      name: str('A new display name'),
+      description: str('A new line saying what the bot is for, e.g. "Plans trips and books travel". Every other bot is told it, to know what to pass on to it.'),
+      emoji: str('A single emoji for the sign its mascot holds'),
+      model: str('The model it is to run on, by name (e.g. "sonnet"), from any engine that is ready. A name that fits no model is answered with the models there are.'),
+      effort: str('How hard its model thinks: minimal, low, medium, high, xhigh or max (not every model takes each), or "default" for the model\'s own'),
+      web_search: { type: 'boolean', description: "Whether it may use its engine's own web search" },
+      show_browser: { type: 'boolean', description: 'Whether its browser window is also shown on the desktop of the computer, from the next time its browser starts' },
+    },
+    ['bot_id'],
+  ),
+  run: async (a, ctx) => {
+    if (!agent.basisOf(ctx.thread).owner) throw new Error('A bot can only be changed when the user has just asked you to. Ask them first.')
+    const bot = getBot(String(a.bot_id ?? ''))
+    if (!bot) throw new Error(`No bot with id ${a.bot_id}. Use list_bots to see the bots that exist.`)
+    // A model may fill what it does not change with nothing.
+    const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+    const patch: Record<string, unknown> = {
+      ...(text(a.name) ? { name: text(a.name) } : {}),
+      ...(text(a.description) ? { description: text(a.description) } : {}),
+      ...(text(a.emoji) ? { emoji: text(a.emoji) } : {}),
+      ...(typeof a.web_search === 'boolean' ? { webSearch: a.web_search } : {}),
+      ...(typeof a.show_browser === 'boolean' ? { headless: !a.show_browser } : {}),
+      ...(await engineFor(bot, a.model, a.effort)),
+    }
+    // Stopped while the models were being looked up: nothing is changed.
+    ctx.signal.throwIfAborted()
+    if (!Object.keys(patch).length) throw new Error('Nothing to change: give what changes, such as name or description.')
+    const changed = updateBot(bot.id, patch)
+    const moved = changed.id === ctx.bot.id && (changed.provider !== bot.provider || changed.model !== bot.model || changed.effort !== bot.effort)
+    return `Changed bot ${JSON.stringify(changedSummary(changed))}${moved ? '\nYou work on the new model from your next turn.' : ''}`
+  },
 }
 
 const filePath = str('Path inside your workspace, e.g. "memory/people.md"')
@@ -721,7 +773,7 @@ const webTools: Tool[] = [
  * its result comes back by itself, and is said on the call then.
  */
 const ON_A_CALL = new Set([
-  'list_bots', 'message_bot', 'create_bot',
+  'list_bots', 'message_bot', 'create_bot', 'update_bot',
   'spawn_subagent', 'list_subagents', 'read_subagent', 'message_subagent', 'cancel_subagent',
   'list_automations', 'create_automation', 'update_automation', 'delete_automation',
 ])
@@ -792,8 +844,8 @@ export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problem
   const bot = getBot(thread.botId)
   const botTools = [
     listBotsTool,
-    // Only the main assistant makes bots, and only in its conversation with the owner: never from a subagent or a run of an automation.
-    ...(bot && thread.kind === 'chat' && automations.isMain(bot) ? [createBotTool(settings().botMessages)] : []),
+    // Only the main assistant makes and changes bots, and only in its conversation with the owner: never from a subagent or a run of an automation.
+    ...(bot && thread.kind === 'chat' && automations.isMain(bot) ? [createBotTool(settings().botMessages), updateBotTool] : []),
     ...(agent.canMessage(thread) ? [messageBotTool] : []),
   ]
   const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, pageTool]

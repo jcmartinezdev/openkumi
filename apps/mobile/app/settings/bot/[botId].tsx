@@ -71,7 +71,7 @@ export default function BotSettings() {
         <Row label="Look" detail={bot.choosingLook ? 'Choosing its look…' : describeLook(bot.look)} opens onPress={openLook} />
       </Section>
 
-      <Section title="What it is for" footer="One line. The other bots are told it, so they know what to pass on to this bot; the bot cannot change it.">
+      <Section title="What it is for" footer="One line. The other bots are told it, so they know what to pass on to this bot. Only you change it: here, or by asking your main assistant.">
         <Field label="What it is for" multiline value={bot.description} placeholder="For example: plans trips and books travel." onCommit={(description) => save({ description })} />
       </Section>
 

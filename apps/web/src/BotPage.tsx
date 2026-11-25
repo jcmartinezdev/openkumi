@@ -134,7 +134,7 @@ function General({ bot }: { bot: Bot }) {
         <Row
           id="bot-description"
           title="What it is for"
-          description={<>One line. The other bots are told it, so they know what to pass on to this bot; the bot cannot change it. What every bot is told is under <a href="#/settings/prompt">Master prompt</a>.</>}
+          description={<>One line. The other bots are told it, so they know what to pass on to this bot. Only you change it: here, or by asking your main assistant. What every bot is told is under <a href="#/settings/prompt">Master prompt</a>.</>}
         >
           <Field label="What it is for" className="set-input set-line" value={bot.description} placeholder="For example: plans trips and books travel." onCommit={(description) => api('PATCH', `/api/bots/${bot.id}`, { description })} />
         </Row>

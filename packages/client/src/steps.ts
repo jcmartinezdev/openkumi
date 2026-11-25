@@ -9,7 +9,7 @@ export function parse(json: string): Record<string, any> {
 }
 
 /** A superpower's id as words: "notion" is "Notion". */
-const title = (id = '') => id.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase())
+const title = (id: unknown) => String(id ?? '').replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase())
 
 export const site = (url: unknown) => String(url ?? '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 
@@ -40,6 +40,7 @@ export function describe(call: { name: string; arguments: string }): string {
     case 'update_automation': return a.paused === true ? 'Pause an automation' : a.paused === false ? 'Resume an automation' : 'Change an automation'
     case 'delete_automation': return 'Delete an automation'
     case 'create_bot': return `Create bot “${a.name ?? ''}”`
+    case 'update_bot': return `Change ${title(a.bot_id)}`
     case 'message_bot': return `Write to ${title(a.bot_id)}`
     case 'list_bots': return 'List bots'
     case 'list_files': return `Look in ${a.path || 'its folder'}`

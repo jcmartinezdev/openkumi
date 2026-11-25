@@ -21,7 +21,7 @@ export function MasterPrompt() {
         <Row
           id="team"
           title="The team"
-          description="Every bot is told the others’ names and these lines, so it knows when to pass a task on. It does so with a message into the other bot’s own conversation, where that bot does the work as itself, with its own logins and superpowers. A bot cannot change its own line."
+          description="Every bot is told the others’ names and these lines, so it knows when to pass a task on. It does so with a message into the other bot’s own conversation, where that bot does the work as itself, with its own logins and superpowers. Only you change these lines: here, or by asking your main assistant."
         />
         {bots.map((bot, i) => (
           <Row key={bot.id} title={<><BotHead bot={bot} />{bot.name}{i === 0 && bots.length > 1 && <span className="pill">Main assistant</span>}</>}>

@@ -104,14 +104,17 @@ export function runsOn(thread: Pick<Thread, 'provider' | 'model' | 'effort'>, bo
 /** Whether a thread's bot can message the other bots from it: from its own conversation, while that is switched on. */
 export const canMessage = (thread: Thread) => thread.kind === 'chat' && settings().botMessages
 
-/** The system prompt: the master prompt, filled in from the bot's folder on every step so its own edits take effect at once. */
-function instructions(bot: Bot, thread: Thread, problems: Record<string, string>, call = false): string {
+/**
+ * The system prompt: the master prompt, filled in from the bot's folder on every step so its own edits take effect at once.
+ * `on` is what the turn runs on, which a change to the bot while it works does not move.
+ */
+function instructions(bot: Bot, thread: Thread, problems: Record<string, string>, call = false, on = runsOn(thread, bot)): string {
   // Who wrote an automation decides whether it counts as the user's say-so; one deleted since is not taken to be theirs.
   const automation = thread.kind === 'automation' && thread.automationId ? db.getAutomation(thread.automationId) : undefined
   const by = automation?.createdBy ?? ''
   return masterPrompt({
     bot_name: bot.name,
-    model: modelName(runsOn(thread, bot)),
+    model: modelName(on),
     today: new Date().toDateString(),
     other_bots: team(bot),
     main: isMain(bot),
@@ -123,7 +126,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     subagent: thread.kind === 'subagent',
     call,
     shared: sharedComputer(),
-    codex: runsOn(thread, bot).provider === 'codex',
+    codex: on.provider === 'codex',
     rules: bot.rules,
     time_zone: TIME_ZONE,
     instructions_limit: String(settings().instructionsLimit),
@@ -491,6 +494,12 @@ async function turn(threadId: string, state: Run) {
   // A turn that answers something asked on a call: the bot only passes work on in it (tools.ts onACall). So also when
   // the turn answers something else besides, as one does that was cut short for a message the owner had read at once.
   const call = state.asked.some(onCall)
+  /**
+   * What the turn runs on, as it was when it began. A change to the bot while it works (by the owner, or by
+   * the bot itself with update_bot) applies from its next turn: another model taking over halfway would
+   * start again on what this one was asked.
+   */
+  let began: RunsOn | undefined
   for (let step = 0; ; step++) {
     const thread = db.getThread(threadId)
     const bot = thread && getBot(thread.botId)
@@ -498,7 +507,7 @@ async function turn(threadId: string, state: Run) {
     const { maxSteps, disabledProviders } = settings()
     if (step >= maxSteps) throw new Error(`Stopped after ${maxSteps} steps without finishing. The limit is in Settings, under Advanced.`)
 
-    const on = runsOn(thread, bot)
+    const on = (began ??= runsOn(thread, bot))
     const provider = getProvider(on.provider)
     if (disabledProviders.includes(provider.id)) throw new Error(`${provider.info().name} is switched off in Settings.`)
     const model = on.model || (await provider.models())[0]?.id
@@ -565,7 +574,7 @@ async function turn(threadId: string, state: Run) {
       try {
         const events = provider.turn({
           model,
-          instructions: instructions(bot, thread, problems, passing),
+          instructions: instructions(bot, thread, problems, passing, on),
           input,
           // What came with the messages it has not seen yet; earlier files are named in what it is told, and kept in the workspace.
           files: toShow(bot.id, threadId, fresh.flatMap((i) => filesOf(i.data)), provider.sees),
@@ -610,7 +619,7 @@ async function turn(threadId: string, state: Run) {
     // An engine that ran this thread earlier has missed what happens from here on, so its
     // conversation is dropped; if the thread goes back to it, it starts again from what was said.
     if (db.getSession(threadId)) db.setSession(threadId, null)
-    const system = instructions(bot, thread, problems, call)
+    const system = instructions(bot, thread, problems, call, on)
     // The conversation is sent whole each time, so it is kept within what the model can take.
     const room = Math.max(1000, settings().historyLimit - Math.ceil(system.length / 4))
     if (await shorten(threadId, room, { provider, model, signal, used })) items = db.listItems(threadId)

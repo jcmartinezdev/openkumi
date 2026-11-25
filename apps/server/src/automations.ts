@@ -5,12 +5,13 @@
 // tools, within the rules at the end of this file: a bot makes them only for itself and changes or
 // deletes only what it made, except the main assistant (the first bot), which may do all of that
 // for every bot.
-import type { Automation, Bot, Effort, ModelInfo, RunsOn, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
+import type { Automation, Bot, Effort, RunsOn, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
 import * as agent from './agent.ts'
 import { EFFORTS, getBot, mainBot } from './bots.ts'
 import * as db from './db.ts'
 import * as hooks from './hooks.ts'
-import { getProvider, listModels, modelName, providerInfos } from './providers/index.ts'
+import { effortsOf, keptAs, modelCalled, readyModels } from './models.ts'
+import { getProvider, modelName, providerInfos } from './providers/index.ts'
 import { settings } from './settings.ts'
 import { track } from './telemetry.ts'
 import * as watching from './watch.ts'
@@ -543,36 +544,6 @@ function triggerFrom(a: Record<string, any>): Record<string, unknown> | null {
   return { kind: 'watch', watch: { ...on, track: watch.track, every: watch.every_minutes } }
 }
 
-/** A name as it is compared: its letters and digits alone, so that "opus 5.5" finds "Claude Opus 5.5". */
-const plain = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '')
-
-/** The models every provider that is ready to use offers, the provider of the bot that does the automation first. */
-async function offered(doer: Bot): Promise<{ id: string; name: string; models: ModelInfo[] }[]> {
-  const ready = providerInfos().filter((p) => p.connected && p.enabled !== false)
-  // Asked for now rather than as last heard: a model may have been added since, and the automation is then shown by its model's name.
-  const lists = await Promise.all(ready.map(async (p) => ({ id: p.id, name: p.name, models: await listModels(getProvider(p.id)).catch(() => []) })))
-  return lists.sort((a, b) => Number(b.id === doer.provider) - Number(a.id === doer.provider))
-}
-
-/**
- * The model a bot named, by its name or its id, among those of every provider that is ready. A name
- * that fits exactly comes before one that only contains what was written, a model of the bot's own
- * provider before another's, and a model's latest version before an earlier one.
- */
-function modelCalled(name: string, lists: Awaited<ReturnType<typeof offered>>): { provider: string; info: ModelInfo } {
-  const want = plain(name)
-  for (const exact of [true, false]) {
-    for (const list of want ? lists : []) {
-      const fits = (text: string) => (exact ? plain(text) === want : plain(text).includes(want))
-      const found = list.models.filter((m) => fits(m.id) || fits(m.name))
-      const info = found.find((m) => !m.older) ?? found[0]
-      if (info) return { provider: list.id, info }
-    }
-  }
-  const there = lists.map((list) => `${list.name}: ${list.models.filter((m) => !m.older).map((m) => (m.name === m.id ? m.id : `${m.name} (${m.id})`)).join(', ')}`)
-  throw new Error(`No model is called "${name}". There are these. ${there.join('. ')}. Or give "same", to run on the model of the bot that does it.`)
-}
-
 /**
  * What a bot asked an automation to run on, with its tool's arguments: undefined when it said
  * nothing about it, null for what the bot that does it runs on. `before` is what the automation
@@ -585,15 +556,12 @@ async function runsOnFrom(doer: Bot, a: Record<string, any>, before?: RunsOn | n
     if (given(a.effort)) throw new Error('effort goes with a model of its own: give model too, by name. An automation on the model of the bot that does it thinks as hard as that bot does.')
     return null
   }
-  const lists = await offered(doer)
-  // The model that was named is the one kept, also when it is its provider's default just now. One its provider itself
-  // only calls "default" is kept as no model, which is the same thing.
-  const named = given(a.model) ? modelCalled(String(a.model), lists) : null
-  const on: RunsOn = named ? { provider: named.provider, model: /^default$/i.test(named.info.id) ? '' : named.info.id, effort: '' } : before!
+  const lists = await readyModels(doer.provider)
+  const named = given(a.model) ? modelCalled(String(a.model), lists, 'Or give "same", to run on the model of the bot that does it.') : null
+  const on: RunsOn = named ? { ...keptAs(named), effort: '' } : before!
   if (!given(a.effort)) return on
   const effort = String(a.effort).trim().toLowerCase()
-  const models = lists.find((list) => list.id === on.provider)?.models ?? []
-  const takes: string[] = (on.model ? models.find((m) => m.id === on.model) : models[0])?.efforts ?? EFFORTS.slice(1)
+  const takes = effortsOf(on, lists)
   if (!takes.includes(effort)) throw new Error(takes.length ? `effort is one of ${takes.join(', ')} for that model.` : 'That model has no levels of reasoning: leave effort out.')
   return { ...on, effort: effort as Effort }
 }

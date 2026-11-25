@@ -92,7 +92,8 @@ Only pass the work on. In the turn that answers something asked on a call, the b
 its usual tools (no files, no memory, no browser, no web search, no superpowers), only these:
 
 - **Other bots.** It can see who the other bots are and write to one (`list_bots`,
-  `message_bot`); the main assistant can also make a new bot (`create_bot`).
+  `message_bot`); the main assistant can also make a new bot or change one (`create_bot`,
+  `update_bot`).
 - **Background tasks.** It can start a subagent (`spawn_subagent`), and look at, write to or stop
   the ones it started. A subagent is the bot itself at work in the background, in a thread of its
   own, with all the bot's tools: that is where something is looked up, a file is written, or
