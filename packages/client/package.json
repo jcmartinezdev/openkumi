@@ -28,6 +28,7 @@
     "./superpowers": "./src/superpowers.ts",
     "./dictation": "./src/dictation.ts",
     "./calls": "./src/calls.ts",
+    "./search": "./src/search.ts",
     "./voices": "./src/voices.ts",
     "./telemetry": "./src/telemetry.ts",
     "./usage": "./src/usage.ts",

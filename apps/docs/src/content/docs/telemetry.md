@@ -261,6 +261,19 @@ The first time a screen is opened each time the app runs.
 
 When the microphone is pressed to dictate a message. What is said stays on the device. It carries nothing of its own.
 
+### palette used
+
+When something is picked in the desktop app’s search (⌘K).
+
+| Name | What it can be | What it says |
+| --- | --- | --- |
+| `picked` | One of `bot`, `action`, `place`, `command`, `setting`, `superpower`, `automation`, `conversation`, `message`, `person` | What kind of thing was picked. Never which one, nor what was typed. |
+| `typed` | Yes or no | Whether something was typed to find it. |
+
+### bot opened by number
+
+When ⌘1–9 (Ctrl+1–9) opens one of the first nine bots in the desktop app. It carries nothing of its own.
+
 ### app error
 
 When something goes wrong in an app, at most ten times each time the app runs.

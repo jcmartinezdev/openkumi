@@ -358,6 +358,13 @@ route('POST', '/api/bots/:id/messages', ([id], body) => {
 })
 route('POST', '/api/bots/:id/fresh', ([id]) => unless(() => agent.startFresh(needBot(id).id)))
 route('GET', '/api/bots/:id/search', ([id], _, { url }) => ({ matches: db.searchMessages(needBot(id).id, url.searchParams.get('q') ?? '') }))
+// The window's search (⌘K): what was said, through every bot's conversations or one bot's, and the
+// threads whose title has the words, older ones included.
+route('GET', '/api/search', (_, __, { url }) => {
+  const q = url.searchParams.get('q') ?? ''
+  const bot = url.searchParams.get('bot') ? needBot(url.searchParams.get('bot')!).id : null
+  return { matches: db.searchMessages(bot, q, 20), threads: db.searchThreadTitles(bot, q) }
+})
 route('POST', '/api/threads/:id/resume', ([id]) => unless(() => agent.resume(needThread(id))))
 
 // ---- automations: the owner may make, change, run and delete any of them

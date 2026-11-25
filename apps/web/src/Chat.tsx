@@ -8,6 +8,7 @@ import { runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { SentFiles, Tray, picked } from './Attachments'
 import { CallButton, CallRecord } from './Call'
+import { useChatActions } from './chatActions'
 import { DictationFailed, Listening, MicButton, useListener } from './Dictation'
 import { History, day } from './History'
 import { Icon } from './Icon'
@@ -604,6 +605,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav, 
   const resume = () => api('POST', `/api/threads/${thread!.id}/resume`).then(() => navigate(bot.id), (e) => setError(e.message))
   const earlier = threads.some((t) => t.botId === bot.id && !t.parentId && t.archivedAt)
   const [historyOpen, setHistoryOpen] = useState(false)
+  // Asked for from the window's search (⌘K), while this conversation is in view and can be written in: bumped to open the model picker.
+  const [modelAsked, setModelAsked] = useState(0)
+  useChatActions(!covered && canAttach ? bot.id : '', (action) => (action === 'model' ? setModelAsked((n) => n + 1) : filePicker.current?.click()))
   const openFile = (path: string) => openSettings('bots', bot.id, 'workspace', ...path.split('/'))
 
   // A reply's link to a page the bot saved opens that page; a link to any other of its files opens it in Files.
@@ -792,7 +796,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav, 
                 <Listening dictating={dictating} listener={listener} />
               ) : (
                 <>
-                  <ModelPicker bot={bot} />
+                  <ModelPicker bot={bot} opened={modelAsked} />
                   {listener && <MicButton start={startDictating} />}
                 </>
               )}

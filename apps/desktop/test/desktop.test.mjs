@@ -364,6 +364,27 @@ test('a reply is drawn as it is written, and a bot’s browser is drawn and driv
   // And what is done to the canvas reaches the page.
   await win.locator('.pane .view canvas').click()
   await until(async () => (await state()).browsers[bot.id]?.tabs.every((t) => t.url === 'about:blank'), 15_000)
+  // A key held down on the page is let go of there when the keyboard leaves it still down: ⌘K opens
+  // the window's search, and the page is not left holding ⌘. The page turns green while ⌘ is down
+  // on it, and blue once it is let go.
+  const colour = (want) => until(async () => (([r, g, b]) => Math.abs(r - want[0]) < 12 && Math.abs(g - want[1]) < 12 && Math.abs(b - want[2]) < 12)(await middle()), 15_000)
+  const paint = (rgb) => `document.body.style.background='rgb(${rgb})'`
+  await win.locator('.address').fill(`data:text/html,<body style="margin:0;height:100vh;background:rgb(200,200,200)"><script>onkeydown=(e)=>{e.key==='Meta'&&(${paint('40,160,60')});e.key==='1'&&e.ctrlKey&&(${paint('230,140,20')})};onkeyup=(e)=>e.key==='Meta'&&(${paint('40,60,200')})</script>`)
+  await win.keyboard.press('Enter')
+  await colour([200, 200, 200])
+  await win.locator('.pane .view').focus()
+  await win.keyboard.down('Meta')
+  await colour([40, 160, 60])
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: ['meta'] }))
+  await win.locator('.palette').waitFor()
+  await colour([40, 60, 200])
+  await win.keyboard.up('Meta')
+  await win.keyboard.press('Escape')
+  await win.locator('.palette').waitFor({ state: 'detached' })
+  // Only ⌘ and a number opens a bot; Ctrl and a number is the page's.
+  await win.locator('.pane .view').focus()
+  await win.keyboard.press('Control+1')
+  await colour([230, 140, 20])
   // Handing back gives the window to the bot again.
   await win.getByRole('button', { name: 'Hand back' }).click()
   await until(async () => (await state()).browsers[bot.id].windows.every((w) => !w.controller), 10_000)
@@ -1171,6 +1192,212 @@ test('a bot has one conversation: starting fresh sets it aside, and earlier ones
   await until(async () => (await here()) === `#/${solo.id}`, 10_000)
   // Its report arrives in the conversation when it is done.
   await win.locator('.msg.report', { hasText: '“Scout” completed' }).waitFor({ timeout: 20_000 })
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('the window’s search: ⌘K from anywhere finds bots, settings and what was said, Tab opens a bot up, and ⌘1–9 open bots, numbered while ⌘ is held', async () => {
+  fs.mkdirSync(`${tmp}/app`, { recursive: true })
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Kumi')
+  const kumi = (await ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')).bots.find((b) => b.name === 'Kumi')
+  const heron = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Heron', provider: 'mock', description: 'Watches the lake' })
+  await showsBot(win, 'Heron')
+  const told = await ask(LOCAL_PORT, 'local-home', 'POST', `/api/bots/${heron.id}/messages`, { text: 'The nest is by the north shore.' })
+  await until(async () => (await ask(LOCAL_PORT, 'local-home', 'GET', `/api/threads/${told.id}`)).thread.status === 'idle', 20_000)
+  const here = () => win.evaluate(() => location.hash)
+  const palette = win.locator('.palette')
+  const titles = (where = palette) => where.locator('.palette-title').allInnerTexts()
+  const group = (name) => palette.locator(`[role=group][aria-label="${name}"]`)
+
+  // ⌘K opens it while a message is being written: the bots first, with their numbers, then what can be done in the chat showing.
+  await win.locator('.sidebar .row.bot', { hasText: 'Kumi' }).click()
+  await win.locator('.composer textarea').fill('half a thought')
+  await win.keyboard.press('Meta+K')
+  await palette.waitFor()
+  // In the sidebar's order, which has the bots the tests before this one made as well.
+  const order = await win.locator('.sidebar a.row.bot').evaluateAll((rows) => rows.map((row) => [row.dataset.bot, row.querySelector('.name').textContent]))
+  const numbers = order.slice(0, 9).map((_, i) => `⌘${i + 1}`)
+  assert.deepEqual(await titles(group('Bots')), order.map(([, name]) => name))
+  assert.deepEqual(await group('Bots').locator('kbd').allInnerTexts(), numbers)
+  assert.ok((await titles(group('The chat you’re in'))).includes('Show the browser'))
+  // ⌘K again closes it, and the message is where it was, with the keyboard.
+  await win.keyboard.press('Meta+K')
+  await palette.waitFor({ state: 'detached' })
+  assert.equal(await win.evaluate(() => document.activeElement?.tagName), 'TEXTAREA')
+  assert.equal(await win.locator('.composer textarea').inputValue(), 'half a thought')
+
+  // Part of a name finds the bot; Enter opens its conversation. What it is for finds it too.
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('her')
+  assert.equal(await palette.locator('.palette-row.selected .palette-title').innerText(), 'Heron')
+  await win.keyboard.press('Enter')
+  await palette.waitFor({ state: 'detached' })
+  await until(async () => (await here()) === `#/${heron.id}`, 10_000)
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('lake')
+  assert.equal(await palette.locator('.palette-row.selected .palette-detail').innerText(), 'Watches the lake')
+
+  // Words that were said are found in every bot's conversations, after a moment, and open the conversation at that message.
+  await win.locator('.palette-search input').fill('north shore')
+  await group('In messages').locator('.palette-row').first().waitFor()
+  assert.deepEqual(await titles(group('In messages')), ['Heron', 'You, to Heron'])
+  await group('In messages').locator('.palette-row', { hasText: 'You, to Heron' }).click()
+  await win.locator('.msg.user.found', { hasText: 'The nest is by the north shore.' }).waitFor()
+
+  // A setting opens its page with the row lit; nothing is changed from the search.
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('enter sends')
+  await palette.locator('.palette-row.selected', { hasText: 'Enter sends the message' }).waitFor()
+  await win.keyboard.press('Enter')
+  await win.locator('#enter-sends.found').waitFor()
+  assert.equal(await here(), '#/settings/chat')
+  // Over the settings, Escape closes the search and leaves the settings open.
+  await win.keyboard.press('Meta+K')
+  await palette.waitFor()
+  await win.keyboard.press('Escape')
+  await palette.waitFor({ state: 'detached' })
+  assert.equal(await here(), '#/settings/chat')
+
+  // Tab opens a bot up: all that can be done with it, its settings and files. Backspace goes back out.
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('heron')
+  await win.keyboard.press('Tab')
+  await palette.locator('.palette-level', { hasText: 'Heron' }).waitFor()
+  assert.equal(await win.locator('.palette-search input').inputValue(), '')
+  for (const title of ['Open the conversation', 'Start fresh', 'Bot settings', 'Superpowers', 'Files', 'New automation']) assert.ok((await titles()).includes(title), title)
+  await win.keyboard.type('files')
+  await win.keyboard.press('Enter')
+  await until(async () => (await here()) === `#/settings/bots/${heron.id}/workspace`, 10_000)
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('heron')
+  await win.keyboard.press('Tab')
+  await win.keyboard.press('Backspace')
+  await palette.locator('.palette-level').waitFor({ state: 'detached' })
+  // ">" first lists only what can be done: no bots, settings or messages.
+  await win.keyboard.type('>')
+  assert.equal(await group('Bots').count(), 0)
+  assert.ok((await titles()).includes('New bot…'))
+  await win.keyboard.press('Escape')
+  await palette.waitFor({ state: 'detached' })
+
+  // What only a conversation can do is asked of it, once it is showing: the model picker of a bot
+  // whose conversation was not, and the files to send.
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('kumi')
+  await win.keyboard.press('Tab')
+  await win.keyboard.type('model')
+  await win.keyboard.press('Enter')
+  await until(async () => (await here()) === `#/${kumi.id}`, 10_000)
+  await win.locator('.model-pop').waitFor()
+  await win.keyboard.press('Escape')
+  await win.locator('.model-pop').waitFor({ state: 'detached' })
+  const chooser = win.waitForEvent('filechooser')
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('send files')
+  await win.keyboard.press('Enter')
+  assert.ok((await chooser).isMultiple())
+  // For a bot whose conversation is not in view, it is opened first, and the files are chosen there.
+  const elsewhere = win.waitForEvent('filechooser', { timeout: 10_000 })
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('heron')
+  await win.keyboard.press('Tab')
+  await win.keyboard.type('send files')
+  await win.keyboard.press('Enter')
+  await elsewhere
+  await until(async () => (await here()) === `#/${heron.id}`, 10_000)
+  // Starting fresh sets the conversation aside; the earlier ones open from the bot, opened up.
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('heron')
+  await win.keyboard.press('Tab')
+  await win.keyboard.type('start fresh')
+  await win.keyboard.press('Enter')
+  await until(async () => (await here()) === `#/${heron.id}`, 10_000)
+  await win.locator('.msg', { hasText: 'north shore' }).first().waitFor({ state: 'detached' })
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('heron')
+  await win.keyboard.press('Tab')
+  await win.keyboard.type('earlier')
+  await win.keyboard.press('Enter')
+  await palette.locator('.palette-level', { hasText: 'Earlier' }).waitFor()
+  assert.deepEqual(await titles(), ['The nest is by the north shore.'])
+  await win.keyboard.press('Enter')
+  await palette.waitFor({ state: 'detached' })
+  await until(async () => new RegExp(`^#/${heron.id}/t_[\\w-]+$`).test(await here()), 10_000).catch(async (e) => assert.fail(`${e.message}: the window is at ${await here()}`))
+  await win.locator('.heading', { hasText: 'Earlier conversation' }).waitFor()
+  assert.match(await win.locator('.heading').innerText(), /^The nest is by the north shore\.\s+Earlier conversation · /)
+
+  // ⌘1–9 open the bots, in the sidebar's order, from anywhere, the settings included.
+  await win.keyboard.press('Meta+1')
+  await until(async () => (await here()) === `#/${order[0][0]}`, 10_000)
+  // Holding ⌘ a moment shows each bot's number in place of its mark, on the row under the pointer
+  // too; they go when it is let go.
+  await win.locator('.sidebar .row.bot').first().hover()
+  await win.keyboard.down('Meta')
+  await win.locator('.sidebar kbd.bot-number').first().waitFor()
+  assert.deepEqual(await win.locator('.sidebar kbd.bot-number').allInnerTexts(), numbers)
+  assert.ok(await win.locator('.sidebar kbd.bot-number').first().isVisible())
+  const heronAt = order.findIndex(([id]) => id === heron.id) + 1
+  assert.ok(heronAt >= 1 && heronAt <= 9)
+  await win.keyboard.press(String(heronAt))
+  await until(async () => (await here()) === `#/${heron.id}`, 10_000)
+  await win.keyboard.up('Meta')
+  await win.locator('.sidebar kbd.bot-number').first().waitFor({ state: 'detached' })
+  // A quick shortcut with ⌘ never shows them.
+  await win.keyboard.press('Meta+C')
+  await new Promise((r) => setTimeout(r, 600))
+  assert.equal(await win.locator('.sidebar kbd.bot-number').count(), 0)
+
+  // A conversation picked in the search comes out from under its bot's browser filling the window;
+  // under it, it is not "the chat you're in".
+  await win.keyboard.press('Meta+K')
+  await win.keyboard.type('show the browser')
+  await win.keyboard.press('Enter')
+  await win.locator('.pane').getByRole('button', { name: 'Full screen' }).click()
+  await win.locator('.pane.full').waitFor()
+  await win.keyboard.press('Meta+K')
+  await palette.waitFor()
+  assert.equal(await group('The chat you’re in').count(), 0)
+  await win.keyboard.type('heron')
+  await win.keyboard.press('Enter')
+  await win.locator('.pane.full').waitFor({ state: 'detached' })
+  await win.locator('.pane').getByRole('button', { name: 'Full screen' }).waitFor()
+
+  // The sidebar's Search opens it too, and so does Search… in the menu bar.
+  await win.locator('.side-search').click()
+  await palette.waitFor()
+  await win.keyboard.press('Escape')
+  await palette.waitFor({ state: 'detached' })
+  await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.find((i) => i.label === 'View').submenu.items.find((i) => i.label === 'Search…').click())
+  await palette.waitFor()
+  // ⌘K from the computer's own keyboard is taken by the app before the window or the menu can see it:
+  // once per press, wherever the keyboard is.
+  const realCommandK = () =>
+    app.evaluate(({ BrowserWindow }) => {
+      const contents = BrowserWindow.getAllWindows()[0].webContents
+      contents.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: ['meta'] })
+      contents.sendInputEvent({ type: 'keyUp', keyCode: 'K', modifiers: ['meta'] })
+    })
+  await realCommandK()
+  await palette.waitFor({ state: 'detached' })
+  await realCommandK()
+  await palette.waitFor()
+  await new Promise((r) => setTimeout(r, 300))
+  assert.equal(await palette.count(), 1)
+  // Held down, it opens once, however often the key repeats.
+  await win.keyboard.press('Escape')
+  await palette.waitFor({ state: 'detached' })
+  await app.evaluate(({ BrowserWindow }) => {
+    const contents = BrowserWindow.getAllWindows()[0].webContents
+    contents.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: ['meta'] })
+    for (let i = 0; i < 3; i++) contents.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: ['meta', 'isAutoRepeat'] })
+    contents.sendInputEvent({ type: 'keyUp', keyCode: 'K', modifiers: ['meta'] })
+  })
+  await palette.waitFor()
+  await new Promise((r) => setTimeout(r, 300))
+  assert.equal(await palette.count(), 1)
 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)

@@ -10,8 +10,10 @@ import { desktop, useDesktop } from './desktop'
 import { Gate } from './Gate'
 import { Icon } from './Icon'
 import { NewBot } from './Modals'
+import { Palette } from './Palette'
 import { usePrefs } from './prefs'
 import { SettingsView } from './Settings'
+import { isCommand, useBotNumbers } from './shortcuts'
 import { Sidebar } from './Sidebar'
 import { TelemetryQuestion } from './Telemetry'
 import { Automations } from './Automations'
@@ -61,6 +63,8 @@ export function App() {
   const browsers = useStore((s) => s.browsers)
   // Which bots have their browser pane showing, and how. Each bot's pane is independent.
   const [panes, setPanes] = useState<Record<string, PaneState | undefined>>({})
+  /** Brings a bot's conversation out from under its browser, when that fills the window. */
+  const reveal = (botId: string) => setPanes((all) => (all[botId]?.full ? { ...all, [botId]: { ...all[botId]!, full: false } } : all))
   // The thread whose window floats over each bot's chat, in picture in picture.
   const [pips, setPips] = useState<Record<string, string | undefined>>({})
   // Threads whose floating window was closed: they stay closed until the bot asks for help in them.
@@ -74,6 +78,30 @@ export function App() {
   useEffect(() => {
     if (loaded) screen(showing)
   }, [loaded, showing])
+  // The window's search (Palette.tsx): ⌘K wherever the keyboard is, Search… in the menu bar, or Search in the sidebar.
+  const [searching, setSearching] = useState(false)
+  const showable = useRef(false)
+  showable.current = loaded && !refused && !unfit
+  useEffect(() => {
+    // Not over a dialog, which has the keyboard; nor before there is anything to search.
+    const toggle = () => setSearching((open) => (open ? false : showable.current && !document.querySelector('.backdrop')))
+    // The app passes ⌘K on, taken before the window or the menu could see it, and Search… from its menu.
+    const stop = desktop?.onPalette?.(toggle)
+    // A ⌘K that reaches the window all the same (from an app that does not pass it on) is taken here,
+    // first, so that a bot's browser does not get it too.
+    const key = (e: KeyboardEvent) => {
+      if (!isCommand(e) || e.key.toLowerCase() !== 'k') return
+      e.preventDefault()
+      e.stopPropagation()
+      // Held down, it opens once.
+      if (!e.repeat) toggle()
+    }
+    window.addEventListener('keydown', key, true)
+    return () => (stop?.(), window.removeEventListener('keydown', key, true))
+  }, [])
+  // ⌘1–9 open the first nine bots from anywhere; holding ⌘ shows their numbers in the sidebar.
+  const order = useBotOrder().bots
+  const numbers = useBotNumbers(order.map((b) => b.id), loaded && !refused && !unfit, (botId) => (setSearching(false), reveal(botId)))
   // The sidebar is a slide-out drawer on narrow screens.
   const [navOpen, setNavOpen] = useState(false)
   useEffect(() => setNavOpen(false), [route.botId, route.threadId, route.usage])
@@ -88,7 +116,7 @@ export function App() {
   const bot = bots.find((b) => b.id === (thread?.botId ?? route.botId))
 
   // Land on the first bot, as the sidebar lists them, when the URL names nothing that exists.
-  const first = useBotOrder().bots[0]?.id
+  const first = order[0]?.id
   useEffect(() => {
     // Not while the settings are showing: they may have been opened directly, with no chat underneath yet.
     if (loaded && !current.settings && !page && !bot && first) navigate(first)
@@ -156,7 +184,17 @@ export function App() {
 
   return (
     <div className="app">
-      <Sidebar bot={page ? undefined : bot} thread={page ? undefined : thread} automationsOpen={!!route.automations} usageOpen={route.usage} openModal={(m) => (setNavOpen(false), setModal(m))} open={navOpen} close={() => setNavOpen(false)} />
+      <Sidebar
+        bot={page ? undefined : bot}
+        thread={page ? undefined : thread}
+        automationsOpen={!!route.automations}
+        usageOpen={route.usage}
+        openModal={(m) => (setNavOpen(false), setModal(m))}
+        openSearch={() => setSearching(true)}
+        numbers={numbers && !searching}
+        open={navOpen}
+        close={() => setNavOpen(false)}
+      />
       {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
       <main
         className={`chat ${pane && !pane.full ? 'with-pane' : ''}`}
@@ -225,6 +263,22 @@ export function App() {
       {current.settings && <SettingsView path={current.settings} newBot={() => setModal({ kind: 'new-bot' })} />}
       {/* A bot made from the settings is opened there, ready to be set up; otherwise its chat opens. */}
       {modal?.kind === 'new-bot' && <NewBot close={() => setModal(null)} created={(made) => ((current.settings ? openSettings('bots', made.id) : navigate(made.id)), setModal(null))} />}
+      {searching && (
+        <Palette
+          close={() => setSearching(false)}
+          // The chat in view: not under the settings, a page in its place, or its browser filling the window.
+          current={page || current.settings || pane?.full ? undefined : bot}
+          browserOpen={showPane}
+          openBrowser={(botId) => {
+            if (botId !== bot?.id || page || current.settings) navigate(botId)
+            setPane(botId, { full: false, threadId: null })
+            setAutoStart(botId)
+            screen('browser')
+          }}
+          openChat={(botId, threadId, itemId) => (navigate(botId, threadId, itemId), reveal(botId))}
+          newBot={() => setModal({ kind: 'new-bot' })}
+        />
+      )}
       {/* The one question a server has for its owner, put once (see Telemetry.tsx). */}
       {!modal && <TelemetryQuestion />}
       {/* A call goes on whatever the window shows. */}

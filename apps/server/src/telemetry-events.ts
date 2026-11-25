@@ -184,6 +184,15 @@ export const EVENTS = {
     },
   },
   'dictation started': { from: 'app', when: 'When the microphone is pressed to dictate a message. What is said stays on the device.', carries: {} },
+  'palette used': {
+    from: 'app',
+    when: 'When something is picked in the desktop app’s search (⌘K).',
+    carries: {
+      picked: { is: ['bot', 'action', 'place', 'command', 'setting', 'superpower', 'automation', 'conversation', 'message', 'person'], what: 'What kind of thing was picked. Never which one, nor what was typed.' },
+      typed: { is: 'flag', what: 'Whether something was typed to find it.' },
+    },
+  },
+  'bot opened by number': { from: 'app', when: 'When ⌘1–9 (Ctrl+1–9) opens one of the first nine bots in the desktop app.', carries: {} },
   'app error': {
     from: 'app',
     when: 'When something goes wrong in an app, at most ten times each time the app runs.',

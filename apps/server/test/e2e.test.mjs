@@ -521,6 +521,20 @@ test('history: the owner and the bot find what was said earlier, also in convers
   assert.equal((await search('1_0%')).length, 0)
   assert.deepEqual(await search(''), [])
   assert.deepEqual(await search('dentist', other.id), [], 'another bot\'s conversations are not searched')
+  assert.ok(matches.every((m) => m.botId === one.id))
+
+  // The window's search (⌘K) goes through every bot's conversations at once, and says whose each match is.
+  await settle((await api('POST', `/api/bots/${other.id}/messages`, { text: 'Is the dentist near the station?' })).id)
+  const everywhere = await api('GET', `/api/search?q=${encodeURIComponent('dentist')}`)
+  assert.deepEqual(
+    everywhere.matches.filter((m) => m.from === 'user').map((m) => [m.botId, m.snippet]),
+    [[other.id, 'Is the dentist near the station?'], [one.id, 'The dentist appointment is on 14 March at 9:30.']],
+  )
+  assert.deepEqual(await api('GET', '/api/search?q='), { matches: [], threads: [] })
+  // With it come the threads whose title has the words: the conversation set aside is one, the current one is not.
+  assert.deepEqual(everywhere.threads.map((t) => t.id), [first.id])
+  const onlyOther = await api('GET', `/api/search?q=dentist&bot=${other.id}`)
+  assert.deepEqual([onlyOther.matches.map((m) => m.botId), onlyOther.threads], [[other.id, other.id], []])
 
   // The bot has the same reach through its tools, from a conversation in which none of it was said.
   const found = await tool('search_history', { query: 'dentist' }, one.id)

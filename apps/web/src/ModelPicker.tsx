@@ -25,11 +25,15 @@ interface Own {
   onChange: (value: RunsOn | null) => void
 }
 
-export function ModelPicker({ bot: stored, own }: { bot: Bot; own?: Own }) {
+/** `opened` opens the picker each time it goes up (the window's search asks for it). */
+export function ModelPicker({ bot: stored, own, opened = 0 }: { bot: Bot; own?: Own; opened?: number }) {
   // Providers that are switched off in Settings are not offered at all.
   const providers = useStore((s) => s.providers).filter((p) => p.enabled !== false)
   const favorites = usePrefs().favoriteModels
   const [open, setOpen] = useState(false)
+  // Only when it goes up: a picker that comes back (after dictation, say) does not open by itself.
+  const asked = useRef(opened)
+  useEffect(() => void (opened !== asked.current && ((asked.current = opened), setOpen(true))), [opened])
   /** An automation that runs on what its bot runs on: no model in the list is its own. */
   const follows = !!own && !own.value
   const [tab, setTab] = useState<string>(own?.value?.provider ?? stored.provider)

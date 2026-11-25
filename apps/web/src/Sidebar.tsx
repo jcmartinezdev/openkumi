@@ -7,6 +7,7 @@ import type { Modal } from './App'
 import { Icon } from './Icon'
 import { USAGE_ADDRESS, mainThread, openSettings, recentSubagents, rootOf, useStore } from './store'
 import { BotHead } from './Mascot'
+import { mac, withCommand } from './shortcuts'
 import { Switcher } from './Switcher'
 import { UpdatePill } from './Updates'
 
@@ -21,7 +22,7 @@ export function StatusDot({ thread }: { thread: Thread }) {
  * them or has something to be read now, in words; that it is at work or failed; or when something
  * last happened in its conversation, with a dot before it when that is still to be read.
  */
-function BotMark({ attention, at }: { attention: Attention; at?: number }) {
+export function BotMark({ attention, at }: { attention: Attention; at?: number }) {
   switch (attention.mark) {
     case 'needs':
       return <span className="pill mark warn">{MARK_WORDS.needs}</span>
@@ -57,6 +58,10 @@ interface Props {
   /** What the models used is showing. */
   usageOpen: boolean
   openModal: (m: Modal) => void
+  /** Opens the window's search (Palette.tsx). */
+  openSearch: () => void
+  /** ⌘ is held: each of the first nine bots shows the number that opens it (shortcuts.ts). */
+  numbers: boolean
   /** Drawer state on narrow screens. */
   open: boolean
   close: () => void
@@ -111,7 +116,7 @@ interface Dragging {
 }
 
 /** The bots, one row each: a bot has a single conversation, so there is nothing to pick beneath it. */
-export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, open, close }: Props) {
+export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, openSearch, numbers, open, close }: Props) {
   const { bots, sort, choosable, choose, move } = useBotOrder()
   const threads = useStore((s) => s.threads)
   const providers = useStore((s) => s.providers)
@@ -148,7 +153,7 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
   }
 
   return (
-    <nav className={`sidebar ${open ? 'open' : ''}`}>
+    <nav className={`sidebar ${open ? 'open' : ''} ${numbers ? 'numbers' : ''}`}>
       <div className="side-head">
         <span className="wordmark">OpenKumi</span>
         {/* OpenKumi is an alpha; Settings › About says what that means. */}
@@ -160,6 +165,12 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
       </div>
       {/* Whose bots these are, and where: switched here, for everyone on this computer and the other computers. */}
       <Switcher picked={close} />
+      {/* The window's search, which ⌘K opens from anywhere. */}
+      <button className="side-search" aria-keyshortcuts={mac ? 'Meta+K' : 'Control+K'} onClick={() => (close(), openSearch())}>
+        <Icon name="search" size={15} />
+        <span className="grow">Search</span>
+        <kbd>{withCommand('K')}</kbd>
+      </button>
       {/* With more than one bot, their order is chosen over the list. */}
       {choosable && bots.length > 1 && (
         <div className="side-caption">
@@ -218,7 +229,7 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
                 >
                   <BotHead bot={b} />
                   <span className="grow name">{b.name}</span>
-                  <span className="meta"><BotMark attention={attention} at={main?.updatedAt} /></span>
+                  <span className="meta">{numbers && place < 9 ? <kbd className="bot-number">{withCommand(String(place + 1))}</kbd> : <BotMark attention={attention} at={main?.updatedAt} />}</span>
                 </a>
                 <button className="icon reveal" title="Bot settings" aria-label={`Settings for ${b.name}`} onClick={() => (close(), openSettings('bots', b.id))}>
                   <Icon name="more" />
