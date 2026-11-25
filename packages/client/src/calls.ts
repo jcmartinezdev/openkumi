@@ -77,6 +77,13 @@ export function useCalling(): Calling {
 /** Whether this app is on a call, or making one, right now: for what must not cut one off. */
 export const onCall = () => calling.phase !== 'off'
 
+/** This app's own call as it stands, and a way to hear of each change to it, for what is not a view (a car's screen). */
+export const callingNow = () => calling
+export function onCalling(fn: () => void): () => void {
+  watchers.add(fn)
+  return () => void watchers.delete(fn)
+}
+
 /** The call an app shows: its own, or one under way on another device, which can be seen and ended from here. */
 export interface CallShown {
   calling: Calling

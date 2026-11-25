@@ -1,7 +1,7 @@
 {
   "name": "@openkumi/mobile",
   "version": "0.0.6",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "dependencies": {
     "@legendapp/list": "3.7.0",
     "@openkumi/client": "*",

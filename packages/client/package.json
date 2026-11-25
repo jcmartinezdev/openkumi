@@ -30,7 +30,8 @@
     "./calls": "./src/calls.ts",
     "./telemetry": "./src/telemetry.ts",
     "./usage": "./src/usage.ts",
-    "./bots": "./src/bots.ts"
+    "./bots": "./src/bots.ts",
+    "./car": "./src/car.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

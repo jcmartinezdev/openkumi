@@ -95,6 +95,9 @@ export function onState(fn: (s: State) => void): () => void {
   return () => void subscribers.delete(call)
 }
 
+/** The state as it stands, outside of any view. */
+export const stateNow = () => state
+
 /** Selectors must return a value that is stable while the state is unchanged (a slice, not a new object). */
 export function useStore<T>(select: (s: State) => T): T {
   return useSyncExternalStore(subscribe, () => select(state))

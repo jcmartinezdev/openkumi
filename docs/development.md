@@ -277,8 +277,9 @@ apps/
       preload.ts       the bridge between the window and the app
       dictation.ts     runs the Mac's dictation program and passes what it hears to the window
   mobile/            the iPhone app (Expo, React Native): pairing, each bot's conversation, calls, a bot's
-                     browser, settings and automations. `modules/call-audio` is its one native module
-                     of its own (Swift): where a call's sound comes out
+                     browser, settings and automations. Its own native modules (Swift) are
+                     `modules/call-audio`, where a call's sound comes out, and `modules/car`, the app
+                     on a car's screen (see [In a car](mobile-releases.md#in-a-car))
   marketing/         the website at openkumi.ai (Astro, built to static pages), and the scripts
                      that make what it shows: every app's icon, drawn from the mascot (`npm run icons`),
                      the app's screenshots, taken from the real app with scripted bots (`npm run
