@@ -299,9 +299,10 @@ export function postMessage(
   if (!opts.always && !isReport(said) && db.queueOf(threadId).length >= MAX_WAITING) {
     throw new Busy(`${getBot(thread.botId)?.name ?? 'The bot'} is busy: ${MAX_WAITING} messages are already waiting for it.`)
   }
-  // The owner writing to their bot has read what is there, and answers whatever it raised for them.
+  // The owner writing to their bot has read what is there, and answers whatever it raised for them. What they
+  // ask on a call answers it too, but they have read nothing: a call is listened to, not looked at.
   if (said.source === 'user' && thread.kind === 'chat') {
-    const upTo = db.lastItem(threadId)
+    const upTo = said.via === 'call' ? 0 : db.lastItem(threadId)
     if (thread.flag || upTo > (thread.readTo ?? 0)) db.markThread(threadId, { readTo: Math.max(upTo, thread.readTo ?? 0), flag: null })
   }
   const attachments = opts.files?.length ? attach(thread.botId, thread.id, opts.files) : []
@@ -503,17 +504,13 @@ async function loop(threadId: string, state: Run) {
  * What a run that is over leaves on a bot's conversation for its owner: what the bot last said,
  * and what it raised to reach them. Nothing for a subagent or a run of an automation, which
  * report to the conversation. What was raised by a run that was stopped, or failed, is dropped:
- * the reply it was about may never have been written.
+ * the reply it was about may never have been written. What it answered on a call is new like the
+ * rest: the voice may not have said it (the call was over, or the answer was too long to say whole).
  */
-function forOwner(threadId: string, state: Run, broken: boolean): globalThis.Partial<Pick<Thread, 'told' | 'readTo' | 'flag'>> {
-  const thread = db.getThread(threadId)
-  if (!thread || thread.kind !== 'chat') return {}
+function forOwner(threadId: string, state: Run, broken: boolean): globalThis.Partial<Pick<Thread, 'told' | 'flag'>> {
+  if (db.getThread(threadId)?.kind !== 'chat') return {}
   const told = db.lastTold(threadId)
-  const raised: Flag | undefined = state.flag && !broken ? { ...state.flag, item: told, at: Date.now() } : undefined
-  if (!state.asked.some(onCall)) return { told, ...(raised ? { flag: raised } : {}) }
-  // What a bot answers on a call is read out to its owner: it is read, and so is what the bot had for them to read.
-  const flag = raised ?? thread.flag ?? null
-  return { told, readTo: Math.max(told, thread.readTo ?? 0), flag: flag?.kind === 'read' ? null : flag }
+  return { told, ...(state.flag && !broken ? { flag: { ...state.flag, item: told, at: Date.now() } } : {}) }
 }
 
 /**

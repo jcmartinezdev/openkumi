@@ -2544,6 +2544,9 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
   assert.equal(caller.voice, '')
   const thread = await fresh(caller.id)
   await say(thread, '!say We spoke before.')
+  // The owner has read that much, before calling.
+  const read = (await api('GET', `/api/threads/${thread}`)).thread.told
+  await api('POST', `/api/threads/${thread}/seen`, { upTo: read })
 
   const watcher = await openSocket()
   const events = []
@@ -2590,6 +2593,9 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
     const asked = items.find((d) => d.via === 'call')
     assert.deepEqual([asked.source, asked.text, asked.before], ['user', '!say Tomorrow is free.', 'User: Hello there\nYou: You said: Hello there'])
     assert.equal(lastText(items), 'Tomorrow is free.')
+    // A call is listened to, not looked at: what was asked and answered on it is still to be read in the conversation.
+    const spokenOf = (await api('GET', `/api/threads/${thread}`)).thread
+    assert.deepEqual([spokenOf.readTo, spokenOf.told > read], [read, true])
     assert.deepEqual(words(), [
       'user: Hello there',
       'assistant: You said: Hello there',
