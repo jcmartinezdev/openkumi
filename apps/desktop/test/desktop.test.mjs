@@ -1259,6 +1259,128 @@ test('what is said to a busy bot waits in view, to be taken back, sent now or le
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('what a bot has for its owner: a mark beside each bot, gone once its conversation is in front; what it waits for over the composer; a count and notifications outside the window', async () => {
+  fs.mkdirSync(`${tmp}/app`, { recursive: true })
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Kumi')
+  const local = (method, url, body) => ask(LOCAL_PORT, 'local-home', method, url, body)
+  const [quiet, asker, planner] = await Promise.all(['Quiet', 'Asker', 'Planner'].map((name) => local('POST', '/api/bots', { name, provider: 'mock' })))
+  await showsBot(win, 'Planner')
+  const row = (name) => win.locator('.sidebar .row.bot', { hasText: name })
+  const send = async (text) => {
+    await win.locator('.composer textarea').fill(text)
+    await win.keyboard.press('Meta+Enter')
+  }
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`) })
+  // What the app shows outside its window. With its window off the screen it only notes that, for this to read.
+  const hidden = !process.env.OPENKUMI_TEST_SHOW
+  const outside = () => app.evaluate(() => ({ count: globalThis.attention.count, shown: globalThis.attention.shown.map((notice) => `${notice.title} | ${notice.body}`) }))
+  /** The notifications about the bots made here: the tests before left bots of their own, some with something for their owner. */
+  const shown = async () => (await outside()).shown.filter((notice) => /^(Asker|Planner)\b/.test(notice))
+  /** How many of those bots the icon counted before anything happened here, once the window had said. */
+  let counted = 0
+  if (hidden) {
+    let last = -1
+    await until(async () => {
+      const was = last
+      last = (await outside()).count
+      return was === last
+    }, 10_000)
+    counted = last
+  }
+  // Tests keep the window off the screen, where nothing in it counts as looked at: from here on it says it is in front.
+  const inFront = () =>
+    win.evaluate(() => {
+      document.hasFocus = () => true
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' })
+      dispatchEvent(new Event('focus'))
+    })
+  await win.locator('.sidebar .row.bot', { hasText: 'Kumi' }).first().click()
+
+  // Things happen in other bots' conversations while the window shows Kumi's: each bot wears a mark for it.
+  await local('POST', `/api/bots/${quiet.id}/messages`, { text: 'hello' })
+  await row('Quiet').locator('.dot.new').waitFor({ timeout: 30_000 })
+  assert.equal(await row('Quiet').locator('.time').count(), 1, 'when it happened stays beside the dot')
+  await local('POST', `/api/bots/${asker.id}/messages`, { text: '!tool notify_user {"kind":"answer","reason":"Which flight to book"}' })
+  await row('Asker').locator('.pill.mark.warn', { hasText: 'Needs you' }).waitFor({ timeout: 30_000 })
+  assert.equal(await row('Asker').getAttribute('title'), 'Needs you: Which flight to book')
+  await local('POST', `/api/bots/${planner.id}/messages`, { text: '!tool notify_user {"kind":"read","reason":"Design review moved to 3 pm"}' })
+  await row('Planner').locator('.pill.mark.new', { hasText: 'Read this' }).waitFor({ timeout: 30_000 })
+  assert.equal(await row('Planner').getAttribute('title'), 'Read this: Design review moved to 3 pm')
+  await shot('attention-marks')
+
+  // Outside the window: the app's icon counts the three, and the two that cannot wait are notified.
+  if (hidden) {
+    await until(async () => (await outside()).count === counted + 3, 10_000)
+    assert.deepEqual(await shown(), ['Asker needs you | Which flight to book', 'Planner: read this | Design review moved to 3 pm'])
+    // A notification that is clicked opens its bot.
+    await app.evaluate((_, id) => globalThis.attention.click(id), planner.id)
+    await until(async () => (await win.evaluate(() => location.hash)) === `#/${planner.id}`, 10_000)
+  } else {
+    await row('Planner').click()
+  }
+
+  // A conversation in front of its owner is read: what was to be read is no longer marked, here or on the icon.
+  await win.locator('.msg.assistant').first().waitFor()
+  await inFront()
+  await row('Planner').locator('.pill').waitFor({ state: 'detached', timeout: 10_000 })
+  await until(async () => (await local('GET', '/api/state')).threads.find((t) => t.botId === planner.id).flag === null, 10_000)
+  if (hidden) await until(async () => (await outside()).count === counted + 2, 10_000)
+
+  // What a bot waits for is said over the composer. Reading it is not answering it: it stays until it is cleared, or the owner writes.
+  await row('Asker').click()
+  const strip = win.locator('.needs-you')
+  await strip.waitFor()
+  assert.match(await strip.innerText(), /^Asker needs you: Which flight to book\s*Clear$/)
+  await shot('attention-needs-you')
+  await until(async () => { const t = (await local('GET', '/api/state')).threads.find((t) => t.botId === asker.id); return t.readTo === t.told }, 10_000)
+  assert.equal(await row('Asker').locator('.pill.mark.warn').count(), 1)
+  await strip.getByRole('button', { name: 'Clear' }).click()
+  await strip.waitFor({ state: 'detached' })
+  await row('Asker').locator('.pill').waitFor({ state: 'detached' })
+  await send('!tool notify_user {"kind":"answer","reason":"Go ahead?"}')
+  await strip.filter({ hasText: 'Go ahead?' }).waitFor({ timeout: 30_000 })
+  await send('yes')
+  await strip.waitFor({ state: 'detached' })
+  await win.locator('.msg.assistant', { hasText: 'Echo: yes' }).waitFor({ timeout: 30_000 })
+  // What it says while its owner looks at it is read as it comes.
+  await until(async () => { const t = (await local('GET', '/api/state')).threads.find((t) => t.botId === asker.id); return t.status === 'idle' && t.readTo === t.told }, 10_000)
+  assert.equal(await row('Asker').locator('.dot.new, .pill').count(), 0)
+
+  // Opening the last of them leaves nothing on the icon.
+  await row('Quiet').click()
+  await row('Quiet').locator('.dot.new').waitFor({ state: 'detached', timeout: 10_000 })
+  if (hidden) await until(async () => (await outside()).count === counted, 10_000)
+
+  // Notifications are switched off in the settings, for this device: the icon still counts.
+  await win.evaluate(() => (location.hash = '/settings/general'))
+  await win.locator('#notifications .switch').click()
+  const before = hidden ? (await shown()).length : 0
+  await local('POST', `/api/bots/${planner.id}/messages`, { text: '!tool notify_user {"kind":"read","reason":"Rain at five"}' })
+  await until(async () => (await local('GET', '/api/state')).threads.find((t) => t.botId === planner.id).flag?.reason === 'Rain at five', 30_000)
+  if (hidden) {
+    await until(async () => (await outside()).count === counted + 1, 10_000)
+    assert.equal((await shown()).length, before, 'nothing more was shown')
+  }
+  await win.locator('#notifications .switch').click()
+
+  // On a Mac the app stays in the Dock when its window is closed, with the bots at work: the window is only put
+  // away, so the icon goes on counting and what cannot wait is still notified. It closes when the app quits.
+  if (hidden && process.platform === 'darwin') {
+    const windows = () => app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
+    await local('POST', `/api/bots/${asker.id}/messages`, { text: '!tool notify_user {"kind":"answer","reason":"Still there?"}' })
+    await until(async () => (await shown()).includes('Asker needs you | Still there?'), 30_000)
+    assert.equal(await windows(), 1)
+    assert.equal((await outside()).count, counted + 2)
+  }
+
+  for (const made of [quiet, asker, planner]) await local('DELETE', `/api/bots/${made.id}`)
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('automations: made on their page, run, and each run opened from beneath its automation', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()

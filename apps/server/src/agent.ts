@@ -7,7 +7,7 @@
 // reporting back) waits in the thread's queue and is let in one message at a time: the bot answers each in a
 // turn of its own. The owner can have a waiting message read at once, by the bot as it works.
 import crypto from 'node:crypto'
-import type { Attachment, Bot, Item, ItemData, Partial, Queued, RunsOn, Said, Thread } from '@openkumi/shared'
+import type { Attachment, Bot, Flag, Item, ItemData, Partial, Queued, RunsOn, Said, Thread } from '@openkumi/shared'
 import { attach, discard, handOver, outgoing, stageCopy, toShow, unstage, withFiles } from './attachments.ts'
 import { getBot, listBots } from './bots.ts'
 import { browserFor, retireWindow } from './browser.ts'
@@ -53,6 +53,8 @@ interface Run {
   steps: number
   /** The tokens the run used so far, by model as the engine names it ('' for the model the bot was set to). */
   used: Map<string, { input: number; cached: number; output: number }>
+  /** What the bot raised to reach its owner (notify_user): put on its conversation once the run is over, when its reply is there to read. */
+  flag?: Pick<Flag, 'kind' | 'reason'>
 }
 
 const running = new Map<string, Run>()
@@ -249,6 +251,9 @@ function letIn(waiting: Queued, thread: Thread): Item {
   const item = db.addItem(thread.id, message)
   db.removeQueued(waiting.id)
   emptied(thread.id)
+  // The owner has written since the bot raised something for them: it is not put on the conversation after all.
+  const state = message.source === 'user' ? running.get(thread.id) : undefined
+  if (state) state.flag = undefined
   track('message sent', { from: message.source, engine: getBot(thread.botId)?.provider, attachments: message.attachments?.length ?? 0, on_call: message.via === 'call' })
   const answer = awaited.get(waiting.id)
   if (answer) {
@@ -293,6 +298,11 @@ export function postMessage(
   }
   if (!opts.always && !isReport(said) && db.queueOf(threadId).length >= MAX_WAITING) {
     throw new Busy(`${getBot(thread.botId)?.name ?? 'The bot'} is busy: ${MAX_WAITING} messages are already waiting for it.`)
+  }
+  // The owner writing to their bot has read what is there, and answers whatever it raised for them.
+  if (said.source === 'user' && thread.kind === 'chat') {
+    const upTo = db.lastItem(threadId)
+    if (thread.flag || upTo > (thread.readTo ?? 0)) db.markThread(threadId, { readTo: Math.max(upTo, thread.readTo ?? 0), flag: null })
   }
   const attachments = opts.files?.length ? attach(thread.botId, thread.id, opts.files) : []
   const waiting = db.addQueued(threadId, { type: 'message', role: 'user', ...said, ...(attachments.length ? { attachments } : {}) })
@@ -478,9 +488,62 @@ async function loop(threadId: string, state: Run) {
       if (broken || closing || !waits) unanswered(id, waits ? 'The bot stopped before it got to that. It waits in the conversation.' : 'The conversation was deleted before the bot got to that.')
     }
     const held = !!stopped && db.queueOf(threadId).length > 0
-    const thread = db.updateThread(threadId, { status, ...(held ? { held } : {}) })
+    const thread = db.updateThread(threadId, { status, ...(held ? { held } : {}), ...forOwner(threadId, state, broken) })
     if (thread) finished(thread)
   }
+}
+
+// ---- what a bot has for its owner
+// The owner is often elsewhere when a bot finishes: an automation's result, another bot's message or
+// a subagent's report set it to work. A conversation therefore knows the last thing its bot said in
+// it (`told`) and how far the owner has read (`readTo`), on any device, and the apps mark a bot that
+// has something new. A bot that needs more than that raises it with notify_user (`flag`).
+
+/**
+ * What a run that is over leaves on a bot's conversation for its owner: what the bot last said,
+ * and what it raised to reach them. Nothing for a subagent or a run of an automation, which
+ * report to the conversation. What was raised by a run that was stopped, or failed, is dropped:
+ * the reply it was about may never have been written.
+ */
+function forOwner(threadId: string, state: Run, broken: boolean): globalThis.Partial<Pick<Thread, 'told' | 'readTo' | 'flag'>> {
+  const thread = db.getThread(threadId)
+  if (!thread || thread.kind !== 'chat') return {}
+  const told = db.lastTold(threadId)
+  const raised: Flag | undefined = state.flag && !broken ? { ...state.flag, item: told, at: Date.now() } : undefined
+  if (!state.asked.some(onCall)) return { told, ...(raised ? { flag: raised } : {}) }
+  // What a bot answers on a call is read out to its owner: it is read, and so is what the bot had for them to read.
+  const flag = raised ?? thread.flag ?? null
+  return { told, readTo: Math.max(told, thread.readTo ?? 0), flag: flag?.kind === 'read' ? null : flag }
+}
+
+/**
+ * A bot raises something for its owner, from its own conversation: that it cannot go on without
+ * them ('answer'), or that what it is about to say should not wait until they next look ('read').
+ * It is put on the conversation when the run is over. The latest one stands.
+ */
+export function raise(thread: Thread, kind: unknown, reason: unknown) {
+  if (thread.kind !== 'chat') throw new Error('Only your own conversation with the user can be raised for them. Say what they should know in your final message.')
+  if (kind !== 'answer' && kind !== 'read') throw new Error('kind must be "answer" or "read".')
+  const text = String(reason ?? '').replace(/\s+/g, ' ').trim()
+  if (!text) throw new Error('Give the reason, in a few words: it is shown beside your name.')
+  const state = running.get(thread.id)
+  if (state) state.flag = { kind, reason: text.length > 80 ? text.slice(0, 79) + '…' : text }
+}
+
+/**
+ * The owner has read a conversation up to an item, on one of their devices. What the bot raised
+ * for them to read goes with that; what it needs an answer to stays until they answer or clear it.
+ */
+export function seen(thread: Thread, upTo: number) {
+  const to = Math.max(Math.min(upTo, db.lastItem(thread.id)), thread.readTo ?? 0)
+  const read = thread.flag?.kind === 'read' && thread.flag.item <= to
+  if (to === (thread.readTo ?? 0) && !read) return
+  db.markThread(thread.id, { readTo: to, ...(read ? { flag: null } : {}) })
+}
+
+/** The owner clears what a bot raised for them, without answering it. */
+export function unflag(thread: Thread) {
+  if (thread.flag) db.markThread(thread.id, { flag: null })
 }
 
 /** One turn: the model answers what it was asked, calling tools until it has nothing more to do. */
@@ -785,7 +848,7 @@ export function startFresh(botId: string): Thread {
   if (!current || (!db.hasItems(current.id) && !db.queueOf(current.id).length)) return current ?? db.createThread({ botId })
   if (busy(current)) throw new Error('The bot is still working. Stop it first, or wait until it is done.')
   mustBeRead(current)
-  db.updateThread(current.id, { archivedAt: Date.now() })
+  db.updateThread(current.id, { archivedAt: Date.now(), flag: null })
   const next = db.createThread({ botId })
   // The bot carries on in the browser window it was using.
   browserFor(botId).handOver(current.id, next.id)
@@ -804,7 +867,7 @@ export function resume(thread: Thread): Thread {
   if (current) {
     if (busy(current)) throw new Error('The bot is still working. Stop it first, or wait until it is done.')
     mustBeRead(current)
-    if (db.hasItems(current.id)) db.updateThread(current.id, { archivedAt: Date.now() })
+    if (db.hasItems(current.id)) db.updateThread(current.id, { archivedAt: Date.now(), flag: null })
     else db.deleteThread(current.id)
     browserFor(thread.botId).handOver(current.id, thread.id)
   }

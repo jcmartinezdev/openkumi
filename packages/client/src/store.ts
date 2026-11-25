@@ -684,6 +684,15 @@ setInterval(() => {
   if (threads !== state.threads) set({ threads })
 }, 10 * 60_000)
 
+/**
+ * Shows a thread as changed before the server has said so. For what the owner just did on this
+ * device and should not see undone for a moment: the server's word follows, and stands.
+ */
+export function assume(id: string, patch: globalThis.Partial<Thread>) {
+  const thread = state.threads.find((t) => t.id === id)
+  if (thread) set({ threads: upsert(state.threads, { ...thread, ...patch }) })
+}
+
 /** A bot's conversation with its owner: its one chat that is not archived. There is none until something has been said. */
 export function mainThread(threads: Thread[], botId: string): Thread | undefined {
   return threads.find((t) => t.botId === botId && !t.parentId && !t.archivedAt)

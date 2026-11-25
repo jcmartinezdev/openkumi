@@ -126,6 +126,14 @@ export interface EnvironmentReport {
   canUpdate?: boolean
 }
 
+/** A notification about one bot: that it needs its owner, or has something for them to read now. */
+export interface Notice {
+  /** The bot's id: one notification per bot, and where a click on it leads. */
+  id: string
+  title: string
+  body: string
+}
+
 /** What the window can ask of the app (see apps/desktop/src/preload.ts). */
 export interface DesktopBridge {
   /** The state as it was when the window loaded, so the first thing drawn is already right. */
@@ -200,6 +208,14 @@ export interface DesktopBridge {
    * with whether it may. Missing from older apps.
    */
   microphone?(): Promise<boolean>
+  /**
+   * What the bots the window shows have for their owner, for the app to show outside the window:
+   * `count` on the app's icon, and each of `notices` as a notification, shown while the window is
+   * not in front and taken back once it is no longer among them. Missing from older apps.
+   */
+  attention?(count: number, notices: Notice[]): Promise<void>
+  /** Called with the id of a notification the person clicked, once the window is in front again. Missing from older apps. */
+  onNotice?(listener: (id: string) => void): () => void
   /**
    * Called with the address a sign-in in this computer's own browser came back to, for the window
    * to pass on to its environment. One that came before anything listened goes to the first listener.

@@ -387,6 +387,84 @@ test('at most ten messages wait for a bot; a bot that is stopped does not start 
   assert.equal(await held(), false)
 })
 
+test('what a bot has for its owner: a conversation knows what is new and how far the owner has read, and the bot raises what cannot wait', async () => {
+  const id = await fresh()
+  const thread = async () => (await api('GET', `/api/threads/${id}`)).thread
+  const lastItem = async () => (await api('GET', `/api/threads/${id}`)).items.at(-1).id
+
+  // What the bot answers is new until an app says its owner has read it.
+  await say(id, 'hello')
+  let t = await thread()
+  assert.deepEqual([t.told, t.readTo, t.flag], [await lastItem(), 0, null], 'the last thing the bot said, and nothing read')
+  await api('POST', `/api/threads/${id}/seen`, { upTo: t.told })
+  const read = await thread()
+  assert.deepEqual([read.readTo, read.updatedAt], [t.told, t.updatedAt], 'reading is not something that happens in the conversation')
+  // Reading goes no further than what is there, and never back.
+  await api('POST', `/api/threads/${id}/seen`, { upTo: t.told + 1000 })
+  await api('POST', `/api/threads/${id}/seen`, { upTo: 1 })
+  assert.equal((await thread()).readTo, t.told)
+  await assert.rejects(api('POST', `/api/threads/${id}/seen`, { upTo: 'everything' }), /upTo must be the id of an item/)
+
+  // What reaches the bot while its owner is elsewhere leaves something new, too: here a subagent's report.
+  await say(id, '!tool spawn_subagent {"name":"Elsewhere","task":"say hi"}')
+  await until(async () => (await settle(id)).some((d) => d.source === 'subagent') && /^Echo: <subagent_notification>/.test(lastText(await settle(id))))
+  t = await thread()
+  assert.deepEqual([t.told, t.told > t.readTo], [await lastItem(), true])
+  // Writing to the bot is reading what was there; its answer is new again.
+  await say(id, 'thanks')
+  const answered = await thread()
+  assert.ok(answered.readTo >= t.told && answered.told > answered.readTo)
+
+  // The bot needs an answer: raised when its turn is over, with the reason in a line, and still there once read.
+  assert.match(lastText(await say(id, '!tools')), /\bnotify_user\b/)
+  await say(id, `!tool notify_user ${JSON.stringify({ kind: 'answer', reason: '  Which flight\n to book  ' })}`)
+  t = await thread()
+  assert.deepEqual([t.flag.kind, t.flag.reason, t.flag.item], ['answer', 'Which flight to book', t.told])
+  await api('POST', `/api/threads/${id}/seen`, { upTo: t.told })
+  assert.equal((await thread()).flag.kind, 'answer', 'reading is not answering')
+  // It goes when the owner writes to the bot, or clears it.
+  await say(id, 'the direct one')
+  assert.equal((await thread()).flag, null)
+  await say(id, '!tool notify_user {"kind":"answer","reason":"Go ahead?"}')
+  assert.equal((await thread()).flag.reason, 'Go ahead?')
+  await api('DELETE', `/api/threads/${id}/flag`)
+  assert.equal((await thread()).flag, null)
+
+  // Something that should not wait, with nothing to answer: it goes once the owner has read up to it.
+  await say(id, '!tool notify_user {"kind":"read","reason":"Design review moved to 3 pm"}')
+  t = await thread()
+  assert.deepEqual([t.flag.kind, t.flag.reason, t.flag.item], ['read', 'Design review moved to 3 pm', t.told])
+  await api('POST', `/api/threads/${id}/seen`, { upTo: t.told })
+  t = await thread()
+  assert.deepEqual([t.flag, t.readTo], [null, t.told])
+
+  // Raised without saying what kind or why, nothing is.
+  assert.match(await toolIn(id, 'notify_user', { kind: 'urgent', reason: 'Now' }), /^Error: kind must be "answer" or "read"/)
+  assert.match(await toolIn(id, 'notify_user', { kind: 'read', reason: ' ' }), /^Error: Give the reason/)
+  assert.equal((await thread()).flag, null)
+
+  // The owner writes before the bot is done: what it raised is not put on the conversation after all.
+  await api('POST', `/api/threads/${id}/messages`, { text: '!tool notify_user {"kind":"answer","reason":"Too late"}' })
+  await api('POST', `/api/threads/${id}/messages`, { text: 'I am here' })
+  await until(async () => lastText(await settle(id)) === 'Echo: I am here')
+  assert.equal((await thread()).flag, null)
+
+  // Only its own conversation is the owner's to read: a subagent is not offered it.
+  await say(id, '!tool spawn_subagent {"name":"Offered","task":"!tools"}')
+  const child = await until(async () => (await api('GET', '/api/state')).threads.find((c) => c.parentId === id && c.title === 'Offered'))
+  const offered = lastText(await settle(child.id))
+  assert.match(offered, /\bread_file\b/)
+  assert.doesNotMatch(offered, /notify_user/)
+  assert.deepEqual([child.told, child.flag], [0, null])
+
+  // A conversation that is set aside takes what was raised in it along.
+  await until(async () => (await settle(id)).some((d) => d.source === 'subagent' && d.text.includes('"Offered"')) && /Offered/.test(lastText(await settle(id))))
+  await say(id, '!tool notify_user {"kind":"answer","reason":"Still there?"}')
+  assert.equal((await thread()).flag.reason, 'Still there?')
+  await fresh()
+  assert.equal((await thread()).flag, null)
+})
+
 test('history: the owner and the bot find what was said earlier, also in conversations that were set aside', async () => {
   const one = await api('POST', '/api/bots', { name: 'Rememberer', provider: 'mock' })
   const other = await api('POST', '/api/bots', { name: 'Stranger', provider: 'mock' })

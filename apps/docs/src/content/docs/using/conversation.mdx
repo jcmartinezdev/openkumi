@@ -68,6 +68,40 @@ tables that scroll sideways, ```` ```mermaid ```` diagrams, and formulas (`$…$
 conversation (a chart, a dashboard, a timeline) that follows light and dark mode and opens full
 size. See [Replies and pages](/how-it-works/replies-and-pages/).
 
+## When a bot has something for you
+
+Much of what a bot does happens while you are elsewhere: an automation ran, another bot wrote to
+it, a subagent finished. So each bot wears one mark beside its name, in the sidebar on the
+computer and in the list on the phone. The first of these that holds is the one it wears:
+
+| Mark | What it means | When it goes |
+| --- | --- | --- |
+| **Needs you** | The bot waits for you: for a step in its browser, with messages held back after it was stopped, or because it said it cannot go on without your answer. | When you do the step, let the messages go, or write to it. |
+| **Read this** | The bot told you something that should not wait until you next look, such as a meeting moved to this afternoon. | When you open its conversation. |
+| A spinner | It is at work. | When it is done. |
+| A red dot | Its last run failed. | When it next runs. |
+| A blue dot, before the time | It said something you have not read. | When you open its conversation. |
+
+What you have read is kept by the environment, not by the device: read a conversation on the
+phone and its mark goes on the computer too. A conversation counts as read while it is in front of
+you, in a window or an app that is in front.
+
+**Needs you** and **Read this** come with the reason in the bot's own few words: under its name
+on the phone, and on the computer when the pointer rests on its row. When a bot asked for your
+answer, the reason also stands over the message box in its conversation, with **Clear** to take
+the mark away without answering. Reading alone does not: the bot is still waiting.
+
+It is the bot that decides to raise either of the two, and it is told to keep them for what cannot
+wait: a daily summary is a blue dot, not a notification. When a bot raises too much or too little,
+tell it so; it writes that into its own instructions.
+
+On the computer, the app's icon counts the bots with **Needs you**, **Read this** or a blue dot,
+and a notification is shown for the first two while OpenKumi is not in front. Clicking it opens
+the bot. On a Mac both go on after you close the window, for as long as OpenKumi is running: the
+window comes back from the Dock. **Settings → General → Notify me when a bot needs me** turns the
+notifications off for that computer; the count stays. The phone shows the marks whenever the app
+is open, and has no notifications of its own yet.
+
 ## Starting fresh, and earlier conversations
 
 **Start fresh**, in the conversation's header, sets the conversation so far aside and begins an

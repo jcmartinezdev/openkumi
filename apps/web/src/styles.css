@@ -17,6 +17,8 @@
   --ok: #4ade80;
   --run: #f5b54a;
   --err: #f87171;
+  /* Something its owner has not read yet. */
+  --new: #6aa9ff;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   /* The picked part of a segmented control on a raised surface, lighter than its track. */
   --segment: #36363c;
@@ -47,6 +49,7 @@
     --ok: #16a34a;
     --run: #d97706;
     --err: #dc2626;
+    --new: #2563eb;
     --shadow: 0 16px 48px rgba(0, 0, 0, 0.14);
     --segment: #ffffff;
     --card: #ffffff;
@@ -72,6 +75,7 @@
   --ok: #16a34a;
   --run: #d97706;
   --err: #dc2626;
+  --new: #2563eb;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.14);
   --segment: #ffffff;
   --card: #ffffff;
@@ -144,11 +148,16 @@ textarea { resize: vertical; line-height: 1.5; }
 .pill.good { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
 .pill.bad { color: var(--err); background: color-mix(in srgb, var(--err) 13%, transparent); }
 .pill.warn { color: var(--run); background: color-mix(in srgb, var(--run) 13%, transparent); }
+/* A bot's mark in the list (Sidebar.tsx): darker (or, when dark, lighter) than its colour itself, to be read at this size. */
+.pill.mark { font-weight: 600; }
+.pill.mark.warn { color: color-mix(in srgb, var(--run) 72%, var(--text)); background: color-mix(in srgb, var(--run) 16%, transparent); }
+.pill.mark.new { color: color-mix(in srgb, var(--new) 72%, var(--text)); background: color-mix(in srgb, var(--new) 17%, transparent); }
 button.pill.link { color: var(--text); }
 button.pill.link:hover { background: var(--active); }
 
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--faint); }
 .dot.error { background: var(--err); }
+.dot.new { width: 8px; height: 8px; background: var(--new); }
 .spinner {
   width: 12px; height: 12px; flex: none; display: inline-block; border-radius: 50%;
   border: 1.5px solid var(--border-strong); border-top-color: var(--text);
@@ -322,7 +331,7 @@ button.alpha-badge:hover:not(:disabled) { background: color-mix(in srgb, var(--r
 .row.thread { padding-left: 38px; }
 .row.sub { font-size: 12.5px; min-height: 28px; }
 .row.settings { margin: 0 8px 8px; width: auto; flex: none; height: 36px; color: var(--muted); }
-.row .meta { display: flex; align-items: center; justify-content: flex-end; min-width: 22px; }
+.row .meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 22px; flex: none; }
 .time { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
 .item { position: relative; }
 a.row { text-decoration: none; }
@@ -607,6 +616,9 @@ button.sent-file:hover { border-color: var(--border-strong); }
 /* An earlier conversation is read-only: where the composer would be, the way to carry it on. */
 .set-aside { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 14px; border: 1px solid var(--border); border-radius: 14px; font-size: 13px; line-height: 1.45; color: var(--muted); text-wrap: pretty; }
 .set-aside > button { flex: none; }
+/* Over the composer: what the bot said it cannot go on without, in the colour of its mark in the list. */
+.needs-you { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 7px 8px 7px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.4; background: color-mix(in srgb, var(--run) 13%, transparent); overflow-wrap: anywhere; }
+.needs-you > button { flex: none; height: 26px; padding: 0 10px; border-color: var(--border-strong); border-radius: 7px; font-size: 12px; }
 button.quiet { height: 28px; border: none; font-size: 12.5px; font-weight: 400; color: var(--faint); }
 button.quiet:hover:not(:disabled) { color: var(--text); }
 

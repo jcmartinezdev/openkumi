@@ -73,6 +73,11 @@ that stays logged in.
   app calls a webhook. It tells you in its conversation what came of it. Each automation runs on
   its bot's model, or on one of its own, such as a lighter one for a simple check. See
   [Automations](/automations/).
+- **Know when a bot has something for you.** Results arrive while you are elsewhere, so each bot
+  wears a mark in the list: a dot when it said something you have not read, **Needs you** when it
+  waits for you, **Read this** when it has something that should not wait. The app's icon counts
+  them, and the last two reach you as notifications. See [When a bot has something for
+  you](/using/conversation/#when-a-bot-has-something-for-you).
 - **See what it all uses.** Usage, on the computer and the phone, shows how many tokens your bots'
   models used by provider, model and bot, what that would have cost as API calls, and how much of
   your Claude and ChatGPT plans is used up. See [Usage](/using/usage/).

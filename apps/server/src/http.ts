@@ -438,6 +438,14 @@ route('GET', '/api/threads/:id/attachments/:file', ([id, file], _, { res }) => {
   fs.createReadStream(found).pipe(res)
   return SENT
 })
+// ---- what a bot has for its owner (agent.ts): how far they have read, and what the bot raised for them
+// An app says so when a conversation is in front of the owner, up to the last item it shows.
+route('POST', '/api/threads/:id/seen', ([id], body) => {
+  const upTo = Number(body.upTo)
+  if (!Number.isSafeInteger(upTo) || upTo < 0) fail(400, 'upTo must be the id of an item')
+  agent.seen(needThread(id), upTo)
+})
+route('DELETE', '/api/threads/:id/flag', ([id]) => agent.unflag(needThread(id)))
 route('POST', '/api/threads/:id/stop', ([id]) => agent.stop(needThread(id).id))
 route('DELETE', '/api/threads/:id', ([id]) => {
   agent.stop(needThread(id).id)

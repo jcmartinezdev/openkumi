@@ -128,6 +128,35 @@ const messageBotTool: Tool = {
 }
 
 /**
+ * Reaching the owner when they are not looking: offered in a bot's own conversation. What it raises
+ * is put on the conversation when the turn is over (agent.raise), and the apps show it beside the bot.
+ */
+const notifyTool: Tool = {
+  name: 'notify_user',
+  description:
+    'Reach the user about what you say in this turn. They are often not looking when you write: your reply then waits in ' +
+    'the conversation, marked as new, until they next look. Call this only when that is not enough, before you ' +
+    'write your reply. kind "answer": you cannot go on without their answer, decision or go-ahead, and your reply ' +
+    'asks for it; it stays beside your name until they write to you. kind "read": there is nothing to answer, but ' +
+    'waiting until they next look would cost them something (a meeting moved to this afternoon, a payment that ' +
+    'failed, a deadline today). Either way they get a notification with your reason. Never for a routine result, ' +
+    'a summary or anything that can wait: a notification sent too often is one they stop reading.',
+  parameters: params(
+    {
+      kind: { type: 'string', enum: ['answer', 'read'], description: '"answer" when you need something from them to go on, "read" when they only need to read it soon' },
+      reason: str('What it is about, in a few words, as it shows beside your name and in the notification, e.g. "Which flight to book" or "Design review moved to 3 pm"'),
+    },
+    ['kind', 'reason'],
+  ),
+  run: (a, ctx) => {
+    agent.raise(ctx.thread, a.kind, a.reason)
+    return a.kind === 'answer'
+      ? 'Noted. When this turn is over the user is told that you need them, with that reason. Now write your reply, which asks them for it.'
+      : 'Noted. When this turn is over the user is told to read what you wrote, with that reason. Now write your reply.'
+  },
+}
+
+/**
  * Creating a bot: the main assistant's, in its conversation, and only on the owner's word. With
  * messages between bots switched on, the new bot can be given a first one to start on.
  */
@@ -848,7 +877,9 @@ export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problem
     ...(bot && thread.kind === 'chat' && automations.isMain(bot) ? [createBotTool(settings().botMessages), updateBotTool] : []),
     ...(agent.canMessage(thread) ? [messageBotTool] : []),
   ]
-  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, pageTool]
+  // Only its own conversation is the owner's to read: a subagent and a run of an automation report to it.
+  const reaching = thread.kind === 'chat' ? [notifyTool] : []
+  const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, pageTool, ...reaching]
   return { tools: [...own, ...services.tools], problems: services.problems }
 }
 

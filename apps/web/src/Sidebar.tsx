@@ -1,6 +1,7 @@
 import { type DragEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import type { Bot, BotSort, Thread } from '@openkumi/shared'
 import { ALPHA_NOTE } from '@openkumi/shared/alpha'
+import { type Attention, MARK_WORDS, attentionOf } from '@openkumi/client/attention'
 import { BOT_SORTS, useBotOrder } from '@openkumi/client/bots'
 import type { Modal } from './App'
 import { Icon } from './Icon'
@@ -13,6 +14,31 @@ export function StatusDot({ thread }: { thread: Thread }) {
   if (thread.status === 'running') return <span className="spinner" aria-label="Working" />
   if (thread.status === 'error') return <span className="dot error" aria-label="Failed" />
   return null
+}
+
+/**
+ * What a bot has for its owner, at the end of its row (@openkumi/client/attention): that it needs
+ * them or has something to be read now, in words; that it is at work or failed; or when something
+ * last happened in its conversation, with a dot before it when that is still to be read.
+ */
+function BotMark({ attention, at }: { attention: Attention; at?: number }) {
+  switch (attention.mark) {
+    case 'needs':
+      return <span className="pill mark warn">{MARK_WORDS.needs}</span>
+    case 'read':
+      return <span className="pill mark new">{MARK_WORDS.read}</span>
+    case 'working':
+      return <span className="spinner" aria-label={MARK_WORDS.working} />
+    case 'failed':
+      return <span className="dot error" aria-label={MARK_WORDS.failed} />
+    default:
+      return at === undefined ? null : (
+        <>
+          {attention.mark === 'new' && <span className="dot new" aria-label={MARK_WORDS.new} />}
+          <span className="time">{ago(at)}</span>
+        </>
+      )
+  }
 }
 
 export function ago(time: number): string {
@@ -89,6 +115,8 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
   const { bots, sort, choosable, choose, move } = useBotOrder()
   const threads = useStore((s) => s.threads)
   const providers = useStore((s) => s.providers)
+  const browsers = useStore((s) => s.browsers)
+  const queue = useStore((s) => s.queue)
   const automationCount = useStore((s) => s.automations.filter((a) => a.enabled).length)
   const runsGoing = threads.some((t) => t.kind === 'automation' && t.status === 'running')
   const root = thread && rootOf(threads, thread)
@@ -148,9 +176,9 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
         {bots.map((b, place) => {
           const main = mainThread(threads, b.id)
           const current = b.id === currentBotId
-          // What its subagents are doing shows under the bot being looked at, and as a mark on the others.
+          // What its subagents are doing shows under the bot being looked at, and in the mark of every bot.
           const subagents = main ? recentSubagents(threads, main) : []
-          const working = main?.status === 'running' || subagents.some((t) => t.status === 'running')
+          const attention = attentionOf(b.id, { threads, browsers, queue })
           return (
             <section
               key={b.id}
@@ -184,13 +212,13 @@ export function Sidebar({ bot, thread, automationsOpen, usageOpen, openModal, op
                   className={`row bot ${current && !subagents.some((t) => t.id === thread?.id) ? 'active' : ''}`}
                   href={`#/${b.id}`}
                   aria-current={current ? 'page' : undefined}
+                  // Why it needs its owner, or what there is to read, in the bot's own few words.
+                  title={attention.reason ? `${MARK_WORDS[attention.mark!]}: ${attention.reason}` : undefined}
                   onClick={close}
                 >
                   <BotHead bot={b} />
                   <span className="grow name">{b.name}</span>
-                  <span className="meta">
-                    {working ? <span className="spinner" aria-label="Working" /> : main?.status === 'error' ? <span className="dot error" aria-label="Failed" /> : main && <span className="time">{ago(main.updatedAt)}</span>}
-                  </span>
+                  <span className="meta"><BotMark attention={attention} at={main?.updatedAt} /></span>
                 </a>
                 <button className="icon reveal" title="Bot settings" aria-label={`Settings for ${b.name}`} onClick={() => (close(), openSettings('bots', b.id))}>
                   <Icon name="more" />

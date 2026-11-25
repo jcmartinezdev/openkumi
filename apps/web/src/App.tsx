@@ -177,6 +177,7 @@ export function App() {
               browserOpen={showPane}
               toggleBrowser={toggleBrowser}
               openNav={() => setNavOpen(true)}
+              covered={!!current.settings || !!pane?.full}
             />
             {/* Outside the keyed Chat so switching chats does not reload the browser view. */}
             {pane && (

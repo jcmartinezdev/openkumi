@@ -183,6 +183,21 @@ export interface Attachment {
 export type ThreadStatus = 'idle' | 'running' | 'error'
 
 /**
+ * What a bot raised on its conversation to reach its owner (notify_user), put there when its turn
+ * was over. 'answer': it cannot go on without their answer, decision or go-ahead, and it stays
+ * until they write to the bot or clear it. 'read': it told them something that should not wait
+ * until they next look, and it goes once they have read up to it.
+ */
+export interface Flag {
+  kind: 'answer' | 'read'
+  /** What it is about, in the bot's few words, to show beside its name. */
+  reason: string
+  /** The last thing the bot had said when it raised it (see Thread.told). */
+  item: number
+  at: number
+}
+
+/**
  * A call: the owner talks with a bot, out loud, and it talks back at once. The voice on the line
  * is a speech model of the owner's ChatGPT plan, reached through Codex; it speaks as the bot and
  * makes small talk itself. Whatever needs the bot (its tools, its memory, its accounts) it passes
@@ -241,6 +256,16 @@ export interface Thread {
    * failed, while they waited. They go in once the owner writes to it or lets them go.
    */
   held: boolean
+  /**
+   * A bot's conversation: the id of the last thing the bot said to its owner in it (a reply, or a
+   * page it showed), as of when it last finished. With `readTo` it says whether there is something
+   * new to read. Missing from older servers, like the two below.
+   */
+  told?: number
+  /** A bot's conversation: how far its owner has read, on any device. The id of an item, 0 when they have read nothing. */
+  readTo?: number
+  /** A bot's conversation: what the bot raised to reach its owner, until that is dealt with. */
+  flag?: Flag | null
   createdAt: number
   updatedAt: number
 }

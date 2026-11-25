@@ -25,6 +25,14 @@ ipcRenderer.on('desktop:sign-in', (_event, url: string) => {
   else returned = url
 })
 
+// A notification that was clicked, kept until the page is there to show what it was about.
+let clicked: string | null = null
+const notices = new Set<(id: string) => void>()
+ipcRenderer.on('desktop:notice', (_event, id: string) => {
+  if (notices.size) notices.forEach((listener) => listener(id))
+  else clicked = id
+})
+
 const heard = new Set<(event: DictationEvent) => void>()
 ipcRenderer.on('desktop:dictation', (_event, event: DictationEvent) => heard.forEach((listener) => listener(event)))
 
@@ -66,6 +74,16 @@ const bridge: DesktopBridge | null = initial && {
     openMicrophoneSettings: () => ipcRenderer.invoke('desktop:microphone-settings'),
   },
   microphone: () => ipcRenderer.invoke('desktop:microphone'),
+  attention: (count, notices) => ipcRenderer.invoke('desktop:attention', count, notices),
+  onNotice(listener) {
+    notices.add(listener)
+    if (clicked) {
+      const id = clicked
+      clicked = null
+      queueMicrotask(() => listener(id))
+    }
+    return () => void notices.delete(listener)
+  },
   onSignIn(listener) {
     returns.add(listener)
     if (returned) {

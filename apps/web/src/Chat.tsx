@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import type { Attachment, Bot, Item, ItemData, Thread } from '@openkumi/shared'
 import { note } from '@openkumi/client/telemetry'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
+import { clearFlag, markRead, unread } from '@openkumi/client/attention'
 import { runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { SentFiles, Tray, picked } from './Attachments'
@@ -395,6 +396,26 @@ interface Props {
   browserOpen: boolean
   toggleBrowser: () => void
   openNav: () => void
+  /** Something is laid over the conversation (the settings, or the bot's browser filling the window), so it is not what its owner is looking at. */
+  covered: boolean
+}
+
+/** Whether this window is the one in front, on a screen that is on: what is in it is then being looked at. */
+function useInFront(): boolean {
+  const now = () => document.visibilityState === 'visible' && document.hasFocus()
+  const [inFront, setInFront] = useState(now)
+  useEffect(() => {
+    const look = () => setInFront(now())
+    addEventListener('focus', look)
+    addEventListener('blur', look)
+    document.addEventListener('visibilitychange', look)
+    return () => {
+      removeEventListener('focus', look)
+      removeEventListener('blur', look)
+      document.removeEventListener('visibilitychange', look)
+    }
+  }, [])
+  return inFront
 }
 
 /** Unsent text per conversation, so looking at a subagent and coming back does not lose it. */
@@ -402,7 +423,7 @@ const drafts = new Map<string, string>()
 // Chats in another environment can have the same ids.
 onEnvironmentChange(() => drafts.clear())
 
-export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }: Props) {
+export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav, covered }: Props) {
   const items = useStore((s) => (thread ? s.items[thread.id] : undefined))
   const older = useStore((s) => (thread ? !!s.older[thread.id] : false))
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
@@ -460,6 +481,16 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
     // Shows what is kept of the chat at once, then brings it up to date; again when the connection comes back.
     if (thread) openThread(thread.id).then(() => setError(''), (e) => setError(e.message))
   }, [thread?.id, connected])
+
+  // A conversation in front of its owner is read: the server is told, so the bot's mark goes on every
+  // device. What the bot says while they look at it is read as it comes, before it is drawn as new.
+  const inFront = useInFront()
+  // Not before what the bot last said is among what is shown: a conversation just opened is still being fetched.
+  const fetched = !!thread && (items?.at(-1)?.id ?? 0) >= (thread.told ?? 0)
+  const reading = !!thread && connected && inFront && !covered && fetched && unread(thread)
+  useLayoutEffect(() => {
+    if (reading && thread) void markRead(thread)
+  }, [reading, thread?.id, thread?.told, thread?.flag?.at])
 
   // On touch devices focusing would pop up the keyboard on every navigation.
   useEffect(() => {
@@ -697,6 +728,14 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               <button onClick={resume}>Continue this one</button>
             </div>
           ) : (
+          <>
+          {/* What the bot said it cannot go on without. It stays until its owner writes, or clears it here. */}
+          {main && thread?.flag?.kind === 'answer' && (
+            <div className="needs-you" role="status">
+              <span className="grow"><strong>{bot.name} needs you:</strong> {thread.flag.reason}</span>
+              <button title="Clear this without answering" onClick={() => clearFlag(thread.id).catch((e) => setError(e.message))}>Clear</button>
+            </div>
+          )}
           <div className="composer">
             <DictationFailed dictating={dictating} />
             <Tray files={files} remove={(id) => removeFile(draftKey, id)} />
@@ -768,6 +807,7 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav }
               )}
             </div>
           </div>
+          </>
           )}
         </div>
       </footer>

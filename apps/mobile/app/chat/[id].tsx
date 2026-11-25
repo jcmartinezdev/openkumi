@@ -1,13 +1,14 @@
 // A bot's conversation (or the thread of one of its subagents): what was said, what the bot did,
 // its reply as it is written, and a place to answer.
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ActionSheetIOS, ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, ActivityIndicator, Alert, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { Stack, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Attachment, Bot, BotRef, CallLine, Item, Thread } from '@openkumi/shared'
 import { note } from '@openkumi/client/telemetry'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
+import { clearFlag, markRead, unread } from '@openkumi/client/attention'
 import { moment, runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
@@ -28,6 +29,17 @@ import { useTextScale } from '../../src/prefs'
 import { ScreenTitle } from '../../src/ScreenTitle'
 import { type Theme, useTheme } from '../../src/theme'
 import { Bobbing, BotHead, Mascot } from '../../src/Mascot'
+
+/** Whether this screen is the one in front, in an app that is open: what is on it is then being looked at. */
+function useInFront(): boolean {
+  const focused = useIsFocused()
+  const [active, setActive] = useState(AppState.currentState === 'active')
+  useEffect(() => {
+    const watching = AppState.addEventListener('change', (now) => setActive(now === 'active'))
+    return () => watching.remove()
+  }, [])
+  return focused && active
+}
 
 /** What one line of the chat shows. Tool results and the bot's private reasoning are left out on a phone. */
 type Row =
@@ -344,6 +356,15 @@ export default function Chat() {
   useEffect(() => {
     if (!forBot && !thread && connected) loadThread(id).catch((e) => setError(e.message))
   }, [id, !!thread, connected])
+  // A conversation in front of its owner is read: the server is told, so the bot's mark goes on every
+  // device. What the bot says while they look at it is read as it comes.
+  const inFront = useInFront()
+  // Not before what the bot last said is among what is shown: a conversation just opened is still being fetched.
+  const fetched = !!thread && (items?.at(-1)?.id ?? 0) >= (thread.told ?? 0)
+  const reading = !!thread && connected && inFront && fetched && unread(thread)
+  useEffect(() => {
+    if (reading && thread) void markRead(thread)
+  }, [reading, thread?.id, thread?.told, thread?.flag?.at])
 
   // Earlier messages are fetched a page at a time as the reader nears the top; the list keeps what
   // was on screen in its place while they are put in above.
@@ -563,6 +584,18 @@ export default function Chat() {
       )}
       {/* A card with the message on top and, under it, what the bot runs on and the send button. Above the keyboard it sits close to it. */}
       <View style={[styles.dock, { paddingBottom: keyboard ? 8 : Math.max(insets.bottom, 10) }]}>
+        {/* What the bot said it cannot go on without. It stays until its owner writes, or clears it here. */}
+        {bot && thread?.flag?.kind === 'answer' && !thread.parentId && !thread.archivedAt && (
+          <View style={[styles.needsYou, { backgroundColor: theme.runTint }]}>
+            <Text style={{ flex: 1, color: theme.text, fontSize: 13.5 * scale, lineHeight: 18 * scale }}>
+              <Text style={{ fontWeight: '600' }}>{bot.name} needs you: </Text>
+              {thread.flag.reason}
+            </Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Clear this without answering" hitSlop={6} style={[styles.pill, { borderColor: theme.border }]} onPress={() => clearFlag(thread.id).catch((e) => setError(e.message))}>
+              <Text style={{ color: theme.text, fontSize: 13, fontWeight: '500' }}>Clear</Text>
+            </Pressable>
+          </View>
+        )}
         <View style={[styles.composer, { backgroundColor: theme.raised, borderColor: theme.border }]}>
           <Tray files={files} remove={(file) => removeFile(id, file)} />
           <TextInput
@@ -653,6 +686,7 @@ const styles = StyleSheet.create({
   takeBack: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%', height: 32, paddingHorizontal: 12, borderWidth: 1, borderRadius: 16 },
   dock: { paddingHorizontal: 10, paddingTop: 6 },
+  needsYou: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8, paddingVertical: 8, paddingLeft: 12, paddingRight: 8, borderRadius: 14 },
   composer: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 26 },
   input: { minHeight: 44, maxHeight: 160, paddingHorizontal: 18, paddingTop: 14, paddingBottom: 4, fontSize: 17, lineHeight: 22 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 8, paddingRight: 8, paddingBottom: 8 },

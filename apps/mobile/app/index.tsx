@@ -6,12 +6,13 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 import { Stack, useRouter } from 'expo-router'
 import type { BotSort } from '@openkumi/shared'
 import { mainThread, useStore } from '@openkumi/client/store'
+import { type Attention, MARK_WORDS, attentionOf } from '@openkumi/client/attention'
 import { moment } from '@openkumi/client/automations'
 import { BOT_SORTS, useBotOrder } from '@openkumi/client/bots'
 import { Glyph } from '../src/icons'
 import { forget, useSession } from '../src/session'
 import { SortableList } from '../src/SortableList'
-import { useTheme } from '../src/theme'
+import { type Theme, useTheme } from '../src/theme'
 import { BotHead } from '../src/Mascot'
 
 const ROW = 60
@@ -30,12 +31,40 @@ function ago(time: number): string {
   return `${Math.floor(minutes / (60 * 24))}d`
 }
 
+/**
+ * What a bot has for its owner, at the end of its row (@openkumi/client/attention): that it needs
+ * them or has something to be read now, in words; that it is at work or failed; or when something
+ * last happened in its conversation, with a dot before it when that is still to be read.
+ */
+function BotMark({ attention, at, theme }: { attention: Attention; at?: number; theme: Theme }) {
+  switch (attention.mark) {
+    case 'needs':
+      return <View style={[styles.pill, { backgroundColor: theme.runTint }]}><Text style={[styles.pillText, { color: theme.runText }]}>{MARK_WORDS.needs}</Text></View>
+    case 'read':
+      return <View style={[styles.pill, { backgroundColor: theme.freshTint }]}><Text style={[styles.pillText, { color: theme.freshText }]}>{MARK_WORDS.read}</Text></View>
+    case 'working':
+      // Not in the colour of "needs you": at work is nothing to act on.
+      return <ActivityIndicator size="small" color={theme.muted} />
+    case 'failed':
+      return <View style={[styles.dot, { backgroundColor: theme.err }]} />
+    default:
+      return at === undefined ? null : (
+        <View style={styles.when}>
+          {attention.mark === 'new' && <View style={[styles.dot, { backgroundColor: theme.fresh }]} />}
+          <Text style={{ color: theme.faint, fontSize: 13 }}>{ago(at)}</Text>
+        </View>
+      )
+  }
+}
+
 export default function Home() {
   const theme = useTheme()
   const router = useRouter()
   const { server } = useSession()
   const { bots, sort, choosable, choose, move } = useBotOrder()
   const threads = useStore((s) => s.threads)
+  const browsers = useStore((s) => s.browsers)
+  const queue = useStore((s) => s.queue)
   const loaded = useStore((s) => s.loaded)
   const connected = useStore((s) => s.connected)
   const refused = useStore((s) => s.refused)
@@ -115,10 +144,12 @@ export default function Home() {
         renderRow={(bot, row) => {
           const thread = mainThread(threads, bot.id)
           const place = bots.indexOf(bot)
+          const attention = attentionOf(bot.id, { threads, browsers, queue })
+          const said = attention.mark ? `, ${MARK_WORDS[attention.mark].toLowerCase()}${attention.reason ? `: ${attention.reason}` : ''}` : ''
           return (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Conversation with ${bot.name}`}
+              accessibilityLabel={`Conversation with ${bot.name}${said}`}
               accessibilityHint={manual ? 'Hold, then drag, to move it in the list' : undefined}
               // For VoiceOver, which cannot drag: a place up or down.
               accessibilityActions={manual ? [...(place > 0 ? [{ name: 'up', label: 'Move up' }] : []), ...(place < bots.length - 1 ? [{ name: 'down', label: 'Move down' }] : [])] : undefined}
@@ -130,8 +161,12 @@ export default function Home() {
               onPressOut={row.release}
             >
               <BotHead bot={bot} size={40} />
-              <Text style={[styles.botName, { color: theme.text }]} numberOfLines={1}>{bot.name}</Text>
-              {thread?.status === 'running' ? <ActivityIndicator size="small" color={theme.run} /> : thread && <Text style={{ color: theme.faint, fontSize: 13 }}>{ago(thread.updatedAt)}</Text>}
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.botName, { color: theme.text }]} numberOfLines={1}>{bot.name}</Text>
+                {/* Why it needs its owner, or what there is to read, in the bot's own few words. */}
+                {!!attention.reason && <Text style={{ color: theme.muted, fontSize: 13, lineHeight: 17 }} numberOfLines={1}>{attention.reason}</Text>}
+              </View>
+              <BotMark attention={attention} at={thread?.updatedAt} theme={theme} />
             </Pressable>
           )
         }}
@@ -148,7 +183,11 @@ const styles = StyleSheet.create({
   banner: { textAlign: 'center', fontSize: 13, paddingVertical: 6 },
   bot: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: ROW, borderRadius: 14 },
   avatar: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
-  botName: { flex: 1, fontSize: 17, fontWeight: '600' },
+  botName: { fontSize: 17, fontWeight: '600' },
+  pill: { height: 24, paddingHorizontal: 10, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  pillText: { fontSize: 12.5, fontWeight: '600' },
+  dot: { width: 9, height: 9, borderRadius: 5 },
+  when: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   automations: { height: 64, marginTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   unpair: { height: 46, paddingHorizontal: 22, borderRadius: 12, borderWidth: 1, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
 })
