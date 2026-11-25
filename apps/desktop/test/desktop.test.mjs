@@ -364,6 +364,27 @@ test('a reply is drawn as it is written, and a bot’s browser is drawn and driv
   // And what is done to the canvas reaches the page.
   await win.locator('.pane .view canvas').click()
   await until(async () => (await state()).browsers[bot.id]?.tabs.every((t) => t.url === 'about:blank'), 15_000)
+  // A key held down on the page is let go of there when the keyboard leaves it still down: ⌘K opens
+  // the window's search, and the page is not left holding ⌘. The page turns green while ⌘ is down
+  // on it, and blue once it is let go.
+  const colour = (want) => until(async () => (([r, g, b]) => Math.abs(r - want[0]) < 12 && Math.abs(g - want[1]) < 12 && Math.abs(b - want[2]) < 12)(await middle()), 15_000)
+  const paint = (rgb) => `document.body.style.background='rgb(${rgb})'`
+  await win.locator('.address').fill(`data:text/html,<body style="margin:0;height:100vh;background:rgb(200,200,200)"><script>onkeydown=(e)=>{e.key==='Meta'&&(${paint('40,160,60')});e.key==='1'&&e.ctrlKey&&(${paint('230,140,20')})};onkeyup=(e)=>e.key==='Meta'&&(${paint('40,60,200')})</script>`)
+  await win.keyboard.press('Enter')
+  await colour([200, 200, 200])
+  await win.locator('.pane .view').focus()
+  await win.keyboard.down('Meta')
+  await colour([40, 160, 60])
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.sendInputEvent({ type: 'keyDown', keyCode: 'K', modifiers: ['meta'] }))
+  await win.locator('.palette').waitFor()
+  await colour([40, 60, 200])
+  await win.keyboard.up('Meta')
+  await win.keyboard.press('Escape')
+  await win.locator('.palette').waitFor({ state: 'detached' })
+  // Only ⌘ and a number opens a bot; Ctrl and a number is the page's.
+  await win.locator('.pane .view').focus()
+  await win.keyboard.press('Control+1')
+  await colour([230, 140, 20])
   // Handing back gives the window to the bot again.
   await win.getByRole('button', { name: 'Hand back' }).click()
   await until(async () => (await state()).browsers[bot.id].windows.every((w) => !w.controller), 10_000)
@@ -1303,7 +1324,8 @@ test('the window’s search: ⌘K from anywhere finds bots, settings and what wa
   await palette.locator('.palette-level', { hasText: 'Earlier' }).waitFor()
   assert.deepEqual(await titles(), ['The nest is by the north shore.'])
   await win.keyboard.press('Enter')
-  await until(async () => new RegExp(`^#/${heron.id}/t_[\\w-]+$`).test(await here()), 10_000)
+  await palette.waitFor({ state: 'detached' })
+  await until(async () => new RegExp(`^#/${heron.id}/t_[\\w-]+$`).test(await here()), 10_000).catch(async (e) => assert.fail(`${e.message}: the window is at ${await here()}`))
   await win.locator('.heading', { hasText: 'Earlier conversation' }).waitFor()
   assert.match(await win.locator('.heading').innerText(), /^The nest is by the north shore\.\s+Earlier conversation · /)
 

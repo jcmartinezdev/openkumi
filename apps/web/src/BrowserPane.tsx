@@ -3,6 +3,10 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Bot, BrowserInput, BrowserTab, BrowserWindow } from '@openkumi/shared'
 import { control, driverOf, hostOf, sessionName } from '@openkumi/client/browser'
 import { Icon } from './Icon'
+import { isCommand } from './shortcuts'
+
+/** Keys that are held down while others are pressed. */
+const MODIFIERS = ['Meta', 'Control', 'Alt', 'Shift']
 import { api, send, useStore, watch } from './store'
 
 /**
@@ -40,6 +44,17 @@ export function PageView({ bot, tab, drive, onPress, children }: { bot: Bot; tab
   }, [drive])
 
   const input = (event: BrowserInput) => drive && tabId && send({ type: 'browser.input', botId: bot.id, tabId, input: event })
+  // The modifiers held down on the page. They are let go of there when the keyboard leaves the view
+  // with them still down (⌘K opens the window's search, ⌘1–9 another bot), or the page would go on
+  // holding them.
+  const held = useRef(new Set<string>())
+  const release = () => {
+    for (const key of held.current) input({ kind: 'keyup', key })
+    held.current.clear()
+  }
+  const releaseNow = useRef(release)
+  releaseNow.current = release
+  useEffect(() => () => releaseNow.current(), [])
 
   const point = (e: { clientX: number; clientY: number }) => {
     const rect = img.current!.getBoundingClientRect()
@@ -92,16 +107,19 @@ export function PageView({ bot, tab, drive, onPress, children }: { bot: Bot; tab
           // Let the browser deliver the clipboard through the paste event instead.
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') return
           // ⌘1–9 (Ctrl+1–9) open a bot from anywhere in the window, this page included (shortcuts.ts).
-          if ((e.metaKey || e.ctrlKey) && /^[1-9]$/.test(e.key)) return
+          if (isCommand(e.nativeEvent) && /^[1-9]$/.test(e.key)) return
           e.preventDefault()
           e.stopPropagation()
           input({ kind: 'keydown', key: e.key === ' ' ? 'Space' : e.key })
+          if (MODIFIERS.includes(e.key)) held.current.add(e.key)
         }}
         onKeyUp={(e) => {
           if (!drive || e.target !== e.currentTarget) return
           e.preventDefault()
           input({ kind: 'keyup', key: e.key === ' ' ? 'Space' : e.key })
+          held.current.delete(e.key)
         }}
+        onBlur={(e) => e.target === e.currentTarget && release()}
         onPaste={(e) => {
           if (!drive) return
           e.preventDefault()
