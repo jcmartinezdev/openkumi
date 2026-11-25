@@ -3,6 +3,7 @@ import type { DesktopState } from '@openkumi/shared/desktop'
 import { keepCopies, keepOnlyCopies, saveCopyNow } from '@openkumi/client/copies'
 import { note, wentWrong } from '@openkumi/client/telemetry'
 import { App } from './App'
+import { watchAttention } from './attention'
 import { desktop, desktopState, inDesktopApp, onDesktopState } from './desktop'
 import { shelf } from './shelf'
 import { passSignIn } from './Superpowers'
@@ -61,5 +62,7 @@ if (!inDesktopApp) {
   addEventListener('unhandledrejection', (e) => wentWrong(e.reason))
   // A superpower's sign-in in this computer's own browser comes back by way of the app.
   desktop.onSignIn?.(passSignIn)
+  // What the bots have for their owner shows outside the window too: on the app's icon, and as notifications.
+  watchAttention()
   createRoot(root).render(<App />)
 }

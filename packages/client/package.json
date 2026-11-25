@@ -31,6 +31,7 @@
     "./telemetry": "./src/telemetry.ts",
     "./usage": "./src/usage.ts",
     "./bots": "./src/bots.ts",
+    "./attention": "./src/attention.ts",
     "./car": "./src/car.ts"
   },
   "scripts": {

@@ -16,7 +16,7 @@ pages under **This app** are the same whoever is picked.
 | Page | What it holds |
 | --- | --- |
 | **Profile & devices** | whose bots these are: their name (**Rename**), **Let other devices connect**, **Pair a device**, the paired devices, and **Remove** for someone else on this computer. See [Other computers and your phone](/environments/). |
-| **General** | **New bots**: what they run on, whether they have web search, whether their browser window is shown. **Confirm before deleting a conversation**. |
+| **General** | **New bots**: what they run on, whether they have web search, whether their browser window is shown. **Notify me when a bot needs me**. **Confirm before deleting a conversation**. |
 | **Appearance** | theme (light, dark or the system's), message text size, a wide conversation |
 | **Chat** | whether **Enter sends the message**, suggestions in a new chat, how much detail a step shows |
 | **Providers** | Codex, Claude Code, Grok, local models and other models: whether each is connected, its program path or address, and **Use … for bots**. See [What bots run on](/setup/providers/). |
@@ -29,9 +29,9 @@ pages under **This app** are the same whoever is picked.
 | **Privacy** | **Send how OpenKumi is used and what goes wrong**, this computer's id, and everything that was sent. See [Usage and error reports](/telemetry/). |
 | **About** | the version of the app and of the environment it shows, their updates, **Update by itself** for a server installed alone, and a note on the alpha |
 
-**Appearance**, **Chat** and **Confirm before deleting a conversation** belong to the device: each
-computer and phone keeps its own. Everything else belongs to the environment, and is the same from
-every device connected to it. The environment keeps its settings in `settings.json` in its data folder
+**Appearance**, **Chat**, **Notify me when a bot needs me** and **Confirm before deleting a
+conversation** belong to the device: each computer and phone keeps its own. Everything else
+belongs to the environment, and is the same from every device connected to it. The environment keeps its settings in `settings.json` in its data folder
 (`~/.openkumi/people/<name>/`), which holds only the values that differ from the defaults. Where
 several people have bots on one computer, each one's server has settings of its own.
 

@@ -66,6 +66,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'general', id: 'default-show-browser', title: 'Show the browser window for new bots', also: 'headless' },
   { page: 'general', id: 'bot-order', title: 'Order of the bots', also: 'sort sidebar list arrange drag last message recent created manual' },
   { page: 'general', id: 'confirm-delete', title: 'Confirm before deleting a conversation', also: 'chat' },
+  { page: 'general', id: 'notifications', title: 'Notify me when a bot needs me', also: 'notification alert banner needs you read this attention dock badge new unread' },
   { page: 'appearance', id: 'theme', title: 'Theme', also: 'dark light mode' },
   { page: 'appearance', id: 'text-size', title: 'Message text size', also: 'font' },
   { page: 'appearance', id: 'wide', title: 'Wide conversation', also: 'width' },
@@ -105,7 +106,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
 /** The settings each page's "Restore defaults" puts back. */
 const RESTORE: Partial<Record<PageId, { settings?: (keyof Settings)[]; prefs?: (keyof Prefs)[] }>> = {
   // The order chosen for the bots goes back; the owner's own order is kept for when it is chosen again.
-  general: { settings: ['botSort', 'defaultProvider', 'defaultWebSearch', 'defaultShowBrowser'], prefs: ['confirmDelete'] },
+  general: { settings: ['botSort', 'defaultProvider', 'defaultWebSearch', 'defaultShowBrowser'], prefs: ['confirmDelete', 'notifications'] },
   appearance: { prefs: ['theme', 'textSize', 'wide'] },
   chat: { prefs: ['enterSends', 'suggestions', 'expandSteps'] },
   browser: { settings: ['browserChannel'], prefs: ['autoOpenBrowser'] },
@@ -277,6 +278,7 @@ function General() {
   const webSearch = useSetting('defaultWebSearch')
   const showBrowser = useSetting('defaultShowBrowser')
   const confirmDelete = usePref('confirmDelete')
+  const notifications = usePref('notifications')
   const usable = providers.filter((p) => (p.connected && p.enabled !== false) || p.id === runsOn.value)
   const order = useBotOrder()
   return (
@@ -307,6 +309,15 @@ function General() {
           description="New bots open their browser on this computer’s desktop as well as in the app."
           reset={showBrowser.reset}
           control={<Switch label="Show the browser window for new bots" checked={showBrowser.value} onChange={showBrowser.set} />}
+        />
+      </Section>
+      <Section title="Notifications">
+        <Row
+          id="notifications"
+          title="Notify me when a bot needs me"
+          description="A notification when a bot waits for you, or has something you should read now, while OpenKumi is not in front. The app’s icon counts the bots with something for you either way. This device only."
+          reset={notifications.reset}
+          control={<Switch label="Notify me when a bot needs me" checked={notifications.value} onChange={notifications.set} />}
         />
       </Section>
       <Section title="Confirmations">

@@ -4,8 +4,8 @@
 //   - the local environment (local.ts): OpenKumi's server, in a process of its own.
 //   - the window (apps/web): the interface, loaded from the app itself, talking straight to the
 //     environment it shows; its connection and the drawing of a bot's browser run on a worker thread.
-import { BrowserWindow, Menu, type MenuItemConstructorOptions, app, dialog, ipcMain, nativeTheme, shell } from 'electron'
-import type { DesktopState, Link } from '@openkumi/shared/desktop'
+import { BrowserWindow, Menu, type MenuItemConstructorOptions, Notification, app, dialog, ipcMain, nativeTheme, shell } from 'electron'
+import type { DesktopState, Link, Notice } from '@openkumi/shared/desktop'
 import { shownName } from '@openkumi/shared/people'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -42,6 +42,68 @@ function signInReturned(url: string) {
   if (win?.isMinimized()) win.restore()
   win?.show()
   app.focus({ steal: true })
+}
+
+// ---- what the bots have for their owner, outside the window
+// The window works out which bots need their owner, or have something for them to read now
+// (@openkumi/client/attention), and says so here: a count on the app's icon, and a notification for
+// each such bot while the window is not in front. Clicking one brings the window forward at that bot.
+
+/** The notification of each bot the window named last: what it said, and the one on screen, if it was shown. */
+const noticed = new Map<string, { said: string; shown: Notification | null }>()
+/** A notification clicked while there was no window to tell. */
+let waitingNotice: string | null = null
+/**
+ * Tests run the app with its window off the screen, where it is never in front and nobody would
+ * want its notifications: what it would have shown is only noted, for them to read.
+ */
+const noted: { count: number; shown: Notice[]; click: (id: string) => void } = { count: 0, shown: [], click: (id) => openNotice(id) }
+if (HIDDEN) (globalThis as { attention?: typeof noted }).attention = noted
+
+const inFront = () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized() && win.isFocused()
+
+function openNotice(id: string) {
+  if (!win) {
+    waitingNotice = id
+    createWindow()
+  } else {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.webContents.send('desktop:notice', id)
+  }
+  app.focus({ steal: true })
+}
+
+function notify(notice: Notice): Notification | null {
+  if (HIDDEN) {
+    noted.shown.push(notice)
+    return null
+  }
+  if (!Notification.isSupported()) return null
+  const shown = new Notification({ title: notice.title, body: notice.body })
+  shown.on('click', () => openNotice(notice.id))
+  shown.show()
+  return shown
+}
+
+function attention(count: unknown, notices: unknown) {
+  noted.count = typeof count === 'number' && count > 0 ? Math.min(Math.floor(count), 999) : 0
+  // On a Mac the Dock's icon, on Linux the launcher's where it has one; Windows shows none.
+  app.setBadgeCount(noted.count)
+  const now = new Map<string, Notice>()
+  for (const given of Array.isArray(notices) ? notices.slice(0, 50) : []) {
+    if (typeof given?.id !== 'string' || typeof given.title !== 'string' || typeof given.body !== 'string') continue
+    now.set(given.id, { id: given.id, title: given.title.slice(0, 120), body: given.body.slice(0, 240) })
+  }
+  // The bot no longer waits, or waits for something else: what was shown about it is taken back.
+  for (const [id, was] of noticed) {
+    const notice = now.get(id)
+    if (notice && `${notice.title}\n${notice.body}` === was.said) continue
+    was.shown?.close()
+    noticed.delete(id)
+  }
+  // One the window is in front for is not shown, now or later: its owner is looking at the list it is in.
+  for (const [id, notice] of now) if (!noticed.has(id)) noticed.set(id, { said: `${notice.title}\n${notice.body}`, shown: inFront() ? null : notify(notice) })
 }
 
 // ---- whose bots the window shows on this computer
@@ -323,6 +385,8 @@ async function updateEnvironment(id: string) {
 
 /** The server this app started is stopped (see the end of this file). */
 let stopped = false
+/** The app is quitting, so its window really closes (on a Mac it is otherwise only put away; see createWindow). */
+let quitting = false
 
 /**
  * Puts the downloaded version of the app in place and opens it. Quitting stops the server this
@@ -342,6 +406,8 @@ async function restartForUpdate() {
     return
   }
   stopped = true
+  // Installing closes the window before the app is told it quits.
+  quitting = true
   installUpdate()
 }
 
@@ -381,6 +447,7 @@ answer('desktop:dictate-cancel', () => cancelDictation())
 answer('desktop:microphone-settings', () => openMicrophoneSettings())
 // Before a call: the person is asked, the first time, whether the app may use the microphone.
 answer('desktop:microphone', () => FAKE_MICROPHONE || microphone())
+answer('desktop:attention', (count, notices) => attention(count, notices))
 // What is said goes back to the window that asked to listen.
 ipcMain.handle('desktop:dictate', (event, locale) => {
   if (!fromApp(event)) throw new Error('Not allowed.')
@@ -410,10 +477,25 @@ function createWindow() {
   })
   const created = win
   if (!HIDDEN) created.once('ready-to-show', () => created.show())
+  // On a Mac, closing the window leaves the app in the Dock, with the bots at work. The window is
+  // then only put away: it is what works out what the bots have for their owner, so the count on
+  // the icon and the notifications go on. It comes back from the Dock, or from a notification.
+  created.on('close', (event) => {
+    if (quitting || !mac) return
+    event.preventDefault()
+    if (!created.isFullScreen()) return created.hide()
+    created.once('leave-full-screen', () => created.hide())
+    created.setFullScreen(false)
+  })
   created.on('closed', () => {
-    if (win === created) win = null
+    if (win !== created) return
+    win = null
+    // Nothing keeps the count on the icon true without a window.
+    attention(0, [])
   })
   created.webContents.on('did-finish-load', () => {
+    if (waitingNotice) created.webContents.send('desktop:notice', waitingNotice)
+    waitingNotice = null
     if (!waitingReturn) return
     created.webContents.send('desktop:sign-in', waitingReturn)
     waitingReturn = null
@@ -487,6 +569,7 @@ else {
   })
   app.on('second-instance', (_event, argv) => {
     if (win?.isMinimized()) win.restore()
+    win?.show()
     win?.focus()
     const url = argv.find((arg) => arg.startsWith(SIGN_IN_RETURN))
     if (url) signInReturned(url)
@@ -505,7 +588,9 @@ else {
     createWindow()
     startUpdates()
     app.on('activate', () => {
-      if (!win) createWindow()
+      // A window that was put away comes back.
+      if (win) win.show()
+      else createWindow()
     })
   })
   app.on('window-all-closed', () => {
@@ -513,6 +598,7 @@ else {
   })
   // The servers this app started end with it, everyone's; bots that are still working are stopped cleanly.
   app.on('before-quit', (event) => {
+    quitting = true
     if (stopped || !managing()) return
     event.preventDefault()
     void stopLocal().then(() => {

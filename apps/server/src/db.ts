@@ -135,6 +135,12 @@ if (!hasColumn('runs_on', 'automations')) db.exec('ALTER TABLE automations ADD C
 if (!hasColumn('provider')) db.exec('ALTER TABLE threads ADD COLUMN provider TEXT')
 if (!hasColumn('effort')) db.exec('ALTER TABLE threads ADD COLUMN effort TEXT')
 
+// A bot's conversation knows what the bot last told its owner, how far the owner has read, and what
+// the bot raised to reach them (Thread.told, readTo, flag). Older versions leave these as they are.
+if (!hasColumn('told')) db.exec('ALTER TABLE threads ADD COLUMN told INTEGER NOT NULL DEFAULT 0')
+if (!hasColumn('read_to')) db.exec('ALTER TABLE threads ADD COLUMN read_to INTEGER NOT NULL DEFAULT 0')
+if (!hasColumn('flag')) db.exec('ALTER TABLE threads ADD COLUMN flag TEXT')
+
 // Nothing survives a restart mid-run, so no thread can still be running. That is a change like any
 // other, or an app's copy would show those threads at work for good.
 for (const { id } of db.prepare(`SELECT id FROM threads WHERE status = 'running'`).all() as { id: string }[]) {
@@ -166,6 +172,9 @@ function toThread(r: any): Thread {
     effort: r.effort ?? null,
     reported: !!r.reported,
     held: !!r.held,
+    told: r.told ?? 0,
+    readTo: r.read_to ?? 0,
+    flag: r.flag ? JSON.parse(r.flag) : null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
@@ -262,6 +271,9 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
     effort: null,
     reported: false,
     held: false,
+    told: 0,
+    readTo: 0,
+    flag: null,
     createdAt: now,
     updatedAt: now,
     ...init,
@@ -274,14 +286,26 @@ export function createThread(init: Pick<Thread, 'botId'> & Partial<Thread>): Thr
   return t
 }
 
-export function updateThread(id: string, patch: Partial<Pick<Thread, 'title' | 'status' | 'reported' | 'archivedAt' | 'held'>>): Thread | undefined {
+export function updateThread(id: string, patch: Partial<Pick<Thread, 'title' | 'status' | 'reported' | 'archivedAt' | 'held' | 'told' | 'readTo' | 'flag'>>): Thread | undefined {
   const t = getThread(id)
-  if (!t) return
-  const next = { ...t, ...patch, updatedAt: Date.now() }
-  db.prepare('UPDATE threads SET title = ?, status = ?, reported = ?, archived_at = ?, held = ?, updated_at = ? WHERE id = ?').run(
-    next.title, next.status, next.reported ? 1 : 0, next.archivedAt, next.held ? 1 : 0, next.updatedAt, id,
+  return t && write({ ...t, ...patch, updatedAt: Date.now() })
+}
+
+/**
+ * Notes how far a conversation's owner has read, or what its bot raised for them. Nothing happened
+ * in the conversation, so when it last changed stays as it was: that is the time shown beside the
+ * bot, and what the bots are ordered by.
+ */
+export function markThread(id: string, patch: Partial<Pick<Thread, 'readTo' | 'flag'>>): Thread | undefined {
+  const t = getThread(id)
+  return t && write({ ...t, ...patch })
+}
+
+function write(next: Thread): Thread {
+  db.prepare('UPDATE threads SET title = ?, status = ?, reported = ?, archived_at = ?, held = ?, told = ?, read_to = ?, flag = ?, updated_at = ? WHERE id = ?').run(
+    next.title, next.status, next.reported ? 1 : 0, next.archivedAt, next.held ? 1 : 0, next.told ?? 0, next.readTo ?? 0, next.flag ? JSON.stringify(next.flag) : null, next.updatedAt, next.id,
   )
-  emit({ type: 'thread.upsert', thread: next, seq: changed(id) })
+  emit({ type: 'thread.upsert', thread: next, seq: changed(next.id) })
   return next
 }
 
@@ -376,6 +400,19 @@ export function itemsAfter(threadId: string, after: number): { items: Item[]; ga
   const { n, bytes } = db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(length(data)), 0) AS bytes FROM items WHERE thread_id = ? AND id > ?').get(threadId, after) as { n: number; bytes: number }
   if (n > PAGE.most || bytes > PAGE.mostBytes) return { ...pageOf(threadId), gap: true }
   return { items: db.prepare('SELECT * FROM items WHERE thread_id = ? AND id > ? ORDER BY id').all(threadId, after).map(toItem), gap: false }
+}
+
+/** The id of the newest item of a thread, 0 when it has none. */
+export const lastItem = (threadId: string) => (db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM items WHERE thread_id = ?').get(threadId) as { id: number }).id
+
+/** The id of the last thing a bot said to its owner in a thread: a reply with something in it, or a page it showed. 0 when there is none. */
+export function lastTold(threadId: string): number {
+  const r = db.prepare(
+    `SELECT COALESCE(MAX(id), 0) AS id FROM items WHERE thread_id = ? AND (
+       (json_extract(data, '$.type') = 'message' AND json_extract(data, '$.role') = 'assistant' AND trim(json_extract(data, '$.text')) <> '')
+       OR json_extract(data, '$.type') = 'page')`,
+  ).get(threadId) as { id: number }
+  return r.id
 }
 
 export function hasItems(threadId: string): boolean {

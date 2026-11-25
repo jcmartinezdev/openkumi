@@ -46,6 +46,10 @@ only if you agree: [all of it is listed](https://docs.openkumi.ai/telemetry/).
 - **Subagents.** A bot splits a big job into parallel helpers and brings their results together.
 - **Automations.** A bot does something every morning, when a web page changes, or when another
   app calls a webhook, and tells you what came of it.
+- **Know when a bot has something for you.** A bot that said something you have not read wears a
+  mark in the list, on the computer and the phone. One that cannot go on without you says
+  **Needs you**, one with something that should not wait says **Read this**, and on the computer
+  both reach you with a notification.
 - **Superpowers.** Switch on, for one bot at a time, what it can do beyond chatting and browsing:
   work in Notion, Linear, Jira, Todoist and some twenty other apps, or know-how such as the
   weather, exchange rates, SEO and launch plans.

@@ -16,6 +16,8 @@ export interface Prefs {
   /** Bring up the browser panel when a bot starts browsing. */
   autoOpenBrowser: boolean
   confirmDelete: boolean
+  /** A notification when a bot needs its owner, or has something for them to read now, while the app is not in front. */
+  notifications: boolean
   /** Models kept at hand in the model picker, as "<provider>:<model>". */
   favoriteModels: string[]
 }
@@ -29,6 +31,7 @@ export const PREF_DEFAULTS: Prefs = {
   suggestions: true,
   autoOpenBrowser: true,
   confirmDelete: true,
+  notifications: true,
   favoriteModels: [],
 }
 
@@ -72,6 +75,11 @@ export function setPrefs(patch: Partial<Prefs>) {
 }
 
 export const getPrefs = () => prefs
+
+/** Calls `fn` whenever a preference changes, outside of any view. */
+export function onPrefs(fn: () => void) {
+  subscribers.add(fn)
+}
 
 const systemDark = matchMedia('(prefers-color-scheme: dark)')
 
