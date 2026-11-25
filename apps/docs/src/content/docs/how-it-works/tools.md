@@ -25,7 +25,7 @@ A bot does not have every tool everywhere:
 
 | Where the bot is | What it does not have |
 | --- | --- |
-| Its conversation, answering you | nothing is withheld; `create_bot` and `update_bot` only for the main assistant, and only right after you asked |
+| Its conversation, answering you | nothing is withheld; `create_bot` and `update_bot` only for the main assistant, and only in a turn that answers something you wrote |
 | Its conversation, answering another bot | `create_bot`, `update_bot`; `message_bot` reaches only the bot that wrote, and only if it asked for a reply |
 | A subagent | `message_bot`, `create_bot`, `update_bot`; at the last level of subagents, the subagent tools |
 | A run of an automation | `message_bot`, `create_bot`, `update_bot`, `browser_ask_user` (nobody is watching) |

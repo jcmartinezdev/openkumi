@@ -9,7 +9,7 @@ export function parse(json: string): Record<string, any> {
 }
 
 /** A superpower's id as words: "notion" is "Notion". */
-const title = (id = '') => id.replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase())
+const title = (id: unknown) => String(id ?? '').replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase())
 
 export const site = (url: unknown) => String(url ?? '').replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '')
 
