@@ -458,6 +458,8 @@ export interface Automation {
 
 /** A message found by searching a bot's conversations, the current one and the archived ones. */
 export interface HistoryMatch {
+  /** The bot whose conversation it is in. Missing from older servers. */
+  botId?: string
   threadId: string
   itemId: number
   /** Who said it: the owner, the bot, a subagent reporting back, a run of an automation reporting back, or another bot (named in `name`). */
@@ -559,7 +561,12 @@ export type AppEvent =
   | { event: 'welcome answered'; choice: 'local' | 'pair' }
   | { event: 'screen opened'; screen: string }
   | { event: 'dictation started' }
+  | { event: 'palette used'; picked: PalettePick; typed: boolean }
+  | { event: 'bot opened by number' }
   | { event: 'app error'; type: string; position: string }
+
+/** What kind of thing was picked in the desktop app's search (⌘K): never which one. */
+export type PalettePick = 'bot' | 'action' | 'place' | 'command' | 'setting' | 'superpower' | 'automation' | 'conversation' | 'message' | 'person'
 
 /** How a server stands with its own updates (apps/server/src/update.ts). */
 export interface ServerUpdate {

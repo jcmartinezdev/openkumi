@@ -33,6 +33,10 @@ ipcRenderer.on('desktop:notice', (_event, id: string) => {
   else clicked = id
 })
 
+// ⌘K, or Search… in the menu bar (apps/desktop/src/main.ts).
+const searches = new Set<() => void>()
+ipcRenderer.on('desktop:palette', () => searches.forEach((listener) => listener()))
+
 const heard = new Set<(event: DictationEvent) => void>()
 ipcRenderer.on('desktop:dictation', (_event, event: DictationEvent) => heard.forEach((listener) => listener(event)))
 
@@ -83,6 +87,10 @@ const bridge: DesktopBridge | null = initial && {
       queueMicrotask(() => listener(id))
     }
     return () => void notices.delete(listener)
+  },
+  onPalette(listener) {
+    searches.add(listener)
+    return () => void searches.delete(listener)
   },
   onSignIn(listener) {
     returns.add(listener)

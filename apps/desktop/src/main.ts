@@ -515,6 +515,17 @@ function createWindow() {
   created.on('leave-full-screen', announce)
 
   const pages = created.webContents
+  // ⌘K (Ctrl+K elsewhere) opens the window's search wherever the keyboard is, a bot's browser
+  // included, whose keys otherwise go to its page. Taken here, before the page and the menu see it,
+  // so it is handled once.
+  pages.on('before-input-event', (event, input) => {
+    const command = mac ? input.meta && !input.control : input.control && !input.meta
+    if (input.type !== 'keyDown' || input.key.toLowerCase() !== 'k' || !command || input.shift || input.alt) return
+    event.preventDefault()
+    // Held down, it opens once.
+    if (input.isAutoRepeat) return
+    pages.send('desktop:palette')
+  })
   // The window only ever shows the app's own page. Links go to the computer's browser.
   const outside = (url: string) => void (/^https?:/.test(url) && shell.openExternal(url))
   pages.on('will-navigate', (event, url) => {
@@ -542,6 +553,8 @@ const goTo = (page: string) => void win?.webContents.executeJavaScript(`location
 function buildMenu() {
   const mac = process.platform === 'darwin'
   const settings: MenuItemConstructorOptions = { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => goTo('general') }
+  // The window's search. Its keys are taken before the menu sees them (createWindow); a click comes here.
+  const search: MenuItemConstructorOptions = { label: 'Search…', accelerator: 'CmdOrCtrl+K', click: () => win?.webContents.send('desktop:palette') }
   // What it finds is shown on the About page, so that is where this goes.
   const updates: MenuItemConstructorOptions[] = updateState().state === 'unsupported' ? [] : [{ label: updateState().state === 'ready' ? 'Restart to Update…' : 'Check for Updates…', click: () => (goTo('about'), void checkForUpdate()) }]
   const appMenu: MenuItemConstructorOptions[] = mac
@@ -563,7 +576,10 @@ function buildMenu() {
         submenu: [...groups.flatMap((group) => [...group, { type: 'separator' } as const]), { label: 'Manage Environments…', click: () => goTo('environments') }, ...(mac ? [] : [{ type: 'separator' } as const, settings, ...updates])],
       },
       { role: 'editMenu' },
-      { role: 'viewMenu' },
+      {
+        label: 'View',
+        submenu: [search, { type: 'separator' }, { role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }],
+      },
       { role: 'windowMenu' },
     ]),
   )

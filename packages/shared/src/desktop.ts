@@ -237,6 +237,11 @@ export interface DesktopBridge {
   /** Called with the id of a notification the person clicked, once the window is in front again. Missing from older apps. */
   onNotice?(listener: (id: string) => void): () => void
   /**
+   * Called when the window's search is asked for: ⌘K (Ctrl+K) wherever the keyboard is in the
+   * window, or Search… in the menu bar. Missing from older apps.
+   */
+  onPalette?(listener: () => void): () => void
+  /**
    * Called with the address a sign-in in this computer's own browser came back to, for the window
    * to pass on to its environment. One that came before anything listened goes to the first listener.
    * Missing from older apps.

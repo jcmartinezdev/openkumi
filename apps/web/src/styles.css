@@ -20,6 +20,8 @@
   /* Something its owner has not read yet. */
   --new: #6aa9ff;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  /* Behind the window's search: the window, dimmed. */
+  --scrim: rgba(0, 0, 0, 0.4);
   /* The picked part of a segmented control on a raised surface, lighter than its track. */
   --segment: #36363c;
   --card: #121214;
@@ -51,6 +53,7 @@
     --err: #dc2626;
     --new: #2563eb;
     --shadow: 0 16px 48px rgba(0, 0, 0, 0.14);
+    --scrim: rgba(0, 0, 0, 0.16);
     --segment: #ffffff;
     --card: #ffffff;
     color-scheme: light;
@@ -77,6 +80,7 @@
   --err: #dc2626;
   --new: #2563eb;
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.14);
+  --scrim: rgba(0, 0, 0, 0.16);
   --segment: #ffffff;
   --card: #ffffff;
   color-scheme: light;
@@ -1000,6 +1004,21 @@ a.set-link:hover { background: var(--hover); }
 /* Whose bots the window shows, at the top of the sidebar and of the settings (Switcher.tsx). */
 .switcher { position: relative; flex: none; }
 .sidebar > .switcher { margin: 0 8px 6px; }
+/* The window's search, under whose bots these are: a field to click, with its key in it. */
+button.side-search {
+  flex: none; display: flex; justify-content: flex-start; gap: 8px; width: auto; height: 34px; margin: 0 8px 6px; padding: 0 6px 0 10px;
+  border-color: var(--border-strong); background: var(--bg); color: var(--faint); font-weight: 400; text-align: left; cursor: text;
+}
+button.side-search:hover:not(:disabled) { background: var(--bg); color: var(--muted); }
+.side-search > svg { color: var(--muted); }
+.side-search kbd, .palette kbd, kbd.bot-number {
+  flex: none; min-width: 22px; height: 20px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 5px;
+  background: var(--hover); color: var(--muted); font: 500 11.5px/1 system-ui, sans-serif; letter-spacing: 0.02em;
+}
+/* ⌘ held: the number that opens each of the first nine bots, in place of its mark (shortcuts.ts). */
+kbd.bot-number { min-width: 26px; background: var(--active); color: var(--text); font-weight: 600; animation: fade 0.1s; }
+.sidebar.numbers .item > .row .meta { visibility: visible; }
+.sidebar.numbers .item > .reveal { display: none; }
 .switcher-current { display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; height: auto; min-height: 42px; padding: 5px 10px 5px 8px; border-color: var(--border); border-radius: 9px; background: var(--raised); text-align: left; font-weight: 400; }
 .switcher-current:hover:not(:disabled), .switcher-current[aria-expanded='true'] { background: var(--raised); border-color: var(--border-strong); }
 .switcher-current > svg { transform: rotate(90deg); color: var(--faint); flex: none; }
@@ -1538,3 +1557,45 @@ p.model-reasoning { margin: 0; font-size: 12.5px; }
 .telemetry-sent dt::after { content: ':'; }
 .telemetry-sent dd { margin: 0; overflow-wrap: anywhere; color: var(--text); }
 @media (max-width: 520px) { .telemetry-lists { grid-template-columns: 1fr; } }
+
+/* ---- the window's search (Palette.tsx): over everything, in the model picker's look */
+.palette-scrim { position: fixed; inset: 0; z-index: 40; background: var(--scrim); animation: fade 0.1s; }
+.palette {
+  position: fixed; z-index: 41; left: 50%; top: max(48px, 11vh); translate: -50% 0; width: min(600px, calc(100vw - 32px)); max-height: calc(100vh - max(48px, 11vh) - 24px);
+  display: flex; flex-direction: column; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--raised); box-shadow: var(--shadow);
+  overflow: hidden; animation: palette-in 0.12s ease-out;
+}
+@keyframes palette-in { from { opacity: 0; transform: translateY(-4px) scale(0.985); } }
+.palette-main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 12px 0; }
+.palette-search { flex: none; display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 4px; color: var(--muted); border-bottom: 2px solid var(--border); transition: border-color 0.12s; }
+.palette-search:focus-within { border-bottom-color: var(--accent); }
+.palette-search input { flex: 1; min-width: 0; height: 100%; padding: 0; border: none; background: none; font-size: 15px; }
+/* A level opened from the first: the bot, its earlier conversations, or whose bots. */
+.palette-level { flex: none; display: inline-flex; align-items: center; gap: 7px; max-width: 50%; height: 28px; padding: 0 9px 0 6px; border-radius: 8px; background: var(--active); color: var(--text); font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; }
+.palette-level > span:not(.avatar) { overflow: hidden; text-overflow: ellipsis; }
+.palette-level > span.faint { flex: none; font-size: 13px; font-weight: 500; color: var(--muted); }
+.palette-level .avatar.head { width: 18px; height: 18px; }
+.palette-list { flex: 1; min-height: 0; max-height: min(420px, 60vh); overflow-y: auto; padding: 4px 0 8px; margin: 0 -6px; }
+.palette-group { display: flex; align-items: center; gap: 6px; margin: 10px 8px 3px; font-size: 11.5px; font-weight: 500; color: var(--faint); }
+.palette-list > div:first-child .palette-group { margin-top: 6px; }
+.palette-group .avatar.head { width: 15px; height: 15px; }
+.palette-row { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 5px 8px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.palette-row.selected { background: var(--active); }
+.palette-lead { flex: none; width: 22px; height: 22px; display: grid; place-items: center; color: var(--muted); }
+.palette-row.selected .palette-lead { color: var(--text); }
+.palette-lead > .avatar { width: 22px; height: 22px; }
+.palette-lead .power-tile.row { width: 22px; height: 22px; border-radius: 6px; font-size: 11px; }
+.palette-text { flex: 1; min-width: 0; display: grid; line-height: 1.35; }
+.palette-title, .palette-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-title mark { background: none; color: inherit; font-weight: 650; }
+.palette-detail { font-size: 12.5px; color: var(--faint); }
+.palette-detail mark { background: none; color: var(--muted); font-weight: 600; }
+.palette-end { flex: none; display: flex; align-items: center; gap: 6px; max-width: 45%; min-width: 0; font-size: 12px; color: var(--faint); }
+.palette-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-row > svg:last-child { flex: none; color: var(--faint); }
+.palette-empty { padding: 18px 8px 12px; font-size: 13px; color: var(--muted); }
+.palette-foot { flex: none; display: flex; align-items: center; gap: 14px; height: 40px; padding: 0 12px 0 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; }
+.palette-foot > span { display: inline-flex; align-items: center; gap: 4px; }
+.palette-foot kbd { min-width: 20px; height: 19px; font-size: 11px; }
+.palette-foot .spinner { width: 10px; height: 10px; margin-right: 3px; }
+@media (prefers-reduced-motion: reduce) { .palette, .palette-scrim, kbd.bot-number { animation: none; } }

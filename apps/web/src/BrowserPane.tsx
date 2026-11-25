@@ -91,6 +91,8 @@ export function PageView({ bot, tab, drive, onPress, children }: { bot: Bot; tab
           if (e.key === 'Escape' && e.shiftKey) return e.currentTarget.blur()
           // Let the browser deliver the clipboard through the paste event instead.
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') return
+          // ⌘1–9 (Ctrl+1–9) open a bot from anywhere in the window, this page included (shortcuts.ts).
+          if ((e.metaKey || e.ctrlKey) && /^[1-9]$/.test(e.key)) return
           e.preventDefault()
           e.stopPropagation()
           input({ kind: 'keydown', key: e.key === ' ' ? 'Space' : e.key })

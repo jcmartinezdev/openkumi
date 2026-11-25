@@ -435,23 +435,26 @@ export function messagesAround(threadId: string, itemId: number, before: number,
 
 /**
  * Messages in a bot's conversations (the current one and the archived ones) that contain every
- * word of `query`, newest first. What subagents said among themselves is not searched.
+ * word of `query`, newest first; with no bot given, in every bot's. What subagents said among
+ * themselves is not searched.
  */
-export function searchMessages(botId: string, query: string, limit = 30): HistoryMatch[] {
+export function searchMessages(botId: string | null, query: string, limit = 30): HistoryMatch[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8)
   if (!words.length) return []
   const rows = db.prepare(
-    `SELECT i.* FROM items i JOIN threads t ON t.id = i.thread_id
-     WHERE t.bot_id = ? AND t.parent_id IS NULL AND ${MESSAGE}
+    `SELECT i.*, t.bot_id AS bot_id FROM items i JOIN threads t ON t.id = i.thread_id
+     WHERE ${botId === null ? '' : 't.bot_id = ? AND '}t.parent_id IS NULL AND ${MESSAGE}
        AND ${words.map(() => `json_extract(i.data, '$.text') LIKE ? ESCAPE '\\'`).join(' AND ')}
      ORDER BY i.id DESC LIMIT ?`,
-  ).all(botId, ...words.map((w) => `%${w.replace(/[\\%_]/g, '\\$&')}%`), limit)
-  return rows.map(toItem).map((item): HistoryMatch => {
+  ).all(...(botId === null ? [] : [botId]), ...words.map((w) => `%${w.replace(/[\\%_]/g, '\\$&')}%`), limit) as Record<string, unknown>[]
+  return rows.map((row): HistoryMatch => {
+    const item = toItem(row)
     const data = item.data as Extract<ItemData, { type: 'message' }>
     const at = Math.max(0, data.text.toLowerCase().indexOf(words[0]))
     const start = Math.max(0, at - 80)
     const snippet = (start ? '…' : '') + data.text.slice(start, at + 200).replace(/\s+/g, ' ').trim() + (at + 200 < data.text.length ? '…' : '')
     return {
+      botId: row.bot_id as string,
       threadId: item.threadId,
       itemId: item.id,
       from: data.role === 'assistant' ? 'bot' : data.source === 'user' ? 'user' : data.source === 'automation' ? 'automation' : data.source === 'bot' ? 'other' : 'subagent',
@@ -460,6 +463,24 @@ export function searchMessages(botId: string, query: string, limit = 30): Histor
       createdAt: item.createdAt,
     }
   })
+}
+
+/**
+ * The threads besides the bots' own conversations (the ones set aside, subagents, and runs of
+ * automations) whose title has every word of `query`, newest first; of one bot's, or of every bot's.
+ * The apps' list holds only the recent subagents and runs, so the older ones are found here.
+ */
+export function searchThreadTitles(botId: string | null, query: string, limit = 10): Thread[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 8)
+  if (!words.length) return []
+  return db
+    .prepare(
+      `SELECT * FROM threads WHERE ${botId === null ? '' : 'bot_id = ? AND '}(parent_id IS NOT NULL OR archived_at IS NOT NULL)
+         AND ${words.map(() => `title LIKE ? ESCAPE '\\'`).join(' AND ')}
+       ORDER BY updated_at DESC LIMIT ?`,
+    )
+    .all(...(botId === null ? [] : [botId]), ...words.map((w) => `%${w.replace(/[\\%_]/g, '\\$&')}%`), limit)
+    .map(toThread)
 }
 
 export function addItem(threadId: string, data: ItemData): Item {
