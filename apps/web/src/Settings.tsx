@@ -204,6 +204,8 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
   const power = useStore((s) => (page === 'superpowers' && path[1] ? s.superpowers.find((p) => p.id === path[1]) : undefined))
   // A superpower's page opened from a bot's settings, which is about that bot.
   const botPower = useStore((s) => (bot && path[2] === 'superpowers' && path[3] ? s.superpowers.find((p) => p.id === path[3]) : undefined))
+  // The page for choosing a bot's voice, under its Bot tab.
+  const botVoice = !!bot && path[2] === 'bot' && path[3] === 'voice'
 
   // Escape closes the settings, unless a dialog on top of them is open (it closes itself).
   useEffect(() => {
@@ -226,17 +228,17 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
             {(bot || power) && (
               <>
                 <Icon name="chevron" size={12} />
-                {botPower ? (
-                  <a href={`#/settings/bots/${encodeURIComponent(bot!.id)}/superpowers`}>{bot!.emoji} {bot!.name}</a>
+                {botPower || botVoice ? (
+                  <a href={`#/settings/bots/${encodeURIComponent(bot!.id)}/${botVoice ? 'bot' : 'superpowers'}`}>{bot!.emoji} {bot!.name}</a>
                 ) : (
                   <span aria-current="page">{bot ? `${bot.emoji} ${bot.name}` : power!.name}</span>
                 )}
               </>
             )}
-            {botPower && (
+            {(botPower || botVoice) && (
               <>
                 <Icon name="chevron" size={12} />
-                <span aria-current="page">{botPower.name}</span>
+                <span aria-current="page">{botPower ? botPower.name : 'Voice'}</span>
               </>
             )}
           </nav>
@@ -246,14 +248,14 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           <button className="icon" title="Close" aria-label="Close settings" onClick={closeSettings}><Icon name="x" /></button>
         </header>
         {/* Keyed by page so each one starts scrolled to the top. */}
-        <div className="set-body" key={bot ? `bot:${bot.id}${botPower ? `:${botPower.id}` : ''}` : power ? `superpower:${power.id}` : `${page}:${page === 'environments' ? (path[1] ?? '') : ''}`}>
+        <div className="set-body" key={bot ? `bot:${bot.id}${botPower ? `:${botPower.id}` : botVoice ? ':voice' : ''}` : power ? `superpower:${power.id}` : `${page}:${page === 'environments' ? (path[1] ?? '') : ''}`}>
           {page === 'profile' && <ProfilePage />}
           {page === 'general' && <General />}
           {page === 'appearance' && <Appearance />}
           {page === 'chat' && <ChatPage />}
           {page === 'providers' && <Providers selected={path[1]} />}
           {page === 'prompt' && <MasterPrompt />}
-          {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} power={path[2] === 'superpowers' ? path[3] : undefined} /> : <Bots newBot={newBot} />)}
+          {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} power={path[2] === 'superpowers' ? path[3] : undefined} voice={botVoice} /> : <Bots newBot={newBot} />)}
           {page === 'superpowers' && (path[1] ? <SuperpowerPage id={path[1]} /> : <SuperpowerCatalog />)}
           {page === 'browser' && <BrowserPage />}
           {page === 'environments' && <Environments adding={path[1] === 'add'} />}
