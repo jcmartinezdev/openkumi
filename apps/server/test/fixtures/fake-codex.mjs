@@ -185,7 +185,8 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
     answer(id, { rateLimits: codex, rateLimitsByLimitId: { codex, other: { limitId: 'other', primary: { usedPercent: 99, windowDurationMins: 300, resetsAt: 1893500000 }, secondary: null, planType: 'plus' } } })
   } else if (method === 'thread/realtime/listVoices') {
     if (!experimental) refuse(id, 'thread/realtime/listVoices requires experimentalApi capability')
-    else answer(id, { voices: { v1: ['juniper', 'cove'], v2: ['marin'], v3: VOICES, defaultV1: 'cove', defaultV2: 'marin' } })
+    // Porto is listed as the real Codex lists it, and OpenAI refuses it: the server leaves it out.
+    else answer(id, { voices: { v1: ['juniper', 'cove'], v2: ['marin'], v3: [...VOICES, 'porto'], defaultV1: 'cove', defaultV2: 'marin' } })
   } else if (method === 'thread/realtime/start') void startCall(id, params)
   else if (method === 'thread/realtime/appendSpeech') {
     if (!onCall) refuse(id, 'conversation is not running')

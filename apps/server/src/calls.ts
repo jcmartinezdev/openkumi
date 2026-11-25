@@ -704,13 +704,21 @@ export function endSample(id: string) {
 
 let known: Promise<{ voices: string[]; usual: string }> | null = null
 
+/**
+ * Voices Codex lists that OpenAI does not put on the line: each one tried is refused with "404 Not
+ * Found: realtime websocket handshake failed" while every other voice says its line (found by
+ * trying each one over a real connection, 2026-11-25, Codex 0.171.0). They are not offered, so
+ * that no bot is given a voice it cannot speak with.
+ */
+const REFUSED = new Set(['marin', 'porto', 'selva'])
+
 /** The voices Codex offers for calls, and the one it uses when none is chosen. Asked once: they come with the program. */
 export function voices(): Promise<{ voices: string[]; usual: string }> {
   known ??= (async () => {
     const codex = startCodex()
     try {
       const list = (await within(ANSWER_WITHIN, 'Codex did not say which voices it has.', greet(codex).then(() => codex.ask('thread/realtime/listVoices', {}))))?.voices ?? {}
-      const names: string[] = (Array.isArray(list.v3) ? list.v3 : []).filter((v: unknown) => typeof v === 'string')
+      const names: string[] = (Array.isArray(list.v3) ? list.v3 : []).filter((v: unknown) => typeof v === 'string' && !REFUSED.has(v))
       return { voices: names, usual: typeof list.defaultV1 === 'string' && names.includes(list.defaultV1) ? list.defaultV1 : (names[0] ?? '') }
     } finally {
       codex.close()

@@ -9,6 +9,9 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { Bot, Call } from '@openkumi/shared'
 import { ApiError, api, onEnvironmentChange, onState, useStore } from './store'
+import { type Voices, voiceName } from './voices'
+
+export { type Voices, voiceName } from './voices'
 
 /** A microphone, or the other side's voice. */
 interface Sound {
@@ -272,17 +275,9 @@ export function callLength(seconds: number) {
 
 // ---- the voice a bot has on a call
 
-export interface Voices {
-  voices: string[]
-  /** The one a bot has when none was chosen for it. */
-  usual: string
-}
 /** Asked once per environment: the voices come with the Codex installed there. */
 let voices: Promise<Voices> | null = null
 onEnvironmentChange(() => (voices = null))
-
-/** A voice's name as people read it: "Maple". */
-export const voiceName = (voice: string) => voice.charAt(0).toUpperCase() + voice.slice(1)
 
 /** The voices the Codex of this environment offers, once they are known and while bots can be called. Null until then. */
 export function useVoices(): Voices | null {

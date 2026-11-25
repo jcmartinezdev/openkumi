@@ -1,32 +1,26 @@
 // The voice a bot has on a call, chosen by ear: the voices side by side, one in view at a time,
-// to swipe through. The one in view says a short line as the bot (the server has Codex put it on
-// the line, as for a call), so it is heard the way it will sound; a button makes it the bot's.
+// to swipe through, sorted female, male and by language (@openkumi/client/voices) with a switch
+// over them for each. The one in view says what it is like, and a short line as the bot (the
+// server has Codex put it on the line, as for a call), so it is heard the way it will sound; a
+// button makes it the bot's.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, type FlatList, Linking, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { useIsFocused, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
-import { stopHearing, useCalling, useHearing, useVoices, voiceName } from '@openkumi/client/calls'
+import { stopHearing, useCalling, useHearing, useVoices } from '@openkumi/client/calls'
+import { type Shelf, type VoiceChoice, isVoice, shelvesOf } from '@openkumi/client/voices'
 import { api, useStore } from '@openkumi/client/store'
 import { hear } from '../../../src/calls'
 import { Glyph } from '../../../src/icons'
 import { Mascot, Talking } from '../../../src/Mascot'
 import { ScreenTitle } from '../../../src/ScreenTitle'
+import { Segments } from '../../../src/SettingsUi'
 import { useTheme } from '../../../src/theme'
 
 /** How much of the voices beside the one in view shows at each edge, which says there is more to the sides. */
 const PEEK = 34
 const GAP = 12
-
-interface Page {
-  /** As Codex names it. */
-  voice: string
-  /** What the bot is given when this one is chosen: the usual voice is kept as none, so that it stays the usual one. */
-  value: string
-  usual: boolean
-  /** The bot has it, and Codex no longer offers it. */
-  gone: boolean
-}
 
 export default function Voice() {
   const theme = useTheme()
@@ -41,41 +35,49 @@ export default function Voice() {
   const [saved, setSaved] = useState<string | null>(null)
   const mine = saved ?? bot?.voice ?? ''
 
-  // The usual voice first, then the others as Codex lists them. The order does not move when one is chosen.
+  // Sorted once: the order does not move when one is chosen, and the bot's voice as the screen opened stays listed.
   const first = useRef(mine).current
-  const pages = useMemo<Page[]>(() => {
-    if (!known) return []
-    const offered = [...(known.usual ? [known.usual] : []), ...known.voices.filter((voice) => voice !== known.usual)]
-    return [
-      ...offered.map((voice) => ({ voice, value: voice === known.usual ? '' : voice, usual: voice === known.usual, gone: false })),
-      ...(first && !known.voices.includes(first) ? [{ voice: first, value: first, usual: false, gone: true }] : []),
-    ]
-  }, [known])
-  /** The page of the voice the bot has. A bot given the usual voice by name has it all the same. */
-  const pageOf = (value: string) => Math.max(0, pages.findIndex((page) => page.value === value || page.voice === value))
+  const shelves = useMemo(() => (known ? shelvesOf(known, first) : []), [known])
+  /** The voices shown: the kind picked above them, at first the bot's own voice's. */
+  const [picked, setPicked] = useState<Shelf | null>(null)
+  const shelf = shelves.find((one) => one.shelf === picked) ?? shelves.find((one) => one.voices.some((choice) => isVoice(choice, first))) ?? shelves[0]
+  const pages = shelf?.voices ?? []
+  /** Where among them the bot's voice is, for them to open at. */
+  const startOf = (voices: VoiceChoice[]) => Math.max(0, voices.findIndex((choice) => isVoice(choice, mine)))
 
   const step = width - 2 * PEEK
-  const list = useRef<FlatList<Page>>(null)
+  const list = useRef<FlatList<VoiceChoice>>(null)
   const x = useRef(new Animated.Value(0)).current
-  const [at, setAt] = useState(0)
-  // It opens at the bot's own voice.
-  const opened = useRef(false)
+  /** The voice in view, as a place among the kind shown. Until a swipe, the bot's own voice, or the first. */
+  const [view, setView] = useState<{ shelf: Shelf; at: number } | null>(null)
+  const at = view && view.shelf === shelf?.shelf ? view.at : startOf(pages)
+  const setAt = (to: number) => shelf && setView({ shelf: shelf.shelf, at: to })
+  // Each kind opens at the bot's own voice, when it is one of them.
   useEffect(() => {
-    if (!pages.length || opened.current) return
-    opened.current = true
-    const start = pageOf(first)
-    setAt(start)
+    if (!pages.length) return
+    const start = startOf(pages)
+    x.setValue(start * step)
     if (start) setTimeout(() => list.current?.scrollToOffset({ offset: start * step, animated: false }), 0)
-  }, [pages.length])
+  }, [shelf?.shelf, !!known])
 
   // A voice swiped to says its line by itself, once the swiping has come to rest on it.
   const swiped = useRef(false)
   useEffect(() => {
-    if (!swiped.current || !bot || !pages[at] || pages[at].gone || onCall) return
+    if (!swiped.current || !bot || !pages[at] || onCall) return
+    // One that cannot be heard stops the one that was talking.
+    if (pages[at].gone) return void stopHearing()
     const { value } = pages[at]
     const wait = setTimeout(() => hear(bot.id, value), 350)
     return () => clearTimeout(wait)
-  }, [at])
+  }, [at, shelf?.shelf])
+  /** Another kind of voice: its voices take the place of these, and none says anything until swiped to. */
+  const show = (next: Shelf) => {
+    void Haptics.selectionAsync()
+    swiped.current = false
+    stopHearing()
+    setView(null)
+    setPicked(next)
+  }
   // The voice only speaks to a line that sends it sound, so hearing one needs the microphone, switched off as it is.
   useEffect(() => {
     if (!hearing.denied) return
@@ -99,21 +101,28 @@ export default function Voice() {
     setAt(to)
   }
   const choose = () => {
-    if (!page) return
+    if (!page || page.gone) return
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     setSaved(page.value)
     api('PATCH', `/api/bots/${bot.id}`, { voice: page.value }).catch((e) => (setSaved(null), Alert.alert('Not saved', (e as Error).message)))
   }
-  const chosen = !!page && pageOf(mine) === at
+  const chosen = !!page && isVoice(page, mine)
 
   return (
     <View style={[styles.screen, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
       <ScreenTitle title="Voice" subtitle={bot.name} />
-      {!pages.length ? (
+      {!pages.length || !shelf ? (
         <View style={styles.waiting}><ActivityIndicator color={theme.muted} /></View>
       ) : (
         <>
+          {shelves.length > 1 && (
+            <View style={styles.shelves}>
+              <Segments label="Kind of voice" value={shelf.shelf} options={shelves.map((one) => [one.shelf, one.title] as const)} onChange={show} />
+            </View>
+          )}
           <Animated.FlatList
+            // Each kind of voice is a list of its own, which starts at its beginning.
+            key={shelf.shelf}
             ref={list}
             data={pages}
             keyExtractor={(item) => item.voice}
@@ -137,18 +146,23 @@ export default function Voice() {
               const around = [(index - 1) * step, index * step, (index + 1) * step]
               const scale = x.interpolate({ inputRange: around, outputRange: [0.92, 1, 0.92], extrapolate: 'clamp' })
               const opacity = x.interpolate({ inputRange: around, outputRange: [0.45, 1, 0.45], extrapolate: 'clamp' })
-              const has = pageOf(mine) === index
+              const has = isVoice(item, mine)
+              // The kind is the switch's, so a card says only what more there is.
+              const about = item.shelf === 'female' || item.shelf === 'male' ? item.about : item.language
               return (
                 <Animated.View style={{ width: step, paddingHorizontal: GAP / 2, opacity, transform: [{ scale }] }}>
                   <View style={[styles.card, { backgroundColor: theme.groupCard, borderColor: has ? theme.text : 'transparent' }]}>
                     <Talking on={speaking}><Mascot look={bot.look} emoji={bot.emoji} size={128} live={index === at} /></Talking>
-                    <Text style={[styles.name, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>{voiceName(item.voice)}</Text>
-                    <Text style={{ color: has ? theme.okText : theme.faint, fontSize: 14, fontWeight: has ? '600' : '400' }} numberOfLines={1}>
-                      {has ? `${bot.name}’s voice` : item.gone ? 'No longer offered' : item.usual ? 'The usual voice' : ' '}
-                    </Text>
+                    <Text style={[styles.name, { color: theme.text }]} numberOfLines={1} adjustsFontSizeToFit>{item.name}</Text>
+                    <Text style={[styles.about, { color: theme.text }]} numberOfLines={1}>{about || ' '}</Text>
+                    <View style={styles.chips}>
+                      {has && <Text style={[styles.chip, { color: theme.okText, backgroundColor: theme.okTint, fontWeight: '600' }]}>{bot.name}’s voice</Text>}
+                      {item.usual && <Text style={[styles.chip, { color: theme.muted, backgroundColor: theme.bubble }]}>The usual one</Text>}
+                      {item.gone && <Text style={[styles.chip, { color: theme.muted, backgroundColor: theme.bubble }]}>No longer offered</Text>}
+                    </View>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel={here ? `Stop ${voiceName(item.voice)}` : `Hear ${voiceName(item.voice)}`}
+                      accessibilityLabel={here ? `Stop ${item.name}` : `Hear ${item.name}`}
                       disabled={item.gone || onCall || index !== at}
                       style={({ pressed }) => [styles.play, { backgroundColor: theme.primary, opacity: item.gone || onCall ? 0.3 : pressed ? 0.8 : 1 }]}
                       onPress={() => (void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), here ? stopHearing() : hear(bot.id, item.value))}
@@ -184,14 +198,14 @@ export default function Voice() {
             {(onCall || (!!hearing.error && !hearing.denied)) && <Text accessibilityRole="alert" style={[styles.note, { color: onCall ? theme.muted : theme.err }]}>{onCall ? 'You are on a call. Hang up to hear the voices.' : hearing.error}</Text>}
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: chosen }}
-              disabled={chosen || !page}
+              accessibilityState={{ disabled: chosen || !!page?.gone }}
+              disabled={chosen || !page || page.gone}
               style={({ pressed }) => [styles.use, { backgroundColor: chosen ? theme.bubble : theme.primary, opacity: pressed ? 0.85 : 1 }]}
               onPress={choose}
             >
               {chosen && <Glyph name="check" size={18} color={theme.muted} weight={2.4} />}
               <Text style={{ color: chosen ? theme.muted : theme.onPrimary, fontSize: 17, fontWeight: '600' }} numberOfLines={1}>
-                {chosen ? `This is ${bot.name}’s voice` : page ? `Use ${voiceName(page.voice)}` : ''}
+                {chosen ? `This is ${bot.name}’s voice` : page ? `Use ${page.name}` : ''}
               </Text>
             </Pressable>
             <Text style={[styles.note, { color: theme.faint }]}>Swipe to hear the others. Each one says a line over your ChatGPT plan, like a very short call.</Text>
@@ -208,6 +222,10 @@ const styles = StyleSheet.create({
   list: { flexGrow: 1 },
   card: { alignItems: 'center', gap: 6, paddingTop: 30, paddingBottom: 24, paddingHorizontal: 20, borderRadius: 32, borderWidth: 2 },
   name: { fontSize: 32, fontWeight: '700', marginTop: 10 },
+  about: { fontSize: 17, marginTop: -4 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, minHeight: 22 },
+  chip: { fontSize: 12, fontWeight: '500', paddingHorizontal: 9, paddingVertical: 2, borderRadius: 11, overflow: 'hidden' },
+  shelves: { paddingHorizontal: 20, paddingTop: 6, paddingBottom: 2 },
   play: { width: 68, height: 68, borderRadius: 34, alignItems: 'center', justifyContent: 'center', marginTop: 18 },
   stop: { width: 20, height: 20, borderRadius: 4 },
   says: { fontSize: 14, lineHeight: 19, textAlign: 'center', minHeight: 38, marginTop: 8 },

@@ -2044,12 +2044,33 @@ test('calls: a bot is called from its conversation, what is said shows as it is 
   assert.equal((await state()).call, null)
   assert.equal(await win.locator('header button.calling').count(), 0)
 
-  // The bot's voice is chosen in its settings, from the ones Codex offers.
+  // The bot's voice is chosen on a page of its own, from the ones Codex offers, sorted female and
+  // male, each with what it is like. The settings show the one it has.
   await win.evaluate((id) => (location.hash = `/settings/bots/${id}`), bot.id)
-  const voice = win.getByRole('combobox', { name: 'Voice' })
-  await until(async () => (await voice.locator('option').allTextContents()).join() === 'Usual (Cove),Juniper,Maple,Cove')
-  await voice.selectOption('maple')
+  const voiceButton = win.locator('a.voice-button')
+  await until(async () => (await voiceButton.locator('.voice-button-text').innerText()).replace(/\s+/g, ' ').trim() === 'Cove Male · Composed and direct')
+  await voiceButton.click()
+  const voices = win.getByRole('listbox', { name: 'Voices' })
+  await until(async () => (await voices.locator('[role=group] h2').allTextContents()).join() === 'Female 2,Male 1')
+  assert.deepEqual(await voices.locator('.voice-name').allTextContents(), ['Juniper', 'Maple', 'Cove'])
+  assert.equal(await win.locator('.crumbs [aria-current=page]').textContent(), 'Voice')
+  // It opens on the bot's own voice, the usual one.
+  await win.locator('.voice-stage h2', { hasText: 'Cove' }).waitFor()
+  await win.getByRole('button', { name: 'Caller’s voice' }).waitFor()
+  // A click brings a voice into view, and a button makes it the bot's.
+  await voices.getByRole('option', { name: /Maple/ }).click()
+  await win.locator('.voice-stage h2', { hasText: 'Maple' }).waitFor()
+  await win.getByRole('button', { name: 'Use Maple' }).click()
   await until(async () => (await state()).bots.find((b) => b.id === bot.id).voice === 'maple')
+  await win.getByRole('button', { name: 'Caller’s voice' }).waitFor()
+  // The arrow keys go through the voices as soon as the page opens, and Enter takes the one in view.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}`), bot.id)
+  await voiceButton.click()
+  await win.locator('.voice-stage h2', { hasText: 'Maple' }).waitFor()
+  await win.keyboard.press('ArrowUp')
+  await win.locator('.voice-stage h2', { hasText: 'Juniper' }).waitFor()
+  await win.keyboard.press('Enter')
+  await until(async () => (await state()).bots.find((b) => b.id === bot.id).voice === 'juniper')
 
   // Where bots cannot be called, the button says what is missing, in the conversation.
   const { settings } = await state()
