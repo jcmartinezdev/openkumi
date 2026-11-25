@@ -4,7 +4,7 @@
     "slug": "openkumi",
     "owner": "goto-lcs-ug",
     "scheme": "openkumi",
-    "version": "0.0.6",
+    "version": "0.0.7",
     "runtimeVersion": {
       "policy": "fingerprint"
     },

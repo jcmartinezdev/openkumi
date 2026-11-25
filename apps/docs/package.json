@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/docs",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "docs.openkumi.ai, OpenKumi's documentation.",
   "private": true,
   "type": "module",
