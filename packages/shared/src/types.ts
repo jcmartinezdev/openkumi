@@ -40,7 +40,8 @@ export interface Bot {
   emoji: string
   /**
    * What the bot is for, in a line. The other bots are told it, so they know what to pass on to it.
-   * The owner's, like the rules: a bot cannot change how the others see it.
+   * The owner's, like the rules: no bot can change how the others see it, but the main assistant
+   * when the owner asks it to (update_bot).
    */
   description: string
   /** Rules from the owner. The bot reads them on every turn and cannot change them. */

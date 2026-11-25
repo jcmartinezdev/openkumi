@@ -5,7 +5,7 @@ description: "Every tool a bot can call, and where each one is withheld: subagen
 
 | Area | Tools |
 | --- | --- |
-| Bots | `list_bots`, `message_bot`, `create_bot` (the main assistant only) |
+| Bots | `list_bots`, `message_bot`, `create_bot` and `update_bot` (the main assistant only) |
 | Files | `list_files`, `read_file`, `write_file`, `edit_file`, `search_files`, `move_file`, `delete_file` |
 | Its conversation | `search_history`, `read_history` |
 | Subagents | `spawn_subagent`, `wait_subagents`, `list_subagents`, `read_subagent`, `message_subagent`, `cancel_subagent` |
@@ -25,11 +25,11 @@ A bot does not have every tool everywhere:
 
 | Where the bot is | What it does not have |
 | --- | --- |
-| Its conversation, answering you | nothing is withheld; `create_bot` only for the main assistant, and only right after you asked |
-| Its conversation, answering another bot | `create_bot`; `message_bot` reaches only the bot that wrote, and only if it asked for a reply |
-| A subagent | `message_bot`, `create_bot`; at the last level of subagents, the subagent tools |
-| A run of an automation | `message_bot`, `create_bot`, `browser_ask_user` (nobody is watching) |
-| A turn that answers something asked on a call | everything but `list_bots`, `message_bot`, `create_bot`, the subagent tools (but `wait_subagents`) and the automation tools; automations it makes must start at a time. No web search. |
+| Its conversation, answering you | nothing is withheld; `create_bot` and `update_bot` only for the main assistant, and only right after you asked |
+| Its conversation, answering another bot | `create_bot`, `update_bot`; `message_bot` reaches only the bot that wrote, and only if it asked for a reply |
+| A subagent | `message_bot`, `create_bot`, `update_bot`; at the last level of subagents, the subagent tools |
+| A run of an automation | `message_bot`, `create_bot`, `update_bot`, `browser_ask_user` (nobody is watching) |
+| A turn that answers something asked on a call | everything but `list_bots`, `message_bot`, `create_bot`, `update_bot`, the subagent tools (but `wait_subagents`) and the automation tools; automations it makes must start at a time. No web search. |
 | Any thread, when **Bots can message each other** is off | `message_bot`, and `create_bot`'s first message |
 
 ## A few in more detail
@@ -42,6 +42,10 @@ A bot does not have every tool everywhere:
   report or an automation's run woke it. A new bot runs on what new bots run on (**Settings →
   General**), and `create_bot` can give it a first message, which it starts on at once in its own
   conversation.
+- **`update_bot`.** The same goes for changing a bot, itself included: its name, what it is for,
+  emoji, model and reasoning effort, web search, and whether its browser window shows. Models are
+  named as people call them ("sonnet"), from any engine that is ready. Its rules stay yours to
+  write, and its instructions its own: to change how a bot works, the main assistant messages it.
 - **The browser while you have control.** While you have control of a window, the bot's
   `browser_snapshot` and `browser_read` still work, and everything else in that window is refused
   at once, with a note saying so; the next result after you hand back tells it you used the window.

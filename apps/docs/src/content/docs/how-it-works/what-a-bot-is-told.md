@@ -34,8 +34,12 @@ in what it knows of the bot and the thread, so in this order a bot is told:
 ## The line that says what a bot is for
 
 Each bot's line in the list of other bots (point 3) is set by you, in the bot's settings or on the
-Master prompt page. No bot can change it, its own included. So a bot that has been talked into
-something by a web page cannot pass that on to the others through how it is described.
+Master prompt page, or by asking your main assistant, which can change it with `update_bot` only in
+a turn that answers something you wrote. No other bot can change it, its own included. So a bot that
+has been talked into something by a web page cannot pass that on to the others through how it is
+described. The main assistant is held to your word only as far as the turn goes: what it reads in
+that turn, a page or an email, could still mislead it, so the change shows as a step in its
+conversation.
 
 A new bot's line starts as what its maker gave: the description a bot passes to `create_bot`, or
 else the first sentence of what the bot was made for.
