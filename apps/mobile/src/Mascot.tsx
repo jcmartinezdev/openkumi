@@ -51,8 +51,8 @@ export function Mascot({ look, emoji, size, crop = 'full', live = false }: Masco
 }
 
 /**
- * A bot's head, where its avatar goes, holding up its sign so bots that look alike tell apart. The
- * row beside it says whose it is. `sign={false}` leaves the sign out where the bot is plain.
+ * A bot's head, where its avatar goes, holding its sign under its chin so bots that look alike tell
+ * apart. The row beside it says whose it is. `sign={false}` leaves the sign out where the bot is plain.
  */
 export function BotHead({ bot, size = 32, sign = true }: { bot: Pick<Bot, 'look' | 'emoji'> | undefined; size?: number; sign?: boolean }) {
   const emoji = bot?.emoji ?? '🤖'
@@ -60,16 +60,18 @@ export function BotHead({ bot, size = 32, sign = true }: { bot: Pick<Bot, 'look'
   const s = HEAD_SIGN
   const { card, paw, pawEdge } = signColors(bot?.look ?? UNDECIDED)
   const pawSize = s.paw * size
+  const pawStyle = [styles.paw, { width: pawSize, height: pawSize, top: (s.height * size - pawSize) / 2, backgroundColor: paw, borderColor: pawEdge }]
   return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={{ width: size, height: size }}>
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none" style={{ width: size, height: size, transform: [{ translateY: -s.lift * size }] }}>
       <Mascot look={bot?.look} emoji={emoji} size={size} crop="head" />
       <View
         style={[
           styles.sign,
-          { width: s.width * size, height: s.height * size, right: s.right * size, bottom: s.bottom * size, borderRadius: s.radius * size, backgroundColor: card, transform: [{ rotate: `${s.angle}deg` }] },
+          { width: s.width * size, height: s.height * size, left: ((1 - s.width) / 2) * size, bottom: s.bottom * size, borderRadius: s.radius * size, backgroundColor: card, transform: [{ rotate: `${s.angle}deg` }] },
         ]}
       >
-        <View style={[styles.paw, { width: pawSize, height: pawSize, left: -pawSize / 2, top: (s.height * size - pawSize) / 2, backgroundColor: paw, borderColor: pawEdge }]} />
+        <View style={[pawStyle, { left: -pawSize / 2 }]} />
+        <View style={[pawStyle, { right: -pawSize / 2 }]} />
         <Text allowFontScaling={false} style={{ fontSize: s.emoji * size }}>{emoji}</Text>
       </View>
     </View>

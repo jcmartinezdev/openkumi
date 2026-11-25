@@ -114,15 +114,18 @@
       m.shadow.style.transform = `scale(${(0.45 + 0.55 * clamp(shadow)).toFixed(3)})`
     }
   }
-  /** A bot's head holding its sign at the corner, as the app shows bots in lists. */
+  /** A bot's head holding its sign under its chin, as the app shows bots in lists (A.headSign is the app's HEAD_SIGN). */
   function head(id, size, sign = true) {
     const b = A.bots[id]
+    const g = A.headSign
     const s = (n) => `${(n * size).toFixed(1)}px`
+    const paw = `width:${s(g.paw)};height:${s(g.paw)};background:${b.sign.paw};border-color:${b.sign.pawEdge}`
     const card = sign
-      ? `<span class="head-sign" style="width:${s(0.68)};height:${s(0.54)};right:${s(-0.15)};bottom:${s(-0.1)};border-radius:${s(0.15)};font-size:${s(0.37)};background:${b.sign.card}">` +
-        `<i style="width:${s(0.21)};height:${s(0.21)};left:${s(-0.105)};background:${b.sign.paw};border-color:${b.sign.pawEdge}"></i>${b.emoji}</span>`
+      ? `<span class="head-sign" style="width:${s(g.width)};height:${s(g.height)};left:${s((1 - g.width) / 2)};bottom:${s(g.bottom)};border-radius:${s(g.radius)};font-size:${s(g.emoji)};transform:rotate(${g.angle}deg);background:${b.sign.card}">` +
+        `<i style="${paw};left:${s(-g.paw / 2)}"></i><i style="${paw};right:${s(-g.paw / 2)}"></i>${b.emoji}</span>`
       : ''
-    return `<span class="head" style="width:${size}px;height:${size}px">${fresh(b.head)}${card}</span>`
+    const lift = sign ? `;transform:translateY(${s(-g.lift)})` : ''
+    return `<span class="head" style="width:${size}px;height:${size}px${lift}">${fresh(b.head)}${card}</span>`
   }
   /** A name tag centred on `cx`. */
   function tag(parent, text, cx, top) {

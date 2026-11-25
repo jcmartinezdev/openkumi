@@ -180,7 +180,7 @@ button.pill.link:hover { background: var(--active); }
 /* Its head stands in for an avatar, with no tile behind it. */
 .avatar.head { background: none; border-radius: 0; position: relative; container-type: size; }
 .avatar.head .mascot { width: 100%; height: 100%; }
-/* Its sign, held up at the corner; Mascot.tsx sizes it from the head. The edge keeps it apart from a pale head or page. */
+/* Its sign, held under the chin with both paws; Mascot.tsx sizes it from the head. The edge keeps it apart from a pale head or page. */
 .head-sign {
   position: absolute; display: grid; place-items: center; line-height: 1;
   box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -1417,7 +1417,7 @@ p.model-reasoning { margin: 0; font-size: 12.5px; }
 .prov-models { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .prov-models li { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; font-family: var(--mono); font-size: 12px; }
 .prov-bots { display: flex; flex-wrap: wrap; gap: 8px; }
-.prov-bots a { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px 0 5px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; }
+.prov-bots a { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px 0 5px; border: 1px solid var(--border); border-radius: 8px; color: var(--text); text-decoration: none; }
 .prov-bots a:hover { background: var(--hover); }
 .prov-bots .avatar { width: 20px; height: 20px; font-size: 12px; border-radius: 5px; }
 @media (max-width: 860px) {

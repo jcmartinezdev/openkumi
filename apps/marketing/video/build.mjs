@@ -6,7 +6,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { drawMascot, signColors } from '@openkumi/client/mascot'
+import { HEAD_SIGN, drawMascot, signColors } from '@openkumi/client/mascot'
 import { markOf } from '@openkumi/client/marks'
 import { KUMI, drawKumi } from '../src/lib/brand.ts'
 
@@ -87,7 +87,7 @@ function assets() {
     return pathToFileURL(file).href
   }
 
-  return { bots, powers, marks, shots: { conversation: shot('conversation'), browser: shot('browser') } }
+  return { bots, headSign: HEAD_SIGN, powers, marks, shots: { conversation: shot('conversation'), browser: shot('browser') } }
 }
 
 /**
