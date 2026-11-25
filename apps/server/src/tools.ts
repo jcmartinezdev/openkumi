@@ -62,6 +62,9 @@ async function page(ctx: ToolContext, { leaving = false, reading = false } = {})
  * exists by then, but only what is called is run. And `location` cannot be given another meaning
  * by a script: declaring it stops the whole script before its first line.
  */
+/** Among the sites a window's scripts ran on: all of them. No host is written like this. */
+const EVERY_SITE = '*'
+
 export const onlyOn = (host: string, script: string, word: string) => `if (location.host !== ${JSON.stringify(host)}) throw ${JSON.stringify(word)};\n${script}`
 
 /** How long browser_ask_user waits for the owner: less than the half hour Claude Code, Codex and Grok wait for a tool. */
@@ -731,8 +734,8 @@ const browserTools: Tool[] = withNews([
         // A script of the bot's that ran on this site in this window may still be there, in this page or in the
         // one that opened it, and would read what is put in.
         const marks = browserFor(ctx.bot.id).marks(ctx.thread.id)
-        if (marks.scripted.has(where.host)) {
-          throw new Error(`You ran a script of your own on ${where.host} in this browser window, and it could read what is put into the page. A secret is only typed where no script of yours has run: have a subagent do this step, in a window of its own.`)
+        if (marks.scripted.has(where.host) || marks.scripted.has(EVERY_SITE)) {
+          throw new Error(`You ran a script of your own on ${where.host} in this browser window, or in a page that may belong to it, and it could read what is put into the page. A secret is only typed where no script of yours has run: have a subagent do this step, in a window of its own.`)
         }
         const value = await secrets.use(ctx.bot.id, String(a.secret), where)
         // From here on the window has held this secret on this site, whatever becomes of the secret.
@@ -839,12 +842,22 @@ const browserTools: Tool[] = withNews([
       // to another site. So none is run on a site one of its secrets is for, nor on one where a secret was put
       // into a page of this window (its owner may have removed it since, and the field still holds it). Nothing
       // of a secret is asked of the page to decide that, only where the page is.
-      const host = new URL(p.url()).host
+      const where = new URL(p.url())
+      const host = where.host
       const marks = browserFor(ctx.bot.id).marks(ctx.thread.id)
+      // A page with no address of its own (a blank one another page opened, or one a page made up) counts as the
+      // page's that made it: a script in it reaches into that page, and reads that site as one of its own pages
+      // would, whichever site it is. So a bot that has secrets, or a window one was put into, runs none there. A
+      // data: page is all its own.
+      const noAddress = !/^(https?|data):$/.test(where.protocol)
+      if (noAddress && (secrets.any(ctx.bot.id) || marks.secrets.size)) {
+        throw new Error('This page has no address of its own, so it may belong to a site one of your secrets is for, and no script is run in it. Carry on in it with browser_navigate, or read it with browser_snapshot.')
+      }
       if (secrets.anyFor(ctx.bot.id, host) || marks.secrets.has(host)) {
         throw new Error(`One of your secrets is for ${host}, and a script could read it out of a page there, so none is run on that site. Read the page with browser_snapshot or browser_read.`)
       }
-      marks.scripted.add(host)
+      // A script in a page that may be any site's has run on every site, as far as this window can tell.
+      marks.scripted.add(noAddress ? EVERY_SITE : host)
       // Where the page is was asked a moment ago, and it may have gone on to another site since (it does so by
       // itself, if a script told it to earlier). So the page says where it is in the same breath as it runs the
       // script, and runs nothing if that is not the site that was checked.
@@ -986,6 +999,9 @@ const webTools: Tool[] = [
         if (!next) break
         if (hops >= 8) throw new Error('Too many redirects.')
         const to = new URL(next, target)
+        // Only the bot names a secret, in what it wrote itself. An answer that sends the request on to an address
+        // with a secret's name in it would have that secret put in where the bot never asked for it.
+        if (secrets.withoutPlaces(to.href) !== to.href) throw new Error(`${target.host} sent the request on to an address that names one of your secrets, which only you do, so it was not followed.`)
         const leaves = to.host !== target.host || to.protocol !== target.protocol
         // A secret goes to the site it is for and no further, whatever that site answers.
         if (used.size && leaves) {

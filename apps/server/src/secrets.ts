@@ -401,6 +401,16 @@ export function scrub(botId: string, text: string): string {
   return text ? taker(readable(botId))(text) : text
 }
 
+/** Whether a bot has any secret at all. */
+export function any(botId: string): boolean {
+  try {
+    return load(botId).length > 0
+  } catch {
+    // Something is kept there, though it cannot be read as what it is.
+    return true
+  }
+}
+
 /** Whether one of a bot's secrets is for this site. */
 export function anyFor(botId: string, host: string): boolean {
   try {
