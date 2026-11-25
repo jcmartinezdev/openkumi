@@ -81,7 +81,7 @@ const faq = [
   },
   {
     q: 'Can a bot use my API keys and passwords?',
-    a: 'Yes, without seeing them. A bot that needs a key asks for it in a card of its own, and what you type there goes straight into the bot’s vault, encrypted, and never into the conversation or to the AI service. The bot uses it by name, and OpenKumi puts it in only on the sites you allowed it for. The vault’s key is kept apart from your data, in the Mac’s keychain or its like on Windows and Linux.',
+    a: 'Yes, without seeing them. A bot that needs a key asks for it in a card of its own, and what you type there goes straight into the bot’s vault, encrypted, and never into the conversation or to the AI service. The bot uses it by name, and OpenKumi puts it in only on the sites you allowed it for. The vault’s key is kept apart from your data: in the Mac’s keychain, in Windows’ protection for your account, or in a Linux keyring, and otherwise in a file only your account can read.',
   },
   {
     q: 'Can several people share one computer?',
@@ -482,7 +482,7 @@ const faq = [
         <ul class="checks">
           <li>The bot uses a secret by its name, and OpenKumi puts it in only on the sites you allowed it for.</li>
           <li>Whatever comes back to the bot has the value taken out.</li>
-          <li>The vault’s key is kept apart from your data, in the Mac’s keychain or its like on Windows and Linux, so a copy of the folder cannot be read without it.</li>
+          <li>The vault’s key is kept apart from your data, so a copy of the folder cannot be read without it: in the Mac’s keychain, in Windows’ protection for your account, or in a Linux keyring, and otherwise in a file only your account can read.</li>
         </ul>
       </div>
       <Shot name="secret" crop={{ x: 0.325, y: 0.58, w: 0.53, h: 0.27 }} sizes="(max-width: 860px) 189vw, 1210px" alt="Kumi asks for a Plausible API key in a card of its own: it is kept encrypted, Kumi uses it without seeing it, and it is sent only to plausible.io." />

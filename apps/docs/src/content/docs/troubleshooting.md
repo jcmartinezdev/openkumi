@@ -47,9 +47,13 @@ anything private.
 ## Updates
 
 - **Settings → About shows another computer's OpenKumi without Update**, and says it is updated
-  with the app. The app on that computer is older than 0.0.7, or does not update itself (it runs
-  from the repository, or was installed as a package the system updates). Update it there once;
-  from then on **Update** works from here.
+  with the app. Either the app on that computer is older than 0.0.7: update it there once, and
+  from then on **Update** works from here. Or that app does not update itself, because it runs
+  from the repository or, on Linux, is not the AppImage: update it there, the way it was
+  installed (with `git` for the repository), each time.
+- **Settings → About says another computer's OpenKumi runs from its source, and is updated there
+  with git.** That is a server run from the repository on its own. Update it there with `git`;
+  it cannot be updated from here.
 - **The other computer's app says it restarts once some bots are done, and does not.** It waits
   until none of the bots on that computer, everyone's, has worked for a moment. **Start it now**
   does not wait; what they have done so far is kept.
