@@ -5,7 +5,7 @@
 //
 // Only an installed app does this. On a Mac the system swaps the app in, which it only does for a
 // signed one. On Linux only the AppImage can replace itself.
-import { app } from 'electron'
+import { app, autoUpdater as system } from 'electron'
 import electronUpdater from 'electron-updater'
 import type { AppUpdate } from '@openkumi/shared/desktop'
 
@@ -21,14 +21,14 @@ let update: AppUpdate = { state: able ? 'none' : 'unsupported', version: null, p
 /** How the app stands with its own updates right now. */
 export const updateState = () => update
 
-let changed = () => {}
-/** `fn` is called whenever there is something new to tell the window. */
+const listeners: (() => void)[] = []
+/** `fn` is called whenever there is something new to tell: the window, and the servers this app runs. */
 export function onUpdateChange(fn: () => void) {
-  changed = fn
+  listeners.push(fn)
 }
 function set(patch: Partial<AppUpdate>) {
   update = { ...update, ...patch }
-  changed()
+  for (const fn of listeners) fn()
 }
 
 /** What went wrong, in a line, without the pages of detail the updater adds. */
@@ -52,9 +52,14 @@ if (able) {
   autoUpdater.on('update-not-available', () => set({ state: update.state === 'ready' ? 'ready' : 'none', checkedAt: Date.now() }))
   autoUpdater.on('update-available', (info) => set({ state: 'downloading', version: info.version, progress: 0, checkedAt: Date.now() }))
   autoUpdater.on('download-progress', (progress) => set({ state: 'downloading', progress: Math.round(progress.percent) }))
-  autoUpdater.on('update-downloaded', (info) => set({ state: 'ready', version: info.version, progress: 100 }))
+  // On a Mac this comes before the system's own updater has taken the download and checked its
+  // signature, and only once it has can the app restart into it: until then it is still downloading.
+  const mac = process.platform === 'darwin'
+  autoUpdater.on('update-downloaded', (info) => set(mac ? { version: info.version, progress: 100 } : { state: 'ready', version: info.version, progress: 100 }))
+  if (mac) system.on('update-downloaded', () => set({ state: 'ready', progress: 100 }))
   // A version that is already downloaded stays ready, whatever a later look runs into.
   autoUpdater.on('error', (e) => update.state !== 'ready' && set({ state: 'failed', error: reason(e) }))
+  if (mac) system.on('error', (e) => update.state !== 'ready' && set({ state: 'failed', error: reason(e) }))
 }
 
 /** Looks for a newer version now. What it finds reaches the window through `onUpdateChange`. */

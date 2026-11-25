@@ -2190,6 +2190,67 @@ test('updates: the app finds a newer version of itself, and an environment this 
   }
 })
 
+test('updates from another computer: the server inside the app on that computer is asked to update, and has its app look for the new version', async () => {
+  const configure = (config) => (fs.mkdirSync(`${tmp}/app`, { recursive: true }), fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify(config)))
+  // A stand-in for the project's releases, offering at first only the version the app already is.
+  const own = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8')).version
+  let offered = own
+  const installer = crypto.randomBytes(2048)
+  const file = process.platform === 'darwin' ? 'OpenKumi-mac-arm64.zip' : process.platform === 'win32' ? 'OpenKumi-win-x64.exe' : 'OpenKumi-linux-x64.AppImage'
+  const sha512 = crypto.createHash('sha512').update(installer).digest('base64')
+  const asked = []
+  const releases = http.createServer((req, res) => {
+    asked.push(req.url)
+    if (/^\/latest[\w-]*\.yml/.test(req.url)) return res.end(`version: ${offered}\nfiles:\n  - url: ${file}\n    sha512: ${sha512}\n    size: ${installer.length}\npath: ${file}\nsha512: ${sha512}\nreleaseDate: '2026-11-25T00:00:00.000Z'\n`)
+    if (req.url.startsWith(`/${file}`)) return res.end(installer)
+    res.writeHead(404).end()
+  })
+  await new Promise((resolve) => releases.listen(REMOTE_PORT + 3, '127.0.0.1', resolve))
+
+  // The other computer: the desktop app, running the bots there, with nobody at it. It updates itself from those releases.
+  fs.mkdirSync(`${tmp}/mini-app`, { recursive: true })
+  fs.writeFileSync(`${tmp}/mini-app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const mini = await _electron.launch({
+    executablePath: electron,
+    args: packaged ? [] : ['.'],
+    env: { ...env, OPENKUMI_DESKTOP_DATA: `${tmp}/mini-app`, OPENKUMI_HOME: `${tmp}/mini-home`, OPENKUMI_PORT: String(REMOTE_PORT), OPENKUMI_DESKTOP_UPDATES_URL: `http://127.0.0.1:${REMOTE_PORT + 3}` },
+  })
+  try {
+    await until(() => up(REMOTE_PORT), 60_000)
+    // The server there is part of that app, which updates itself: so it can be asked to.
+    await until(async () => (await ask(REMOTE_PORT, 'mini-home', 'GET', '/api/update').catch(() => ({}))).updatable === true)
+    const before = await ask(REMOTE_PORT, 'mini-home', 'GET', '/api/update')
+    assert.equal(before.how, 'app')
+    assert.equal(before.state === 'idle' || before.state === 'checking', true)
+
+    // This computer was paired with it, and shows its bots.
+    const given = await pairWith(REMOTE_PORT, 'mini-home')
+    configure({ local: { enabled: false }, environments: [{ id: 'remote-mini', name: 'Mini', addresses: [{ url: `http://127.0.0.1:${REMOTE_PORT}` }], token: given.key, enabled: true }], current: 'remote-mini' })
+    const win = await launch()
+    await showsBot(win, 'Kumi')
+    await win.evaluate(() => (location.hash = '/settings/about'))
+    const row = win.locator('#server-update', { hasText: 'Mini' })
+    await row.locator('p', { hasText: 'It is part of the desktop app on that computer. Updating it has that app restart into the new version once no bot there is working.' }).waitFor()
+
+    // A new version comes out. Asked from here, the app there looks for it, and its server reports what it finds as its own.
+    // (Run from the repository, the app goes no further than finding it: it has no installer of its own to download for.)
+    offered = '9.9.9'
+    const looked = asked.length
+    await row.getByRole('button', { name: /^(Check for updates|Update)$/ }).click()
+    await until(() => asked.slice(looked).some((url) => /^\/latest[\w-]*\.yml/.test(url)))
+    await until(async () => (await ask(REMOTE_PORT, 'mini-home', 'GET', '/api/update')).latest === '9.9.9')
+    // This window hears it too: the version is out there. (Putting it in place is the system's part,
+    // which it only does for an installed, signed app: so this one stops short of restarting.)
+    await row.getByRole('button', { name: /^(Update|Start it now)$/ }).waitFor({ timeout: 120_000 })
+    await app.close()
+  } finally {
+    await mini.close().catch(() => {})
+    releases.close()
+    releases.closeAllConnections()
+    await until(async () => !(await up(REMOTE_PORT)), 15_000)
+  }
+})
+
 test('telemetry: the server’s question is put once with its box ticked, nothing is sent before the answer, and the Privacy page shows what went and switches it off', async () => {
   // A stand-in for PostHog, which keeps what it is sent.
   const received = []

@@ -546,10 +546,17 @@ export interface ServerUpdate {
   /**
    * How this server gets a new version:
    * - `installed`: it was installed on its own (openkumi.ai/install.sh) and can update itself;
-   * - `app`: it runs inside the desktop app and is updated with it;
+   * - `app`: it runs inside the desktop app and is updated with it: asked to update, it has the
+   *   app fetch its new version and restart into it, when that app can update itself (`updatable`);
    * - `source`: it runs from the repository, where a new version is fetched with git.
    */
   how: 'installed' | 'app' | 'source'
+  /**
+   * Whether asking it to update (POST /api/update) does anything: always for one installed on its
+   * own, and for one inside a desktop app that updates itself. Missing from older servers, of which
+   * only an installed one could be asked.
+   */
+  updatable?: boolean
   /** The newest version there is, once it has been looked up. The same as the server's own when it is up to date. */
   latest: string | null
   /**
@@ -562,14 +569,18 @@ export interface ServerUpdate {
    * - `idle`: nothing is going on;
    * - `checking`: looking up the newest version;
    * - `downloading`: fetching it;
-   * - `ready`: the new version is in place, and the server starts it as soon as no bot is working;
+   * - `ready`: the new version is in place, and the server starts it as soon as no bot is working
+   *   (inside the desktop app: the app has it, and was asked to restart into it);
    * - `failed`: see `error`.
    */
   state: 'idle' | 'checking' | 'downloading' | 'ready' | 'failed'
   error: string
   /** When the newest version was last looked up, in milliseconds, or 0. */
   checkedAt: number
-  /** How many conversations, subagents and runs are at work right now: what a restart would cut off. */
+  /**
+   * How many conversations, subagents and runs are at work right now: what a restart would cut off.
+   * Inside the desktop app, that is the bots of every server the app runs, since it restarts them all.
+   */
   working: number
 }
 

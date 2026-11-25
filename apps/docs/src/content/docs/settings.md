@@ -27,7 +27,7 @@ pages under **This app** are the same whoever is picked.
 | **Environments** | the local environment and the other computers this app is paired with, with their addresses. See [Other computers and your phone](/environments/). |
 | **Advanced** | **Steps per turn**, **Subagents at once**, **Subagent levels**, **Size of a bot's own instructions**, **Length of a conversation**, **Log what the engines print**, the data folder, **Delete all conversations** |
 | **Privacy** | **Send how OpenKumi is used and what goes wrong**, this computer's id, and everything that was sent. See [Usage and error reports](/telemetry/). |
-| **About** | the version of the app and of the environment it shows, their updates, **Update by itself** for a server installed alone, and a note on the alpha |
+| **About** | the version of the app and of the environment it shows, their updates (**Update** for another computer's OpenKumi, installed alone or inside the app there), **Update by itself** for a server installed alone, and a note on the alpha |
 
 **Appearance**, **Chat**, **Notify me when a bot needs me** and **Confirm before deleting a
 conversation** belong to the device: each computer and phone keeps its own. Everything else

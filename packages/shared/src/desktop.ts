@@ -95,6 +95,26 @@ export interface AppUpdate {
   checkedAt: number
 }
 
+/**
+ * What a server the app runs tells the app, over the channel between the two processes
+ * (apps/desktop/src/local.ts, apps/server/src/update.ts). Both come in the same app, so they
+ * are always the same version.
+ * - `ready`: it listens;
+ * - `working`: how many of its bots are at work, said again whenever that changes;
+ * - `update`: it was asked over the network to update (POST /api/update), which is the app's to
+ *   do. The app answers with `updated` once it has looked for its new version and fetched it.
+ */
+export type FromServer = { type: 'ready'; port: number } | { type: 'working'; working: number } | { type: 'update'; id: number; now: boolean }
+
+/**
+ * What the app tells each server it runs (apps/desktop/src/updateAsked.ts).
+ * - `app-update`: how the app stands with its update, which the server reports as its own;
+ *   `asked` once it was asked to restart into it, and `elsewhere`, the bots at work in the app's
+ *   other servers, which that restart would stop too;
+ * - `updated`: the answer to an `update` of the same `id`, sent after the `app-update` it ended with.
+ */
+export type ToServer = { type: 'app-update'; update: AppUpdate; asked: boolean; elsewhere: number } | { type: 'updated'; id: number }
+
 export interface DesktopState {
   version: string
   /** Missing from older apps. */

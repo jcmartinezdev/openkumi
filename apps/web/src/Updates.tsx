@@ -1,7 +1,8 @@
 // Keeping OpenKumi up to date, as the window shows it. There are two things to update, and they
 // do it apart: this app (apps/desktop/src/updates.ts), and the server of the environment the
 // window shows (apps/server/src/update.ts). The server on this computer is part of the app and
-// comes with it; one installed on another computer updates itself, and can be told to from here.
+// comes with it. One on another computer can be told to update from here: one installed alone
+// does it itself, and one inside the desktop app there has that app update and restart.
 import { useState } from 'react'
 import type { ServerUpdate } from '@openkumi/shared'
 import type { AppUpdate } from '@openkumi/shared/desktop'
@@ -59,6 +60,8 @@ const HOW: Record<ServerUpdate['how'], string> = {
   source: 'It runs from its source, and is updated there with git.',
   installed: 'It was installed on its own, and keeps itself up to date.',
 }
+/** A server inside a desktop app that updates itself: asking it to update has that app restart into its new version. */
+const IN_APP = 'It is part of the desktop app on that computer. Updating it has that app restart into the new version once no bot there is working.'
 
 /** How this app stands with its own updates, and the button for what there is to do about it. */
 export function AppUpdateRow() {
@@ -108,13 +111,18 @@ export function UpdatesSection() {
   }
 
   const out = !!update.latest && newer(update.latest, about.version)
+  // Older servers do not say; of those, only one installed alone could be asked.
+  const askable = update.updatable ?? update.how === 'installed'
+  const inApp = update.how === 'app'
   const serverStatus =
     update.state === 'checking'
       ? 'Looking for a newer version…'
       : update.state === 'downloading'
         ? `Downloading OpenKumi ${update.latest}…`
         : update.state === 'ready'
-          ? `OpenKumi ${update.staged ?? update.latest} is in place${update.working ? `, and starts once ${bots(update.working)} done working` : ' and is starting'}.`
+          ? inApp
+            ? `OpenKumi ${update.staged ?? update.latest} is downloaded there${update.working ? `, and the app restarts into it once ${bots(update.working)} done working` : '. The app is restarting into it'}.`
+            : `OpenKumi ${update.staged ?? update.latest} is in place${update.working ? `, and starts once ${bots(update.working)} done working` : ' and is starting'}.`
           : update.state === 'failed'
             ? update.error
             : out
@@ -132,12 +140,12 @@ export function UpdatesSection() {
           <Row
             id="server-update"
             title={<>{here ? 'OpenKumi on this computer' : name}<span className="set-version">{about.version}</span></>}
-            description={here ? 'It was started outside this app, so it is updated on its own. ' + HOW[update.how] : HOW[update.how]}
+            description={(here ? 'It was started outside this app, so it is updated on its own. ' : '') + (inApp && askable ? IN_APP : HOW[update.how])}
             status={error || serverStatus}
             control={
-              update.how === 'installed' &&
+              askable &&
               (update.state === 'ready' && update.working ? (
-                <button disabled={asking} onClick={() => confirm(`${bots(update.working)} working there. Starting the new version now stops them; what they have done so far is kept. Start it now?`) && void updateServer(true)}>Start it now</button>
+                <button disabled={asking} onClick={() => confirm(`${bots(update.working)} working ${inApp ? 'on that computer' : 'there'}. Starting the new version now stops them; what they have done so far is kept. Start it now?`) && void updateServer(true)}>Start it now</button>
               ) : (
                 <button disabled={asking || update.state === 'checking' || update.state === 'downloading' || update.state === 'ready'} onClick={() => void updateServer(false)}>{out ? 'Update' : 'Check for updates'}</button>
               ))

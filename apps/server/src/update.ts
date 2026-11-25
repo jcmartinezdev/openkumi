@@ -14,13 +14,17 @@
 // version, two of them at once too, and the others start it when they notice it is in place. Each
 // leaves a note of the version it runs, so that it is not tidied away from under it.
 //
-// A server inside the desktop app is updated with the app, and one run from the repository with
-// git: both only say so.
+// A server inside the desktop app is updated with the app. Asked to update, from another computer
+// say, it passes that on to the app, which fetches its own new version and restarts into it, this
+// server with it, once no bot is working in any of the servers it runs. Meanwhile it reports how
+// the app stands with that as its own. One run from the repository is updated with git, and only
+// says so.
 import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import type { ServerUpdate } from '@openkumi/shared'
+import type { FromServer, ToServer } from '@openkumi/shared/desktop'
 import { VERSION, emit, onEvent } from './config.ts'
 import { settings } from './settings.ts'
 
@@ -36,12 +40,15 @@ export const RESTART = 75
 /** Which of the published archives runs on this computer. */
 export const TARGET = `${process.platform}-${process.arch}`
 
+/** The desktop app this server runs inside, when it does: the channel between the two. */
+const APP = (process as { parentPort?: { postMessage(message: FromServer): void; on(event: 'message', fn: (event: { data: ToServer }) => void): void } }).parentPort
+
 /** How this server runs: inside the desktop app, installed on its own, or from the repository. */
-export const HOW: ServerUpdate['how'] = (process as { parentPort?: unknown }).parentPort ? 'app' : RUNTIME ? 'installed' : 'source'
+export const HOW: ServerUpdate['how'] = APP ? 'app' : RUNTIME ? 'installed' : 'source'
 
 /** Why a server that cannot update itself cannot. */
 export const WHY_NOT: Record<Exclude<ServerUpdate['how'], 'installed'>, string> = {
-  app: 'This OpenKumi runs inside the desktop app on that computer, and is updated with the app.',
+  app: 'This OpenKumi runs inside the desktop app on that computer, which does not update itself: it runs from the repository, or was installed as a package the system updates. Update the app there.',
   source: 'This OpenKumi runs from its source. Update it there with “git pull” and “npm install”, then start it again.',
 }
 
@@ -53,7 +60,8 @@ let restart: (() => void) | null = null
 /** Asked to update without waiting for the bots. */
 let hurried = false
 
-export const updateInfo = (): ServerUpdate => ({ how: HOW, ...state, staged: staged(), working: working() })
+export const updateInfo = (): ServerUpdate =>
+  HOW === 'app' ? fromApp() : { how: HOW, updatable: HOW === 'installed', ...state, staged: staged(), working: working() }
 
 function set(patch: Partial<typeof state>) {
   state = { ...state, ...patch }
@@ -272,6 +280,7 @@ function settle() {
 
 /** What POST /api/update does: fetch the newest version now, and start it at once (`now`) or when the bots are done. */
 export async function updateNow(now: boolean): Promise<ServerUpdate> {
+  if (HOW === 'app') return askApp(now)
   if (HOW !== 'installed') throw new Error(WHY_NOT[HOW])
   // A look that is under way may be one that only looks: this one is made after it, so that
   // being asked to install always installs.
@@ -285,6 +294,81 @@ export async function updateNow(now: boolean): Promise<ServerUpdate> {
   return info
 }
 
+// ---- inside the desktop app
+// The app tells this server how it stands with its own update whenever that changes, and this
+// server reports it as its own: a version the app has downloaded is "out" until someone asks for
+// it, and "in place" once the app was asked to restart into it.
+
+/** What the app said last: nothing yet, until it has said. */
+let app: Extract<ToServer, { type: 'app-update' }> | null = null
+/** The questions to the app that wait for its answer, by their number. */
+const waiting = new Map<number, () => void>()
+let asked = 0
+
+/** How this server stands with its update, inside the app: how the app stands with its own. */
+function fromApp(): ServerUpdate {
+  const atWork = working() + (app?.elsewhere ?? 0)
+  const update = app?.update
+  if (!update || update.state === 'unsupported') return { how: 'app', updatable: false, latest: null, staged: null, state: 'idle', error: '', checkedAt: 0, working: atWork }
+  const { version, checkedAt, error } = update
+  const base = { how: 'app' as const, updatable: true, checkedAt, error, working: atWork }
+  switch (update.state) {
+    case 'none':
+      return { ...base, latest: checkedAt ? VERSION : null, staged: null, state: 'idle' }
+    case 'ready':
+      return app!.asked ? { ...base, latest: version, staged: version, state: 'ready' } : { ...base, latest: version, staged: null, state: 'idle' }
+    default:
+      return { ...base, latest: version, staged: null, state: update.state }
+  }
+}
+
+/**
+ * Has the app fetch its new version, and restart into it once no bot is working in any of its
+ * servers, or at once (`now`). Answers once the app has looked and fetched it, or after a while
+ * with where it has got to: what happens after reaches whoever asked as `update` events.
+ */
+async function askApp(now: boolean): Promise<ServerUpdate> {
+  if (!app) throw new Error('OpenKumi on that computer has only just started. Try again in a moment.')
+  if (!fromApp().updatable) throw new Error(WHY_NOT.app)
+  const id = ++asked
+  await new Promise<void>((resolve) => {
+    const late = setTimeout(() => (waiting.delete(id), resolve()), 110_000)
+    waiting.set(id, () => (clearTimeout(late), waiting.delete(id), resolve()))
+    APP!.postMessage({ type: 'update', id, now })
+  })
+  return fromApp()
+}
+
+/** Hears what the app says, and tells it how many bots are at work here whenever that changes. */
+function listenToApp() {
+  /** What the apps connected here were told last. */
+  let shown = ''
+  const show = () => {
+    const now = fromApp()
+    if (JSON.stringify(now) === shown) return
+    shown = JSON.stringify(now)
+    emit({ type: 'update', update: now })
+  }
+  APP!.on('message', ({ data }) => {
+    if (data?.type === 'updated') return waiting.get(data.id)?.()
+    if (data?.type !== 'app-update') return
+    app = data
+    show()
+  })
+  let said = -1
+  const tell = () => {
+    const now = working()
+    if (now === said) return
+    said = now
+    APP!.postMessage({ type: 'working', working: now })
+    show()
+  }
+  tell()
+  onEvent((event) => event.type !== 'update' && tell())
+  // For whatever the events miss.
+  setInterval(tell, 5000).unref()
+}
+
 const HOUR = 3_600_000
 
 /**
@@ -293,6 +377,7 @@ const HOUR = 3_600_000
  */
 export function startUpdates(server: { working: () => number; restart: () => void }) {
   working = server.working
+  if (HOW === 'app') return listenToApp()
   if (HOW !== 'installed') return
   restart = server.restart
   const note = path.join(running(), String(process.pid))
