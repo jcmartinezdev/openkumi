@@ -47,8 +47,9 @@ anything private.
 ## Updates
 
 - **Settings → About shows another computer's OpenKumi without Update**, and says it is updated
-  with the app. Either the app on that computer is older than 0.0.7: update it there once, and
-  from then on **Update** works from here. Or that app does not update itself, because it runs
+  with the app. Either the app on that computer is one installed from a download (the Mac or
+  Windows app, or the AppImage) and is older than 0.0.7: update it there once, and from then on
+  **Update** works from here. Or that app does not update itself, because it runs
   from the repository or, on Linux, is not the AppImage: update it there, the way it was
   installed (with `git` for the repository), each time.
 - **Settings → About says another computer's OpenKumi runs from its source, and is updated there
