@@ -14,10 +14,11 @@ import { checkNew, ordered, refusal, withFound } from '@openkumi/client/addresse
 import { pair, parseAddress } from '@openkumi/client/pair'
 import { canDictate, cancelDictation, microphone, openMicrophoneSettings, startDictation, stopDictation } from './dictation.ts'
 import { askToUpdate, config, find, nameOf, save, showing, statuses, turnedOn } from './environments.ts'
-import { local, managing, me, onLocalChange, peopleHere, retryLocal, serverOf, startLocal, stopLocal } from './local.ts'
+import { local, managing, me, onLocalChange, onServerMessage, peopleHere, retryLocal, runningHere, serverOf, startLocal, stopLocal, tell, workingIn } from './local.ts'
 import { ASSUME_YES, CATCH_SIGN_INS, FAKE_MICROPHONE, HIDDEN, PRELOAD } from './paths.ts'
 import { addPerson, people, removePerson, renamePerson, workingHere } from './people.ts'
 import { APP_URL, keepPage, serveInterface } from './protocol.ts'
+import { startUpdateRequests } from './updateAsked.ts'
 import { checkForUpdate, installUpdate, onUpdateChange, startUpdates, updateState } from './updates.ts'
 
 let win: BrowserWindow | null = null
@@ -398,6 +399,16 @@ async function restartForUpdate() {
   const working = await workingHere()
   const asked = working === null ? 'Bots may be working on this computer.' : working ? `${working === 1 ? '1 bot is' : `${working} bots are`} working on this computer.` : ''
   if (asked && !(await confirmed(asked, 'Restarting stops them. What they have done so far is kept.', 'Restart'))) return
+  await restartIntoUpdate()
+}
+
+/**
+ * Stops the servers this app runs, cleanly, and opens the downloaded version in this one's place.
+ * Also what a server here asks for, from a computer paired with it (updateAsked.ts): nobody here
+ * is asked then, and it only happens before the bots are done when whoever asked said so.
+ */
+async function restartIntoUpdate() {
+  if (updateState().state !== 'ready') return
   if (managing()) await stopLocal()
   // A look for updates that ran meanwhile may have found a still newer version, which is being
   // fetched now: there is nothing to install yet, so the server is started again and the app stays.
@@ -582,6 +593,17 @@ else {
     if (HIDDEN) app.dock?.hide()
     serveInterface()
     buildMenu()
+    // Before the servers start: a server here can be asked to update, which is the app's to do.
+    startUpdateRequests({
+      state: updateState,
+      check: checkForUpdate,
+      onChange: onUpdateChange,
+      servers: runningHere,
+      workingIn,
+      tell,
+      onMessage: onServerMessage,
+      restart: () => void restartIntoUpdate(),
+    })
     // The local environment runs whenever it is turned on, whichever environment the window shows.
     // It starts alongside the window, not after it; the window is told when it is ready.
     if (config.local.enabled) void startLocal().catch(() => {})

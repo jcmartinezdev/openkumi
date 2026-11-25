@@ -21,14 +21,14 @@ let update: AppUpdate = { state: able ? 'none' : 'unsupported', version: null, p
 /** How the app stands with its own updates right now. */
 export const updateState = () => update
 
-let changed = () => {}
-/** `fn` is called whenever there is something new to tell the window. */
+const listeners: (() => void)[] = []
+/** `fn` is called whenever there is something new to tell: the window, and the servers this app runs. */
 export function onUpdateChange(fn: () => void) {
-  changed = fn
+  listeners.push(fn)
 }
 function set(patch: Partial<AppUpdate>) {
   update = { ...update, ...patch }
-  changed()
+  for (const fn of listeners) fn()
 }
 
 /** What went wrong, in a line, without the pages of detail the updater adds. */

@@ -126,7 +126,7 @@ if (command === 'serve') {
       if (!chromeFound()) console.log('  Browser:   Google Chrome was not found. The bots need it to browse.')
       const { update: u } = state
       if (u.state === 'ready') console.log(`  Update:    ${u.staged ?? u.latest} is in place and starts once no bot is working${u.working ? ` (${bots(u.working)} now)` : ''}.`)
-      else if (u.latest && newer(u.latest, state.about.version)) console.log(`  Update:    ${u.latest} is out. ${u.how === 'installed' ? 'Get it with “openkumi update”.' : WHY_NOT[u.how]}`)
+      else if (u.latest && newer(u.latest, state.about.version)) console.log(`  Update:    ${u.latest} is out. ${u.how === 'installed' || u.updatable ? 'Get it with “openkumi update”.' : WHY_NOT[u.how]}`)
       else if (u.state === 'failed') console.log(`  Update:    ${u.error}`)
     }
     if (several) console.log(`  People:    ${people().map((p) => p.name).join(', ')} each have a server of their own here (“openkumi people”)`)

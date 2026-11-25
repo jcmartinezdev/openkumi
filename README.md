@@ -204,7 +204,9 @@ OpenKumi installed on the same computer (see
 You do not have to do anything.
 
 - **The desktop app** downloads a new version in the background and shows **Restart to update**
-  when it is ready. It never restarts by itself, and asks first when bots are working.
+  when it is ready. It never restarts by itself, and asks first when bots are working. The app on
+  a computer you reach from another can be updated from there: **Update** under **Settings →
+  About** has it restart into the new version once its bots are done.
 - **OpenKumi on a computer with no screen** fetches a new version and starts it once no bot is
   working. `openkumi update` does it now, and **Settings → About** in a connected app can switch
   the automatic part off.

@@ -12,7 +12,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { type UtilityProcess, utilityProcess } from 'electron'
-import type { LocalEnvironment } from '@openkumi/shared/desktop'
+import type { FromServer, LocalEnvironment, ToServer } from '@openkumi/shared/desktop'
 import { compatible } from '@openkumi/shared/protocol'
 import { hello } from './environments.ts'
 import { SERVER, USER_DATA } from './paths.ts'
@@ -44,6 +44,43 @@ export function onLocalChange(fn: () => void) {
 function set(patch: Partial<typeof local>) {
   Object.assign(local, patch)
   changed()
+}
+
+// ---- what the servers this app runs say to it
+// Each says how many of its bots are at work, whenever that changes, and passes on a request to
+// update, which is the app's to do (updateAsked.ts).
+
+/** How many bots are at work in each server this app runs, as it said last. */
+const counts = new Map<UtilityProcess, number>()
+let heard: (child: UtilityProcess, message: FromServer | { type: 'gone' }) => void = () => {}
+/** `fn` is given what each server this app runs says to it, and `gone` for one that has ended. */
+export function onServerMessage(fn: (child: UtilityProcess, message: FromServer | { type: 'gone' }) => void) {
+  heard = fn
+}
+
+/** Hears what a server this app started says, for as long as it runs. */
+function listen(child: UtilityProcess) {
+  child.on('message', (message: FromServer) => {
+    if (message?.type === 'working' && Number.isInteger(message.working) && message.working >= 0) counts.set(child, message.working)
+    heard(child, message)
+  })
+  child.once('exit', () => {
+    counts.delete(child)
+    heard(child, { type: 'gone' })
+  })
+}
+
+/** The servers this app runs right now, everyone's. */
+export const runningHere = (): UtilityProcess[] => [...(local.child ? [local.child] : []), ...[...others.values()].map((other) => other.child)]
+/** How many bots are at work in a server this app runs, as it said last. */
+export const workingIn = (child: UtilityProcess) => counts.get(child) ?? 0
+/** Tells a server this app runs something. One that has just ended is not there to tell. */
+export function tell(child: UtilityProcess, message: ToServer) {
+  try {
+    child.postMessage(message)
+  } catch {
+    // Gone.
+  }
 }
 
 const canListen = (port: number) =>
@@ -156,6 +193,7 @@ async function start(turn: number) {
     env: serverEnv(port),
   })
   local.child = child
+  listen(child)
   /** The last things the server printed, for saying why it could not start. */
   let said = ''
   for (const stream of [child.stdout, child.stderr]) {
@@ -350,6 +388,7 @@ export async function startOther(name: string): Promise<void> {
   const log = fs.createWriteStream(path.join(USER_DATA, `server-${name}.log`), { mode: 0o600 })
   const child = utilityProcess.fork(SERVER, ['--for', name], { serviceName: `OpenKumi Server (${name})`, stdio: ['ignore', 'pipe', 'pipe'], env: serverEnv(local.port) })
   others.set(name, { child, port: person.port, home: path.join(path.dirname(local.home), name) })
+  listen(child)
   let said = ''
   for (const stream of [child.stdout, child.stderr]) {
     stream?.on('data', (chunk: Buffer) => {
