@@ -1261,6 +1261,9 @@ test('superpowers: an app on this computer that refuses the desktop app’s way 
       await api('POST', `/api/bots/${bot.id}/superpowers/check`)
       await until(async () => (await state())?.state === 'needs-login', 10_000)
       assert.equal(moved.seen.registered, 0)
+      // The window of the sign-in before closes by itself a moment after it is done. Nobody signs in again in that
+      // instant, but a test does: started in a window on its way out, the sign-in would never come back.
+      await until(async () => !(await api('GET', '/api/state')).browsers[bot.id]?.windows.some((w) => w.threadId?.startsWith('sign-in:')))
       await api('POST', `/api/bots/${bot.id}/superpowers/mill/login`, { via: 'bot' })
       await until(async () => moved.seen.tokens === 1 && (await state())?.state === 'connected', 20_000)
       assert.equal(moved.seen.registered, 1, 'registered anew at the new address')

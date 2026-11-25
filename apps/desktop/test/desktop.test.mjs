@@ -1401,6 +1401,14 @@ test('the window’s search: ⌘K from anywhere finds bots, settings and what wa
   await new Promise((r) => setTimeout(r, 300))
   assert.equal(await palette.count(), 1)
 
+  // The search keeps the keyboard when the conversation under it changes: here Heron's earlier one is
+  // continued from elsewhere. The message box, which takes the keyboard for a conversation that opens, leaves it be.
+  await ask(LOCAL_PORT, 'local-home', 'POST', `/api/threads/${told.id}/resume`)
+  await win.locator('.msg', { hasText: 'north shore' }).first().waitFor()
+  await win.keyboard.type('nest')
+  assert.equal(await palette.locator('input').inputValue(), 'nest')
+  assert.equal(await win.locator('.composer textarea').inputValue(), '')
+
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })

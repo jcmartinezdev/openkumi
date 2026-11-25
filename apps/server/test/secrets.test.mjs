@@ -15,8 +15,9 @@ import { after, before, test } from 'node:test'
 /** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
 const dataOf = (home) => path.join(home, 'people', JSON.parse(fs.readFileSync(path.join(home, 'people.json'), 'utf8'))[0].name)
 
-// Clear of the other tests' servers, of one run from the repository, and of the ports fetch refuses.
-const PORT = 5200 + Math.floor(Math.random() * 300)
+// Clear of the other tests' servers (the highest, people.test.mjs, stays under 5800), of one run from the
+// repository, and of the ports fetch refuses.
+const PORT = 5800 + Math.floor(Math.random() * 90)
 const BASE = `http://127.0.0.1:${PORT}`
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'openkumi-secrets-'))
 /** Where the vault's key goes in a test, instead of the keychain of whoever runs it. */

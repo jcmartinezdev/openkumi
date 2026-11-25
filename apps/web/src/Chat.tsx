@@ -561,9 +561,10 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav, 
     if (reading && thread) void markRead(thread)
   }, [reading, thread?.id, thread?.told, thread?.flag?.at])
 
-  // On touch devices focusing would pop up the keyboard on every navigation.
+  // On touch devices focusing would pop up the keyboard on every navigation. Nor is the keyboard taken from
+  // the window's search, when the conversation changes under it while it is open (started fresh, say).
   useEffect(() => {
-    if (matchMedia('(hover: hover)').matches) input.current?.focus()
+    if (matchMedia('(hover: hover)').matches && !document.querySelector('.palette')) input.current?.focus()
   }, [thread?.id])
 
   // Earlier messages are fetched a page at a time as the reader nears the top. While they are put
