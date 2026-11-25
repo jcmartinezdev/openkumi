@@ -14,7 +14,7 @@ and nearly everything we change is the JavaScript. So there are two ways a chang
 Which of the two a change needs is not left to anyone's judgment. The app has a **fingerprint**: a
 hash of everything native about it (its native packages and their versions, the settings in
 `app.json`, the dictation module in `packages/dictation`, the call sound module in
-`apps/mobile/modules/call-audio`). A build remembers the fingerprint it was
+`apps/mobile/modules/call-audio`, the car's screen in `apps/mobile/modules/car`). A build remembers the fingerprint it was
 made with, and an update over the air is only offered to builds with the same one. It cannot land
 on an app it does not fit.
 
@@ -105,6 +105,47 @@ same release.
 
 The code is in `apps/mobile/src/appUpdates.ts`; the settings are `runtimeVersion` and `updates` in
 `apps/mobile/app.json`, and the build profile in `apps/mobile/eas.json`.
+
+## In a car
+
+The app can show in a car, through CarPlay: the bots as a list, and a tap on one calls it, with the
+car's microphone and loudspeakers. It is built, and **left out of every build until Apple allows
+it**: an app is only let into CarPlay with an entitlement Apple gives on request, and a build for a
+phone cannot be signed while the app asks for one it does not have.
+
+- **Asking Apple.** The account holder of the Apple developer account asks at
+  <https://developer.apple.com/contact/carplay/>, for the category **voice-based conversational
+  app** (in CarPlay since iOS 26.4; the entitlement is
+  `com.apple.developer.carplay-voice-based-conversation`). The rules for that category are in
+  Apple's [CarPlay Developer Guide](https://developer.apple.com/download/files/CarPlay-Developer-Guide.pdf):
+  the app is talked with, holds the car's sound only during a call, shows the screen for a voice
+  while one is on, and does not answer with text or pictures. Once Apple has said yes, the
+  identifier `ai.openkumi.mobile` gets the CarPlay capability switched on under Certificates,
+  Identifiers & Profiles, and the provisioning profile is made anew (`npx eas-cli credentials -p ios`).
+- **Switching it on.** `OPENKUMI_CAR=1 npx expo prebuild --clean` adds what a car needs to the app
+  (`apps/mobile/modules/car/plugin.js`: the entitlement, and the car's screen in the app's
+  `Info.plist`, which then also says the app has more than one screen at a time). `--clean`, because
+  a prebuild over an `ios` folder made the other way keeps what was there: without it the switch
+  neither comes on nor goes off. Once Apple has allowed it, the plugin goes into `plugins` in `app.json` for good and
+  the switch out of `app.config.js`, so that a release and the check of its fingerprint see the same
+  app. That changes the fingerprint: the release it is part of goes through TestFlight.
+- **How it works.** CarPlay draws the screens itself: a list, the screen for a voice, an alert. What
+  goes on them is worked out in `packages/client/src/car.ts` (tried by its test, without a car),
+  handed over by `apps/mobile/src/car.ts`, and put on the car's screen by `apps/mobile/modules/car`
+  (Swift). A car is often the only screen the app is on, the phone locked in a pocket. So the app is
+  started without its window then (`CarSceneDelegate.swift`, and `index.js`, which loads the car's
+  part before the screens), and the paired server is kept where a locked phone can read it
+  (`apps/mobile/src/session.ts`).
+- **Trying it.** Xcode 27 shows no CarPlay for a simulated iPhone, and a real one needs the
+  entitlement. With it: an iPhone on a cable, and CarPlay Simulator in Xcode's Device Hub (Device →
+  CarPlay Simulator), or a car. Without it, what the car would show can be read from the test of
+  `packages/client/src/car.ts`; the screens themselves have not been seen yet (see below).
+
+Still to do on a real car's screen, once Apple has allowed it: look at the list and the call's
+screen (its two buttons, Mute and End, need iOS 26.4), hear a call through the car, check that
+music or radio comes back when the call ends, that the call goes on while a map is looked at, and
+that the app opens in the car with the phone locked. And on an iPad: an app that says it has more
+than one screen at a time can be opened there in two windows, which the app is not made for.
 
 ## Versions
 

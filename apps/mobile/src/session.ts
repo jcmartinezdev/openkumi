@@ -21,6 +21,8 @@ export interface Server {
   key: string
   /** The server's own id, once known: another server answering at one of the addresses is not it. */
   serverId?: string
+  /** Kept the way a locked phone can read it too (`KEPT`). What an earlier version saved is not, until it is saved again. */
+  open?: true
 }
 
 useRandom(() => Crypto.getRandomBytes(16))
@@ -29,6 +31,10 @@ useRandom(() => Crypto.getRandomBytes(16))
 export const hostOf = (server: Server) => new URL(ordered(server.addresses)[0]).host
 
 const SAVED = 'openkumi.server'
+// In a car the app shows while the phone is locked in a pocket, so what it needs to reach the
+// server can be read from when the phone was first unlocked after it was switched on, rather than
+// only while it is unlocked.
+const KEPT = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK }
 /** What the store calls the paired server; its copy on the phone is kept under this name. */
 const PAIRED = 'paired'
 
@@ -43,11 +49,12 @@ let ready = false
 const listeners = new Set<() => void>()
 const changed = () => listeners.forEach((fn) => fn())
 const subscribe = (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn))
-let snapshot: { server: Server | null; ready: boolean } = { server, ready }
+/** `locked`: the keychain could not be read because the phone is locked, so whether there is a server is not known yet. */
+let snapshot: { server: Server | null; ready: boolean; locked: boolean } = { server, ready, locked: false }
 const set = (next: Server | null) => {
   server = next
   ready = true
-  snapshot = { server, ready }
+  snapshot = { server, ready, locked: false }
   // The store shows this server from now on, or nothing.
   follow(next && { id: PAIRED, name: next.name, addresses: ordered(next.addresses), token: next.key, local: false, serverId: next.serverId })
   changed()
@@ -55,8 +62,9 @@ const set = (next: Server | null) => {
 
 /** Keeps a change to the server in the keychain, and shows it. */
 async function keep(next: Server) {
-  await SecureStore.setItemAsync(SAVED, JSON.stringify(next))
-  set(next)
+  const kept: Server = { ...next, open: true }
+  await SecureStore.setItemAsync(SAVED, JSON.stringify(kept), KEPT)
+  set(kept)
 }
 
 // What the connection learns about the server is kept with it: its id, and where else it can be
@@ -68,9 +76,13 @@ onLearn((_, learned) => {
 })
 
 // Back in the app, the addresses are asked again: the phone may have left home, or come back.
-AppState.addEventListener('change', (now) => now === 'active' && recheck())
+// And a keychain that was locked when the app started (in a car) can be read by now.
+AppState.addEventListener('change', (now) => now === 'active' && (recheck(), void restore()))
 
 export const useSession = () => useSyncExternalStore(subscribe, () => snapshot)
+/** The same outside of any view (a car's screen). */
+export const sessionNow = () => snapshot
+export const onSession = subscribe
 
 /** How the connection to the server stands, in a few words and in one, and whether that is good. */
 export function useServerStatus(): { text: string; word: string; ok: boolean } {
@@ -125,20 +137,46 @@ useTransport(
   }),
 )
 
+let reading = false
 /** Reads the paired server from the keychain, once, when the app starts. */
 export async function restore() {
+  if (ready || reading) return
+  reading = true
+  let text: string | null
+  try {
+    text = await SecureStore.getItemAsync(SAVED)
+  } catch (e: any) {
+    // The keychain does not open because the phone is locked, and what an earlier version saved can
+    // only be read unlocked. That is not the same as nothing being saved, so the app does not ask
+    // to be paired: it waits, and reads again when it is looked at. Anything else that goes wrong
+    // with the keychain is as it was: nothing can be read, and the app asks to be paired.
+    if (/interaction is not allowed/i.test(String(e?.message ?? e))) {
+      if (!snapshot.locked) {
+        snapshot = { ...snapshot, locked: true }
+        changed()
+      }
+      return
+    }
+    text = null
+  } finally {
+    reading = false
+  }
+  // Read while a pairing was being made: that one stands.
   if (ready) return
   let saved: (Server & { url?: string }) | null = null
   try {
-    saved = JSON.parse((await SecureStore.getItemAsync(SAVED)) ?? 'null')
+    saved = JSON.parse(text ?? 'null')
   } catch {
-    // Nothing saved, or it cannot be read: the app asks to be paired.
+    // What is saved cannot be made out: the app asks to be paired.
   }
   // An earlier version kept a single address.
   const { url, ...rest } = saved ?? ({} as Partial<Server & { url: string }>)
   // An earlier version could keep the same address twice; one is enough.
   const addresses = (rest.addresses ?? (url ? [{ url }] : [])).filter((a, i, all) => all.findIndex((b) => b.url === a.url) === i)
-  set(addresses.length && rest.key && rest.name ? { ...rest, name: rest.name, key: rest.key, addresses } : null)
+  const found: Server | null = addresses.length && rest.key && rest.name ? { ...rest, name: rest.name, key: rest.key, addresses, open: true } : null
+  set(found)
+  // What an earlier version saved is saved again the way a locked phone can read it, once.
+  if (found && !rest.open) void SecureStore.setItemAsync(SAVED, JSON.stringify(found), KEPT).catch(() => {})
 }
 
 /** Pairs this phone with a server, using the code its owner's computer shows, and remembers it. */

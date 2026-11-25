@@ -1,0 +1,7 @@
+{
+  "platforms": ["apple"],
+  "apple": {
+    "modules": ["CarModule"],
+    "podspecPath": "apple/OpenKumiCar.podspec"
+  }
+}
