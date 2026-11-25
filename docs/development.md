@@ -143,8 +143,8 @@ If a job fails, nothing after it runs: a failed build publishes nothing, and the
 only released once the release is out. Fix it, then either run the failed jobs again from the
 run's page, or delete the tag and push it again on the fixed commit.
 
-The release is published with GitHub's list of its pull requests as the notes. Once it is out,
-replace them with notes written by hand, features in the bots and the apps first, as
+The release is published with GitHub's list of its pull requests as the notes. Once the run has
+finished, replace them with notes written by hand, features in the bots and the apps first, as
 [Release notes](release-notes.md) describes.
 
 The other two workflows release nothing: **Tests** runs the tests on every pull request and on

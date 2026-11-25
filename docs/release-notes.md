@@ -1,8 +1,9 @@
 # Release notes
 
 A release is published with GitHub's own list of its pull requests as the notes
-(`--generate-notes` in `.github/workflows/release.yml`). Once **Publish the release** has run,
-replace that list with notes written by hand, in the order below:
+(`--generate-notes` in `.github/workflows/release.yml`). Once the whole run has finished,
+**Release the iPhone app** included, since what it did goes into the notes, replace that list
+with notes written by hand, in the order below:
 
 ```sh
 gh release edit v0.2.0 --notes-file notes.md
