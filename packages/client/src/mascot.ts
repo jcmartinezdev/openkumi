@@ -206,11 +206,13 @@ export const SIGN = { x: 100, y: 166, size: 30, angle: -5 }
 /** The card the emoji is on. */
 const CARD = '#fffaf1'
 /**
- * The sign as a head holds it up at its corner, so bots that look alike tell apart in lists. The app
- * draws it over the head: a card with the emoji and one paw on its left edge. Each length is a share
- * of the head's width, and `right` and `bottom` reach past the head's box.
+ * The sign as a head holds it in lists, so bots that look alike tell apart. The app draws it over
+ * the head: a card with the emoji, centred under the chin with a paw on each side, as the whole
+ * mascot holds it, so it covers no eye. Each length is a share of the head's width. `bottom` reaches
+ * below the head's box, and `lift` raises the head in its box so the head and its sign sit near the
+ * middle of the place the head is given.
  */
-export const HEAD_SIGN = { width: 0.68, height: 0.54, right: -0.15, bottom: -0.1, radius: 0.15, emoji: 0.37, paw: 0.21, angle: -6 }
+export const HEAD_SIGN = { width: 0.64, height: 0.4, bottom: -0.27, radius: 0.12, emoji: 0.3, paw: 0.18, angle: -3, lift: 0.07 }
 /** The colours of a sign and of the paw holding it, for a body of the look's colour. */
 export function signColors(look: Look): { card: string; paw: string; pawEdge: string } {
   const c = BODY_COLORS[look.color]?.hex ?? BODY_COLORS.cloud.hex

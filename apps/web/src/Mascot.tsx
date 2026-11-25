@@ -25,29 +25,34 @@ export function Mascot({ look: given, emoji, crop = 'full', live = false, classN
 }
 
 /**
- * A bot's head, in the place of an avatar, holding up its sign so bots that look alike tell apart.
- * The name beside it says whose it is. `sign={false}` leaves the sign out where the bot is plain.
+ * A bot's head, in the place of an avatar, holding its sign under its chin so bots that look alike
+ * tell apart. The name beside it says whose it is. `sign={false}` leaves the sign out where the bot
+ * is plain.
  */
 export function BotHead({ bot, sign = true, className = '' }: { bot: Pick<Bot, 'look' | 'emoji'>; sign?: boolean; className?: string }) {
   return (
-    <span className={`avatar head ${className}`}>
+    <span className={`avatar head ${className}`} style={sign ? lifted : undefined}>
       <Mascot look={bot.look} emoji={bot.emoji} crop="head" />
       {sign && <HeadSign look={bot.look ?? UNDECIDED} emoji={bot.emoji} />}
     </span>
   )
 }
 
-// The head is a size container, so every length is a share of its width (cqw).
+// The head is a size container, so every length inside it is a share of its width (cqw). The head
+// itself moves by a share of its own height, which is its width.
 const share = (n: number) => `${n * 100}cqw`
 const s = HEAD_SIGN
-const signBox = { width: share(s.width), height: share(s.height), right: share(s.right), bottom: share(s.bottom), borderRadius: share(s.radius), fontSize: share(s.emoji), rotate: `${s.angle}deg` }
-const pawBox = { width: share(s.paw), height: share(s.paw), left: share(-s.paw / 2) }
+const lifted = { translate: `0 ${-s.lift * 100}%` }
+const signBox = { width: share(s.width), height: share(s.height), left: share((1 - s.width) / 2), bottom: share(s.bottom), borderRadius: share(s.radius), fontSize: share(s.emoji), rotate: `${s.angle}deg` }
+const pawBox = { width: share(s.paw), height: share(s.paw) }
 
 function HeadSign({ look, emoji }: { look: Look; emoji: string }) {
   const { card, paw, pawEdge } = signColors(look)
+  const pawStyle = { ...pawBox, background: paw, borderColor: pawEdge }
   return (
     <span className="head-sign" style={{ ...signBox, background: card }}>
-      <i style={{ ...pawBox, background: paw, borderColor: pawEdge }} />
+      <i style={{ ...pawStyle, left: share(-s.paw / 2) }} />
+      <i style={{ ...pawStyle, right: share(-s.paw / 2) }} />
       {emoji}
     </span>
   )

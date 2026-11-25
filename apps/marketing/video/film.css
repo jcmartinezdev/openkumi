@@ -54,10 +54,10 @@ svg { display: block; }
 .mascot svg > ellipse { transform-box: fill-box; transform-origin: 50% 50%; }
 .tag { padding: 6px 18px; border-radius: 999px; background: var(--raised); border: 1px solid var(--border); box-shadow: var(--shadow); font: 600 24px/1.3 var(--body); white-space: nowrap; transform-origin: 50% 0; }
 
-/* A bot's head with its sign held up at the corner, as the app shows it in lists (apps/web/src/Mascot.tsx). */
+/* A bot's head with its sign held under its chin, as the app shows it in lists (apps/web/src/Mascot.tsx). */
 .head { position: relative; display: inline-block; flex: none; line-height: 0; }
 .head svg { width: 100%; height: 100%; }
-.head-sign { position: absolute; display: grid; place-items: center; line-height: 1; transform: rotate(-6deg); box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.22), 0 1px 2px rgb(0 0 0 / 0.3); }
+.head-sign { position: absolute; display: grid; place-items: center; line-height: 1; box-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.22), 0 1px 2px rgb(0 0 0 / 0.3); }
 .head-sign i { position: absolute; top: 50%; transform: translateY(-50%); border-radius: 50%; border: 0.5px solid; }
 
 /* ---- the app's window, as the website frames its screenshots */
