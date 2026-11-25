@@ -26,6 +26,7 @@ be in several groups.
 | Meetings | Granola, Otter.ai, Fathom, tl;dv |
 | Sites and marketing | Webflow, Wix, Klaviyo, Typefully |
 | Money | PocketSmith |
+| Coding | T3 Code, open on the same computer as your bots ([below](#t3-code)) |
 
 **Know-how**, with nothing to sign in to: Weather, Exchange rates, Holidays, Watch a page, SEO &
 AI search, Social posts, Launch, Landing pages, Competitors. These use free services the bot
@@ -70,6 +71,9 @@ Deactivating a superpower for a bot forgets that bot's sign-in. A bot whose sign
   than yours. This also leaves the bot's browser signed in to that app's website; the other two
   ways do not.
 
+An app that refuses the `openkumi://` way back accepts only the last of these, so for it the popup
+and the phone offer only the bot's browser. T3 Code is one.
+
 Either way the bot gets an account of its own (two bots can use two different accounts), and
 cancelling leaves the superpower as it was, with nothing kept.
 
@@ -98,6 +102,33 @@ cancelling leaves the superpower as it was, with nothing kept.
   caption="The sign-in finishes only the way it was started, once, for the bot it was started for. The tokens never leave the computer that runs the bots."
 />
 
+## T3 Code
+
+The T3 Code superpower lets a bot hand coding work to the agents in [T3 Code](https://t3.codes/)
+and follow how it goes: read your projects and threads, start a thread when you ask, message it,
+wait for it and tell you what it did.
+
+- **Same computer.** T3 Code has to run on the computer that runs your bots, and be open when a
+  bot uses it. The bot finds it where T3 Code says it listens (`~/.t3/userdata/server-runtime.json`,
+  else `http://127.0.0.1:3773`). When it is closed, the bot and the app say so.
+- **Signing in.** T3 Code's own page opens in the bot's browser and asks for a sign-in code, which
+  you make in T3 Code under **Settings → Sharing & access** (*Use T3 Code in another app*) or with
+  `t3 auth pairing create`, and for what the bot may do. Check that choice before you approve:
+  the page can pick a mode for you once the code is in. The code is used up there; the bot's
+  browser is not left signed in to T3 Code.
+- **What it may do.** *Read only* reads projects and threads. *Supervised* and the modes above it
+  also start, message and stop threads, and no thread the bot starts runs in more than the mode
+  you picked: with *Supervised*, its agent asks you in T3 Code before running commands or
+  changing files.
+- **Only threads and projects.** The bot gets T3 Code's tools for reading projects and for
+  reading, starting, messaging and stopping threads, and none of the others (pull requests,
+  issues, settings, setting up projects). It cannot answer an agent's questions or approvals.
+- **How long.** T3 Code ends the sign-in after 30 days, and the bot asks to be signed in again. It
+  is listed under **Settings → Sharing & access** in T3 Code, where you can end it sooner.
+
+A bot still cannot run code. The agents it starts in T3 Code can, as far as the mode you picked
+lets them, so pick the lowest mode that does the job.
+
 ## What a superpower is made of
 
 Each superpower is a folder in the code, `apps/server/superpowers/<id>`:
@@ -117,7 +148,11 @@ ones are both: instructions, and the app's own MCP server, whose tools the bot g
 
 `superpower.json` can also say which of a service's tools only read (`mcp.reads`, so a
 [watch](/automations/#what-starts-one) can call them) and how its app calls OpenKumi back
-(`hooks`, for [webhooks](/webhooks/)).
+(`hooks`, for [webhooks](/webhooks/)). For an app on the same computer it can say where that app
+writes down its address (`mcp.origin`, only an address on this computer is taken), that it is
+signed in to only in the bot's browser (`mcp.botBrowserOnly`), and what to say when it is not open
+(`mcp.unreachable`). For a service that offers far more than the superpower is for, `mcp.tools`
+names the only tools a bot gets.
 
 <Aside type="caution" title="A superpower acts as the bot">
   A superpower's instructions are followed with the bot's own browser and accounts, so each is

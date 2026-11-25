@@ -14,6 +14,7 @@ const power = (over = {}) => ({
   instructions: true,
   files: ['instructions.md'],
   signIn: true,
+  botBrowserOnly: false,
   service: 'mcp.granola.ai',
   site: '',
   onFor: [],

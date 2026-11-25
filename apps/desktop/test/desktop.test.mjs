@@ -1009,7 +1009,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     const cards = () => win.locator('.power-card h3').allInnerTexts()
     assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday'])
     const group = (name) => win.locator('.set-section', { has: win.locator('h2', { hasText: name }) }).locator('.power-card h3').allInnerTexts()
-    assert.deepEqual(await group('Work'), ['Atlassian', 'Attio', 'ClickUp', 'Competitors', 'Fathom', 'folk', 'Granola', 'Jotform', 'Linear', 'Miro', 'Notion', 'Otter.ai', 'PandaDoc', 'PostHog', 'Sentry', 'tl;dv'])
+    assert.deepEqual(await group('Work'), ['Atlassian', 'Attio', 'ClickUp', 'Competitors', 'Fathom', 'folk', 'Granola', 'Jotform', 'Linear', 'Miro', 'Notion', 'Otter.ai', 'PandaDoc', 'PostHog', 'Sentry', 'T3 Code', 'tl;dv'])
     assert.deepEqual(await group('Travel'), ['Exchange rates', 'Holidays', 'Weather'])
     assert.equal((await cards()).filter((name) => name === 'Notion').length, 2, 'in Productivity and in Work')
     const nav = await win.locator('.set-nav').innerText()
@@ -1033,7 +1033,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     assert.match(await win.locator('.power-about').innerText(), /Lets a bot work in your Notion workspace/)
     assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['What a bot can do with it', 'Your bots', 'What it gives a bot'])
     const gives = win.locator('.set-section', { hasText: 'What it gives a bot' })
-    assert.match(await gives.innerText(), /Skill[\s\S]*1 file[\s\S]*Tools from 127\.0\.0\.1/)
+    assert.match(await gives.innerText(), /Skill[\s\S]*1 file[\s\S]*Tools from Notion on this computer/)
     // What it teaches a bot can be read here, formatted or as written, and not changed.
     await gives.getByRole('button', { name: 'Read the files' }).click()
     assert.deepEqual(await gives.locator('.skill-files .file-row').allInnerTexts(), ['instructions.md'])

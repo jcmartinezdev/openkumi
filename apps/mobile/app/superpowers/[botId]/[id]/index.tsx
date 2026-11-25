@@ -180,7 +180,11 @@ function Top({ bot, power, status, on, main, hooked, placed }: { bot: Bot; power
         {button}
         {error ?? (
           <Text style={[styles.hint, { color: theme.muted }]}>
-            {power.signIn ? `Next, you choose where ${bot.name} signs in to ${power.name}.` : `Nothing to sign in to. ${bot.name} can use it as soon as it is active.`}
+            {!power.signIn
+              ? `Nothing to sign in to. ${bot.name} can use it as soon as it is active.`
+              : power.botBrowserOnly
+                ? `Next, ${bot.name} signs in to ${power.name} inside its own browser.`
+                : `Next, you choose where ${bot.name} signs in to ${power.name}.`}
           </Text>
         )}
       </>

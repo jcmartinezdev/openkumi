@@ -2,7 +2,8 @@
 // connection of its own and, for services that need an account, a sign-in of its own, so two bots
 // can use two different accounts. Signing a bot in to a service is what activates the superpower.
 // It happens in the owner's own browser (the desktop app catches the way back, at APP_RETURN) or
-// in the bot's browser, which works from any device (see browser.ts).
+// in the bot's browser, which works from any device (see browser.ts). A service that refuses the
+// app's address is signed in to in the bot's browser alone (`botBrowserOnly`).
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -41,6 +42,22 @@ export interface ServiceTool extends Tool {
 /** The superpowers switched on for a bot that bring a service. */
 const services = (botId: string) => enabledSuperpowers(botId).filter((id) => serviceOf(id))
 
+/**
+ * Nothing answered at the service's address: the connection was refused, as it is when an app on
+ * this computer is not open, or there was no way to it. Node's fetch says only "fetch failed"; why
+ * is in its cause.
+ */
+const GONE = new Set(['ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH'])
+function refused(e: unknown): boolean {
+  for (let at: any = e, depth = 0; at && depth < 6; at = at.cause, depth++) {
+    if (GONE.has(at.code) || /ECONNREFUSED/.test(String(at.message))) return true
+  }
+  return false
+}
+
+/** What to say about a service that could not be reached: what its superpower says for that, or what went wrong. */
+const unreachable = (service: Service, e: any) => (service.unreachable && refused(e) ? service.unreachable : String(e?.message ?? e).split('\n')[0].slice(0, 300))
+
 function needService(id: string): Service {
   const service = serviceOf(id)
   if (!service) throw new Error('That superpower has nothing to sign in to.')
@@ -58,13 +75,15 @@ const APP_RETURN = 'openkumi://sign-in/callback'
 type Via = 'app' | 'bot'
 
 /** Sign-ins waiting for the browser to come back, by the `state` value sent with them. */
-const pending = new Map<string, { botId: string; id: string; via: Via; at: number }>()
+const pending = new Map<string, { botId: string; id: string; via: Via; url?: string; at: number }>()
 
 interface Saved {
   client?: StoredOAuthClientInformation
   tokens?: StoredOAuthTokens
   verifier?: string
   discovery?: OAuthDiscoveryState
+  /** The service's address when these were saved: an app on this computer can move, and none of it holds at a new address. */
+  url?: string
 }
 
 /** One bot's account with one service, kept in the bot's private folder where the bot cannot read it. */
@@ -73,13 +92,16 @@ class Credentials implements OAuthClientProvider {
   private botId: string
   private id: string
   private via: Via
+  /** The service's address this sign-in is for, read once: an app on this computer can move while it goes on. */
+  private url?: string
   /** Where the user has to go to sign in, once the service has asked for that. */
   authUrl: URL | null = null
 
-  constructor(botId: string, id: string, via: Via = 'bot') {
+  constructor(botId: string, id: string, via: Via = 'bot', url = serviceOf(id)?.url) {
     this.botId = botId
     this.id = id
     this.via = via
+    this.url = url
     this.file = path.join(privateDir(botId), 'superpowers', `${id}.json`)
   }
 
@@ -113,8 +135,8 @@ class Credentials implements OAuthClientProvider {
   get clientMetadata() {
     return {
       client_name: 'OpenKumi',
-      // Both, so a bot can be signed in either way with the one registration.
-      redirect_uris: [SIGN_IN_RETURN, APP_RETURN],
+      // Both, so a bot can be signed in either way with the one registration; the bot's alone where the service refuses the app's.
+      redirect_uris: serviceOf(this.id)?.botBrowserOnly ? [SIGN_IN_RETURN] : [SIGN_IN_RETURN, APP_RETURN],
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
@@ -125,17 +147,20 @@ class Credentials implements OAuthClientProvider {
     const now = Date.now()
     for (const [key, p] of pending) if (now - p.at > 15 * 60_000) pending.delete(key)
     const state = crypto.randomBytes(18).toString('base64url')
-    pending.set(state, { botId: this.botId, id: this.id, via: this.via, at: now })
+    pending.set(state, { botId: this.botId, id: this.id, via: this.via, url: this.url, at: now })
     return state
   }
 
   clientInformation = () => this.load().client
   saveClientInformation = (client: StoredOAuthClientInformation) => this.save({ client })
   tokens = () => this.load().tokens
-  saveTokens = (tokens: StoredOAuthTokens) => this.save({ tokens })
+  saveTokens = (tokens: StoredOAuthTokens) => this.save({ tokens, url: this.url })
   saveCodeVerifier = (verifier: string) => this.save({ verifier })
   discoveryState = () => this.load().discovery
-  saveDiscoveryState = (discovery: OAuthDiscoveryState) => this.save({ discovery })
+  saveDiscoveryState = (discovery: OAuthDiscoveryState) => this.save({ discovery, url: this.url })
+
+  /** What was saved was for another address than `url`. */
+  savedFor = (url: string) => (this.load().url ?? url) !== url
 
   codeVerifier() {
     const { verifier } = this.load()
@@ -168,10 +193,16 @@ function signInTo(id: string) {
  */
 export async function login(botId: string, id: string, headless: boolean, via: Via): Promise<{ url?: string; windowId?: string; done?: true }> {
   const signIn = signInTo(id)
-  // Activating starts afresh: whatever an earlier attempt left behind is of no use.
-  if (!enabledSuperpowers(botId).includes(id)) new Credentials(botId, id).clear()
-  const creds = new Credentials(botId, id, via)
-  const result = await auth(creds, signIn)
+  const service = needService(id)
+  if (via === 'app' && service.botBrowserOnly) throw new Error(`${service.name} can be signed in to only inside the bot’s browser.`)
+  // Activating starts afresh: whatever an earlier attempt left behind is of no use. So does a
+  // sign-in to an app that has moved since.
+  const before = new Credentials(botId, id)
+  if (!enabledSuperpowers(botId).includes(id) || before.savedFor(signIn.serverUrl)) before.clear()
+  const creds = new Credentials(botId, id, via, signIn.serverUrl)
+  const result = await auth(creds, signIn).catch((e) => {
+    throw service.unreachable && refused(e) ? new Error(service.unreachable) : e
+  })
   if (result === 'AUTHORIZED') {
     signedIn(botId, id)
     await reconnect(botId, id)
@@ -192,7 +223,9 @@ async function finishLogin(params: URLSearchParams, via: Via, botId?: string): P
   pending.delete(state)
   const code = params.get('code')
   if (!code) throw new Error(params.get('error_description') || 'The sign-in was not completed.')
-  await auth(new Credentials(waiting.botId, waiting.id, via), { ...signInTo(waiting.id), authorizationCode: code, iss: params.get('iss') ?? undefined })
+  // At the address the sign-in began at: if the app has moved since, the bot is asked to sign in again there.
+  const signIn = { ...signInTo(waiting.id), ...(waiting.url && { serverUrl: waiting.url }) }
+  await auth(new Credentials(waiting.botId, waiting.id, via, signIn.serverUrl), { ...signIn, authorizationCode: code, iss: params.get('iss') ?? undefined })
   signedIn(waiting.botId, waiting.id)
   await reconnect(waiting.botId, waiting.id)
   return { botId: waiting.botId, id: waiting.id }
@@ -262,12 +295,20 @@ async function open(botId: string, id: string): Promise<Live> {
   const result: Live = { client: null as unknown as Client, tools: [] }
 
   const toTools = (list: { name: string; description?: string; inputSchema?: unknown; annotations?: { readOnlyHint?: boolean } }[]): ServiceTool[] =>
-    list.map((t) => {
+    // Only those the superpower is for, where it says which.
+    list.filter((t) => !service.tools || service.tools.includes(t.name)).map((t) => {
       const call: ServiceTool['call'] = async (args, signal) => {
-        const current = await connect(botId, id)
+        const current = await connect(botId, id).catch((e) => {
+          throw service.unreachable && refused(e) ? new Error(service.unreachable) : e
+        })
         try {
           return (await current.client.callTool({ name: t.name, arguments: args }, { signal, timeout: 120_000 })) as CallToolResult
         } catch (e) {
+          if (refused(e)) {
+            // The service went away; once it is back, the next use connects afresh.
+            await gone(botId, id, e, current)
+            throw service.unreachable ? new Error(service.unreachable) : e
+          }
           // Some services let a bot connect and list its tools without its account, and
           // only ask for the account when a tool is used, so this is where a lapsed sign-in shows.
           if (!(e instanceof UnauthorizedError || e instanceof InsufficientScopeError)) throw e
@@ -300,7 +341,7 @@ async function open(botId: string, id: string): Promise<Live> {
             onChanged: (error, tools) => {
               if (error || !tools) return
               result.tools = toTools(tools)
-              setStatus(botId, id, { state: 'connected', tools: tools.length, signedIn: new Credentials(botId, id).hasTokens() })
+              setStatus(botId, id, { state: 'connected', tools: result.tools.length, signedIn: new Credentials(botId, id).hasTokens() })
             },
           },
         },
@@ -320,7 +361,9 @@ async function open(botId: string, id: string): Promise<Live> {
     await client.connect(transport, { timeout: 30_000 })
   } else {
     const url = new URL(service.url!)
-    const options = { authProvider: new Credentials(botId, id) }
+    const options = { authProvider: new Credentials(botId, id, 'bot', service.url) }
+    // An app on this computer that moved since the bot signed in knows nothing of that sign-in.
+    if (options.authProvider.savedFor(service.url!)) throw new UnauthorizedError(`${service.name} moved to ${url.host} since the bot signed in.`)
     try {
       await client.connect(new StreamableHTTPClientTransport(url, options), { timeout: 30_000 })
     } catch (first) {
@@ -358,7 +401,7 @@ function connect(botId: string, id: string): Promise<Live> {
       if (live.get(k) === attempt) live.delete(k)
       failed.set(k, Date.now())
       const needsLogin = e instanceof UnauthorizedError || /unauthorized|\b401\b/i.test(String(e?.message))
-      setStatus(botId, id, needsLogin ? { state: 'needs-login', tools: 0 } : { state: 'error', tools: 0, error: String(e?.message ?? e).split('\n')[0].slice(0, 300) })
+      setStatus(botId, id, needsLogin ? { state: 'needs-login', tools: 0 } : { state: 'error', tools: 0, error: unreachable(needService(id), e) })
       throw e
     },
   )
@@ -372,6 +415,16 @@ async function drop(botId: string, id: string) {
   live.delete(k)
   failed.delete(k)
   await connection?.then((c) => c.client.close()).catch(() => {})
+}
+
+/** A service stopped answering on connection `from`: the app shows why, and it is connected again when next needed. */
+async function gone(botId: string, id: string, e: unknown, from: Live) {
+  // Unless a newer connection has already taken its place, also while this waited.
+  const entry = live.get(key(botId, id))
+  if ((await entry?.catch(() => undefined)) !== from || live.get(key(botId, id)) !== entry) return
+  // Said first: a connection made while the old one closes reports for itself.
+  setStatus(botId, id, { state: 'error', tools: 0, error: unreachable(needService(id), e) })
+  await drop(botId, id)
 }
 
 /** A bot's account with a service stopped working: the app shows it has to sign in again. */
@@ -445,10 +498,10 @@ export async function serviceTool(botId: string, name: string): Promise<ServiceT
   if (!id) return undefined
   try {
     return (await connect(botId, id)).tools.find((t) => t.name === name)
-  } catch {
-    const service = needService(id).name
-    if (statuses.get(key(botId, id))?.state === 'needs-login') throw new NeedsSignIn(lapsed(service))
-    throw new Error(`${service} is not reachable right now.`)
+  } catch (e) {
+    const service = needService(id)
+    if (statuses.get(key(botId, id))?.state === 'needs-login') throw new NeedsSignIn(lapsed(service.name))
+    throw new Error(service.unreachable && refused(e) ? service.unreachable : `${service.name} is not reachable right now.`)
   }
 }
 

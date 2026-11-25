@@ -1,0 +1,24 @@
+{
+  "name": "T3 Code",
+  "categories": ["Work"],
+  "tagline": "Hand coding work to the agents in T3 Code on this computer, and follow how it goes.",
+  "summary": "Read the user's T3 Code projects and threads, and, when the user asks for it, start a coding agent's thread in one of their projects, message it, wait for it and report what it did. Only with T3 Code open on the computer that runs the bot, and within the access the user chose when signing the bot in.",
+  "can": [
+    "Read your T3 Code projects and threads, and search what was said in them",
+    "Start a thread in one of your projects when you ask, and message or stop it",
+    "Wait for an agent to finish and tell you what it did, within the access you chose"
+  ],
+  "mcp": {
+    "url": "http://127.0.0.1:3773/mcp",
+    "scopes": ["orchestration:read", "orchestration:operate"],
+    "tools": [
+      "t3_project_list", "t3_project_read", "t3_worktree_list", "orchestrator_capabilities",
+      "t3_thread_list", "t3_thread_search", "t3_thread_read", "t3_thread_wait",
+      "t3_thread_launch", "t3_thread_send", "t3_thread_interrupt"
+    ],
+    "botBrowserOnly": true,
+    "origin": { "file": "~/.t3/userdata/server-runtime.json", "key": "origin" },
+    "unreachable": "T3 Code is not open on this computer. Open it, then try again."
+  },
+  "site": "https://t3.codes/"
+}

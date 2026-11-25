@@ -27,6 +27,8 @@ export interface Superpower {
   app: boolean
   /** Where the app's service is, for an app. */
   service: string | null
+  /** The app runs on the same computer as the bots (T3 Code), rather than on the web. */
+  local: boolean
   site: string | null
   /** What the app can call a bot's webhook about. */
   hooks: string[]
@@ -52,6 +54,7 @@ export const superpowers: Superpower[] = Object.entries(manifests)
       can: m.can,
       app: !!m.mcp,
       service: m.mcp ? new URL(m.mcp.url).host : null,
+      local: !!m.mcp && ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(m.mcp.url).hostname),
       site: m.site ?? null,
       hooks: m.hooks?.events.map((e) => e.name) ?? [],
       icon: icon ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(icon)}` : null,

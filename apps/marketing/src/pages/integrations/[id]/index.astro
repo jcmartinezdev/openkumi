@@ -44,7 +44,13 @@ const siteName = power.site && new URL(power.site).host.replace(/^www\./, '')
         <dl>
           <div>
             <dt>How it connects</dt>
-            <dd>{power.app ? <>Through {power.name}’s own service ({power.service}). Switching it on signs the bot in with an account of its own.</> : 'Nothing to sign in to: switch it on for a bot and ask.'}</dd>
+            <dd>
+              {power.local
+                ? <>Through {power.name} itself, open on the same computer as your bots. Switching it on signs the bot in, with the access you choose there.</>
+                : power.app
+                  ? <>Through {power.name}’s own service ({power.service}). Switching it on signs the bot in with an account of its own.</>
+                  : 'Nothing to sign in to: switch it on for a bot and ask.'}
+            </dd>
           </div>
           {
             power.hooks.length > 0 && (

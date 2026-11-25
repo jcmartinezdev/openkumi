@@ -35,6 +35,10 @@ is started with its own tools for running commands and touching files switched o
 read-only where it has one, and your personal setup left out; it gets OpenKumi's tools instead.
 See [Engines and models](/how-it-works/engines/#what-is-switched-off).
 
+The [T3 Code superpower](/superpowers/#t3-code) is the one way a bot gets code run: it hands the
+work to a coding agent in T3 Code, which runs in no more than the mode you picked when you signed
+the bot in. Read only gives it none of that.
+
 A bot holds no key to the server, so it cannot use OpenKumi's API to change its own rules or
 superpowers, or anyone else's. Its engine reaches its tools at an address that works for one turn
 and only from this computer. A bot's browser and `web_fetch` also refuse OpenKumi's own server, and

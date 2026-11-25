@@ -102,7 +102,9 @@ export interface Superpower {
   files: string[]
   /** It works in an app the bot signs in to, and is active only once the bot is signed in. */
   signIn: boolean
-  /** Where its tools come from, for display ("mcp.notion.com"), when it brings a service. */
+  /** The bot signs in to it only inside its own browser: the app refuses any other way back. */
+  botBrowserOnly: boolean
+  /** Where its tools come from, for display ("mcp.notion.com", "T3 Code on this computer"), when it brings a service. */
   service: string | null
   /** Where the service is on the web. */
   site: string

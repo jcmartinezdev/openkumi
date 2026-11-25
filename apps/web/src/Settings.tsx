@@ -84,7 +84,7 @@ const SEARCH: { page: PageId; id: string; title: string; also?: string; sub?: st
   { page: 'browser', id: 'browser-program', title: 'Browser program', also: 'chrome edge chromium' },
   { page: 'browser', id: 'browser-panel', title: 'Open the panel when a bot starts browsing' },
   { page: 'browser', id: 'browsers-running', title: 'Browsers running now', also: 'stop' },
-  { page: 'superpowers', id: 'superpowers', title: 'Superpowers', also: 'plugins skills apps tools productivity work creative marketing travel everyday notion linear atlassian jira confluence todoist granola otter readwise typefully evernote clickup miro fathom tldv attio folk pocketsmith webflow wix jotform klaviyo posthog sentry pandadoc crm forms analytics websites meetings finance documents errors weather exchange rates currency holidays watch seo social posts launch landing pages competitors sign in' },
+  { page: 'superpowers', id: 'superpowers', title: 'Superpowers', also: 'plugins skills apps tools productivity work creative marketing travel everyday notion linear atlassian jira confluence todoist granola otter readwise typefully evernote clickup miro fathom tldv attio folk pocketsmith webflow wix jotform klaviyo posthog sentry t3 code coding agents pandadoc crm forms analytics websites meetings finance documents errors weather exchange rates currency holidays watch seo social posts launch landing pages competitors sign in' },
   { page: 'environments', id: 'local-environment', title: 'Local environment', also: 'run on this computer server' },
   { page: 'environments', id: 'remote-environments', title: 'Other computers', also: 'remote environments add another computer connect server lan' },
   { page: 'advanced', id: 'max-steps', title: 'Steps per turn', also: 'limit' },
