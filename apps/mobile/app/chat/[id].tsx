@@ -1,7 +1,7 @@
 // A bot's conversation (or the thread of one of its subagents): what was said, what the bot did,
 // its reply as it is written, and a place to answer.
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ActionSheetIOS, ActivityIndicator, Alert, AppState, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, ActivityIndicator, Alert, AppState, Keyboard, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { LegendList, type LegendListRef } from '@legendapp/list/react-native'
 import { Stack, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -15,6 +15,7 @@ import { useDictation } from '@openkumi/client/dictation'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { callLength, useCalling } from '@openkumi/client/calls'
 import { type Report, parseReport, reportWord } from '@openkumi/client/reports'
+import { type SecretAsk, answerSecret, declineSecret, secretAsk } from '@openkumi/client/secrets'
 import { describe } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
@@ -55,6 +56,8 @@ type Row =
   | { key: string; kind: 'call'; seconds: number; lines: CallLine[]; at: number }
   /** What the bot asked its owner with ask_user, in its questions' words. */
   | { key: string; kind: 'asked'; questions: string[] }
+  /** The bot asked for a secret: its owner types it here while the bot waits, and reads afterwards what became of it. */
+  | { key: string; kind: 'secret'; ask: SecretAsk }
   /** A message between bots: one that came from another bot (`from`), or one this bot sent (`to`). */
   | { key: string; kind: 'between'; from?: string; to?: BotRef; text: string; replyWanted: boolean; messageKey?: string; attachments?: Attachment[]; threadId?: string }
 
@@ -66,10 +69,11 @@ const brief = (text: string) => {
 }
 const FROM = { parent: 'From the chat above', subagent: 'From a subagent', trigger: 'Automation', automation: 'From an automation' }
 
-function rows(items: Item[]): Row[] {
+function rows(items: Item[], running: boolean): Row[] {
   const failed = new Set(items.flatMap(({ data: d }) => (d.type === 'function_call_output' && d.output.startsWith('Error:') ? [d.call_id] : [])))
   /** The calls that came back. */
   const done = new Set(items.flatMap(({ data: d }) => (d.type === 'function_call_output' ? [d.call_id] : [])))
+  const outputs = new Map(items.flatMap(({ data: d }) => (d.type === 'function_call_output' ? [[d.call_id, d.output] as const] : [])))
   const out: Row[] = []
   const step = (key: string, text: string) => {
     const last = out.at(-1)
@@ -86,6 +90,8 @@ function rows(items: Item[]): Row[] {
     else if (d.type === 'sent') out.push({ key, kind: 'between', to: d.to, text: d.text, replyWanted: d.replyWanted, messageKey: d.key, attachments: d.attachments, threadId: d.threadId })
     // What the bot asked its owner is said to them, like a reply: it stands in the conversation, not among the steps. A call that failed asked nothing.
     else if (d.type === 'function_call' && d.name === 'ask_user' && done.has(d.call_id) && !failed.has(d.call_id) && askedIn(d).length) out.push({ key, kind: 'asked', questions: askedIn(d) })
+    // A bot asking for a secret is answered in a card; one that could not be asked is a step like any that failed.
+    else if (d.type === 'function_call' && d.name === 'ask_secret' && !failed.has(d.call_id)) out.push({ key, kind: 'secret', ask: secretAsk(d, outputs.get(d.call_id), running) })
     // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
     else if (d.type === 'function_call' && ((d.name !== 'show_page' && d.name !== 'message_bot') || failed.has(d.call_id))) step(key, describe(d))
     else if (d.type === 'web_search_call') step(key, 'Search the web')
@@ -189,6 +195,83 @@ function CallCard({ row, theme, scale }: { row: Row & { kind: 'call' }; theme: T
           ))}
         </View>
       )}
+    </View>
+  )
+}
+
+/**
+ * A bot asking for a secret (ask_secret): an API key, a password. While the bot waits, its owner
+ * types the value here. It goes to the server and into the bot's vault, and is never part of the
+ * conversation; afterwards the card says what became of it.
+ */
+function SecretCard({ row, theme, scale }: { row: Row & { kind: 'secret' }; theme: Theme; scale: number }) {
+  const name = useContext(BotName)
+  const { ask } = row
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const act = (doing: Promise<unknown>) => {
+    setBusy(true)
+    setError('')
+    doing.then(() => setValue(''), (e) => setError(e.message)).finally(() => setBusy(false))
+  }
+  const body = { color: theme.text, fontSize: 15 * scale, lineHeight: 21 * scale }
+  if (ask.state !== 'waiting') {
+    return (
+      <View style={[styles.report, styles.secret, { borderColor: theme.border }]}>
+        <View style={styles.reportKind}>
+          <Glyph name="key" size={12} color={theme.faint} />
+          <Text style={[styles.eyebrow, { color: theme.faint }]}>Secret</Text>
+        </View>
+        <Text style={body}>
+          {ask.what} <Text style={{ color: theme.muted }}>{ask.state === 'saved' ? `saved as “${ask.name}”, for ${ask.site}` : ask.state === 'declined' ? 'not given' : 'not entered'}</Text>
+        </Text>
+      </View>
+    )
+  }
+  const save = () => value && !busy && act(answerSecret(ask.callId, value))
+  return (
+    <View style={[styles.report, styles.secret, { borderColor: theme.muted }]}>
+      <View style={styles.reportKind}>
+        <Glyph name="key" size={12} color={theme.faint} />
+        <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{name} needs a secret</Text>
+      </View>
+      <Text style={[body, { fontWeight: '600' }]}>{ask.what}</Text>
+      <Text style={{ color: theme.muted, fontSize: 13.5 * scale, lineHeight: 19 * scale }}>
+        It is kept encrypted as “{ask.name}”{ask.replaces ? ', in place of the one it has' : ''}. {name} uses it without seeing it, and it is sent only to <Text style={{ color: theme.text, fontWeight: '600' }}>{ask.site}</Text>.
+      </Text>
+      {!!ask.where && (
+        <Pressable accessibilityRole="link" hitSlop={6} onPress={() => void Linking.openURL(ask.where!)}>
+          <Text style={{ color: theme.text, fontSize: 13.5 * scale, textDecorationLine: 'underline' }}>Where to find it</Text>
+        </Pressable>
+      )}
+      <TextInput
+        accessibilityLabel={ask.what}
+        style={[styles.secretInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.bg }]}
+        placeholder="Paste or type it here"
+        placeholderTextColor={theme.faint}
+        secureTextEntry
+        // Not a password of the phone's owner: said to be a one-time code, the phone neither offers one of its own nor asks to keep this one in Passwords.
+        textContentType="oneTimeCode"
+        autoComplete="off"
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        returnKeyType="done"
+        editable={!busy}
+        value={value}
+        onChangeText={setValue}
+        onSubmitEditing={save}
+      />
+      <View style={styles.secretButtons}>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: !value || busy }} disabled={!value || busy} style={[styles.pill, { borderColor: 'transparent', backgroundColor: theme.primary, opacity: !value || busy ? 0.4 : 1 }]} onPress={save}>
+          <Text style={{ color: theme.onPrimary, fontSize: 14, fontWeight: '600' }}>Save</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={busy} hitSlop={6} style={[styles.pill, { borderColor: theme.border }]} onPress={() => act(declineSecret(ask.callId))}>
+          <Text style={{ color: theme.text, fontSize: 14 }}>Not now</Text>
+        </Pressable>
+      </View>
+      {!!error && <Text style={{ color: theme.err, fontSize: 13 }}>{error}</Text>}
     </View>
   )
 }
@@ -322,6 +405,7 @@ const Line = memo(function Line({ row, theme, scale }: { row: Row; theme: Theme;
   if (row.kind === 'report') return <ReportCard row={row} theme={theme} scale={scale} />
   if (row.kind === 'call') return <CallCard row={row} theme={theme} scale={scale} />
   if (row.kind === 'asked') return <Asked questions={row.questions} theme={theme} scale={scale} />
+  if (row.kind === 'secret') return <SecretCard row={row} theme={theme} scale={scale} />
   return <Text style={[styles.notice, { color: row.error ? theme.err : theme.faint }]}>{row.text}</Text>
 })
 
@@ -388,7 +472,9 @@ export default function Chat() {
       .finally(() => ((fetching.current = false), setFetchingOlder(false)))
   }
 
-  const shown = useMemo(() => rows(items ?? []), [items])
+  // Whether the bot is at work decides what a card it asked a secret with shows: a field while it waits, and what became of it after.
+  const atWork = thread?.status === 'running'
+  const shown = useMemo(() => rows(items ?? [], atWork), [items, atWork])
 
   // Opened for one message (the other end of a message between bots): it is brought into view once it is there.
   const sought = useRef(item)
@@ -683,6 +769,9 @@ const styles = StyleSheet.create({
   reportOpen: { flexDirection: 'row', alignItems: 'center', gap: 1 },
   reportBody: { marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   callLines: { gap: 10 },
+  secret: { gap: 6 },
+  secretInput: { height: 44, marginTop: 4, paddingHorizontal: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, fontSize: 16 },
+  secretButtons: { flexDirection: 'row', gap: 8, marginTop: 2 },
   onCall: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   working: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingVertical: 6 },

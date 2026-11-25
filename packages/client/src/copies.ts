@@ -9,7 +9,7 @@
 //   <environment>/thread/<id>      the newest items of one chat
 import type { Item } from '@openkumi/shared'
 import type { Link } from '@openkumi/shared/desktop'
-import { type State, currentLink, onEnvironmentChange, onState, useCopies } from './store'
+import { type State, currentLink, onEnvironmentChange, onState, rewritesHeld, useCopies } from './store'
 
 /** A place to keep text under keys, such as a table of an on-device database. */
 export interface Shelf {
@@ -96,7 +96,8 @@ function save(): Promise<void> {
   for (const [id, items] of Object.entries(now.items)) {
     if (was.items[id] === items) continue
     const some = newest(items)
-    const value = JSON.stringify({ items: some, older: !!now.older[id] || some.length < items.length })
+    // With how often the thread had been rewritten when these were fetched: a copy from before a rewrite is fetched afresh.
+    const value = JSON.stringify({ items: some, older: !!now.older[id] || some.length < items.length, rewrites: rewritesHeld(id) })
     was.items[id] = items
     was.recent = [id, ...was.recent.filter((r) => r !== id)]
     was.sizes.set(id, value.length)
@@ -153,13 +154,13 @@ async function restore(link: Link): Promise<globalThis.Partial<State> | null> {
 }
 
 /** Reads the copy kept of one chat. */
-async function thread(link: Link, id: string): Promise<{ items: Item[]; older: boolean } | null> {
+async function thread(link: Link, id: string): Promise<{ items: Item[]; older: boolean; rewrites?: number } | null> {
   const on = shelf
   if (!on || saved?.environment !== link.id) return null
   const [raw] = await inTurn(() => on.get([threadKey(link.id, id)]))
   if (!raw) return null
   try {
-    const copy = JSON.parse(raw) as { items: Item[]; older: boolean }
+    const copy = JSON.parse(raw) as { items: Item[]; older: boolean; rewrites?: number }
     // It is what is kept already, so it is not written again until it changes.
     if (saved?.environment === link.id) saved.items[id] = copy.items
     return copy

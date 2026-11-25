@@ -123,4 +123,44 @@ await until(() => texts(conv).at(-1) === 'Echo: four')
 const live = now.items[conv]!.map((i) => i.id)
 assert.equal(new Set(live).size, live.length)
 
+// 4. Something already in the chat is rewritten on the server: a key that was written out in it is
+// put in the bot's vault, and taken out of the conversation. What the store holds of it follows.
+const key = 'key_wr1ttenOutInTheChat00aa11bb22'
+await http('POST', `/api/threads/${conv}/messages`, { text: `the key is ${key}` })
+await until(() => texts(conv).at(-1) === `Echo: the key is ${key}`)
+const held = now.items[conv]!.length
+await http('POST', `/api/threads/${conv}/messages`, { text: `!tool save_secret ${JSON.stringify({ name: 'written-out', site: 'example.com', what: 'A key', value: key })}` })
+await until(() => String(texts(conv).at(-1)).startsWith('Tool result: Kept as "written-out"'))
+assert.ok(!JSON.stringify(now.items[conv]).includes(key), 'the key is in nothing the store holds')
+assert.deepEqual(texts(conv).slice(held - 2, held), ['the key is [secret: written-out]', 'Echo: the key is [secret: written-out]'])
+const rewritten = now.items[conv]!.map((i) => i.id)
+assert.deepEqual(rewritten, [...rewritten].sort((a, b) => a - b), 'each item is where it was')
+assert.equal(new Set(rewritten).size, rewritten.length)
+
+// 5. The same while the store is away (a phone in a pocket): it was told of no change, and what came
+// after what it holds is not all that changed. The conversation says it was rewritten, so what is
+// held of it is thrown away and fetched afresh.
+const other = 'key_wr1ttenOutWhileAway33cc44dd55'
+await http('POST', `/api/threads/${conv}/messages`, { text: `and another key is ${other}` })
+await until(() => texts(conv).at(-1) === `Echo: and another key is ${other}`)
+assert.ok(JSON.stringify(now.items[conv]).includes(other), 'held as it was said')
+away()
+await until(() => !now.connected)
+await http('POST', `/api/threads/${conv}/messages`, { text: `!tool save_secret ${JSON.stringify({ name: 'written-while-away', site: 'example.com', what: 'A key', value: other })}` })
+for (;;) {
+  const { thread, items } = await http('GET', `/api/threads/${conv}`)
+  if (thread.status === 'idle' && String(items.at(-1).data.text).startsWith('Tool result: Kept as "written-while-away"')) break
+  await new Promise((r) => setTimeout(r, 50))
+}
+assert.ok(JSON.stringify(now.items[conv]).includes(other), 'still held as it was, while away')
+back()
+await until(() => now.connected)
+await openThread(conv)
+assert.ok(!JSON.stringify(now.items[conv]).includes(other), 'what was held from before the rewrite is gone')
+assert.ok(texts(conv).includes('and another key is [secret: written-while-away]'))
+assert.ok(String(texts(conv).at(-1)).startsWith('Tool result: Kept as "written-while-away"'))
+const afresh = now.items[conv]!.map((i) => i.id)
+assert.deepEqual(afresh, [...afresh].sort((a, b) => a - b))
+assert.equal(new Set(afresh).size, afresh.length)
+
 process.exit(0)

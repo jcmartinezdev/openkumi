@@ -30,7 +30,7 @@ export default defineConfig({
         },
         {
           label: 'Setting up',
-          items: ['setup/providers', 'setup/bots', 'environments', 'connections', 'superpowers', 'automations', 'webhooks', 'calls'],
+          items: ['setup/providers', 'setup/bots', 'environments', 'connections', 'superpowers', 'secrets', 'automations', 'webhooks', 'calls'],
         },
         {
           label: 'Everyday use',

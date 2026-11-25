@@ -19,6 +19,7 @@
     "./marks": "./src/marks.ts",
     "./automations": "./src/automations.ts",
     "./webhooks": "./src/webhooks.ts",
+    "./secrets": "./src/secrets.ts",
     "./queue": "./src/queue.ts",
     "./reports": "./src/reports.ts",
     "./mascot": "./src/mascot.ts",

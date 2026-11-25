@@ -33,6 +33,8 @@ const env = {
   OPENKUMI_PORT: String(LOCAL_PORT),
   OPENKUMI_MOCK: '1',
   OPENKUMI_SUPERPOWERS: `${tmp}/superpowers`,
+  // The key the bots' secrets are encrypted with goes here, and not into the keychain of whoever runs the tests.
+  OPENKUMI_VAULT_KEYS: `${tmp}/keys`,
   // The servers these tests start tell OpenKumi's makers nothing, and have no question to ask. The test of that says otherwise for itself.
   OPENKUMI_TELEMETRY: '0',
   // The app run from the source cannot be what the computer opens sign-ins with; the tests hand it them.
@@ -1900,6 +1902,108 @@ test('a webhook is set up on its app’s page, and an automation chosen in the f
   await section.locator('.set-row', { hasText: 'No webhook.' }).waitFor()
   assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', '/api/automations')).find((a) => a.id === made.id).enabled, false)
   await ask(LOCAL_PORT, 'local-home', 'DELETE', `/api/automations/${made.id}`)
+
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
+test('secrets: a bot asks for a key in a card where its owner types it, and the bot’s settings list, show, change and remove them', async () => {
+  fs.mkdirSync(`${tmp}/app`, { recursive: true })
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Kumi')
+  win.on('dialog', (dialog) => dialog.accept())
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
+  const analyst = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Analyst', provider: 'mock' })
+  const kept = async () => (await ask(LOCAL_PORT, 'local-home', 'GET', `/api/bots/${analyst.id}/secrets`)).secrets
+  const typed = 'plsbl_typed_into_the_card_0001'
+
+  // The bot needs a key it does not have, and asks: a card in the conversation says what for, and where it will go.
+  await win.locator('.sidebar .row.bot', { hasText: 'Analyst' }).click()
+  await win.locator('.empty h1', { hasText: 'Analyst' }).waitFor()
+  await win.locator('.composer textarea').fill('!tool ask_secret {"name":"plausible","site":"plausible.io","what":"Plausible API key","where":"https://plausible.io/settings/api-keys"}')
+  await win.keyboard.press('Meta+Enter')
+  const card = win.locator('.secret-card.waiting')
+  await card.waitFor({ timeout: 20_000 })
+  assert.match(await card.innerText(), /^ANALYST NEEDS A SECRET\s+Plausible API key\s+It is kept encrypted as “plausible”\. Analyst uses it without seeing it, and it is sent only to plausible\.io\. Where to find it/i)
+  assert.equal(await card.getByRole('link', { name: 'Where to find it' }).getAttribute('href'), 'https://plausible.io/settings/api-keys')
+  assert.equal(await card.getByRole('button', { name: 'Save' }).isDisabled(), true, 'there is nothing to save yet')
+  assert.equal(await card.getByLabel('Plausible API key').getAttribute('type'), 'password', 'what is typed is not shown')
+  await shot('secret-card')
+  // Typed there, it goes into the bot's vault, and the bot carries on. The conversation never holds it.
+  await card.getByLabel('Plausible API key').fill(typed)
+  await card.getByRole('button', { name: 'Save' }).click()
+  await win.locator('.secret-card:not(.waiting)', { hasText: 'Plausible API key saved as “plausible”, for plausible.io' }).waitFor()
+  await win.locator('.msg.assistant', { hasText: 'Tool result: Saved as "plausible", for plausible.io.' }).waitFor({ timeout: 20_000 })
+  assert.equal(await win.locator('.secret-card input').count(), 0, 'the field is gone once it is answered')
+  assert.ok(!(await win.locator('body').innerText()).includes(typed))
+  await shot('secret-saved')
+  assert.deepEqual((await kept()).map((s) => [s.name, s.what, s.sites, s.by]), [['plausible', 'Plausible API key', ['plausible.io'], 'owner']])
+
+  // The owner can say no, and the card says so afterwards.
+  await win.locator('.composer textarea').fill('!tool ask_secret {"name":"stripe","site":"api.stripe.com","what":"Stripe key"}')
+  await win.keyboard.press('Meta+Enter')
+  await win.locator('.secret-card.waiting', { hasText: 'Stripe key' }).getByRole('button', { name: 'Not now' }).click()
+  await win.locator('.secret-card:not(.waiting)', { hasText: 'Stripe key not given' }).waitFor()
+  await win.locator('.msg.assistant', { hasText: 'Tool result: The user said no.' }).waitFor({ timeout: 20_000 })
+
+  // Asked again for one it has, because it stopped working: the card says that what is typed takes its place.
+  await win.locator('.composer textarea').fill('!tool ask_secret {"name":"plausible","site":"plausible.io","what":"Plausible API key","replace":true}')
+  await win.keyboard.press('Meta+Enter')
+  const again = win.locator('.secret-card.waiting')
+  await again.locator('p', { hasText: 'It is kept encrypted as “plausible”, in place of the one it has.' }).waitFor({ timeout: 20_000 })
+  await again.getByRole('button', { name: 'Not now' }).click()
+  await win.locator('.secret-card.waiting').waitFor({ state: 'detached' })
+
+  // In the bot's settings: what it has, where each goes, and who put it there.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}/secrets`), analyst.id)
+  const row = (name) => win.locator('.set-row', { has: win.locator('h3', { hasText: name }) })
+  await row('plausible').waitFor()
+  assert.equal(await win.locator('.tabbar a.active').innerText(), 'Secrets\n1')
+  assert.match(await win.locator('.set-intro').innerText(), /^A secret is kept encrypted, and the bot uses it by name without ever seeing it\. It is sent only to the sites it is for\. The key that opens them is in a file only your account can read/)
+  assert.match(await row('plausible').innerText(), /plausible\s+Plausible API key\. Sent only to plausible\.io\.\s+Added by you · not used yet/)
+  // On the computer that runs OpenKumi its value can be read.
+  await win.getByRole('button', { name: 'Show the value of plausible' }).click()
+  assert.equal(await row('plausible').locator('.secret-value code').innerText(), typed)
+  await win.getByRole('button', { name: 'Hide the value of plausible' }).click()
+  assert.equal(await row('plausible').locator('.secret-value').count(), 0)
+  // What it is for and where it goes are the owner's to change; a site is kept as its host.
+  await win.getByRole('button', { name: 'Change plausible' }).click()
+  await win.getByLabel('Sites it is sent to: “plausible”').fill('https://plausible.io/api, analytics.example.com')
+  await row('plausible').getByRole('button', { name: 'Save' }).click()
+  await row('plausible').locator('p', { hasText: 'Sent only to plausible.io, analytics.example.com.' }).waitFor()
+  assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', `/api/bots/${analyst.id}/secrets/plausible/value`)).value, typed, 'its value is as it was')
+
+  // One added here, before any bot asked.
+  await win.getByRole('button', { name: 'Add a secret' }).click()
+  await win.getByLabel('Name of the new secret').fill('home-assistant')
+  await win.getByLabel('What it is: new secret').fill('Token for the house')
+  await win.getByLabel('Sites it is sent to: new secret').fill('ftp://files.example.com')
+  await win.getByLabel('Value: new secret').fill('ha_long_lived_token_0002')
+  await win.getByRole('button', { name: 'Add secret' }).click()
+  await win.locator('.secret-form small.err', { hasText: 'is not a site' }).waitFor()
+  await win.getByLabel('Sites it is sent to: new secret').fill('http://192.168.1.20:8123')
+  await win.getByRole('button', { name: 'Add secret' }).click()
+  await row('home-assistant').locator('p', { hasText: 'Token for the house. Sent only to 192.168.1.20:8123.' }).waitFor()
+  assert.equal(await win.locator('.secret-form').count(), 0)
+  // Adding never writes over one that is there: a name that is taken is said to be, and what is kept stays.
+  await win.getByRole('button', { name: 'Add a secret' }).click()
+  await win.getByLabel('Name of the new secret').fill('Plausible')
+  await win.getByLabel('Sites it is sent to: new secret').fill('example.com')
+  await win.getByLabel('Value: new secret').fill('something-else-entirely')
+  await win.getByRole('button', { name: 'Add secret' }).click()
+  await win.locator('.secret-form small.err', { hasText: 'There is already a secret named "plausible".' }).waitFor()
+  assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', `/api/bots/${analyst.id}/secrets/plausible/value`)).value, typed)
+  await win.locator('.secret-form').getByRole('button', { name: 'Cancel' }).click()
+  assert.equal(await win.locator('.tabbar a.active').innerText(), 'Secrets\n2')
+  await shot('secrets-tab')
+  // The bot is told of both by name.
+  assert.match((await ask(LOCAL_PORT, 'local-home', 'GET', `/api/bots/${analyst.id}/instructions`)).text, /Your secrets:\n- plausible: Plausible API key \(for plausible\.io, analytics\.example\.com\)\n- home-assistant: Token for the house \(for 192\.168\.1\.20:8123\)\n/)
+
+  // Removed, it is gone for good.
+  await win.getByRole('button', { name: 'Remove home-assistant' }).click()
+  await row('home-assistant').waitFor({ state: 'detached' })
+  assert.deepEqual((await kept()).map((s) => s.name), ['plausible'])
 
   await app.close()
   await until(async () => !(await up(LOCAL_PORT)), 15_000)

@@ -10,6 +10,7 @@ import { useVoiceChoices } from '@openkumi/client/calls'
 import { api, useFiles, useStore } from '@openkumi/client/store'
 import { triggerLabel } from '@openkumi/client/automations'
 import { inShort, summarize } from '@openkumi/client/workspace'
+import { NEW_SECRET, useSecrets } from '@openkumi/client/secrets'
 import { ProviderIcon, SuperpowerIcon } from '../../../src/icons'
 import { useBotModel } from '../../../src/ModelChip'
 import { Field, ICON_INSET, Row, Section, SettingsPage, Slot, SwitchRow } from '../../../src/SettingsUi'
@@ -30,6 +31,7 @@ export default function BotSettings() {
   const zone = useStore((s) => s.about.timeZone)
   const statuses = useStatuses(botId)
   const { entries } = useFiles(botId)
+  const secrets = useSecrets(botId).data?.secrets
   const allAutomations = useStore((s) => s.automations)
   const calls = useStore((s) => s.calls)
   const voices = useVoiceChoices(stored?.voice ?? '')
@@ -109,6 +111,20 @@ export default function BotSettings() {
           />
         ))}
         <Row icon="compass" label="Browse superpowers" tone="action" opens onPress={() => router.push({ pathname: '/superpowers/[botId]', params: { botId: bot.id } })} />
+      </Section>
+
+      <Section title="Secrets" inset={ICON_INSET} footer={`Keys and passwords ${bot.name} works with. They are kept encrypted: it uses one by name without seeing it, and each is sent only to the site it is for.`}>
+        {secrets?.map((secret) => (
+          <Row
+            key={secret.name}
+            icon="key"
+            label={secret.name}
+            detail={secret.problem ? 'Cannot be read: enter it again' : `${secret.what ? `${secret.what} · ` : ''}${secret.sites.join(', ')}`}
+            opens
+            onPress={() => router.push({ pathname: '/settings/secrets/[botId]/[name]', params: { botId: bot.id, name: secret.name } })}
+          />
+        ))}
+        <Row icon="plus" label="Add a secret" tone="action" onPress={() => router.push({ pathname: '/settings/secrets/[botId]/[name]', params: { botId: bot.id, name: NEW_SECRET } })} />
       </Section>
 
       <Section title="Automations" inset={ICON_INSET}>

@@ -82,6 +82,15 @@ interface Win {
   controller: string | null
   /** The owner had control since the bot last used it, which the bot is told. */
   touched: boolean
+  /**
+   * The sites the bot has run a script of its own on in this window, and the sites one of its
+   * secrets was put into a page of. A script goes on living in its page, comes back with it when
+   * the bot goes back, and reaches into a popup its page opened, which is in this window too. So
+   * in a window a site gets the bot's scripts or its secrets, never both (see browser_eval and
+   * browser_type in tools.ts). Kept for as long as the window is.
+   */
+  scripted: Set<string>
+  secrets: Set<string>
   /** What the bot asked the owner to do in it (browser_ask_user), and how to tell it how that ended. */
   request: { text: string; taken: boolean; settle: (outcome: AskOutcome) => void } | null
   /** When the bot last used it. */
@@ -220,7 +229,7 @@ class BotBrowser {
     if (page.isClosed() || !context || this.context !== context) return null
     let win = parent?.win.tabs.length ? parent.win : [...this.windows.values()].find((w) => chromeId !== null && w.chromeIds.has(chromeId))
     if (!win) {
-      win = { id: newId(), chromeIds: new Set(), threadId: null, spare, tabs: [], active: null, controller: null, touched: false, request: null, usedAt: 0 }
+      win = { id: newId(), chromeIds: new Set(), threadId: null, spare, tabs: [], active: null, controller: null, touched: false, scripted: new Set(), secrets: new Set(), request: null, usedAt: 0 }
       this.windows.set(win.id, win)
     }
     if (chromeId !== null) win.chromeIds.add(chromeId)
@@ -318,6 +327,11 @@ class BotBrowser {
 
   private windowOf(threadId: string): Win | undefined {
     return [...this.windows.values()].find((w) => w.threadId === threadId && w.tabs.length)
+  }
+
+  /** Where the bot ran scripts, and where its secrets went, in the window a thread works in (see Win). */
+  marks(threadId: string): Pick<Win, 'scripted' | 'secrets'> {
+    return this.windowOf(threadId) ?? { scripted: new Set(), secrets: new Set() }
   }
 
   /** Stops a window from being closed for having finished its work: it is wanted again. */

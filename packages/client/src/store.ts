@@ -21,6 +21,8 @@ export interface State extends AppState {
   callError: string
   /** Counts changes to each bot's workspace, so views of its files know when to refetch. */
   filesVersion: Record<string, number>
+  /** Counts changes to each bot's secrets, the same way. */
+  secretsVersion: Record<string, number>
   connected: boolean
   loaded: boolean
   /** How many times in a row the environment could not be reached. */
@@ -63,6 +65,7 @@ const EMPTY: State = {
   older: {},
   partial: {},
   filesVersion: {},
+  secretsVersion: {},
   connected: false,
   loaded: false,
   failures: 0,
@@ -204,6 +207,8 @@ function handle(ev: ServerEvent) {
       if (ev.seq <= state.seq) return
       const during = loading.get(ev.thread.id)
       if (during) during.upserted = true
+      // A thread that is being followed has had each rewritten item changed as it was told of it.
+      if (current.has(ev.thread.id)) heldAt.set(ev.thread.id, ev.thread.rewrites ?? 0)
       const patch: globalThis.Partial<State> = { threads: upsert(state.threads, ev.thread), seq: ev.seq }
       if (ev.thread.status !== 'running') patch.partial = omit(state.partial, ev.thread.id)
       return set(patch)
@@ -245,6 +250,15 @@ function handle(ev: ServerEvent) {
         partial: cleared ? { ...state.partial, [threadId]: cleared } : state.partial,
       })
     }
+    case 'item.change': {
+      // Something in a conversation was rewritten (a secret taken out of it): what is held of it follows.
+      const { threadId, id } = ev.item
+      // Whatever is being fetched of the thread right now, or is fetched later, may still be how it was before.
+      rewrittenItems.set(threadId, (rewrittenItems.get(threadId) ?? new Map()).set(id, ev.item))
+      const list = state.items[threadId]
+      if (!list?.some((i) => i.id === id)) return
+      return set({ items: { ...state.items, [threadId]: list.map((i) => (i.id === id ? ev.item : i)) } })
+    }
     case 'queue.upsert':
       return set({ queue: state.queue.some((w) => w.id === ev.message.id) ? state.queue.map((w) => (w.id === ev.message.id ? ev.message : w)) : [...state.queue, ev.message] })
     case 'queue.remove':
@@ -281,6 +295,8 @@ function handle(ev: ServerEvent) {
     }
     case 'files.changed':
       return set({ filesVersion: { ...state.filesVersion, [ev.botId]: (state.filesVersion[ev.botId] ?? 0) + 1 } })
+    case 'secrets.changed':
+      return set({ secretsVersion: { ...state.secretsVersion, [ev.botId]: (state.secretsVersion[ev.botId] ?? 0) + 1 } })
     case 'browser.state':
       return set({ browsers: { ...state.browsers, [ev.botId]: ev.state } })
   }
@@ -356,6 +372,9 @@ export function follow(next: Link | null) {
   saving.clear()
   current.clear()
   leaving.forEach((fn) => fn())
+  // After what is being left was written to its copy, which says how often each thread had been rewritten.
+  heldAt.clear()
+  rewrittenItems.clear()
   set(EMPTY)
   link = next
   if (next) void begin(next)
@@ -370,7 +389,7 @@ export interface Copies {
   /** The copy of the environment's state, or null when there is none to use. */
   restore(link: Link): Promise<globalThis.Partial<State> | null>
   /** The copy of one of its threads, or null. */
-  thread(link: Link, id: string): Promise<{ items: Item[]; older: boolean } | null>
+  thread(link: Link, id: string): Promise<{ items: Item[]; older: boolean; rewrites?: number } | null>
 }
 let copies: Copies | null = null
 export function useCopies(kept: Copies) {
@@ -496,6 +515,9 @@ async function opened() {
   const mine = ++opens
   waiting = []
   current.clear()
+  // What was rewritten while disconnected was not told, so what was told before may be older than what is fetched
+  // from now on. Forgotten at once, before anything is waited for: a page asked for meanwhile must not be given it.
+  rewrittenItems.clear()
   // What is held is kept, and only what changed since it is asked for. Without anything held (or
   // from another database), everything comes.
   const since = state.database ? `?since=${state.seq}&db=${encodeURIComponent(state.database)}` : ''
@@ -582,6 +604,13 @@ export async function loadThread(id: string, after?: number): Promise<Thread | u
     const res = await api<{ thread: Thread; items: Item[]; more?: boolean; gap?: boolean; partial: Partial }>('GET', `/api/threads/${id}${after === undefined ? '' : `?after=${after}`}`)
     // Abandoned by a reconnect or a change of environment: a fresh load has replaced this one.
     if (loading.get(id) !== during) return
+    // Something that was already in the thread was rewritten since what is held of it was fetched (a
+    // secret was taken out of the conversation): what came after is not all that changed, so what is
+    // held goes, and the thread is fetched as if for the first time.
+    if (after !== undefined && (res.thread.rewrites ?? 0) !== (heldAt.get(id) ?? 0)) {
+      loading.delete(id)
+      return loadThread(id)
+    }
     // Caught up: what was held, then what came after it. Unless so much came that the server sent
     // the newest page instead, which does not meet what was held.
     const fresh = after === undefined || !!res.gap
@@ -599,11 +628,13 @@ export async function loadThread(id: string, after?: number): Promise<Thread | u
     }
     set({
       threads: upsert(state.threads, thread),
-      items: { ...state.items, [id]: [...got, ...extra] },
+      // What was rewritten while this was on its way is as it was rewritten, wherever it came from.
+      items: { ...state.items, [id]: asRewritten(id, [...got, ...extra]) },
       older: fresh ? { ...state.older, [id]: !!res.more } : state.older,
       partial: { ...state.partial, [id]: partial },
     })
     current.add(id)
+    heldAt.set(id, thread.rewrites ?? 0)
     return thread
   } finally {
     if (loading.get(id) === during) loading.delete(id)
@@ -612,6 +643,21 @@ export async function loadThread(id: string, after?: number): Promise<Thread | u
 
 /** Threads whose items are up to date: fetched, or caught up, since the connection opened. */
 const current = new Set<string>()
+/** How often each thread had been rewritten (Thread.rewrites) when what is held of it was fetched. */
+const heldAt = new Map<string, number>()
+/**
+ * The items this app was told were rewritten, by thread and id, since its connection opened. A
+ * page of a thread that was asked for before a rewrite may arrive after it, with the item as it
+ * was: what is put in place is the item as it was rewritten. Kept for one connection only: while
+ * disconnected an item may be rewritten again without this app hearing of it.
+ */
+const rewrittenItems = new Map<string, Map<number, Item>>()
+const asRewritten = (id: string, items: Item[]) => {
+  const changed = rewrittenItems.get(id)
+  return changed ? items.map((i) => changed.get(i.id) ?? i) : items
+}
+/** The same for the copy kept on the device, which keeps it with the thread's items. */
+export const rewritesHeld = (id: string) => heldAt.get(id) ?? 0
 /** Threads whose kept copy is being read. */
 const reading = new Set<string>()
 
@@ -628,7 +674,10 @@ export async function openThread(id: string): Promise<void> {
     const kept = await copies.thread(shown, id).catch(() => null)
     reading.delete(id)
     if (asked !== epoch) return
-    if (kept && !state.items[id]) set({ items: { ...state.items, [id]: kept.items }, older: { ...state.older, [id]: kept.older } })
+    if (kept && !state.items[id]) {
+      heldAt.set(id, kept.rewrites ?? 0)
+      set({ items: { ...state.items, [id]: kept.items }, older: { ...state.older, [id]: kept.older } })
+    }
   }
   if (!state.connected || current.has(id)) return
   const held = state.items[id]
@@ -649,11 +698,13 @@ export async function loadOlder(id: string, to?: number): Promise<boolean> {
   if (!held?.length || !state.older[id] || fetchingOlder.has(id)) return false
   const first = held[0].id
   const asked = epoch
+  const connection = opens
   fetchingOlder.add(id)
   try {
     const res = await api<{ items: Item[]; more: boolean }>('GET', `/api/threads/${id}?before=${first}${to ? `&from=${to}` : ''}`)
-    if (asked !== epoch || state.items[id]?.[0]?.id !== first) return false
-    const earlier = res.items.filter((i) => i.id < first)
+    // Asked for on a connection that has since dropped: what was rewritten meanwhile was not told, so this page may be from before it.
+    if (asked !== epoch || connection !== opens || state.items[id]?.[0]?.id !== first) return false
+    const earlier = asRewritten(id, res.items.filter((i) => i.id < first))
     set({ items: { ...state.items, [id]: [...earlier, ...state.items[id]] }, older: { ...state.older, [id]: res.more } })
     return earlier.length > 0
   } finally {

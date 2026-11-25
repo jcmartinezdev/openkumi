@@ -18,13 +18,14 @@ import { masterPrompt } from './prompt.ts'
 import { QUESTION_LIMITS, readQuestions } from './questions.ts'
 import { getProvider, learnModels, modelName } from './providers/index.ts'
 import type { ModelEvent, Steering } from './providers/types.ts'
+import { index as secretIndex } from './secrets.ts'
 import { settings } from './settings.ts'
 import { superpowerIndex, superpowerNames } from './superpowers.ts'
 import { failed, modelSent, track, whereOf } from './telemetry.ts'
 import { count as countUsage } from './usage.ts'
 import { TIME_ZONE, finishRun, isMain } from './automations.ts'
 import { type ToolEndpoint, openToolEndpoint } from './tool-endpoint.ts'
-import { onACall, runTool, toolsFor } from './tools.ts'
+import { asRecorded, onACall, runTool, toolsFor } from './tools.ts'
 import { agentsFile, memoryIndex } from './workspace.ts'
 
 /** An engine's turn while it runs, for a message to be given to it as it works. */
@@ -136,6 +137,7 @@ function instructions(bot: Bot, thread: Thread, problems: Record<string, string>
     agents_md: agentsFile(bot.id),
     memory: memoryIndex(bot.id).join('\n'),
     superpowers: superpowerIndex(bot.id, problems).join('\n'),
+    secrets: secretIndex(bot.id).join('\n'),
     automation_title: thread.title,
     by_user: by === 'user',
     by_you: by === bot.id,
@@ -246,8 +248,7 @@ function letIn(waiting: Queued, thread: Thread): Item {
   const { message } = withCopies(waiting, thread)
   // A conversation is named after what it began with, which is how it is found again once archived.
   if ((message.source === 'user' || message.source === 'bot') && thread.kind === 'chat' && thread.title === db.UNTITLED) {
-    const title = message.text.replace(/\s+/g, ' ').trim() || (message.attachments ?? []).map((a) => a.name).join(', ')
-    db.updateThread(thread.id, { title: title.length > 60 ? title.slice(0, 57) + '…' : title || db.UNTITLED })
+    db.updateThread(thread.id, { title: db.titleFrom(message.text) || db.titleFrom((message.attachments ?? []).map((a) => a.name).join(', ')) || db.UNTITLED })
   }
   const item = db.addItem(thread.id, message)
   db.removeQueued(waiting.id)
@@ -625,7 +626,8 @@ async function turn(threadId: string, state: Run) {
       else if (ev.type === 'item') {
         if (ev.item.type === 'message') state.partial.text = ''
         if (ev.item.type === 'reasoning') state.partial.reasoning = ''
-        db.addItem(threadId, ev.item)
+        // A call is written down without what its tool keeps out of the conversation; the tool gets it as it was made.
+        db.addItem(threadId, ev.item.type === 'function_call' ? asRecorded(tools, ev.item) : ev.item)
         if (ev.item.type === 'function_call') calls.push(ev.item)
       } else if (ev.type !== 'session') {
         const kind = ev.type === 'text_delta' ? 'text' : 'reasoning'

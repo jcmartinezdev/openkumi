@@ -18,6 +18,7 @@ import * as mcp from './mcp.ts'
 import * as db from './db.ts'
 import { homeAddresses, served, tailscaleAddresses } from './network.ts'
 import { announceProviders, callsInfo, getProvider, providerInfos, refreshProviders } from './providers/index.ts'
+import * as secrets from './secrets.ts'
 import { DEFAULTS, onSettingsChange, settings, updateSettings } from './settings.ts'
 import { announceSuperpowers, enabledSuperpowers, listSuperpowers, setSuperpower, superpowerCategories, superpowerFile } from './superpowers.ts'
 import * as automations from './automations.ts'
@@ -402,6 +403,31 @@ route('GET', '/api/hooks/address', async () => {
 })
 route('PUT', '/api/bots/:id/hooks/:power', ([id, power], body) => checked(() => hooks.setUp(needBot(id).id, power, body)))
 route('DELETE', '/api/bots/:id/hooks/:power', ([id, power]) => hooks.remove(needBot(id).id, power))
+
+// ---- secrets: what a bot keeps in its vault, as its owner looks after it. A value comes in here and is never sent out again,
+// except to be read on the computer that runs OpenKumi.
+/** A secret's name as it stands in an address. */
+const secretNamed = (given: string) => {
+  try {
+    return decodeURIComponent(given)
+  } catch {
+    return fail(400, 'That is not a name a secret can have.')
+  }
+}
+route('GET', '/api/bots/:id/secrets', ([id]) => secrets.list(needBot(id).id))
+// Adds one. A name that is taken is said to be: what is kept under it is never written over by adding.
+route('POST', '/api/bots/:id/secrets', ([id], body) =>
+  checked(() => secrets.save(needBot(id).id, { name: secrets.nameOf(body.name), sites: secrets.sitesOf(body.sites), value: body.value, what: body.what, by: 'owner' })),
+)
+// Changes what one is, where it may go, or its value.
+route('PUT', '/api/bots/:id/secrets/:name', ([id, given], body) => checked(() => secrets.change(needBot(id).id, secretNamed(given), body)))
+route('DELETE', '/api/bots/:id/secrets/:name', ([id, name]) => secrets.remove(needBot(id).id, secretNamed(name)))
+route('GET', '/api/bots/:id/secrets/:name/value', ([id, name], _, call) => {
+  if (whoIs(call.req, call.url) !== 'owner') fail(403, 'A secret is only shown on the computer running OpenKumi.')
+  return checked(() => ({ value: secrets.reveal(needBot(id).id, secretNamed(name)) }))
+})
+// The owner's answer to a bot that asked for one (ask_secret): the value typed into its card, or no.
+route('POST', '/api/secret-requests/:call', ([call], body) => checked(() => secrets.answer(call, body)))
 
 // ---- threads
 // A thread, and its newest page of items (see db.PAGE); `before` asks for the page before that

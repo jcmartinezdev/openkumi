@@ -784,7 +784,9 @@ test('master prompt: every bot is told the one OpenKumi comes with, filled in, a
   // In the file's order, with its comment left out and every part filled in.
   const at = ['# Principles', '# The other bots', '# Working in OpenKumi', '# Your conversation', '# Automations', '# Your workspace', '# Your instructions (AGENTS.md)', '# Your notes (memory/)'].map((h) => prompt.indexOf(`\n${h}\n`))
   assert.ok(at.every((n, i) => n > 0 && (i === 0 || n > at[i - 1])), `in order: ${at}`)
-  assert.ok(!/\{\{|<!--|\n\n\n/.test(prompt), 'no tag, comment or run of empty lines is left')
+  // {{secret:name}} is no tag of the file's: it is how a bot is told to name a secret in a request.
+  assert.ok(!/\{\{[#^/]?\w+\}\}|<!--|\n\n\n/.test(prompt), 'no tag, comment or run of empty lines is left')
+  assert.match(prompt, /# Your secrets\nYou have a vault for secrets[\s\S]*write \{\{secret:name\}\} where the value goes[\s\S]*\nYou have none yet\.\n/)
   assert.ok(!prompt.includes('# You are running'), 'a conversation is neither a run of an automation nor a subagent')
 
   // It is the same for every bot, and there is nothing to change it with.

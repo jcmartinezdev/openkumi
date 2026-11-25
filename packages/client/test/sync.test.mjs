@@ -22,7 +22,8 @@ let server = null
 async function start() {
   server = spawn(process.execPath, ['src/index.ts'], {
     cwd: SERVER,
-    env: { ...process.env, OPENKUMI_HOME: home, OPENKUMI_PORT: String(PORT), OPENKUMI_MOCK: '1' },
+    // The key a bot's secrets are encrypted with goes beside the test's data, not into the keychain of whoever runs it.
+    env: { ...process.env, OPENKUMI_HOME: home, OPENKUMI_PORT: String(PORT), OPENKUMI_MOCK: '1', OPENKUMI_VAULT_KEYS: path.join(out, 'keys') },
     stdio: ['ignore', 'pipe', 'inherit'],
   })
   const exited = new Promise((resolve) => server.on('exit', resolve))

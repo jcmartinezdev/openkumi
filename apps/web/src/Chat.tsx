@@ -20,6 +20,7 @@ import { Asked, Questions } from './Questions'
 import { StatusDot } from './Sidebar'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { parseReport, reportWord } from '@openkumi/client/reports'
+import { type SecretAsk, answerSecret, declineSecret, secretAsk } from '@openkumi/client/secrets'
 import { describe, parse, site } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openAutomations, openSettings, openThread, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
@@ -29,6 +30,7 @@ type Call = Extract<ItemData, { type: 'function_call' }>
 const FILE_TOOLS = new Set(['list_files', 'read_file', 'write_file', 'edit_file', 'search_files', 'move_file', 'delete_file'])
 const toolIcon = (name: string) =>
   name.startsWith('browser_') || name === 'web_fetch' ? 'globe'
+  : name.endsWith('_secret') ? 'key'
   : name.includes('subagent') ? 'agents'
   : name.endsWith('_automation') || name === 'list_automations' ? 'clock'
   : FILE_TOOLS.has(name) ? 'file'
@@ -131,6 +133,55 @@ function Report({ id, text }: { id: number; text: string }) {
         <div className="report-title">{title}</div>
       )}
     </div>
+  )
+}
+
+/**
+ * A bot asking for a secret (ask_secret): an API key, a password. While the bot waits, its owner
+ * types the value here. It goes to the server and into the bot's vault, and is never part of the
+ * conversation; afterwards the card says what became of it.
+ */
+function SecretCard({ id, ask, name }: { id: number; ask: SecretAsk; name: string }) {
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const act = (doing: Promise<unknown>) => {
+    setBusy(true)
+    setError('')
+    doing.then(() => setValue(''), (e) => setError(e.message)).finally(() => setBusy(false))
+  }
+  if (ask.state !== 'waiting') {
+    return (
+      <div data-item={id} className="msg secret-card">
+        <div className="secret-head"><Icon name="key" size={13} /><span className="eyebrow">Secret</span></div>
+        <div>
+          {ask.what} <span className="report-word">{ask.state === 'saved' ? `saved as “${ask.name}”, for ${ask.site}` : ask.state === 'declined' ? 'not given' : 'not entered'}</span>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <form
+      data-item={id}
+      className="msg secret-card waiting"
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (value && !busy) act(answerSecret(ask.callId, value))
+      }}
+    >
+      <div className="secret-head"><Icon name="key" size={13} /><span className="eyebrow">{name} needs a secret</span></div>
+      <div className="secret-what">{ask.what}</div>
+      <p>
+        It is kept encrypted as “{ask.name}”{ask.replaces && ', in place of the one it has'}. {name} uses it without seeing it, and it is sent only to <strong>{ask.site}</strong>.
+        {ask.where && <> <a href={ask.where} target="_blank" rel="noreferrer">Where to find it</a></>}
+      </p>
+      <div className="secret-entry">
+        <input type="password" autoComplete="off" spellCheck={false} aria-label={ask.what} placeholder="Paste or type it here" value={value} disabled={busy} onChange={(e) => setValue(e.target.value)} />
+        <button type="submit" className="primary" disabled={!value || busy}>Save</button>
+        <button type="button" className="ghost" disabled={busy} onClick={() => act(declineSecret(ask.callId))}>Not now</button>
+      </div>
+      {error && <small className="err">{error}</small>}
+    </form>
   )
 }
 
@@ -293,6 +344,15 @@ function Items({ items, running, openFile, name }: { items: Item[]; running: boo
       flush(id)
       blocks.push(<Asked key={id} id={id} call={data} />)
       continue
+    }
+    // A bot asking for a secret is answered in a card, where its owner types it. One that could not be asked is a step like any that failed.
+    if (data.type === 'function_call' && data.name === 'ask_secret') {
+      const ask = secretAsk(data, outputs.get(data.call_id), running)
+      if (ask.state !== 'failed') {
+        flush(id)
+        blocks.push(<SecretCard key={id} id={id} ask={ask} name={name} />)
+        continue
+      }
     }
     if (isStep(data)) {
       if (!steps.length) began = createdAt

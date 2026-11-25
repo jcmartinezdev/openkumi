@@ -25,6 +25,9 @@ if (found > FORMAT) {
 
 db.exec(`
   PRAGMA journal_mode = WAL;
+  -- What is deleted or rewritten is wiped where it lay, not only struck from the list: a secret
+  -- that was taken out of a conversation (rewriteItems) is then gone from the file as well.
+  PRAGMA secure_delete = ON;
   CREATE TABLE IF NOT EXISTS threads (
     id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, parent_id TEXT, title TEXT NOT NULL, kind TEXT NOT NULL,
     status TEXT NOT NULL, model TEXT, reported INTEGER NOT NULL DEFAULT 0,
@@ -140,6 +143,9 @@ if (!hasColumn('effort')) db.exec('ALTER TABLE threads ADD COLUMN effort TEXT')
 if (!hasColumn('told')) db.exec('ALTER TABLE threads ADD COLUMN told INTEGER NOT NULL DEFAULT 0')
 if (!hasColumn('read_to')) db.exec('ALTER TABLE threads ADD COLUMN read_to INTEGER NOT NULL DEFAULT 0')
 if (!hasColumn('flag')) db.exec('ALTER TABLE threads ADD COLUMN flag TEXT')
+// How often something that was already in a thread was rewritten (Thread.rewrites): an app that holds
+// a copy of the thread from before fetches it afresh. Older versions leave it as it is.
+if (!hasColumn('rewrites')) db.exec('ALTER TABLE threads ADD COLUMN rewrites INTEGER NOT NULL DEFAULT 0')
 
 // Nothing survives a restart mid-run, so no thread can still be running. That is a change like any
 // other, or an app's copy would show those threads at work for good.
@@ -154,6 +160,11 @@ if (found < FORMAT) db.exec(`PRAGMA user_version = ${FORMAT}`)
 
 /** What a conversation is called until its first message names it. */
 export const UNTITLED = 'New chat'
+/** What a conversation is called after the first thing said in it: that, in one line, cut to fit a list. */
+export function titleFrom(text: string): string {
+  const title = text.replace(/\s+/g, ' ').trim()
+  return title.length > 60 ? title.slice(0, 57) + '…' : title
+}
 
 const newId = (prefix: string) => `${prefix}_${crypto.randomBytes(6).toString('base64url')}`
 
@@ -175,6 +186,7 @@ function toThread(r: any): Thread {
     told: r.told ?? 0,
     readTo: r.read_to ?? 0,
     flag: r.flag ? JSON.parse(r.flag) : null,
+    rewrites: r.rewrites ?? 0,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
@@ -491,6 +503,75 @@ export function addItem(threadId: string, data: ItemData): Item {
   const item: Item = { id: Number(r.lastInsertRowid), threadId, data, createdAt }
   emit({ type: 'item.add', item })
   return item
+}
+
+/** What says what an item is, or ties it to another: never rewritten, whatever is taken out of the rest. */
+const FIXED = new Set(['type', 'role', 'source', 'call_id', 'name', 'key', 'answers', 'level', 'status', 'via'])
+
+/**
+ * Every text in something kept as JSON, put through `take`; what it is made of (its keys, its
+ * numbers) stays. With `keep`, so does what says what kind of thing something is: an item, or a
+ * part of one, such as who said a line on a call.
+ */
+function rewritten(value: unknown, take: (text: string) => string, keep: boolean, key = ''): unknown {
+  if (typeof value === 'string') return keep && FIXED.has(key) ? value : take(value)
+  if (Array.isArray(value)) return value.map((one) => rewritten(one, take, keep))
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, rewritten(v, take, keep, k)]))
+  return value
+}
+
+/**
+ * An item with every text in it put through `take`, but for what says what it is. In the
+ * arguments of a call, which are JSON kept as text, a text is a text whatever it is called: the
+ * "key" in the body of a request a bot made is where a key would be.
+ */
+function rewrittenItem(data: ItemData, take: (text: string) => string): ItemData {
+  const fields = Object.entries(data).map(([key, value]) => {
+    if (key !== 'arguments' || typeof value !== 'string') return [key, rewritten(value, take, true, key)]
+    try {
+      return [key, JSON.stringify(rewritten(JSON.parse(value), take, false))]
+    } catch {
+      return [key, take(value)]
+    }
+  })
+  return Object.fromEntries(fields) as ItemData
+}
+
+/**
+ * Takes something out of what is kept of a thread, wherever it is written: `take` gives a text
+ * without it, and `heads` are texts that stand wherever it does, to find the items by. For a
+ * secret that was written out in a conversation before it was put in the vault. Only what an item
+ * says is rewritten, never what it is. The apps are told of each item that changed, and the
+ * thread counts the rewrite, so that an app which was away knows that what it holds of it is from
+ * before. Gives how many items changed.
+ */
+export function rewriteItems(threadId: string, heads: string[], take: (text: string) => string): number {
+  if (!heads.length) return 0
+  const rows = db
+    .prepare(`SELECT * FROM items WHERE thread_id = ? AND (${heads.map(() => 'instr(data, ?) > 0').join(' OR ')})`)
+    .all(threadId, ...heads) as any[]
+  let count = 0
+  const thread = getThread(threadId)
+  let title = thread?.title
+  for (const row of rows) {
+    const before = toItem(row)
+    const data = rewrittenItem(before.data, take)
+    const text = JSON.stringify(data)
+    if (text === row.data) continue
+    db.prepare('UPDATE items SET data = ? WHERE id = ?').run(text, row.id)
+    emit({ type: 'item.change', item: { ...before, data } })
+    count++
+    // A conversation called after what was said first is called after what stands there now.
+    if (before.data.type === 'message' && data.type === 'message' && title === titleFrom(before.data.text)) title = titleFrom(data.text) || UNTITLED
+  }
+  if (!count) return 0
+  if (thread) {
+    db.prepare('UPDATE threads SET rewrites = rewrites + 1 WHERE id = ?').run(threadId)
+    write({ ...getThread(threadId)!, title: title ?? thread.title })
+  }
+  // What was written before still lies in the log the database keeps beside itself, until that is folded in and emptied.
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+  return count
 }
 
 /** Where a message between bots is, by its key: the sender's record of it ('sent') and the message as the other bot got it. */
