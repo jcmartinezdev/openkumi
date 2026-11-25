@@ -33,6 +33,7 @@
     "./usage": "./src/usage.ts",
     "./bots": "./src/bots.ts",
     "./attention": "./src/attention.ts",
+    "./questions": "./src/questions.ts",
     "./car": "./src/car.ts"
   },
   "scripts": {

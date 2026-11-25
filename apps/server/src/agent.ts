@@ -7,7 +7,7 @@
 // reporting back) waits in the thread's queue and is let in one message at a time: the bot answers each in a
 // turn of its own. The owner can have a waiting message read at once, by the bot as it works.
 import crypto from 'node:crypto'
-import type { Attachment, Bot, Flag, Item, ItemData, Partial, Queued, RunsOn, Said, Thread } from '@openkumi/shared'
+import type { Attachment, Bot, Flag, Item, ItemData, Partial, Queued, Question, RunsOn, Said, Thread } from '@openkumi/shared'
 import { attach, discard, handOver, outgoing, stageCopy, toShow, unstage, withFiles } from './attachments.ts'
 import { getBot, listBots } from './bots.ts'
 import { browserFor, retireWindow } from './browser.ts'
@@ -15,6 +15,7 @@ import { emit, sharedComputer, workspaceDir } from './config.ts'
 import * as db from './db.ts'
 import { heard, isOverflow, prepare, shorten, tokens, transcript } from './history.ts'
 import { masterPrompt } from './prompt.ts'
+import { QUESTION_LIMITS, readQuestions } from './questions.ts'
 import { getProvider, learnModels, modelName } from './providers/index.ts'
 import type { ModelEvent, Steering } from './providers/types.ts'
 import { settings } from './settings.ts'
@@ -53,8 +54,8 @@ interface Run {
   steps: number
   /** The tokens the run used so far, by model as the engine names it ('' for the model the bot was set to). */
   used: Map<string, { input: number; cached: number; output: number }>
-  /** What the bot raised to reach its owner (notify_user): put on its conversation once the run is over, when its reply is there to read. */
-  flag?: Pick<Flag, 'kind' | 'reason'>
+  /** What the bot raised to reach its owner (notify_user, ask_user): put on its conversation once the run is over, when its reply is there to read. */
+  flag?: Pick<Flag, 'kind' | 'reason' | 'questions'>
 }
 
 const running = new Map<string, Run>()
@@ -498,7 +499,8 @@ async function loop(threadId: string, state: Run) {
 // The owner is often elsewhere when a bot finishes: an automation's result, another bot's message or
 // a subagent's report set it to work. A conversation therefore knows the last thing its bot said in
 // it (`told`) and how far the owner has read (`readTo`), on any device, and the apps mark a bot that
-// has something new. A bot that needs more than that raises it with notify_user (`flag`).
+// has something new. A bot that needs more than that raises it with notify_user, or asks what it
+// needs to know with ask_user (`flag`).
 
 /**
  * What a run that is over leaves on a bot's conversation for its owner: what the bot last said,
@@ -516,15 +518,42 @@ function forOwner(threadId: string, state: Run, broken: boolean): globalThis.Par
 /**
  * A bot raises something for its owner, from its own conversation: that it cannot go on without
  * them ('answer'), or that what it is about to say should not wait until they next look ('read').
- * It is put on the conversation when the run is over. The latest one stands.
+ * It is put on the conversation when the run is over. The latest one stands, except that what the
+ * bot asked with ask_user in the same turn is not replaced: its questions are what the owner answers.
  */
-export function raise(thread: Thread, kind: unknown, reason: unknown) {
+export function raise(thread: Thread, kind: unknown, reason: unknown): { asked: boolean } {
   if (thread.kind !== 'chat') throw new Error('Only your own conversation with the user can be raised for them. Say what they should know in your final message.')
   if (kind !== 'answer' && kind !== 'read') throw new Error('kind must be "answer" or "read".')
   const text = String(reason ?? '').replace(/\s+/g, ' ').trim()
   if (!text) throw new Error('Give the reason, in a few words: it is shown beside your name.')
   const state = running.get(thread.id)
-  if (state) state.flag = { kind, reason: text.length > 80 ? text.slice(0, 79) + '…' : text }
+  // What it asked in this turn stands: the owner is told that it needs them, with its question.
+  if (state?.flag?.questions) return { asked: true }
+  if (state) state.flag = { kind, reason: inALine(text) }
+  return { asked: false }
+}
+
+/** As much of a text as is shown beside a bot's name. */
+const inALine = (text: string) => (text.length > 80 ? text.slice(0, 79) + '…' : text)
+
+/**
+ * A bot asks its owner something they answer by choosing (ask_user), from its own conversation.
+ * Like anything it raises, the questions are put on the conversation when the run is over: the
+ * apps then show them over the composer, and the bot wears "Needs you" with the first of them.
+ * What the owner answers reaches the bot as a message from them, in a turn of its own, so nothing
+ * waits on a tool that only so long can wait. Asked again in the same turn, the questions add up.
+ */
+export function askOwner(thread: Thread, given: unknown): Question[] {
+  if (thread.kind !== 'chat') throw new Error('Only in your own conversation with the user can they be asked. Say what you need to know in your final message.')
+  const asked = readQuestions(given)
+  const state = running.get(thread.id)
+  const before = state?.flag?.questions ?? []
+  if (before.length + asked.length > QUESTION_LIMITS.questions) {
+    throw new Error(`At most ${QUESTION_LIMITS.questions} questions can wait for the user at once, and ${before.length} of yours already do from this turn. Those stand: ask the rest once they are answered.`)
+  }
+  const questions = [...before, ...asked]
+  if (state) state.flag = { kind: 'answer', reason: inALine(questions[0].question), questions }
+  return questions
 }
 
 /**

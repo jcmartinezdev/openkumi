@@ -137,7 +137,8 @@ const notifyTool: Tool = {
     'Reach the user about what you say in this turn. They are often not looking when you write: your reply then waits in ' +
     'the conversation, marked as new, until they next look. Call this only when that is not enough, before you ' +
     'write your reply. kind "answer": you cannot go on without their answer, decision or go-ahead, and your reply ' +
-    'asks for it; it stays beside your name until they write to you. kind "read": there is nothing to answer, but ' +
+    'asks for it; it stays beside your name until they write to you (when what you need is a choice among a few ' +
+    'answers, ask with ask_user instead, which tells them by itself). kind "read": there is nothing to answer, but ' +
     'waiting until they next look would cost them something (a meeting moved to this afternoon, a payment that ' +
     'failed, a deadline today). Either way they get a notification with your reason. Never for a routine result, ' +
     'a summary or anything that can wait: a notification sent too often is one they stop reading.',
@@ -149,10 +150,70 @@ const notifyTool: Tool = {
     ['kind', 'reason'],
   ),
   run: (a, ctx) => {
-    agent.raise(ctx.thread, a.kind, a.reason)
+    if (agent.raise(ctx.thread, a.kind, a.reason).asked) return 'Noted. You asked the user with ask_user in this turn, which already tells them that you need them, with your question.'
     return a.kind === 'answer'
       ? 'Noted. When this turn is over the user is told that you need them, with that reason. Now write your reply, which asks them for it.'
       : 'Noted. When this turn is over the user is told to read what you wrote, with that reason. Now write your reply.'
+  },
+}
+
+/**
+ * Asking the owner something they answer by choosing: offered in a bot's own conversation. The
+ * questions are put on the conversation when the turn is over (agent.askOwner), where the apps show
+ * them as a card with the options, and the answers come back as the owner's next message.
+ */
+const askTool: Tool = {
+  name: 'ask_user',
+  description:
+    'Ask the user one to four questions that each have a few likely answers, when you cannot go on, or would have to ' +
+    'guess, without their choice: which of several ways to do it, a go-ahead before something that cannot be undone, ' +
+    'a detail only they know. They see each question as a card with your options to pick from, can always write an ' +
+    'answer of their own, and are told that you need them. Ask everything you need in one call. Asking ends your ' +
+    'work for now: after it, end your turn with at most a line saying what you wait for, without repeating the ' +
+    'questions, and their answers arrive as their next message. Not for what you can look up or sensibly decide ' +
+    'yourself, and not for something to talk over, which you ask in your reply.',
+  parameters: params(
+    {
+      questions: {
+        type: 'array',
+        description: 'One to four questions, most important first',
+        items: {
+          type: 'object',
+          properties: {
+            question: str('The question, complete in itself, e.g. "Which flight should I book?"'),
+            header: str('What it is about, in a word or two, shown over the question, e.g. "Flight"'),
+            options: {
+              type: 'array',
+              description:
+                'Up to six answers to choose from, each different from the others, the one you would recommend first. ' +
+                'Leave out "Other": the user can always write their own. Give none for a question that is only answered in writing, such as a name or a date.',
+              items: {
+                type: 'object',
+                properties: {
+                  label: str('The answer in a few words, e.g. "Lufthansa, 9:40"'),
+                  description: str('What choosing it means, when the label does not say it all, e.g. "Direct, 212 €, lands 11:05"'),
+                },
+                required: ['label'],
+                additionalProperties: false,
+              },
+            },
+            multiple: { type: 'boolean', description: 'Set it when more than one of the options may be chosen' },
+          },
+          required: ['question'],
+          additionalProperties: false,
+        },
+      },
+    },
+    ['questions'],
+  ),
+  run: (a, ctx) => {
+    const all = agent.askOwner(ctx.thread, a.questions)
+    const several = all.length > 1
+    return (
+      `Asked. When this turn is over the user sees your ${several ? `${all.length} questions` : 'question'} as a card with the options, and is told that you need them. ` +
+      `End your turn now, with at most a line saying what you wait for: do not repeat the question${several ? 's' : ''} or the options. ` +
+      'What they answer arrives as their next message.'
+    )
   },
 }
 
@@ -878,7 +939,7 @@ export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problem
     ...(agent.canMessage(thread) ? [messageBotTool] : []),
   ]
   // Only its own conversation is the owner's to read: a subagent and a run of an automation report to it.
-  const reaching = thread.kind === 'chat' ? [notifyTool] : []
+  const reaching = thread.kind === 'chat' ? [notifyTool, askTool] : []
   const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, pageTool, ...reaching]
   return { tools: [...own, ...services.tools], problems: services.problems }
 }

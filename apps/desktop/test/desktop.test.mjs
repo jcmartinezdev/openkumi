@@ -1348,6 +1348,66 @@ test('what a bot has for its owner: a mark beside each bot, gone once its conver
   await until(async () => { const t = (await local('GET', '/api/state')).threads.find((t) => t.botId === asker.id); return t.status === 'idle' && t.readTo === t.told }, 10_000)
   assert.equal(await row('Asker').locator('.dot.new, .pill').count(), 0)
 
+  // What a bot asks with ask_user is answered over the composer, in place of the line that only says it waits:
+  // one question in front at a time, its options to press, and room for an answer of one's own.
+  const asked = {
+    questions: [
+      { question: 'Which flight should I book?', header: 'Flight', options: [{ label: 'Lufthansa, 9:40', description: 'Direct, 212 €, lands 11:05' }, { label: 'Iberia, 11:15', description: 'One stop in Madrid, 168 €' }] },
+      { question: 'Which extras do you want with it?', header: 'Extras', options: ['Checked bag', 'Seat by the window', 'Meal'], multiple: true },
+      { question: 'Who travels with you?' },
+    ],
+  }
+  await send(`!tool ask_user ${JSON.stringify(asked)}`)
+  const card = win.locator('.questions')
+  await card.waitFor({ timeout: 30_000 })
+  assert.equal(await strip.count(), 0)
+  await row('Asker').locator('.pill.mark.warn', { hasText: 'Needs you' }).waitFor()
+  assert.equal(await row('Asker').getAttribute('title'), 'Needs you: Which flight should I book?')
+  // Where it asked, the conversation keeps the questions, to read back later.
+  assert.match(await win.locator('.msg.asked').innerText(), /^Asked you\s+Which flight should I book\?\s+Which extras do you want with it\?\s+Who travels with you\?$/i)
+  assert.match(await card.locator('.questions-head').innerText(), /^Asker needs you · Flight\s+1 of 3$/i)
+  const sendAnswers = card.getByRole('button', { name: 'Send answers' })
+  await shot('questions-one-of-several')
+  // One answer chosen goes on to the next question by itself; several are ticked, and another can be written.
+  await card.getByRole('radio', { name: /Iberia/ }).click()
+  await card.locator('.question-text', { hasText: 'Which extras' }).waitFor()
+  await card.getByRole('checkbox', { name: 'Checked bag' }).click()
+  await card.getByRole('checkbox', { name: 'Meal' }).click()
+  await card.locator('.question-own').fill('A vegetarian one')
+  await shot('questions-any-that-fit')
+  await card.getByRole('button', { name: 'Next' }).click()
+  // One with nothing to choose from is written, or left out: what was answered before is kept, and enough to send.
+  await card.locator('.question-text', { hasText: 'Who travels with you?' }).waitFor()
+  assert.equal(await card.locator('.question-option').count(), 0)
+  await card.getByRole('button', { name: 'Back' }).click()
+  assert.equal(await card.getByRole('checkbox', { name: 'Meal' }).getAttribute('aria-checked'), 'true')
+  assert.equal(await card.locator('.question-own').inputValue(), 'A vegetarian one')
+  await card.getByRole('button', { name: 'Next' }).click()
+  await sendAnswers.click()
+  // The answers are a message from the owner: the card and the mark go, and the bot goes on with them.
+  await card.waitFor({ state: 'detached' })
+  const answers = 'Which flight should I book?\n→ Iberia, 11:15\n\nWhich extras do you want with it?\n→ Checked bag\n→ Meal\n→ A vegetarian one\n\nWho travels with you?\n→ (no answer)'
+  await win.locator('.msg.assistant', { hasText: 'Echo: Which flight should I book?' }).waitFor({ timeout: 30_000 })
+  assert.equal(await win.locator('.msg.user').last().innerText(), answers)
+  await row('Asker').locator('.pill').waitFor({ state: 'detached', timeout: 10_000 })
+  await shot('questions-answered')
+  // One question alone is sent from where it stands, and cleared like the line was.
+  await send(`!tool ask_user ${JSON.stringify({ questions: [{ question: 'Book it now?', options: ['Yes, book it', 'Not yet'] }] })}`)
+  await card.locator('.question-text', { hasText: 'Book it now?' }).waitFor({ timeout: 30_000 })
+  const sendAnswer = card.getByRole('button', { name: 'Send answer', exact: true })
+  assert.equal(await sendAnswer.isDisabled(), true, 'nothing to send until something is answered')
+  await shot('questions-one')
+  await card.getByRole('button', { name: 'Clear this without answering' }).click()
+  await card.waitFor({ state: 'detached' })
+  await row('Asker').locator('.pill').waitFor({ state: 'detached' })
+  await send(`!tool ask_user ${JSON.stringify({ questions: [{ question: 'Book it now?', options: ['Yes, book it', 'Not yet'] }] })}`)
+  await card.locator('.question-text', { hasText: 'Book it now?' }).waitFor({ timeout: 30_000 })
+  await card.getByRole('radio', { name: 'Yes, book it' }).click()
+  await sendAnswer.click()
+  await win.locator('.msg.assistant', { hasText: 'Echo: Book it now?' }).waitFor({ timeout: 30_000 })
+  assert.equal(await win.locator('.msg.user').last().innerText(), 'Book it now?\n→ Yes, book it')
+  await until(async () => { const t = (await local('GET', '/api/state')).threads.find((t) => t.botId === asker.id); return t.status === 'idle' && t.readTo === t.told }, 10_000)
+
   // Opening the last of them leaves nothing on the icon.
   await row('Quiet').click()
   await row('Quiet').locator('.dot.new').waitFor({ state: 'detached', timeout: 10_000 })

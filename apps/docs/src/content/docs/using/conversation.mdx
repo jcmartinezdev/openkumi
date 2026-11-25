@@ -76,7 +76,7 @@ computer and in the list on the phone. The first of these that holds is the one 
 
 | Mark | What it means | When it goes |
 | --- | --- | --- |
-| **Needs you** | The bot waits for you: for a step in its browser, with messages held back after it was stopped, or because it said it cannot go on without your answer. | When you do the step, let the messages go, or write to it. |
+| **Needs you** | The bot waits for you: for a step in its browser, with messages held back after it was stopped, or because it asked you something or said it cannot go on without your answer. | When you do the step, let the messages go, answer, or write to it. |
 | **Read this** | The bot told you something that should not wait until you next look, such as a meeting moved to this afternoon. | When you open its conversation. |
 | A spinner | It is at work. | When it is done. |
 | A red dot | Its last run failed. | When it next runs. |
@@ -90,6 +90,26 @@ you, in a window or an app that is in front.
 on the phone, and on the computer when the pointer rests on its row. When a bot asked for your
 answer, the reason also stands over the message box in its conversation, with **Clear** to take
 the mark away without answering. Reading alone does not: the bot is still waiting.
+
+### When it asks you to choose
+
+When what a bot needs is a choice (which of two flights, whether to go ahead, a detail only you
+know), it asks with a card over the message box instead of a paragraph to read. Each question
+comes with the answers the bot thinks likely, the one it would recommend first:
+
+- Press an answer to choose it. Where several may fit, the card says so and each is ticked by
+  itself.
+- **Something else…** takes an answer in your own words, in place of the options or, where several
+  may fit, beside them.
+- With more than one question the card shows one at a time: choosing an answer goes on to the
+  next, **Back** returns, and **Skip** leaves one out.
+- **Send answer** sends what you chose to the bot as a message from you, which you can read back
+  in the conversation, and the bot goes on from there.
+
+The card is the same on the computer and the phone, and answering on one closes it on the other.
+You can also ignore the options and write to the bot as usual, or close the card with **×**: that
+takes **Needs you** away without answering. The questions stay in the conversation, where the bot
+asked them.
 
 It is the bot that decides to raise either of the two, and it is told to keep them for what cannot
 wait: a daily summary is a blue dot, not a notification. When a bot raises too much or too little,

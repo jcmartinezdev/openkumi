@@ -76,7 +76,8 @@ that stays logged in.
 - **Know when a bot has something for you.** Results arrive while you are elsewhere, so each bot
   wears a mark in the list: a dot when it said something you have not read, **Needs you** when it
   waits for you, **Read this** when it has something that should not wait. The app's icon counts
-  them, and the last two reach you as notifications. See [When a bot has something for
+  them, and the last two reach you as notifications. A bot that needs you to choose asks with a
+  card of answers to press, on the computer and the phone. See [When a bot has something for
   you](/using/conversation/#when-a-bot-has-something-for-you).
 - **See what it all uses.** Usage, on the computer and the phone, shows how many tokens your bots'
   models used by provider, model and bot, what that would have cost as API calls, and how much of
