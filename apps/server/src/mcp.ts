@@ -422,8 +422,9 @@ async function gone(botId: string, id: string, e: unknown, from: Live) {
   // Unless a newer connection has already taken its place, also while this waited.
   const entry = live.get(key(botId, id))
   if ((await entry?.catch(() => undefined)) !== from || live.get(key(botId, id)) !== entry) return
-  await drop(botId, id)
+  // Said first: a connection made while the old one closes reports for itself.
   setStatus(botId, id, { state: 'error', tools: 0, error: unreachable(needService(id), e) })
+  await drop(botId, id)
 }
 
 /** A bot's account with a service stopped working: the app shows it has to sign in again. */
