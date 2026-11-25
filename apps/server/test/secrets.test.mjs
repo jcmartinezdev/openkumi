@@ -250,6 +250,14 @@ test('web_fetch puts a secret in by name as the request leaves, and takes it out
   assert.match(await tool('web_fetch', { url: `http://${site}/echo` }), /"method":"GET"/)
   assert.match(await tool('web_fetch', { url: `http://${site}/echo`, method: 'DELETE', headers: { 'X-Why': 'test' } }), /"method":"DELETE"/)
   assert.match(await tool('web_fetch', { url: `http://${site}/echo`, body: 'x' }), /^Error: A GET sends no body/)
+  // A header the bot gave is sent as it gave it, also one that says what a body would be on a request that has none.
+  seen.length = 0
+  await tool('web_fetch', { url: `http://${site}/echo`, headers: { 'Content-Type': 'application/json' } })
+  assert.equal(seen[0].type, 'application/json')
+  // It goes with the body when a site answers a POST by sending it on to be read elsewhere.
+  seen.length = 0
+  await tool('web_fetch', { url: `http://${site}/away`, method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":1}' })
+  assert.deepEqual(seen.map((s) => [s.path, s.method, s.type, s.body]), [['/away', 'POST', 'application/json', '{"a":1}'], ['/echo', 'GET', null, '']])
   assert.match(await tool('web_fetch', { url: `http://${site}/echo`, headers: { Host: 'evil.example' } }), /^Error: The header "Host" cannot be set/)
 })
 

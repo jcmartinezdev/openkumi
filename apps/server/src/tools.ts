@@ -950,6 +950,8 @@ const webTools: Tool[] = [
       let address = String(a.url)
       /** The request left the site it was made to: what says who is asking stays behind. */
       let away = false
+      /** A redirect turned the request into one that only reads: what said what its body was goes with the body. */
+      let bodiless = false
       let res: Response
       /** The secrets the request has carried so far. An answer may repeat one in the address it sends the request on to, where no name stands for it any more. */
       const used = new Set<string>()
@@ -971,7 +973,7 @@ const webTools: Tool[] = [
         const headers = new Headers({ 'User-Agent': 'Mozilla/5.0 (compatible; OpenKumi/0.1)', Accept: 'text/html,application/json,text/plain,*/*' })
         for (const [name, value] of given) {
           const lower = name.toLowerCase()
-          if ((away && PERSONAL.has(lower)) || (body === undefined && lower === 'content-type')) continue
+          if ((away && PERSONAL.has(lower)) || (bodiless && lower === 'content-type')) continue
           const filled = await put(value)
           // Said here, without the value: what fetch says of a header it cannot send repeats the header.
           if (/[^\t\x20-\x7e\x80-\xff]/.test(filled)) throw new Error(`The header "${name}" cannot be sent: its value has a line break or a character a header cannot hold.`)
@@ -993,6 +995,7 @@ const webTools: Tool[] = [
         // As a browser does: after "see other", and after a POST that was moved, the next request only reads.
         if (res.status === 303 || ((res.status === 301 || res.status === 302) && method === 'POST')) {
           method = 'GET'
+          bodiless = body !== undefined
           body = undefined
         }
         address = to.href

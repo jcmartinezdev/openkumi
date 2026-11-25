@@ -416,15 +416,20 @@ const secretNamed = (given: string) => {
 }
 route('GET', '/api/bots/:id/secrets', ([id]) => secrets.list(needBot(id).id))
 // Adds one. A name that is taken is said to be: what is kept under it is never written over by adding.
-route('POST', '/api/bots/:id/secrets', ([id], body) =>
-  checked(() => secrets.save(needBot(id).id, { name: secrets.nameOf(body.name), sites: secrets.sitesOf(body.sites), value: body.value, what: body.what, by: 'owner' })),
-)
+route('POST', '/api/bots/:id/secrets', ([id], body) => {
+  const botId = needBot(id).id
+  return checked(() => secrets.save(botId, { name: secrets.nameOf(body.name), sites: secrets.sitesOf(body.sites), value: body.value, what: body.what, by: 'owner' }))
+})
 // Changes what one is, where it may go, or its value.
-route('PUT', '/api/bots/:id/secrets/:name', ([id, given], body) => checked(() => secrets.change(needBot(id).id, secretNamed(given), body)))
+route('PUT', '/api/bots/:id/secrets/:name', ([id, given], body) => {
+  const botId = needBot(id).id
+  return checked(() => secrets.change(botId, secretNamed(given), body))
+})
 route('DELETE', '/api/bots/:id/secrets/:name', ([id, name]) => secrets.remove(needBot(id).id, secretNamed(name)))
 route('GET', '/api/bots/:id/secrets/:name/value', ([id, name], _, call) => {
   if (whoIs(call.req, call.url) !== 'owner') fail(403, 'A secret is only shown on the computer running OpenKumi.')
-  return checked(() => ({ value: secrets.reveal(needBot(id).id, secretNamed(name)) }))
+  const botId = needBot(id).id
+  return checked(() => ({ value: secrets.reveal(botId, secretNamed(name)) }))
 })
 // The owner's answer to a bot that asked for one (ask_secret): the value typed into its card, or no.
 route('POST', '/api/secret-requests/:call', ([call], body) => checked(() => secrets.answer(call, body)))

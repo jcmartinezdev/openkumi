@@ -84,7 +84,8 @@ function SecretRow({ bot, secret }: { bot: Bot; secret: Secret }) {
           <CopyButton text={shown} label="Copy" />
         </div>
       )}
-      {changing && <SecretForm bot={bot} secret={secret} done={() => setChanging(false)} />}
+      {/* What was shown may be the value from before the change. */}
+      {changing && <SecretForm bot={bot} secret={secret} done={() => (setChanging(false), setShown(null))} />}
     </Row>
   )
 }

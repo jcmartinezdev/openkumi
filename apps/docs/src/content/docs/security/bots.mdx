@@ -51,7 +51,8 @@ such as its address on your network, only the key keeps a bot out.
 A bot works with API keys and passwords without ever holding them. They are in its
 [vault](/secrets/), encrypted, in its private folder; the bot knows each by name, and the server
 puts the value in as a request leaves or types it into a page. A secret goes only to the site it is
-for, over `https`, and stops when that site sends the request on elsewhere. What comes back to the
+for, over `https` (plain `http` only to an address written as numbers, of this computer or the
+local network), and stops when that site sends the request on elsewhere. What comes back to the
 bot has the value taken out again, and the bot runs no script of its own on a site one of its
 secrets is for. Only you replace, remove or show a secret, or change where it
 may go, and a value is shown only on the computer that runs OpenKumi.

@@ -147,9 +147,10 @@ assert.ok(JSON.stringify(now.items[conv]).includes(other), 'held as it was said'
 away()
 await until(() => !now.connected)
 await http('POST', `/api/threads/${conv}/messages`, { text: `!tool save_secret ${JSON.stringify({ name: 'written-while-away', site: 'example.com', what: 'A key', value: other })}` })
-for (;;) {
+for (const end = Date.now() + 20_000; ; ) {
   const { thread, items } = await http('GET', `/api/threads/${conv}`)
   if (thread.status === 'idle' && String(items.at(-1).data.text).startsWith('Tool result: Kept as "written-while-away"')) break
+  if (Date.now() > end) throw new Error(`the key was not kept while away: ${thread.status}, ${JSON.stringify(items.at(-1).data).slice(0, 200)}`)
   await new Promise((r) => setTimeout(r, 50))
 }
 assert.ok(JSON.stringify(now.items[conv]).includes(other), 'still held as it was, while away')

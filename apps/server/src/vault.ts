@@ -259,11 +259,13 @@ export function seal(text: string, about: string): Sealed {
 /** Reads what `seal` wrote. Throws Missing when its key is not on this computer, and Locked when the key cannot be had right now. */
 export function open(sealed: Sealed, about: string): string {
   const key = keyOf(sealed.key)
-  const data = Buffer.from(sealed.data, 'base64')
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(sealed.iv, 'base64'))
-  decipher.setAAD(Buffer.from(about))
-  decipher.setAuthTag(data.subarray(data.length - 16))
   try {
+    const data = Buffer.from(sealed.data, 'base64')
+    // The last 16 bytes say that the rest is as it was written: with fewer, less would be checked.
+    if (data.length < 16) throw new Error('too short')
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(sealed.iv, 'base64'), { authTagLength: 16 })
+    decipher.setAAD(Buffer.from(about))
+    decipher.setAuthTag(data.subarray(data.length - 16))
     return Buffer.concat([decipher.update(data.subarray(0, data.length - 16)), decipher.final()]).toString('utf8')
   } catch {
     throw new Missing('This secret could not be read: what is kept of it was changed or damaged. Enter it again.')

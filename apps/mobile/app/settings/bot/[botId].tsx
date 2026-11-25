@@ -31,7 +31,8 @@ export default function BotSettings() {
   const zone = useStore((s) => s.about.timeZone)
   const statuses = useStatuses(botId)
   const { entries } = useFiles(botId)
-  const secrets = useSecrets(botId).data?.secrets
+  const { data: vault, error: secretsError } = useSecrets(botId)
+  const secrets = vault?.secrets
   const allAutomations = useStore((s) => s.automations)
   const calls = useStore((s) => s.calls)
   const voices = useVoiceChoices(stored?.voice ?? '')
@@ -113,7 +114,7 @@ export default function BotSettings() {
         <Row icon="compass" label="Browse superpowers" tone="action" opens onPress={() => router.push({ pathname: '/superpowers/[botId]', params: { botId: bot.id } })} />
       </Section>
 
-      <Section title="Secrets" inset={ICON_INSET} footer={`Keys and passwords ${bot.name} works with. They are kept encrypted: it uses one by name without seeing it, and each is sent only to the site it is for.`}>
+      <Section title="Secrets" inset={ICON_INSET} footer={secretsError ? `Its secrets could not be fetched: ${secretsError}` : `Keys and passwords ${bot.name} works with. They are kept encrypted: it uses one by name without seeing it, and each is sent only to the site it is for.`}>
         {secrets?.map((secret) => (
           <Row
             key={secret.name}

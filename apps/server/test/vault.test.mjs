@@ -161,4 +161,8 @@ test('what is encrypted opens only as what it was encrypted as', () => {
   changed[0] ^= 1
   assert.equal(pc.run('open', { ...sealed, data: changed.toString('base64') }).error, 'Missing')
   assert.equal(pc.run('open', { ...sealed, key: 'k_someOtherKey0' }).error, 'Missing')
+  // Cut short, so that less than all of it would be checked, or with nothing where the key's other half goes: damaged, like the rest.
+  assert.equal(pc.run('open', { ...sealed, data: Buffer.from(sealed.data, 'base64').subarray(0, 8).toString('base64') }).error, 'Missing')
+  assert.equal(pc.run('open', { ...sealed, data: Buffer.from(sealed.data, 'base64').subarray(4).toString('base64') }).error, 'Missing')
+  assert.equal(pc.run('open', { ...sealed, iv: '' }).error, 'Missing')
 })
