@@ -1033,7 +1033,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     assert.match(await win.locator('.power-about').innerText(), /Lets a bot work in your Notion workspace/)
     assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['What a bot can do with it', 'Your bots', 'What it gives a bot'])
     const gives = win.locator('.set-section', { hasText: 'What it gives a bot' })
-    assert.match(await gives.innerText(), /Skill[\s\S]*1 file[\s\S]*Tools from 127\.0\.0\.1/)
+    assert.match(await gives.innerText(), /Skill[\s\S]*1 file[\s\S]*Tools from Notion on this computer/)
     // What it teaches a bot can be read here, formatted or as written, and not changed.
     await gives.getByRole('button', { name: 'Read the files' }).click()
     assert.deepEqual(await gives.locator('.skill-files .file-row').allInnerTexts(), ['instructions.md'])
