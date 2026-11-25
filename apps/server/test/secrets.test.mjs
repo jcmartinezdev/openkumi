@@ -491,7 +491,8 @@ test('a password is made up, typed into a page of its site, and never seen by th
   await toolIn(id, 'browser_press_key', { key: 'Enter' })
   await until(() => seen.find((s) => s.path === '/posted'))
   assert.equal(new URLSearchParams(seen.find((s) => s.path === '/posted').body).get('password'), password)
-  assert.match(await toolIn(id, 'browser_snapshot', {}), /^Page: Done\n/)
+  // The service has the form before the browser has the page that answers it: looked at too early, the page is still on its way.
+  await until(async () => /^Page: Done\n/.test(await toolIn(id, 'browser_snapshot', {})))
   assert.match(await toolIn(id, 'browser_eval', { expression: 'localStorage.getItem("seen")' }), refused)
 
   // The other way round, with another bot: on a site where a script of the bot's ran in a window before it had a
