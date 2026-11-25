@@ -1009,7 +1009,7 @@ test('superpowers: browse them, open one, activate it for one bot here or in the
     const cards = () => win.locator('.power-card h3').allInnerTexts()
     assert.deepEqual(await win.locator('.set-section h2').allInnerTexts(), ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday'])
     const group = (name) => win.locator('.set-section', { has: win.locator('h2', { hasText: name }) }).locator('.power-card h3').allInnerTexts()
-    assert.deepEqual(await group('Work'), ['Atlassian', 'Attio', 'ClickUp', 'Competitors', 'Fathom', 'folk', 'Granola', 'Jotform', 'Linear', 'Miro', 'Notion', 'Otter.ai', 'PandaDoc', 'PostHog', 'Sentry', 'tl;dv'])
+    assert.deepEqual(await group('Work'), ['Atlassian', 'Attio', 'ClickUp', 'Competitors', 'Fathom', 'folk', 'Granola', 'Jotform', 'Linear', 'Miro', 'Notion', 'Otter.ai', 'PandaDoc', 'PostHog', 'Sentry', 'T3 Code', 'tl;dv'])
     assert.deepEqual(await group('Travel'), ['Exchange rates', 'Holidays', 'Weather'])
     assert.equal((await cards()).filter((name) => name === 'Notion').length, 2, 'in Productivity and in Work')
     const nav = await win.locator('.set-nav').innerText()

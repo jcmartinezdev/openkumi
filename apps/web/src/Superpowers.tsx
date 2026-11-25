@@ -276,7 +276,8 @@ function SkillFiles({ power }: { power: Superpower }) {
  * Activating a superpower for a bot. One that works in an app is active only once the bot has
  * signed in to it, so the popup asks how: in the browser on this computer, where the person's
  * accounts already are, or in the bot's own browser, which works from any device and suits another
- * account. Giving up leaves the superpower as it was. `again` signs a bot in again that was signed out.
+ * account. An app that refuses any other way back is signed in to in the bot's browser alone.
+ * Giving up leaves the superpower as it was. `again` signs a bot in again that was signed out.
  */
 function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; again: boolean; close: () => void }) {
   const [step, setStep] = useState<'ask' | 'browser' | 'bot' | 'done'>('ask')
@@ -284,7 +285,8 @@ function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; a
   const [page, setPage] = useState('')
   const status = useStore((s) => s.superpowerStatus[bot.id]?.[power.id])
   const active = useStore((s) => !!s.bots.find((b) => b.id === bot.id)?.superpowers.includes(power.id))
-  const ownBrowser = !!useDesktop().catchesSignIns
+  const catchesSignIns = !!useDesktop().catchesSignIns
+  const ownBrowser = catchesSignIns && !power.botBrowserOnly
   const path = `/api/bots/${bot.id}/superpowers/${power.id}`
   const waiting = step === 'browser' || step === 'bot'
 
@@ -355,10 +357,14 @@ function Activate({ bot, power, again, close }: { bot: Bot; power: Superpower; a
                 )}
                 <button className={ownBrowser ? '' : 'primary'} onClick={() => begin('bot')}>
                   <strong>Sign in inside {bot.name}’s browser</strong>
-                  <span>{bot.name}’s own browser, on the computer that runs your bots. Good for using a different account for this bot.</span>
+                  <span>{bot.name}’s own browser, on the computer that runs your bots.{power.botBrowserOnly ? '' : ' Good for using a different account for this bot.'}</span>
                 </button>
               </div>
-              {!ownBrowser && <p className="faint">To sign in with your own browser, use the latest OpenKumi app installed on this computer.</p>}
+              {power.botBrowserOnly ? (
+                <p className="faint">{power.name} lets apps sign in only this way.</p>
+              ) : (
+                !catchesSignIns && <p className="faint">To sign in with your own browser, use the latest OpenKumi app installed on this computer.</p>
+              )}
             </>
           )}
           {step === 'browser' && (

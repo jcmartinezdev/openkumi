@@ -1,6 +1,7 @@
 // Where a bot signs in to a superpower's app, asked as a sheet over its page: on this phone, with
-// the accounts Safari has, or inside the bot's own browser, which suits a different account. The
-// superpower is active once the bot is signed in. "again" signs a bot in that was signed out.
+// the accounts Safari has, or inside the bot's own browser, which suits a different account; an app
+// that refuses any other way back offers only the bot's browser. The superpower is active once the
+// bot is signed in. "again" signs a bot in that was signed out.
 import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
@@ -44,7 +45,8 @@ export default function SignInSheet() {
         </Pressable>
       </View>
       <Text style={[styles.text, { color: theme.muted }]}>
-        Choose where {bot.name} signs in to {power.name}.{again ? '' : ` It is active once ${bot.name} is signed in.`}
+        {power.botBrowserOnly ? `${bot.name} signs in to ${power.name} inside its own browser, the only way ${power.name} allows.` : `Choose where ${bot.name} signs in to ${power.name}.`}
+        {again ? '' : ` It is active once ${bot.name} is signed in.`}
       </Text>
       {!!error && (
         <View accessibilityRole="alert" style={[styles.error, { backgroundColor: theme.errTint }]}>
@@ -53,12 +55,16 @@ export default function SignInSheet() {
         </View>
       )}
       <View style={[styles.card, { backgroundColor: theme.groupCard }]}>
-        <Choice icon="phone" label="Sign in on this phone" detail="With an account you use in Safari on this phone." busy={starting === 'app'} disabled={!!starting} onPress={() => void choose('app')} />
-        <View style={[styles.line, { backgroundColor: theme.border }]} />
+        {!power.botBrowserOnly && (
+          <>
+            <Choice icon="phone" label="Sign in on this phone" detail="With an account you use in Safari on this phone." busy={starting === 'app'} disabled={!!starting} onPress={() => void choose('app')} />
+            <View style={[styles.line, { backgroundColor: theme.border }]} />
+          </>
+        )}
         <Choice
           icon="globe"
           label={`Sign in inside ${bot.name}’s browser`}
-          detail={`On the computer that runs ${bot.name}. Good for a different account.`}
+          detail={`On the computer that runs ${bot.name}.${power.botBrowserOnly ? '' : ' Good for a different account.'}`}
           busy={starting === 'bot'}
           disabled={!!starting}
           onPress={() => void choose('bot')}

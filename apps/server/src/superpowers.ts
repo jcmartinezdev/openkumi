@@ -9,6 +9,7 @@
 // A superpower has instructions, a service the bot signs in to and works in (over MCP, see mcp.ts),
 // or both. Each is switched on for one bot at a time, by the owner; a bot cannot switch one on.
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import type { Superpower } from '@openkumi/shared'
 import { announce } from './bots.ts'
@@ -27,6 +28,15 @@ export interface Service {
   scopes?: string[]
   /** Its tools that only read, by the service's own names, where the service does not say so itself. Only these can be watched. */
   reads?: string[]
+  /** The only tools of the service a bot gets, by the service's own names, for a service that offers far more than the superpower is for. All of them when not given. */
+  tools?: string[]
+  /**
+   * The bot signs in only inside its own browser, so the service is told of that way back alone.
+   * For services that refuse the desktop app's address (openkumi://), and with it the sign-in.
+   */
+  botBrowserOnly?: boolean
+  /** What the owner and the bot are told when nothing answers at its address, such as an app on this computer that is not open. */
+  unreachable?: string
 }
 
 /**
@@ -54,7 +64,21 @@ interface Manifest {
   /** What the bot is told the superpower is for, in a line. */
   summary: string
   can: string[]
-  mcp?: ({ url: string; scopes?: string[] } | { command: string; args?: string[] }) & { reads?: string[] }
+  mcp?: (
+    | {
+        url: string
+        scopes?: string[]
+        botBrowserOnly?: boolean
+        /**
+         * For an app on this computer that writes down where it listens: the JSON file it writes
+         * ("~/" for the home folder) and the key that holds its address there. Only an address on
+         * this computer is taken; until there is one, `url` is used as it is.
+         */
+        origin?: { file: string; key: string }
+        unreachable?: string
+      }
+    | { command: string; args?: string[] }
+  ) & { reads?: string[]; tools?: string[] }
   hooks?: HookRecipe
   site?: string
 }
@@ -133,11 +157,44 @@ export function superpowerFile(id: string, rel: string): { path: string; text: s
   return { path: rel, text }
 }
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
+/** An address on this computer, which nothing outside it can answer. */
+const onThisComputer = (url: string) => LOOPBACK_HOSTS.has(new URL(url).hostname)
+
+/** Where an app on this computer says it listens now, with `url`'s path, or `url` itself when it says nothing usable. */
+function currentAddress(url: string, origin: { file: string; key: string } | undefined): string {
+  if (!origin || typeof origin.file !== 'string' || typeof origin.key !== 'string') return url
+  try {
+    const file = origin.file.startsWith('~/') ? path.join(os.homedir(), origin.file.slice(2)) : origin.file
+    const said = JSON.parse(fs.readFileSync(file, 'utf8'))[origin.key]
+    const at = new URL(String(said))
+    if (!/^https?:$/.test(at.protocol) || !LOOPBACK_HOSTS.has(at.hostname)) return url
+    const wanted = new URL(url)
+    const now = new URL(at.origin)
+    now.pathname = wanted.pathname
+    now.search = wanted.search
+    return now.href
+  } catch {
+    return url
+  }
+}
+
 export function serviceOf(id: string): Service | null {
   const m = manifest(id)
   if (!m?.mcp) return null
   const reads = Array.isArray(m.mcp.reads) ? m.mcp.reads.map(String) : undefined
-  return 'url' in m.mcp ? { name: m.name, url: m.mcp.url, scopes: m.mcp.scopes, reads } : { name: m.name, command: m.mcp.command, args: m.mcp.args, reads }
+  const tools = Array.isArray(m.mcp.tools) ? m.mcp.tools.map(String) : undefined
+  if (!('url' in m.mcp)) return { name: m.name, command: m.mcp.command, args: m.mcp.args, reads, tools }
+  const { url, scopes, botBrowserOnly, origin, unreachable } = m.mcp
+  return {
+    name: m.name,
+    url: currentAddress(url, origin),
+    scopes,
+    reads,
+    tools,
+    botBrowserOnly: botBrowserOnly === true,
+    unreachable: typeof unreachable === 'string' ? unreachable : undefined,
+  }
 }
 
 /** How a superpower's app calls OpenKumi, when it can and its superpower says how. */
@@ -196,7 +253,8 @@ export function listSuperpowers(): Superpower[] {
       instructions: hasInstructions(id),
       files: filesOf(id),
       signIn: needsSignIn(id),
-      service: service ? (service.url ? new URL(service.url).host : 'a program on this computer') : null,
+      botBrowserOnly: !!service?.botBrowserOnly,
+      service: service ? (!service.url ? 'a program on this computer' : onThisComputer(service.url) ? `${m.name} on this computer` : new URL(service.url).host) : null,
       site: m.site ?? '',
       onFor: botsWith(id),
       hooks: hooks && { events: hooks.events.map(({ id, name }) => ({ id, name })), setup: hooks.setup.map(String) },

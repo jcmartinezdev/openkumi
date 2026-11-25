@@ -43,10 +43,10 @@ that stays logged in.
   at a time: working in Notion, Linear, Jira and Confluence, ClickUp, Todoist, Evernote, Miro,
   Readwise or Typefully; keeping customers in Attio or folk, documents in PandaDoc and forms in
   Jotform; running sites in Webflow or Wix, email marketing in Klaviyo, product analytics in
-  PostHog and error tracking in Sentry; reading your money in PocketSmith or your meetings in
-  Granola, Otter.ai, Fathom or tl;dv; or know-how such as the weather, exchange rates,
-  public holidays, watching a page, SEO and AI search, social posts, launches, landing pages and
-  competitors. They are grouped by what they are for (Productivity, Work, Creative, Marketing,
+  PostHog and error tracking in Sentry; handing coding work to T3 Code on the same computer;
+  reading your money in PocketSmith or your meetings in Granola, Otter.ai, Fathom or tl;dv; or
+  know-how such as the weather, exchange rates, public holidays, watching a page, SEO and AI
+  search, social posts, launches, landing pages and competitors. They are grouped by what they are for (Productivity, Work, Creative, Marketing,
   Travel, Everyday), and each has a page that says what it does and lets you read the files it
   gives a bot. Those that work in an app sign in with an account of the bot's own. A bot can use
   what you give it but cannot change it or give itself more. See [Superpowers](/superpowers/).

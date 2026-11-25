@@ -889,7 +889,7 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
   const all = await list()
   const shipped = [
     'atlassian', 'attio', 'clickup', 'evernote', 'fathom', 'folk', 'granola', 'jotform', 'klaviyo', 'linear', 'miro', 'notion',
-    'otter', 'pandadoc', 'pocketsmith', 'posthog', 'readwise', 'sentry', 'tldv', 'todoist', 'typefully', 'webflow', 'wix',
+    'otter', 'pandadoc', 'pocketsmith', 'posthog', 'readwise', 'sentry', 't3-code', 'tldv', 'todoist', 'typefully', 'webflow', 'wix',
   ]
   const knowHow = ['competitors', 'exchange-rates', 'holidays', 'landing-pages', 'launch', 'seo', 'social-posts', 'watch-a-page', 'weather']
   assert.deepEqual(Object.keys(all), [...shipped, ...knowHow, 'field-guide'].sort(), 'by name, apps and know-how together')
@@ -899,6 +899,8 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
   const { notion, 'field-guide': guide } = all
   assert.deepEqual([notion.name, notion.instructions, notion.service, notion.site, notion.onFor], ['Notion', true, 'mcp.notion.com', 'https://www.notion.so/', []])
   assert.deepEqual([guide.instructions, guide.service], [true, null])
+  // An app on this computer is named as such, not by its address; T3 Code is signed in to inside the bot's browser alone.
+  assert.deepEqual([all['t3-code'].service, all['t3-code'].botBrowserOnly, notion.botBrowserOnly], ['T3 Code on this computer', true, false])
   for (const id of shipped) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions && all[id].signIn, id)
   for (const id of knowHow) assert.ok(all[id].icon && all[id].tagline && all[id].about && all[id].can.length >= 3 && all[id].instructions && !all[id].signIn && !all[id].service, id)
 
@@ -954,8 +956,20 @@ test('superpowers: a service gives the bot its tools, named after the superpower
     await api('PUT', `/api/bots/${bot.id}/superpowers/echo`, { on: false })
     assert.doesNotMatch(await told('!tools'), /mcp__/)
     assert.equal((await api('GET', '/api/state')).superpowerStatus[bot.id]?.echo, undefined)
+
+    // One that names the tools it is for gives the bot those alone, whatever else the service offers.
+    addPower('echo-few', { name: 'Echo few', mcp: { command: process.execPath, args: [path.resolve('test/fixtures/mcp-stdio.mjs')], tools: ['shout'] } })
+    await api('PUT', `/api/bots/${bot.id}/superpowers/echo-few`, { on: true })
+    const few = await until(async () => {
+      const s = (await api('GET', '/api/state')).superpowerStatus[bot.id]?.['echo-few']
+      return s?.state === 'connecting' ? null : s
+    })
+    assert.deepEqual(few, { state: 'connected', tools: 0, signedIn: false })
+    assert.doesNotMatch(await told('!tools'), /mcp__echo-few__say/)
+    await api('PUT', `/api/bots/${bot.id}/superpowers/echo-few`, { on: false })
   } finally {
     removePower('echo')
+    removePower('echo-few')
   }
 })
 
@@ -1054,6 +1068,79 @@ test('superpowers: a sign-in asks only for what the superpower needs, and one th
   } finally {
     removePower('tundra-mail')
     await tundra.close()
+  }
+})
+
+test('superpowers: an app on this computer that refuses the desktop app’s way back is signed in to inside the bot’s browser, where it says it is, and says when it is not open', async () => {
+  // Where the app writes down the address it listens at; until it has, the superpower's own address is used, where nothing answers.
+  const said = path.join(powers, 'mill-runtime.json')
+  const closed = 'Mill is not open on this computer. Open it, then try again.'
+  const nobody = await new Promise((resolve) => {
+    const probe = http.createServer().listen(0, '127.0.0.1', () => {
+      const { port } = probe.address()
+      probe.close(() => resolve(port))
+    })
+  })
+  const mill = await startOAuthServer({ webReturnsOnly: true })
+  addPower('mill', { name: 'Mill', mcp: { url: `http://127.0.0.1:${nobody}/mcp`, botBrowserOnly: true, origin: { file: said, key: 'origin' }, unreachable: closed } })
+  const state = async () => (await api('GET', '/api/state')).superpowerStatus[bot.id]?.mill
+  const powersOf = async () => (await api('GET', '/api/state')).bots.find((b) => b.id === bot.id).superpowers
+  try {
+    const listed = (await api('GET', '/api/superpowers')).find((p) => p.id === 'mill')
+    assert.deepEqual([listed.signIn, listed.botBrowserOnly, listed.service], [true, true, 'Mill on this computer'])
+
+    // Not open: there is nothing to sign in to yet, and the owner is told why in the app's own words.
+    await assert.rejects(api('POST', `/api/bots/${bot.id}/superpowers/mill/login`, { via: 'bot' }), new RegExp(closed))
+    // An address that is not on this computer is not taken from the file.
+    fs.writeFileSync(said, JSON.stringify({ origin: 'https://example.com' }))
+    await assert.rejects(api('POST', `/api/bots/${bot.id}/superpowers/mill/login`, { via: 'bot' }), new RegExp(closed))
+
+    // Open, and saying where. The owner's own browser is not offered, and is refused if asked for.
+    fs.writeFileSync(said, JSON.stringify({ origin: new URL(mill.url).origin }))
+    await assert.rejects(api('POST', `/api/bots/${bot.id}/superpowers/mill/login`, { via: 'app' }), /Mill can be signed in to only inside the bot’s browser/)
+    assert.equal(mill.seen.registered, 0)
+    await api('POST', `/api/bots/${bot.id}/superpowers/mill/login`, { via: 'bot' })
+    await until(async () => (await state())?.state === 'connected', 20_000)
+    assert.deepEqual(mill.seen.redirectUris, [`http://localhost:${PORT}/api/superpowers/callback`], 'only the way back the app accepts')
+    assert.deepEqual(await powersOf(), ['mill'])
+    assert.equal(await tool('mcp__mill__whoami', {}), 'signed in with token-1')
+
+    // The app quits: the bot and the owner are told it is not open, and it is used again once it is back.
+    const port = new URL(mill.url).port
+    await mill.close()
+    assert.equal(await tool('mcp__mill__whoami', {}), `Error: ${closed}`)
+    assert.deepEqual(await state(), { state: 'error', tools: 0, error: closed })
+    assert.match(await told(), new RegExp(`\\n- Mill: Mill for tests\\. Its tools' names start with mcp__mill__\\. Not available right now: not reachable right now \\(${closed.replace(/\./g, '\\.')}\\)\\.$`))
+    const back = await startOAuthServer({ webReturnsOnly: true, port: Number(port) })
+    try {
+      await api('POST', `/api/bots/${bot.id}/superpowers/check`)
+      await until(async () => (await state())?.state === 'connected', 10_000)
+      assert.equal(await tool('mcp__mill__whoami', {}), 'signed in with token-1', 'the same sign-in, on a new connection')
+    } finally {
+      await back.close()
+    }
+
+    // It opens again at another address: what the bot saved for the old one is no use there, and signing in again starts afresh.
+    const moved = await startOAuthServer({ webReturnsOnly: true })
+    try {
+      fs.writeFileSync(said, JSON.stringify({ origin: new URL(moved.url).origin }))
+      // The connection it had goes nowhere now; the next one, at the new address, needs the owner to sign the bot in again.
+      assert.equal(await tool('mcp__mill__whoami', {}), `Error: ${closed}`)
+      await api('POST', `/api/bots/${bot.id}/superpowers/check`)
+      await until(async () => (await state())?.state === 'needs-login', 10_000)
+      assert.equal(moved.seen.registered, 0)
+      await api('POST', `/api/bots/${bot.id}/superpowers/mill/login`, { via: 'bot' })
+      await until(async () => moved.seen.tokens === 1 && (await state())?.state === 'connected', 20_000)
+      assert.equal(moved.seen.registered, 1, 'registered anew at the new address')
+      assert.equal(await tool('mcp__mill__whoami', {}), 'signed in with token-1')
+    } finally {
+      await moved.close()
+    }
+  } finally {
+    await api('PUT', `/api/bots/${bot.id}/superpowers/mill`, { on: false }).catch(() => {})
+    removePower('mill')
+    fs.rmSync(said, { force: true })
+    await mill.close().catch(() => {})
   }
 })
 

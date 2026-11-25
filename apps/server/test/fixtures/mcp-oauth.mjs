@@ -1,11 +1,14 @@
 // A minimal MCP server over HTTP that requires an OAuth sign-in, with its own tiny authorization
 // server, for the tests. The "sign-in page" approves at once and redirects back with a code.
 // With `openList`, anyone can connect and list the tools, but using one needs an account.
-// `seen.refuse` makes every account stop working.
+// With `webReturnsOnly`, it refuses to register a client with any way back that is not https or
+// http on this computer, as T3 Code does. `seen.refuse` makes every account stop working.
 import http from 'node:http'
 
-export async function startOAuthServer({ openList = false } = {}) {
-  const seen = { registered: 0, tokens: 0, authorize: null, refuse: false }
+const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+export async function startOAuthServer({ openList = false, webReturnsOnly = false, port = 0 } = {}) {
+  const seen = { registered: 0, tokens: 0, authorize: null, refuse: false, redirectUris: null }
   /** The codes given out, with the address each was sent back to: a code is exchanged only with that same address. */
   const codes = new Map()
   const server = http.createServer(async (req, res) => {
@@ -38,8 +41,17 @@ export async function startOAuthServer({ openList = false } = {}) {
       })
     }
     if (url.pathname === '/register') {
+      const asked = JSON.parse(raw)
+      const web = (uri) => {
+        const at = new URL(uri)
+        return at.protocol === 'https:' || (at.protocol === 'http:' && LOOPBACK.has(at.hostname))
+      }
+      if (webReturnsOnly && !asked.redirect_uris.every(web)) {
+        return json(400, { error: 'invalid_redirect_uri', error_description: 'Redirect URIs must be https, or http on localhost, 127.0.0.1 or [::1].' })
+      }
       seen.registered++
-      return json(201, { ...JSON.parse(raw), client_id: `client-${seen.registered}` })
+      seen.redirectUris = asked.redirect_uris
+      return json(201, { ...asked, client_id: `client-${seen.registered}` })
     }
     if (url.pathname === '/authorize') {
       seen.authorize = Object.fromEntries(url.searchParams)
@@ -84,6 +96,6 @@ export async function startOAuthServer({ openList = false } = {}) {
     }
     json(404, { error: 'not found' })
   })
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
   return { url: `http://127.0.0.1:${server.address().port}/mcp`, seen, close: () => new Promise((resolve) => server.close(resolve)) }
 }
