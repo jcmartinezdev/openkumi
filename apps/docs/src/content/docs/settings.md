@@ -16,11 +16,11 @@ pages under **This app** are the same whoever is picked.
 | Page | What it holds |
 | --- | --- |
 | **Profile & devices** | whose bots these are: their name (**Rename**), **Let other devices connect**, **Pair a device**, the paired devices, and **Remove** for someone else on this computer. See [Other computers and your phone](/environments/). |
-| **General** | **New bots**: what they run on, whether they have web search, whether their browser window is shown. **Notify me when a bot needs me**. **Confirm before deleting a conversation**. |
+| **General** | **New bots**: what they run on, whether they have web search, whether their browser window is shown. **Order of the bots** (see [The order of your bots](/setup/bots/#the-order-of-your-bots)). **Confirm before deleting a conversation**. **Notify me when a bot needs me**. |
 | **Appearance** | theme (light, dark or the system's), message text size, a wide conversation |
 | **Chat** | whether **Enter sends the message**, suggestions in a new chat, how much detail a step shows |
 | **Providers** | Codex, Claude Code, Grok, local models and other models: whether each is connected, its program path or address, and **Use … for bots**. See [What bots run on](/setup/providers/). |
-| **Bots** | every bot, and each bot's page: what it is for, its rules, model, web search, browser, voice, look, superpowers, automations and workspace. **Bots can message each other**. See [Making and shaping a bot](/setup/bots/). |
+| **Bots** | every bot, and each bot's page: what it is for, its rules, model, web search, browser, voice, look, superpowers, [secrets](/secrets/), automations and workspace. **Bots can message each other**. See [Making and shaping a bot](/setup/bots/). |
 | **Superpowers** | every superpower, what each does, which bots have it, and webhooks. See [Superpowers](/superpowers/). |
 | **Master prompt** | what each bot is for, and everything a bot is told, to read. See [What every bot is told](/how-it-works/what-a-bot-is-told/). |
 | **Browser** | the browser program the bots drive, whether the live view opens when a bot starts browsing, and which bots have a browser running now |
@@ -66,6 +66,7 @@ wins.
 | `OPENKUMI_TELEMETRY` | from Settings | `0` stops the server telling OpenKumi's makers anything, whatever Settings says (see [Usage and error reports](/telemetry/)); `DO_NOT_TRACK=1` does the same |
 | `OPENKUMI_TELEMETRY_URL`, `OPENKUMI_TELEMETRY_KEY` | PostHog in the EU, OpenKumi's project | another place and project for those reports to go, for testing; with these set a server run from the source sends too |
 | `OPENKUMI_PRICES_URL` | LiteLLM's public list on GitHub | another address for the list of model prices that [Usage](/using/usage/) goes by; set to nothing, the list is never fetched, and only what Claude Code prices itself has a cost |
+| `OPENKUMI_VAULT_KEYS` | unset | a folder to keep the keys of the bots' [vaults](/secrets/#where-a-secret-is-kept) in, as plain files, instead of the keychain or keyring. Secrets saved under another key stay unreadable until they are entered again |
 | `OPENKUMI_MOCK` | unset | `1` turns on the scripted offline provider the tests use |
 
 The desktop app also reads `OPENKUMI_PORT` and `OPENKUMI_HOME`, to find or start the local server.

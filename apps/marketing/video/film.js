@@ -17,7 +17,7 @@
     conversation: {
       whole: [0, 0, 1, 1],
       // The sidebar: each bot, and the subagents of the open one under it.
-      bots: [0, 0.1, 0.36, 0.34],
+      bots: [0, 0.145, 0.36, 0.34],
       // The three "Start subagent" lines and the subagents' cards.
       subagents: [0.33, 0.175, 0.53, 0.39],
       // The table the answer was put together in, and the pick under it.

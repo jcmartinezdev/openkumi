@@ -6,7 +6,7 @@
 import Layout from '../../layouts/Layout.astro'
 import { COMPANY, DOCS_URL, GITHUB_URL, ISSUES_URL } from '../../lib/site'
 
-const UPDATED = '19 November 2026'
+const UPDATED = '25 November 2026'
 const TELEMETRY = `${DOCS_URL}/telemetry/`
 const OUTSIDE = `${DOCS_URL}/security/outside/`
 ---
@@ -49,7 +49,7 @@ const OUTSIDE = `${DOCS_URL}/security/outside/`
     <section>
       <h2>What stays on your devices</h2>
       <ul>
-        <li><strong>The computer that runs your bots</strong> keeps everything in one folder, <code>~/.openkumi</code>: the bots, their memory and files, the conversations, the settings, and the keys of the computers and phones paired with it.</li>
+        <li><strong>The computer that runs your bots</strong> keeps everything in one folder, <code>~/.openkumi</code>: the bots, their memory and files, the conversations, the settings, and the keys of the computers and phones paired with it. The key that each bot’s vault of passwords and API keys is encrypted with is kept on the same computer but apart from that folder: in the Mac’s keychain, in Windows’ protection for your account, or in a Linux keyring or a file only your account can read.</li>
         <li><strong>The iPhone app</strong> keeps the key it was given when you paired it (in the iPhone’s keychain), a copy of recent conversations so it opens without a connection, and its own settings, such as the theme. Deleting the app deletes them.</li>
         <li><strong>Dictation</strong> is written down on the device itself, by Apple’s speech recognition. No sound leaves it; only the words go to the bot, when you send them.</li>
       </ul>

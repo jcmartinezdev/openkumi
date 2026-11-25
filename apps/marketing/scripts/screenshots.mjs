@@ -34,6 +34,8 @@ const env = {
   OPENKUMI_DESKTOP_HIDDEN: '1',
   OPENKUMI_DESKTOP_YES: '1',
   OPENKUMI_TELEMETRY: '0',
+  // The vault's key in a folder that goes with the rest, and not in this Mac's keychain.
+  OPENKUMI_VAULT_KEYS: path.join(tmp, 'keys'),
   // Whose bots they are, as the switcher at the top of the sidebar says: someone, and not whoever runs this.
   OPENKUMI_NAME: 'alex',
   OPENKUMI_CLAUDE_BIN: path.join(here, 'scripts/stage-engine.mjs'),
@@ -98,6 +100,8 @@ try {
 
   await say(kumi.id, 'Can you move my dentist appointment to Thursday afternoon?', 'Thursday at 16:30')
   await say(bots.inbox.id, 'Anything in my inbox that needs me today?', 'drafted replies')
+  // Inbox asks which times to offer, and wears Needs you in every picture from here on.
+  await say(bots.inbox.id, 'Answer the landlord for me.', 'once you’ve picked')
   await say(bots.chef.id, 'What can I cook tonight with what’s in the fridge?', '35 minutes')
   await say(kumi.id, 'Can you ask Travel to find a hotel in Lisbon for the last weekend of March? Under €160 a night, near the river.', 'Shall I ask it')
   await say(bots.researcher.id, 'Lisbon, Porto or Seville for a long weekend at the end of March? Compare the weather, getting there from Berlin and what a decent hotel costs, then pick one for me.', 'My pick: Lisbon')
@@ -128,6 +132,8 @@ try {
     db.prepare('UPDATE items SET created_at = created_at + ? WHERE thread_id IN (SELECT id FROM threads WHERE bot_id = ?)').run(shift, botId)
     db.prepare('UPDATE threads SET created_at = created_at + ?, updated_at = updated_at + ? WHERE bot_id = ?').run(shift, shift, botId)
   }
+  // Read on another device, all but Chef's answer, which is still new. Inbox waits for its answer whether read or not.
+  for (const bot of [kumi, bots.researcher, bots.travel]) db.prepare('UPDATE threads SET read_to = told WHERE bot_id = ? AND parent_id IS NULL').run(bot.id)
   // Three months of what the bots used, for the usage page, which shows the last one: more on weekdays, most by the bot on the biggest model.
   const use = db.prepare('INSERT INTO usage (hour, bot_id, provider, model, costed, input, cached, output, cost) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)')
   const PRICES = { 'claude-opus-5-5': [5, 0.5, 25], 'claude-sonnet-5-5': [3, 0.3, 15], 'claude-haiku-5-5': [1, 0.1, 5] }
@@ -185,6 +191,18 @@ try {
 
   await open(kumi, 'Claude Opus')
   await shoot('together')
+
+  // Kumi asks for a key in a card of its own, and is stopped once the picture is taken, so it is not at work in the others.
+  if (wanted('secret')) {
+    const asked = await api('POST', `/api/bots/${kumi.id}/messages`, { text: 'How many people visited my blog this week?' })
+    await until(async () => (await itemsOf(asked.id)).some((d) => d.type === 'function_call' && d.name === 'ask_secret'), 'Kumi to ask for a key')
+    await shoot('secret', () => win.getByText('Plausible API key').first().waitFor())
+    await api('POST', `/api/threads/${asked.id}/stop`)
+    await until(async () => (await state()).threads.every((t) => t.botId !== kumi.id || t.status !== 'running'), 'Kumi to stop')
+  }
+
+  await open(bots.inbox, 'Claude Sonnet')
+  await shoot('asks', () => win.locator('.question-text', { hasText: 'fix the boiler' }).waitFor())
 
   await go('/-usage')
   // Once Claude Code has said how much of the plan is used.

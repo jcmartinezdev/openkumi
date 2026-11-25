@@ -69,7 +69,7 @@ const faq = [
   },
   {
     q: 'Can I talk to my bots out loud?',
-    a: 'Yes, in two ways. The microphone in the message box writes down what you say, on the device itself (macOS 26 or iOS 26 and later), so no sound leaves it. And the phone button calls the bot: it talks back at once, and you can interrupt it. The voice comes with a ChatGPT plan, through Codex, so the sound of a call goes to OpenAI, and it works for a bot on any engine.',
+    a: 'Yes, in two ways. The microphone in the message box writes down what you say, on the device itself (macOS 26 or iOS 26 and later), so no sound leaves it. And the phone button calls the bot: it talks back at once, and you can interrupt it, in a voice you pick for it by ear. The voice comes with a ChatGPT plan, through Codex, so the sound of a call goes to OpenAI, and it works for a bot on any engine.',
   },
   {
     q: 'Where does my data live?',
@@ -78,6 +78,10 @@ const faq = [
   {
     q: 'Could a bot do something I did not want?',
     a: 'A bot has only the superpowers you switch on for it, and cannot change them or give itself more. Each superpower asks before the things you would want to approve. When a bot edits its own instructions, you see the change and can undo it. Messages between bots show in both conversations, and can be switched off.',
+  },
+  {
+    q: 'Can a bot use my API keys and passwords?',
+    a: 'Yes, without seeing them. A bot that needs a key asks for it in a card of its own, and what you type there goes straight into the bot’s vault, encrypted, and never into the conversation or to the AI service. The bot uses it by name, and OpenKumi puts it in only on the sites you allowed it for. The vault’s key is kept apart from your data: in the Mac’s keychain, in Windows’ protection for your account, or in a Linux keyring, and otherwise in a file only your account can read.',
   },
   {
     q: 'Can several people share one computer?',
@@ -93,7 +97,7 @@ const faq = [
   },
   {
     q: 'How does it stay up to date?',
-    a: 'By itself. The desktop app downloads a new version in the background and asks you to restart when it is ready. OpenKumi installed on a computer of its own fetches the new version and starts it once no bot is working. You can switch that off and update when you choose.',
+    a: 'By itself. The desktop app downloads a new version in the background and asks you to restart when it is ready. OpenKumi installed on a computer of its own fetches the new version and starts it once no bot is working. You can switch that off and update when you choose. And the app on another of your computers, such as a Mac mini nobody sits at, updates from the one you are at, in Settings › About.',
   },
 ]
 ---
@@ -124,7 +128,7 @@ const faq = [
       <div class="lineup" aria-hidden="true">
         {[researcher, inbox, chef, travel].map((bot, i) => <Mascot id={`hero-${i}`} look={bot.look} emoji={bot.emoji} live delay={i * 0.9} class="stand" />)}
       </div>
-      <Shot name="conversation" eager alt="The OpenKumi window: a sidebar of bots, each shown by its mascot's head, and the Researcher bot comparing three cities with the help of three subagents." />
+      <Shot name="conversation" eager alt="The OpenKumi window: a sidebar of bots, each shown by its mascot's head, with Inbox marked Needs you, and the Researcher bot comparing three cities with the help of three subagents." />
     </div>
   </section>
 
@@ -230,6 +234,7 @@ const faq = [
               <li>The voice comes with your ChatGPT plan, through Codex. No API key, and it works for a bot on any engine.</li>
               <li>Your voice, and the last few messages of the conversation, go to OpenAI for the call. Dictation stays on the device.</li>
               <li>On the computer and the iPhone. The call goes on while you look at something else.</li>
+              <li>Each bot speaks in a voice you choose for it by ear.</li>
               <li>What was asked and said is kept in the conversation.</li>
             </ul>
           </div>
@@ -265,6 +270,10 @@ const faq = [
             <p>Drop or paste files into a message. The bot gets a copy of its own to read, keep, or file away with the rest of its work.</p>
           </div>
         </article>
+      </div>
+      <div class="replies">
+        <span class="part-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-4.6-4.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+        <p><strong>Find anything with <kbd>⌘K</kbd>.</strong> A bot, a setting, or something said in any conversation, from anywhere in the desktop app. <kbd>⌘1</kbd>–<kbd>9</kbd> opens one of your first nine bots. On Windows and Linux, it is Ctrl.</p>
       </div>
     </div>
   </section>
@@ -358,6 +367,19 @@ const faq = [
       </div>
       <Shot name="tasks" crop={{ x: 0.345, y: 0.19, w: 0.49, h: 0.49 }} sizes="(max-width: 860px) 204vw, 1310px" alt="OpenKumi's automations: a weekday morning briefing, a weekly dinner plan, a watch on OpenKumi's releases page, and new Linear issues to sort as they come in." />
     </div>
+
+    <div class="container split wide flip asks-row">
+      <div class="copy">
+        <span class="eyebrow">When it needs you</span>
+        <h3>It tells you, and only when it matters</h3>
+        <p>A mark beside each bot says what it has for you: a dot for something new, <strong>Read this</strong> for what should not wait, and <strong>Needs you</strong> when it cannot go on without you. What you read on one device is read on the others.</p>
+        <ul class="checks">
+          <li>A bot that needs a choice asks with a card of answers to press, over the message box, on the computer and the iPhone. What you pick goes back to it as your reply.</li>
+          <li>On the computer, a count on the app’s icon, and a notification for what cannot wait, which you can switch off. The iPhone shows the marks while the app is open.</li>
+        </ul>
+      </div>
+      <Shot name="asks" crop={{ x: 0.325, y: 0.278, w: 0.53, h: 0.607 }} sizes="(max-width: 860px) 189vw, 1210px" alt="The Inbox bot asks when the engineer can come to fix the boiler: a card over the message box with three times to tick, a box for something else, and Skip." />
+    </div>
   </section>
 
   <!-- ---- together -->
@@ -369,7 +391,7 @@ const faq = [
         <p>Ask Kumi, your first bot, and it passes the job to the bot it fits. Bots write to each other in their own conversations, and you read every message in both.</p>
         <ul class="checks">
           <li>Every bot knows who the others are and what each is for.</li>
-          <li>Ask for a new bot in chat, and your main assistant makes one and starts it on its first job.</li>
+          <li>Ask your main assistant for a new bot and it makes one, starting it on its first job. Ask it to rename a bot or move one to another model, and it does that too.</li>
           <li>Files go from bot to bot only as copies, sent with a message.</li>
           <li>Messages between bots can be switched off at any time.</li>
         </ul>
@@ -432,7 +454,7 @@ const faq = [
       <div class="copy">
         <span class="eyebrow">Yours, on your computer</span>
         <h2>A bot is a folder you can open</h2>
-        <p>What a bot can do is yours to decide: its model, its rules and its superpowers sit where only you can change them. What it knows is its own, kept as plain files it writes itself, with a history you can undo.</p>
+        <p>What a bot may do is yours to decide: its rules and its superpowers sit where only you can change them. What it knows is its own, kept as plain files it writes itself, with a history you can undo.</p>
         <ul class="checks">
           <li>No OpenKumi account. Your bots and everything you say to them live in <code>~/.openkumi</code>, and nowhere else.</li>
           <li>What you write to a bot goes only to the model provider it runs on. On a call, your voice and the last few messages also go to OpenAI, whose voice the call uses.</li>
@@ -448,17 +470,31 @@ const faq = [
 ├── <span class="its">AGENTS.md</span>       <i>how it works, in its words</i>
 ├── <b>memory/</b>         <i>what it has learned</i>
 └── <b>files/</b>          <i>what it made for you</i>
-<b>private/</b>            <i>its browser and logins</i></pre>
+<b>private/</b>            <i>its browser, logins and vault</i></pre>
       </div>
     </div>
 
-    <div class="container split wide flip usage-row">
-      <Shot name="usage" crop={{ x: 0.345, y: 0.148, w: 0.49, h: 0.457 }} sizes="(max-width: 860px) 204vw, 1310px" alt="OpenKumi's usage page: tokens used this month, what they would have cost as API calls, how much was read from cache, and how much of the Claude plan's session and week is used." />
+    <div class="container split wide flip vault-row">
+      <div class="copy">
+        <span class="eyebrow">Keys and passwords</span>
+        <h3>A vault it uses without looking</h3>
+        <p>When a bot needs an API key or a password, it asks in a card of its own. What you type goes straight into the bot’s vault, encrypted, and never through the conversation or the AI service.</p>
+        <ul class="checks">
+          <li>The bot uses a secret by its name, and OpenKumi puts it in only on the sites you allowed it for.</li>
+          <li>Whatever comes back to the bot has the value taken out.</li>
+          <li>The vault’s key is kept apart from your data, so a copy of the folder cannot be read without it: in the Mac’s keychain, in Windows’ protection for your account, or in a Linux keyring, and otherwise in a file only your account can read.</li>
+        </ul>
+      </div>
+      <Shot name="secret" crop={{ x: 0.325, y: 0.58, w: 0.53, h: 0.27 }} sizes="(max-width: 860px) 189vw, 1210px" alt="Kumi asks for a Plausible API key in a card of its own: it is kept encrypted, Kumi uses it without seeing it, and it is sent only to plausible.io." />
+    </div>
+
+    <div class="container split wide usage-row">
       <div class="copy">
         <span class="eyebrow">Usage</span>
         <h3>See what it all uses</h3>
         <p>How many tokens your bots’ models used, by provider, model and bot. What that would have cost as API calls. And how much of your Claude and ChatGPT plans is used up, before you run into a limit.</p>
       </div>
+      <Shot name="usage" crop={{ x: 0.345, y: 0.148, w: 0.49, h: 0.457 }} sizes="(max-width: 860px) 204vw, 1310px" alt="OpenKumi's usage page: tokens used this month, what they would have cost as API calls, how much was read from cache, and how much of the Claude plan's session and week is used." />
     </div>
   </section>
 
@@ -1556,11 +1592,27 @@ const faq = [
     border-radius: 50%;
     background: var(--green) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M6 10.5l2.5 2.5L14 7.5' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 100% no-repeat;
   }
-  .usage-row {
+  .usage-row,
+  .vault-row,
+  .asks-row {
     margin-top: 112px;
   }
+  .replies kbd {
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.85em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
   @media (max-width: 860px) {
-    .usage-row {
+    .usage-row,
+    .vault-row,
+    .asks-row {
       margin-top: 72px;
     }
   }

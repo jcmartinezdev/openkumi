@@ -38,7 +38,7 @@ that stays logged in.
   asks, and waits. See [A bot's browser](/using/browser/).
 - **A vault for keys and passwords.** When a bot needs an API key or a password, it asks in a card
   and you type it once. It is kept encrypted, the bot uses it by name without ever seeing it, and
-  it is sent only to the site it is for. See [Secrets](/secrets/).
+  it is sent only to the sites it is for. See [Secrets](/secrets/).
 - **Bots that write their own instructions.** A bot keeps an `AGENTS.md` and a `memory/` folder
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone. See [Making and shaping a bot](/setup/bots/).
@@ -70,7 +70,9 @@ that stays logged in.
   with no API key, and it works for a bot on any engine: whatever needs the bot is handed to the
   bot itself, which on a call only passes work on, to another bot or to a background task of its
   own, and what comes back is read out. What was asked and what was said is kept in the
-  conversation. See [Calls](/calls/).
+  conversation. The voice is yours to choose for each bot, after hearing it. Calling a bot from a
+  car's screen, through CarPlay, is built but not switched on until Apple allows it. See
+  [Calls](/calls/).
 - **Automations.** A bot can work without being asked: at set times, when a page or one of its
   apps changes (OpenKumi looks, at no cost, and starts the bot only on a change), or the moment an
   app calls a webhook. It tells you in its conversation what came of it. Each automation runs on
@@ -86,7 +88,9 @@ that stays logged in.
   models used by provider, model and bot, what that would have cost as API calls, and how much of
   your Claude and ChatGPT plans is used up. See [Usage](/using/usage/).
 - **From anywhere.** Pair another computer or an iPhone with a one-time code, and reach your bots
-  at home directly and away through an `https` address, on Tailscale or elsewhere. See [Other computers and your phone](/environments/).
+  at home directly and away through an `https` address, on Tailscale or elsewhere. See [Other
+  computers and your phone](/environments/). A computer nobody sits at, such as a Mac mini, is
+  [updated](/install/#updates) from the one you are at.
 - **Bots for everyone in the house.** One computer can run bots for several people: each gets a
   server of their own, with bots, conversations, settings and paired devices apart from everyone
   else's, on the same Claude, ChatGPT or Grok plan. Add someone, and pick whose bots to show, in
@@ -96,7 +100,12 @@ that stays logged in.
   to ask it for something and get the answer back. You read every such message in both
   conversations, and can switch it off. See [Messages between bots](/how-it-works/messages-between-bots/).
 - **Bots that make bots.** Create bots in the app, or just ask your main assistant in chat; it can
-  start the new bot on its first job at once.
+  start the new bot on its first job at once. Ask it, too, to rename a bot, say what one is for,
+  or move one to another model. See [Making and shaping a bot](/setup/bots/#what-you-can-set).
+- **Find anything.** In the desktop app, ⌘K (Ctrl+K) searches your bots, settings, superpowers,
+  automations and everything that was said, and opens what you pick; ⌘1 to ⌘9 open your first nine
+  bots. See [Search and shortcuts](/using/search/).
 - **A mascot for every bot.** Each bot is a little jelly creature holding a sign with its emoji.
   Choose its creature, colour, hat, extra and clothes, or leave it and the new bot dresses itself
   from its name and what it is for. Its look is a line in `bot.md` (`look: cat sky cap orange`).
+  In the lists of bots its head stands for it, holding the sign under its chin.
