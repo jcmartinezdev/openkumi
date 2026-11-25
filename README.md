@@ -49,7 +49,8 @@ only if you agree: [all of it is listed](https://docs.openkumi.ai/telemetry/).
 - **Know when a bot has something for you.** A bot that said something you have not read wears a
   mark in the list, on the computer and the phone. One that cannot go on without you says
   **Needs you**, one with something that should not wait says **Read this**, and on the computer
-  both reach you with a notification.
+  both reach you with a notification. When a bot needs you to choose, it asks with a card of
+  answers to press.
 - **Superpowers.** Switch on, for one bot at a time, what it can do beyond chatting and browsing:
   work in Notion, Linear, Jira, Todoist and some twenty other apps, or know-how such as the
   weather, exchange rates, SEO and launch plans.

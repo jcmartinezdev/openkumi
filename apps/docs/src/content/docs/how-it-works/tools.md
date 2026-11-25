@@ -12,7 +12,7 @@ description: "Every tool a bot can call, and where each one is withheld: subagen
 | Automations | `list_automations`, `create_automation`, `update_automation`, `delete_automation` |
 | Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval`, `browser_ask_user` |
 | Web | `web_fetch`, plus the engine's own web search on Codex, Claude Code and Grok (when the bot's **Web search** is on) |
-| The conversation | `show_page`, `notify_user` |
+| The conversation | `show_page`, `notify_user`, `ask_user` |
 | Superpowers | every tool of the services its superpowers bring, named `mcp__<superpower>__<tool>` |
 
 There is no tool for running commands. A bot's file tools reach its own workspace and, to read
@@ -27,8 +27,8 @@ A bot does not have every tool everywhere:
 | --- | --- |
 | Its conversation, answering you | nothing is withheld; `create_bot` and `update_bot` only for the main assistant, and only in a turn that answers something you wrote |
 | Its conversation, answering another bot | `create_bot`, `update_bot`; `message_bot` reaches only the bot that wrote, and only if it asked for a reply |
-| A subagent | `message_bot`, `create_bot`, `update_bot`, `notify_user`; at the last level of subagents, the subagent tools |
-| A run of an automation | `message_bot`, `create_bot`, `update_bot`, `notify_user`, `browser_ask_user` (nobody is watching) |
+| A subagent | `message_bot`, `create_bot`, `update_bot`, `notify_user`, `ask_user`; at the last level of subagents, the subagent tools |
+| A run of an automation | `message_bot`, `create_bot`, `update_bot`, `notify_user`, `ask_user`, `browser_ask_user` (nobody is watching) |
 | A turn that answers something asked on a call | everything but `list_bots`, `message_bot`, `create_bot`, `update_bot`, the subagent tools (but `wait_subagents`) and the automation tools; automations it makes must start at a time. No web search. |
 | Any thread, when **Bots can message each other** is off | `message_bot`, and `create_bot`'s first message |
 
@@ -60,6 +60,14 @@ A bot does not have every tool everywhere:
   raised by a turn that was stopped or failed, or once you have written to the bot meanwhile. Only
   a bot's own conversation has it: a subagent and a run of an automation report there. See [When a
   bot has something for you](/using/conversation/#when-a-bot-has-something-for-you).
+- **`ask_user`** asks you one to four questions, each with up to six answers to choose from (or
+  none, for one you answer in writing), and whether several may be chosen. Like `notify_user` it
+  does not wait: the questions are put on the conversation when the turn is over, with **Needs
+  you** and the first question as its reason, and the apps show them as a card over the message
+  box. What you answer goes to the bot as a message from you, each answer under its question, and
+  the bot goes on in a new turn. So nothing is lost when you answer hours later, or after the
+  server restarted. Questions asked again in the same turn add up, to four at most. See [When it
+  asks you to choose](/using/conversation/#when-it-asks-you-to-choose).
 - **`show_page`** shows a self-contained HTML page in the conversation. See [Replies and
   pages](/how-it-works/replies-and-pages/).
 - **Superpower tools** come from each superpower's MCP server, connected with the bot's own

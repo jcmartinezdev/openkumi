@@ -43,6 +43,8 @@ export function describe(call: { name: string; arguments: string }): string {
     case 'update_bot': return `Change ${title(a.bot_id)}`
     case 'message_bot': return `Write to ${title(a.bot_id)}`
     case 'list_bots': return 'List bots'
+    case 'ask_user': return 'Ask you a question'
+    case 'notify_user': return a.kind === 'read' ? 'Mark this for you to read' : 'Say that it needs you'
     case 'list_files': return `Look in ${a.path || 'its folder'}`
     case 'read_file': return String(a.path ?? '').startsWith('superpowers/') ? `Read how to use ${title(String(a.path).split('/')[1])}` : `Read ${a.path ?? 'a file'}`
     case 'write_file':

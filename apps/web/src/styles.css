@@ -619,6 +619,34 @@ button.sent-file:hover { border-color: var(--border-strong); }
 /* Over the composer: what the bot said it cannot go on without, in the colour of its mark in the list. */
 .needs-you { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 7px 8px 7px 12px; border-radius: 10px; font-size: 12.5px; line-height: 1.4; background: color-mix(in srgb, var(--run) 13%, transparent); overflow-wrap: anywhere; }
 .needs-you > button { flex: none; height: 26px; padding: 0 10px; border-color: var(--border-strong); border-radius: 7px; font-size: 12px; }
+/* Over the composer too: what the bot asked with ask_user, one question in front at a time, its options to press. */
+.questions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; padding: 10px 12px 12px; border: 1px solid color-mix(in srgb, var(--run) 32%, var(--border)); border-radius: 16px; background: color-mix(in srgb, var(--run) 7%, var(--raised)); }
+.questions-head { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+.questions-head .eyebrow { margin: 0; color: color-mix(in srgb, var(--run) 62%, var(--text)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.questions-head .faint { flex: none; font-variant-numeric: tabular-nums; }
+.questions-head button.icon { width: 24px; height: 24px; margin-right: -4px; }
+.question-text { font-size: 14.5px; font-weight: 600; line-height: 1.4; text-wrap: pretty; overflow-wrap: anywhere; }
+.question-options { display: flex; flex-direction: column; gap: 4px; max-height: min(264px, 36vh); overflow-y: auto; margin: 0 -2px; padding: 2px; }
+button.question-option {
+  display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 10px; row-gap: 1px; align-items: center; justify-content: stretch; flex: none;
+  height: auto; min-height: 36px; padding: 7px 12px 7px 10px; border-radius: 10px; background: var(--bg); text-align: left; white-space: normal; font-weight: 400; font-size: 13.5px; line-height: 1.4;
+}
+button.question-option:hover:not(:disabled) { background: var(--bg); border-color: var(--border-strong); }
+button.question-option.on { border-color: color-mix(in srgb, var(--run) 70%, var(--text)); }
+.question-mark { display: grid; place-items: center; width: 18px; height: 18px; border: 1.5px solid var(--border-strong); border-radius: 50%; color: var(--on-primary); }
+.question-mark.box { border-radius: 5px; }
+.question-option.on .question-mark { border-color: transparent; background: var(--primary); }
+.question-label { overflow-wrap: anywhere; }
+.question-option.on .question-label { font-weight: 500; }
+.question-about { grid-column: 2; color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+input.question-own { height: 36px; padding: 0 12px; border-radius: 10px; background: var(--bg); font-size: 13.5px; }
+.questions-foot { display: flex; align-items: center; gap: 6px; min-height: 30px; }
+.questions-foot > button { flex: none; height: 30px; }
+/* In the conversation: what was asked, in the bot's words, once the card is gone. */
+.msg.asked { align-self: flex-start; max-width: 85%; padding: 8px 14px 10px; border: 1px solid var(--border); border-radius: 14px; }
+.asked-head { display: flex; align-items: center; gap: 6px; height: 24px; margin-bottom: 2px; color: var(--faint); }
+.asked-head .eyebrow { margin: 0; color: inherit; }
+.asked-question + .asked-question { margin-top: 4px; }
 button.quiet { height: 28px; border: none; font-size: 12.5px; font-weight: 400; color: var(--faint); }
 button.quiet:hover:not(:disabled) { color: var(--text); }
 

@@ -3,6 +3,7 @@ import type { Attachment, Bot, Item, ItemData, Thread } from '@openkumi/shared'
 import { note } from '@openkumi/client/telemetry'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { clearFlag, markRead, unread } from '@openkumi/client/attention'
+import { askedIn, openQuestions } from '@openkumi/client/questions'
 import { runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { SentFiles, Tray, picked } from './Attachments'
@@ -14,6 +15,7 @@ import { CopyButton, FileLinks, Markdown } from './Markdown'
 import { ModelPicker } from './ModelPicker'
 import { PageFrame, PageViewer } from './PageFrame'
 import { usePrefs } from './prefs'
+import { Asked, Questions } from './Questions'
 import { StatusDot } from './Sidebar'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { parseReport, reportWord } from '@openkumi/client/reports'
@@ -284,6 +286,12 @@ function Items({ items, running, openFile, name }: { items: Item[]; running: boo
           <Markdown text={summary.text} />
         </details>,
       )
+    }
+    // What the bot asked its owner is said to them, like a reply: it stands in the conversation, not among the steps. A call that failed asked nothing.
+    if (data.type === 'function_call' && data.name === 'ask_user' && outputs.has(data.call_id) && !outputs.get(data.call_id)!.startsWith('Error:') && askedIn(data).length) {
+      flush(id)
+      blocks.push(<Asked key={id} id={id} call={data} />)
+      continue
     }
     if (isStep(data)) {
       if (!steps.length) began = createdAt
@@ -729,8 +737,9 @@ export function Chat({ bot, thread, focus, browserOpen, toggleBrowser, openNav, 
             </div>
           ) : (
           <>
-          {/* What the bot said it cannot go on without. It stays until its owner writes, or clears it here. */}
-          {main && thread?.flag?.kind === 'answer' && (
+          {/* What the bot asked, to answer by choosing; or only what it said it cannot go on without. Either stays until its owner writes, or clears it here. */}
+          {main && thread && openQuestions(thread).length > 0 && <Questions bot={bot} thread={thread} connected={connected} setError={setError} />}
+          {main && thread?.flag?.kind === 'answer' && !openQuestions(thread).length && (
             <div className="needs-you" role="status">
               <span className="grow"><strong>{bot.name} needs you:</strong> {thread.flag.reason}</span>
               <button title="Clear this without answering" onClick={() => clearFlag(thread.id).catch((e) => setError(e.message))}>Clear</button>

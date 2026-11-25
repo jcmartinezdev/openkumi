@@ -183,7 +183,7 @@ export interface Attachment {
 export type ThreadStatus = 'idle' | 'running' | 'error'
 
 /**
- * What a bot raised on its conversation to reach its owner (notify_user), put there when its turn
+ * What a bot raised on its conversation to reach its owner (notify_user, ask_user), put there when its turn
  * was over. 'answer': it cannot go on without their answer, decision or go-ahead, and it stays
  * until they write to the bot or clear it. 'read': it told them something that should not wait
  * until they next look, and it goes once they have read up to it.
@@ -192,9 +192,29 @@ export interface Flag {
   kind: 'answer' | 'read'
   /** What it is about, in the bot's few words, to show beside its name. */
   reason: string
+  /**
+   * What the bot asked with ask_user, for the owner to answer by choosing: the apps show them over
+   * the composer for as long as this stands, and the answers go to the bot as a message from the
+   * owner, which clears it like anything they write. Missing when the bot only said it needs them.
+   */
+  questions?: Question[]
   /** The last thing the bot had said when it raised it (see Thread.told). */
   item: number
   at: number
+}
+
+/**
+ * One thing a bot asks its owner with ask_user: a question and the answers it offers. The owner
+ * chooses among them, or writes an answer of their own, which is always possible; a question with
+ * no options is answered in writing only.
+ */
+export interface Question {
+  /** What it is about, in a word or two ("Flight"), shown over the question. Empty when the bot gave none. */
+  header: string
+  question: string
+  options: { label: string; /** What choosing it means, when the label does not say it all. May be empty. */ description: string }[]
+  /** More than one of the options may be chosen. */
+  multiple: boolean
 }
 
 /**

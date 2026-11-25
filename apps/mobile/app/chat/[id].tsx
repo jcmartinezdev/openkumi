@@ -9,6 +9,7 @@ import type { Attachment, Bot, BotRef, CallLine, Item, Thread } from '@openkumi/
 import { note } from '@openkumi/client/telemetry'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { clearFlag, markRead, unread } from '@openkumi/client/attention'
+import { askedIn, openQuestions } from '@openkumi/client/questions'
 import { moment, runBrief } from '@openkumi/client/automations'
 import { useDictation } from '@openkumi/client/dictation'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
@@ -25,6 +26,7 @@ import { startCall } from '../../src/calls'
 import { ListeningBar, MicButton, listener, useDictationChecks } from '../../src/Dictation'
 import { ModelChip } from '../../src/ModelChip'
 import { PageSheet, PageView, Sheet } from '../../src/PageView'
+import { Asked, Questions } from '../../src/Questions'
 import { useTextScale } from '../../src/prefs'
 import { ScreenTitle } from '../../src/ScreenTitle'
 import { type Theme, useTheme } from '../../src/theme'
@@ -51,6 +53,8 @@ type Row =
   | { key: string; kind: 'report'; report: Report; at: number }
   /** A call that ended: how long it lasted, and what was said on it. */
   | { key: string; kind: 'call'; seconds: number; lines: CallLine[]; at: number }
+  /** What the bot asked its owner with ask_user, in its questions' words. */
+  | { key: string; kind: 'asked'; questions: string[] }
   /** A message between bots: one that came from another bot (`from`), or one this bot sent (`to`). */
   | { key: string; kind: 'between'; from?: string; to?: BotRef; text: string; replyWanted: boolean; messageKey?: string; attachments?: Attachment[]; threadId?: string }
 
@@ -64,6 +68,8 @@ const FROM = { parent: 'From the chat above', subagent: 'From a subagent', trigg
 
 function rows(items: Item[]): Row[] {
   const failed = new Set(items.flatMap(({ data: d }) => (d.type === 'function_call_output' && d.output.startsWith('Error:') ? [d.call_id] : [])))
+  /** The calls that came back. */
+  const done = new Set(items.flatMap(({ data: d }) => (d.type === 'function_call_output' ? [d.call_id] : [])))
   const out: Row[] = []
   const step = (key: string, text: string) => {
     const last = out.at(-1)
@@ -78,6 +84,8 @@ function rows(items: Item[]): Row[] {
     else if (d.type === 'message' && d.role === 'user' && d.source === 'bot') out.push({ key, kind: 'between', from: d.bot?.name ?? 'another bot', text: d.text, replyWanted: !!d.replyWanted, messageKey: d.key, attachments: d.attachments, threadId: item.threadId })
     else if (d.type === 'message') out.push(d.role === 'assistant' ? { key, kind: 'bot', text: d.text } : d.source === 'user' ? { key, kind: 'user', text: d.text, attachments: d.attachments, threadId: item.threadId, onCall: d.via === 'call' } : { key, kind: 'notice', text: `${FROM[d.source as keyof typeof FROM]}: ${d.source === 'trigger' ? brief(d.text) : d.text}` })
     else if (d.type === 'sent') out.push({ key, kind: 'between', to: d.to, text: d.text, replyWanted: d.replyWanted, messageKey: d.key, attachments: d.attachments, threadId: d.threadId })
+    // What the bot asked its owner is said to them, like a reply: it stands in the conversation, not among the steps. A call that failed asked nothing.
+    else if (d.type === 'function_call' && d.name === 'ask_user' && done.has(d.call_id) && !failed.has(d.call_id) && askedIn(d).length) out.push({ key, kind: 'asked', questions: askedIn(d) })
     // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
     else if (d.type === 'function_call' && ((d.name !== 'show_page' && d.name !== 'message_bot') || failed.has(d.call_id))) step(key, describe(d))
     else if (d.type === 'web_search_call') step(key, 'Search the web')
@@ -313,6 +321,7 @@ const Line = memo(function Line({ row, theme, scale }: { row: Row; theme: Theme;
   if (row.kind === 'page') return <PageView title={row.title} html={row.html} height={row.height} />
   if (row.kind === 'report') return <ReportCard row={row} theme={theme} scale={scale} />
   if (row.kind === 'call') return <CallCard row={row} theme={theme} scale={scale} />
+  if (row.kind === 'asked') return <Asked questions={row.questions} theme={theme} scale={scale} />
   return <Text style={[styles.notice, { color: row.error ? theme.err : theme.faint }]}>{row.text}</Text>
 })
 
@@ -584,8 +593,9 @@ export default function Chat() {
       )}
       {/* A card with the message on top and, under it, what the bot runs on and the send button. Above the keyboard it sits close to it. */}
       <View style={[styles.dock, { paddingBottom: keyboard ? 8 : Math.max(insets.bottom, 10) }]}>
-        {/* What the bot said it cannot go on without. It stays until its owner writes, or clears it here. */}
-        {bot && thread?.flag?.kind === 'answer' && !thread.parentId && !thread.archivedAt && (
+        {/* What the bot asked, to answer by choosing; or only what it said it cannot go on without. Either stays until its owner writes, or clears it here. */}
+        {bot && thread && openQuestions(thread).length > 0 && <Questions bot={bot} thread={thread} connected={connected} keyboard={keyboard} onError={setError} />}
+        {bot && thread?.flag?.kind === 'answer' && !thread.parentId && !thread.archivedAt && !openQuestions(thread).length && (
           <View style={[styles.needsYou, { backgroundColor: theme.runTint }]}>
             <Text style={{ flex: 1, color: theme.text, fontSize: 13.5 * scale, lineHeight: 18 * scale }}>
               <Text style={{ fontWeight: '600' }}>{bot.name} needs you: </Text>

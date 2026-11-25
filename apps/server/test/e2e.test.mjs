@@ -449,12 +449,50 @@ test('what a bot has for its owner: a conversation knows what is new and how far
   await until(async () => lastText(await settle(id)) === 'Echo: I am here')
   assert.equal((await thread()).flag, null)
 
+  // Asked something to answer by choosing: the questions stand on the conversation with the mark, tidied, the first of them as the reason.
+  assert.match(lastText(await say(id, '!tools')), /\bask_user\b/)
+  const flight = { question: '  Which flight\n should I book? ', header: 'Flight', options: [{ label: 'Lufthansa, 9:40', description: ' Direct,  212 € ' }, 'Iberia, 11:15', { label: ' ' }] }
+  const seat = { question: 'Which seats?', options: ['Window', 'Aisle'], multiple: true }
+  assert.match(await toolIn(id, 'ask_user', { questions: [flight, seat, { question: 'Who travels with you?', multiple: true }] }), /^Asked\. When this turn is over the user sees your 3 questions as a card/)
+  t = await thread()
+  assert.deepEqual([t.flag.kind, t.flag.reason, t.flag.item], ['answer', 'Which flight should I book?', t.told])
+  assert.deepEqual(t.flag.questions, [
+    { header: 'Flight', question: 'Which flight should I book?', options: [{ label: 'Lufthansa, 9:40', description: 'Direct, 212 €' }, { label: 'Iberia, 11:15', description: '' }], multiple: false },
+    { header: '', question: 'Which seats?', options: [{ label: 'Window', description: '' }, { label: 'Aisle', description: '' }], multiple: true },
+    // With nothing to choose from, it is answered in writing.
+    { header: '', question: 'Who travels with you?', options: [], multiple: false },
+  ])
+  // Reading is not answering; the answers are a message from the owner like any other, which clears it.
+  await api('POST', `/api/threads/${id}/seen`, { upTo: t.told })
+  assert.equal((await thread()).flag.questions.length, 3)
+  await say(id, 'Which flight should I book?\n→ Iberia, 11:15')
+  assert.equal((await thread()).flag, null)
+  // Cleared without an answer, the questions go with the mark.
+  await say(id, `!tool ask_user ${JSON.stringify({ questions: [{ question: 'Go ahead?', options: ['Yes', 'No'] }] })}`)
+  assert.deepEqual([(await thread()).flag.reason, (await thread()).flag.questions.length], ['Go ahead?', 1])
+  // One option alone is taken too: the owner can always write another answer, beside it where several may be chosen.
+  await say(id, `!tool ask_user ${JSON.stringify({ questions: [{ question: 'Add a bag?', options: ['Checked bag'], multiple: true }] })}`)
+  assert.deepEqual((await thread()).flag.questions, [{ header: '', question: 'Add a bag?', options: [{ label: 'Checked bag', description: '' }], multiple: true }])
+  await api('DELETE', `/api/threads/${id}/flag`)
+  assert.equal((await thread()).flag, null)
+  // What cannot be shown as given is said to the bot, and nothing is asked.
+  const refused = [
+    [{}, /^Error: Give questions/],
+    [{ questions: Array(5).fill(seat) }, /^Error: At most 4 questions can be asked at once/],
+    [{ questions: [{ question: ' ', options: ['Yes', 'No'] }] }, /^Error: The question has no text/],
+    [{ questions: [seat, { question: 'Sure?', options: ['Yes', 'No', 'yes'] }] }, /^Error: Question 2 offers the same option twice/],
+    [{ questions: [{ question: 'Which?', options: 'abcdefg'.split('') }] }, /^Error: The question offers more than 6 options/],
+    [{ questions: [{ question: 'Which?', options: ['x'.repeat(81), 'y'] }] }, /^Error: The question has an option that is too long/],
+  ]
+  for (const [args, said] of refused) assert.match(await toolIn(id, 'ask_user', args), said)
+  assert.equal((await thread()).flag, null)
+
   // Only its own conversation is the owner's to read: a subagent is not offered it.
   await say(id, '!tool spawn_subagent {"name":"Offered","task":"!tools"}')
   const child = await until(async () => (await api('GET', '/api/state')).threads.find((c) => c.parentId === id && c.title === 'Offered'))
   const offered = lastText(await settle(child.id))
   assert.match(offered, /\bread_file\b/)
-  assert.doesNotMatch(offered, /notify_user/)
+  assert.doesNotMatch(offered, /notify_user|\bask_user/)
   assert.deepEqual([child.told, child.flag], [0, null])
 
   // A conversation that is set aside takes what was raised in it along.
