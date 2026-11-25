@@ -42,6 +42,9 @@ export function startUpdateRequests<Server>({ state, check, onChange, servers, w
   let hurried = false
   /** Requests still to be answered: the app does not restart under them. */
   let answering = 0
+  /** Since when no bot has been at work in any of the servers, from the latest drop to none: 0 while one is. */
+  let quietSince = Date.now()
+  const recount = () => (atWork() > 0 ? (quietSince = 0) : (quietSince ||= Date.now()))
 
   const atWork = () => servers().reduce((sum, server) => sum + workingIn(server), 0)
   const busy = () => state().state === 'checking' || state().state === 'downloading'
@@ -54,7 +57,14 @@ export function startUpdateRequests<Server>({ state, check, onChange, servers, w
 
   /** Restarts into the new version once there is one, if it was asked for, and nothing would be cut off by that or it was asked not to wait. */
   function settle() {
-    if (!asked || answering || state().state !== 'ready' || (atWork() > 0 && !hurried)) return
+    if (!asked || answering || state().state !== 'ready') return
+    if (!hurried) {
+      recount()
+      if (!quietSince) return
+      // None at work has to hold a moment first: a bot that is done may hand on to another at once.
+      const left = quietSince + answerMs - Date.now()
+      if (left > 0) return void setTimeout(settle, left)
+    }
     asked = false
     hurried = false
     restart()
@@ -103,7 +113,8 @@ export function startUpdateRequests<Server>({ state, check, onChange, servers, w
   onMessage((server, message) => {
     if (message?.type === 'update' && Number.isInteger(message.id)) return void updateAsked(server, message.id, message.now === true)
     // A server that has just started learns how things stand; the others hear how many bots are at work besides theirs.
+    recount()
     tellAll()
-    setTimeout(settle, answerMs)
+    settle()
   })
 }

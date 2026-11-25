@@ -9,7 +9,7 @@ import { startUpdateRequests } from '../src/updateAsked.ts'
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** An app with two servers, whose update starts as `begin`, and whose look for a newer version does what `look` says. */
-function app(begin = 'ready', look = async () => {}) {
+function app(begin = 'ready', look = async () => {}, answerMs = 50) {
   let update = { state: begin, version: begin === 'ready' ? '9.9.9' : null, progress: 0, error: '', checkedAt: 0 }
   const changes = []
   let hear = () => {}
@@ -49,7 +49,7 @@ function app(begin = 'ready', look = async () => {}) {
     tell: (server, message) => said[server].push(message),
     onMessage: (fn) => (hear = fn),
     restart: () => restarts.push(Date.now()),
-    answerMs: 50,
+    answerMs,
   })
   return it
 }
@@ -94,6 +94,18 @@ test('a bot that is done and hands on to another at once (a report, an automatio
   it.working('a', 0)
   await wait(150)
   assert.equal(it.restarts.length, 1)
+
+  // Nor when something else has the app look again in that moment: the restart after the answer, or the new version arriving.
+  const late = app('ready', async () => {}, 200)
+  late.working('a', 1)
+  await late.ask('a')
+  await wait(150)
+  late.working('a', 0)
+  await wait(70)
+  late.set({ progress: 100 })
+  late.working('a', 1)
+  await wait(400)
+  assert.equal(late.restarts.length, 0)
 })
 
 test('asked not to wait, it restarts with bots at work; that holds for this request only', async () => {
