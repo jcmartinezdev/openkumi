@@ -108,6 +108,8 @@ const site_ = http.createServer(async (req, res) => {
   if (url.pathname === '/home') return signedIn ? html(res, 'Home', `<p>Signed in as ${USER}</p><a href="/logout">Sign out</a>`) : res.writeHead(302, { Location: '/login' }).end()
   if (url.pathname === '/logout') return res.writeHead(302, { Location: '/login', 'Set-Cookie': 'session=; Path=/; Max-Age=0' }).end()
   if (url.pathname === '/login') return html(res, 'Sign in', signInForm())
+  // A form that takes its time to answer.
+  if (url.searchParams.has('slow')) await new Promise((r) => setTimeout(r, 2500))
   if (url.pathname === '/session') {
     const right = form.get('email') === USER && form.get('password') === PASSWORD
     // JSON for the page that signs in with a script, a page for the forms.
@@ -132,6 +134,22 @@ const site_ = http.createServer(async (req, res) => {
         `<div role="button" id="go" tabindex="0">Log in</div><script>document.getElementById('go').onclick = async () => { const r = await fetch('/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.value, password: pass.value }) }); if (r.ok) location = '/home'; else document.title = 'Refused' }</script>`,
     )
   }
+  // A form written as one, sent by a script that waits for its answer.
+  if (url.pathname === '/slow') {
+    return html(
+      res,
+      'Sign in',
+      `<form id="f"><input name="email" type="email" placeholder="Email"><input name="password" type="password" placeholder="Password"><button>Sign in</button></form>` +
+        `<script>f.onsubmit = async (e) => { e.preventDefault(); const r = await fetch('/session?slow', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: f.email.value, password: f.password.value }) }); if (r.ok) location = '/home' }</script>`,
+    )
+  }
+  // A form on the site that sends what is typed into it to another one.
+  if (url.pathname === '/sends-away') return html(res, 'Sign in', `<form method="post" action="http://${elsewhere}/session"><input name="email" type="email" placeholder="Email"><input name="password" type="password" placeholder="Password"><button>Sign in</button></form>`)
+  // A page that knows who is coming back, and asks for the password alone.
+  if (url.pathname === '/welcome-back') return html(res, 'Welcome back', `<p>Welcome back, ${USER}</p><form method="post" action="/session"><input type="hidden" name="email" value="${USER}"><input name="password" type="password" placeholder="Password" autofocus><button>Sign in</button></form>`)
+  // A site that says back the password it was sent.
+  if (url.pathname === '/shows') return html(res, 'Sign in', '<form method="post" action="/shown"><input name="email" type="email" placeholder="Email" autofocus><input name="password" type="password" placeholder="Password"><button>Sign in</button></form>')
+  if (url.pathname === '/shown') return html(res, 'Welcome', `<p>Welcome. Your password is ${form.get('password')}</p>`)
   if (url.pathname === '/plain') return html(res, 'Plain', '<p>Nothing to sign in to here.</p><input type="email" placeholder="Your e-mail for our newsletter">')
   html(res, 'Elsewhere', '<p>Another page.</p>')
 })
@@ -200,6 +218,7 @@ test('the owner adds a login: a user name the bot is told, and a password it is 
   assert.match(lastText(await say(await fresh(), '!tools')), /\bbrowser_sign_in\b[\s\S]*\bask_secret ask_login save_secret\b/)
   // The password has no place in what the bot is told.
   assert.match((await call('PUT', `/api/bots/${bot.id}/secrets/${name}`, { user: `me ${PASSWORD}` })).json.error, /The user name is told to the bot: the password has no place in it\./)
+  assert.match((await call('POST', `/api/bots/${bot.id}/secrets`, { sites: 'short.example.com', user: 'abc12', value: 'abc12' })).json.error, /The user name is told to the bot/, 'a short one neither')
   // A second login for the site gets a name of its own, and a secret without a user name is no login.
   const second = await api('POST', `/api/bots/${bot.id}/secrets`, { sites: site, user: 'other@example.com', value: 'another-password-000' })
   assert.equal(second.name, `${name}-2`)
@@ -239,6 +258,20 @@ test('a bot signs in with a login by itself: the form is found, filled in and se
   seen.length = 0
   assert.match(await toolIn(id, 'browser_sign_in', {}), /and the site moved on from it\.[\s\S]*Page: Home\n/)
   assert.deepEqual(seen, [{ path: '/session', form: { email: USER, password: PASSWORD } }])
+
+  // A form that answers slowly is sent once: Enter sends it, and its button is not pressed after it.
+  await toolIn(id, 'browser_navigate', { url: `http://${site}/logout` })
+  await toolIn(id, 'browser_navigate', { url: `http://${site}/slow` })
+  seen.length = 0
+  assert.match(await toolIn(id, 'browser_sign_in', {}), /and the site moved on from it\.[\s\S]*Page: Home\n/)
+  assert.equal(sentTo('/session').length, 1)
+
+  // A form on the login's site that sends what is typed into it to another site is not given the password.
+  await toolIn(id, 'browser_navigate', { url: `http://${site}/logout` })
+  await toolIn(id, 'browser_navigate', { url: `http://${site}/sends-away` })
+  seen.length = 0
+  assert.match(await toolIn(id, 'browser_sign_in', {}), new RegExp(`^Error: The sign-in form here sends what is typed into it to ${elsewhere}, and the login "${name}" is for ${site.replace(/\./g, '\\.')}, so the password was not entered\\.`))
+  assert.deepEqual(seen, [])
 
   // On a page of another site nothing is entered: not when the bot names the login either.
   await toolIn(id, 'browser_navigate', { url: `http://${elsewhere}/login` })
@@ -431,6 +464,27 @@ test('the owner signs in by hand in the bot’s browser, and is asked whether to
   await api('POST', `/api/bots/${other.id}/browser/login-offer`, { windowId: win.id, offerId: third.id, save: true })
   assert.deepEqual(await api('GET', `/api/bots/${other.id}/secrets/${name}/value`), { value: PASSWORD })
   assert.equal((await logins(other.id)).length, 1)
+
+  // A page that asks for the password alone, as a site does of someone it knows: the account is the one the bot has there.
+  await api('PUT', `/api/bots/${other.id}/secrets/${name}`, { value: 'the-password-before-02' })
+  await api('POST', `/api/bots/${other.id}/browser/navigate`, { tabId: win.activeTab, url: `http://${site}/logout` })
+  await api('POST', `/api/bots/${other.id}/browser/navigate`, { tabId: win.activeTab, url: `http://${site}/welcome-back` })
+  await until(async () => /Page: Welcome back\n[\s\S]*input:password "Password"\n/.test(await toolIn(id, 'browser_snapshot', {})))
+  input({ kind: 'text', text: PASSWORD })
+  key('Enter')
+  const fourth = await until(async () => (await windowOf()).offer)
+  assert.deepEqual(fourth, { id: fourth.id, site, user: USER, replaces: name })
+  await api('POST', `/api/bots/${other.id}/browser/login-offer`, { windowId: win.id, offerId: fourth.id, save: true })
+  assert.deepEqual(await api('GET', `/api/bots/${other.id}/secrets/${name}/value`), { value: PASSWORD })
+
+  // A site that says back what was typed: while the password is held for the owner's answer, the bot does not read it there.
+  await api('POST', `/api/bots/${other.id}/browser/navigate`, { tabId: win.activeTab, url: `http://${site}/shows` })
+  await until(async () => /Page: Sign in\n[\s\S]*input:email "Email"\n/.test(await toolIn(id, 'browser_snapshot', {})))
+  signIn('someone@example.com', 'said-back-password-77')
+  const fifth = await until(async () => (await windowOf()).offer)
+  assert.match(await toolIn(id, 'browser_snapshot', {}), /Welcome\. Your password is \[secret: a password typed by hand\]$/)
+  assert.equal(inConversations('said-back-password-77'), 0)
+  await api('POST', `/api/bots/${other.id}/browser/login-offer`, { windowId: win.id, offerId: fifth.id, save: false })
   socket.close()
   await api('DELETE', `/api/bots/${other.id}`)
 })

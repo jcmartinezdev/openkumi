@@ -19,6 +19,10 @@ type Want =
   | 'remember'
   /** Whether a password field is showing at all. */
   | 'shows'
+  /** Whether Enter in the field `from` sends its form by itself: it is in a form with a button that sends it. */
+  | 'formed'
+  /** The addresses the form of the field `from` sends what is in it to, when the page says: its own, and those of its buttons. */
+  | 'sends'
   /** What has been typed into the page's sign-in form. */
   | 'typed'
 
@@ -47,7 +51,9 @@ function look({ want, from, value }: { want: Want; from?: Node | null; value?: s
   const isPassword = (el: HTMLInputElement) => el.type === 'password' && usable(el) && !/cc-|one-time-code/.test(el.autocomplete) && !(el.maxLength > 0 && el.maxLength <= 4)
   const said = (el: HTMLInputElement) => [el.name, el.id, el.autocomplete, el.placeholder, el.getAttribute('aria-label'), el.labels?.[0]?.textContent].join(' ').toLowerCase()
   const isSearch = (el: HTMLInputElement) => el.type === 'search' || el.getAttribute('role') === 'searchbox' || /search|query/.test(`${el.name} ${el.id}`.toLowerCase())
-  const texty = (el: HTMLInputElement) => ['text', 'email', 'tel'].includes(el.type) && usable(el) && !isSearch(el)
+  // A password that is being shown is in a field that says text, and is no user name for that.
+  const shownPassword = (el: HTMLInputElement) => /password/.test(el.autocomplete) || /pass|pwd/.test(`${el.name} ${el.id}`.toLowerCase())
+  const texty = (el: HTMLInputElement) => ['text', 'email', 'tel'].includes(el.type) && usable(el) && !isSearch(el) && !shownPassword(el)
   const userLike = (el: HTMLInputElement) => texty(el) && (el.type === 'email' || /user|e-?mail|login|account|identifier|phone|mobile|benutzer|usuario|correo|utilisateur|courriel|identifiant/.test(said(el)))
   /** The user name field that goes with a password field: the nearest one before it, in its form. */
   const userBefore = (password: HTMLInputElement) => {
@@ -82,15 +88,24 @@ function look({ want, from, value }: { want: Want; from?: Node | null; value?: s
     const filled = fields.filter((el) => isPassword(el) && el.value)
     const one = new Set(filled.map((el) => el.value)).size === 1 ? filled[0] : null
     const user = one ? userBefore(one) : password ? null : userAlone()
-    return { password: one?.value ?? null, user: user?.value.trim() ?? '', page: `${location.origin}${location.pathname}` }
+    // Where it was typed is read with what was typed: a page that goes elsewhere in between is another page.
+    return { password: one?.value ?? null, user: user?.value.trim() ?? '', host: location.host, page: `${location.origin}${location.pathname}` }
   }
   if (!(from instanceof HTMLInputElement)) return null
+  const sending = (form: HTMLFormElement) => [...form.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button[type=submit], input[type=submit], input[type=image], button:not([type])')].filter((el) => seen(el) && !el.disabled)
+  if (want === 'formed') return !!from.form && sending(from.form).length > 0
+  if (want === 'sends') {
+    if (!from.form) return []
+    // As the page wrote them: a field named "action" stands in the way of asking the form itself.
+    const written = [from.form.getAttribute('action'), ...sending(from.form).map((el) => el.getAttribute('formaction'))].filter((address): address is string => !!address)
+    return written.map((address) => { try { return new URL(address, document.baseURI).href } catch { return '' } })
+  }
   if (want === 'remember') {
     const boxes = fields.filter((el) => el.type === 'checkbox' && el.form === from.form && !el.disabled && !el.checked)
     return boxes.find((el) => /remember|keep.{0,12}(signed|logged)|stay.{0,12}(signed|logged)|persist|angemeldet|recordar|recu[eé]rd|mantener|souvenir|rester|ricorda/.test(said(el))) ?? null
   }
   if (want === 'submit') {
-    const own = from.form && [...from.form.querySelectorAll('button[type=submit], input[type=submit], button:not([type])')].find(seen)
+    const own = from.form && sending(from.form)[0]
     if (own) return own
     // A form that is not written as one: the first button after the field that says it signs in, and not with somebody else's account.
     const says = (el: Element) => (el instanceof HTMLInputElement ? el.value : (el.textContent ?? '')).replace(/\s+/g, ' ').trim().toLowerCase()
@@ -170,7 +185,10 @@ async function send(page: Page, field: ElementHandle<HTMLInputElement>) {
   const leaving = (moved: Frame) => void (left ||= moved === frame || moved === page.mainFrame())
   page.on('framenavigated', leaving)
   try {
+    // A form with a button that sends it is sent by Enter, however long its answer takes: the button would send it twice.
+    const formed = !frame || (await frame.evaluate(look, { want: 'formed' as Want, from: field }).catch(() => false))
     await field.press('Enter', { timeout: 5000 }).catch(() => {})
+    if (formed) return
     await page.waitForTimeout(1500).catch(() => {})
     // Still there, as it was: nothing took the Enter.
     const stayed = !left && page.url() === at && (await field.evaluate((el) => el.isConnected && el.value !== '').catch(() => false))
@@ -252,6 +270,14 @@ export async function signIn(page: Page, login: Login, password: (where: URL) =>
   // goes elsewhere meanwhile, the field is gone and nothing is put anywhere.
   const frame = await field.ownerFrame()
   if (!frame) throw new Error('The sign-in form went away before it was filled in. Take a new snapshot.')
+  // A form that says it sends what is in it to another site is not given the password, whatever page it is on.
+  const sends: string[] = await frame.evaluate(look, { want: 'sends' as Want, from: field }).catch(() => [])
+  const away = sends.map((address) => { try { return new URL(address) } catch { return null } }).find((to) => to && /^https?:$/.test(to.protocol) && !login.sites.includes(to.host))
+  if (away) {
+    throw new Error(
+      `The sign-in form here sends what is typed into it to ${away.host}, and the login "${login.name}" is for ${login.sites.join(', ')}, so the password was not entered. If that is where this account signs in, the user can add ${away.host} to the login, in your settings under Secrets.`,
+    )
+  }
   if (!(await put(field, await password(new URL(frame.url()))))) throw new Error('The password could not be put into the form: its field is no longer on the page, or does not take text.')
   // Staying signed in is what a login is kept for.
   const remember = await element(frame, 'remember', field)
@@ -292,7 +318,7 @@ export async function typedIn(page: Page): Promise<Typed | null> {
       const host = hostOf(frame)
       if (!host) return null
       const typed = await Promise.race([frame.evaluate(look, { want: 'typed' as Want }).catch(() => null), new Promise<null>((done) => setTimeout(() => done(null), 500).unref())])
-      return typed && (typed.password || typed.user) ? { host, ...typed } : null
+      return typed?.host && (typed.password || typed.user) ? typed : null
     }),
   )
   return read.find((typed) => typed?.password) ?? read.find(Boolean) ?? null

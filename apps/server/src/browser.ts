@@ -103,7 +103,7 @@ interface Win {
    * password its next page asks for. Held here and nowhere else.
    */
   typed: (Typed & { password: string }) | null
-  typedUser: { user: string; at: number } | null
+  typedUser: { user: string; host: string; at: number } | null
   /** A login made of that, which the owner is asked whether to keep. The password waits here for their answer, and is let go after a while. */
   offer: (LoginOffer & { password: string; page: string; expires: NodeJS.Timeout }) | null
   /** When the bot last used it. */
@@ -177,6 +177,8 @@ class BotBrowser {
 
   constructor(botId: string) {
     this.botId = botId
+    // What its owner typed by hand and is held here is taken out of what the bot reads, as its secrets are.
+    secrets.holding(botId, () => [...this.windows.values()].flatMap((win) => [win.typed?.password, win.offer?.password]).filter((held): held is string => !!held))
   }
 
   state(): BrowserState {
@@ -670,8 +672,9 @@ class BotBrowser {
     if (!win.controller || win.threadId?.startsWith('sign-in:')) return
     const typed = await typedIn(tab.page).catch(() => null)
     if (!typed) return
-    if (!typed.password) return void (win.typedUser = { user: typed.user, at: Date.now() })
-    const before = win.typedUser && Date.now() - win.typedUser.at < USER_FOR ? win.typedUser.user : ''
+    if (!typed.password) return void (win.typedUser = { user: typed.user, host: typed.host, at: Date.now() })
+    // The user name of the page before goes with a password on the same site, and with no other.
+    const before = win.typedUser && win.typedUser.host === typed.host && Date.now() - win.typedUser.at < USER_FOR ? win.typedUser.user : ''
     win.typed = { ...typed, password: typed.password, user: typed.user || before }
   }
 
@@ -684,17 +687,22 @@ class BotBrowser {
     for (const wait of looks) {
       await new Promise((done) => setTimeout(done, wait).unref())
       if (win.typed !== typed || !this.windows.has(win.id)) return
-      const asks = await Promise.all(win.tabs.map((tab) => stillAsks(tab.page, typed.host, typed.password)))
+      // A page that does not answer is taken to ask still: nothing is offered on its silence.
+      const silent = new Promise<boolean[]>((done) => setTimeout(() => done([true]), 2000).unref())
+      const asks = await Promise.race([Promise.all(win.tabs.map((tab) => stillAsks(tab.page, typed.host, typed.password))), silent])
+      // Another look at the same form may have settled it meanwhile, or the window has gone.
+      if (win.typed !== typed || !this.windows.has(win.id)) return
       if (asks.some(Boolean)) continue
       win.typed = null
       win.typedUser = null
-      const { same, replaces } = secrets.standing(this.botId, typed.host, typed.user, typed.password)
+      const { same, replaces, user } = secrets.standing(this.botId, typed.host, typed.user, typed.password)
       if (same) return
       if (win.offer) clearTimeout(win.offer.expires)
       const offer: NonNullable<Win['offer']> = {
         id: newId(),
         site: typed.host,
-        user: typed.user,
+        // A page that asks for the password alone: the account is the one the bot has for the site.
+        user: typed.user || user || '',
         ...(replaces ? { replaces } : {}),
         password: typed.password,
         page: typed.page,

@@ -87,6 +87,14 @@ completely safe:
 - **What you type is read to make the offer.** While you have control of a bot's browser, the
   server reads the sign-in form you fill in, so that it can ask whether to save it. It holds the
   password in memory until you answer, for ten minutes at most, and keeps nothing if you say no.
+  While it holds the password, it takes it out of what the bot reads.
+- **A password you make visible can be read.** A bot reads the pages in its browser, and a
+  password field hides what is in it. If you use a site's "show password" while you type by
+  hand and leave it showing, the bot can read it once the server no longer holds it. Hide it
+  again, or send the form, before you hand the window back.
+- **The password goes where the site's form sends it.** It is only entered on a page of the
+  login's site, and not into a form that says it sends to another site. What the site's own
+  scripts do with it after that is the site's business.
 - **A sign-in outlives the password.** The bot's browser profile, and the cookies kept beside
   it, hold the bot's sign-ins. A copy of the profile may be enough to be signed in as the bot,
   whatever becomes of the saved password.

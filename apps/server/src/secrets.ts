@@ -162,6 +162,9 @@ export function nameFor(botId: string, site: string): string {
   }
 }
 
+/** Whether a login's user name, which the bot is told, gives its password away: it is the password, or has it in it. */
+const inUser = (user: string | undefined, value: string) => !!user && (user === value || (value.length >= SHORTEST && user.includes(value)))
+
 const whatOf = (given: unknown) => String(given ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
 /** A text with a secret's value taken out of it, a short one too (down to a PIN): the secret's name stands there instead. */
 const plainly = (text: string, value: string, name: string) => (value.length < 4 ? text : taker([{ name, value }])(text))
@@ -200,9 +203,9 @@ export function save(
   const value = valueGiven(given.value)
   if (value.length >= SHORTEST && given.name.includes(value)) throw new Error('A secret’s name is what it is called, not the secret itself.')
   const user = userOf(given.user)
-  if (user && value.length >= SHORTEST && user.includes(value)) throw new Error('The user name is told to the bot: the password has no place in it.')
   const all = load(botId)
   const before = all.find((s) => s.name === given.name)
+  if (inUser(user || before?.user, value)) throw new Error('The user name is told to the bot: the password has no place in it.')
   if (before && !replace) throw new Error(`There is already a secret named "${given.name}".`)
   if (!before && all.length >= MOST) throw new Error(`A bot keeps ${MOST} secrets at most.`)
   const now = Date.now()
@@ -255,7 +258,7 @@ export function change(botId: string, name: string, patch: { sites?: unknown; wh
   // What it is said to be is kept as it is, and told to the bot: the value itself has no place in it.
   try {
     const value = valueOf(botId, next)
-    if (next.user && value.length >= SHORTEST && next.user.includes(value)) throw new Refused('The user name is told to the bot: the password has no place in it.')
+    if (inUser(next.user, value)) throw new Refused('The user name is told to the bot: the password has no place in it.')
     next.what = said(next.what, value, name)
   } catch (e) {
     if (e instanceof Refused) throw e
@@ -385,7 +388,7 @@ export function login(botId: string, name: string): Login {
  * would give a new password, and neither when it would be a new login. Without a user name, the
  * site's only login is the one meant.
  */
-export function standing(botId: string, host: string, user: string, password: string): { same: boolean; replaces?: string } {
+export function standing(botId: string, host: string, user: string, password: string): { same: boolean; replaces?: string; user?: string } {
   let all: Stored[]
   try {
     all = load(botId).filter((s) => s.user && s.sites.includes(host))
@@ -399,7 +402,7 @@ export function standing(botId: string, host: string, user: string, password: st
   } catch {
     // One that cannot be read is there to be entered again.
   }
-  return { same: false, replaces: mine.name }
+  return { same: false, replaces: mine.name, user: mine.user }
 }
 
 /**
@@ -407,10 +410,12 @@ export function standing(botId: string, host: string, user: string, password: st
  * a new password for the one the bot has for that account.
  */
 export function keepLogin(botId: string, typed: { site: string; user: unknown; password: string; page?: string }): Secret {
-  const user = userOf(typed.user)
-  if (!user) throw new Error('Give the user name too.')
-  const { replaces } = standing(botId, typed.site, user, typed.password)
+  const given = userOf(typed.user)
+  const { replaces } = standing(botId, typed.site, given, typed.password)
   const before = replaces ? load(botId).find((s) => s.name === replaces) : undefined
+  // A new password for the account the bot has, typed into a page that asked for nothing else.
+  const user = given || before?.user
+  if (!user) throw new Error('Give the user name too.')
   if (before) return save(botId, { name: before.name, sites: before.sites, value: typed.password, user, page: typed.page, by: 'owner' }, { replace: true })
   return save(botId, { name: nameFor(botId, typed.site), sites: [typed.site], value: typed.password, what: `Login for ${typed.site.replace(/^www\./, '')}`, user, page: typed.page, by: 'owner' })
 }
@@ -460,6 +465,13 @@ const plainAllowed = (hostname: string) => {
  * of a page that is open.
  */
 const handedOut = new Map<string, Map<string, string>>()
+
+/**
+ * The passwords a bot's owner typed by hand into its browser, for as long as they are held to be
+ * offered to them (see BotBrowser.settleTyped): looked for in what comes back to the bot as well.
+ */
+const heldFor = new Map<string, () => string[]>()
+export const holding = (botId: string, held: () => string[]) => void heldFor.set(botId, held)
 
 /**
  * The value of one of a bot's secrets, to be sent to `url`: given only when the secret is for that
@@ -579,6 +591,7 @@ function readable(botId: string): { name: string; value: string }[] {
     all = []
   }
   const found = new Map<string, string>(handedOut.get(botId))
+  for (const value of heldFor.get(botId)?.() ?? []) found.set(value, 'a password typed by hand')
   for (const secret of all) {
     try {
       found.set(valueOf(botId, secret), secret.name)
