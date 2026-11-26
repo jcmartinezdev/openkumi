@@ -1,0 +1,634 @@
+<!doctype html>
+<html>
+<head>
+<style>
+/* The game page: one page for every game, drawn from the data it is shown with (see instructions.md).
+   It sits on the conversation in the app's colours; the stage and the answer tiles have colours of
+   their own, the same in light and dark. */
+:root {
+  --g1: #6a4df5; --g2: #b14df5;
+  --game-font: ui-rounded, "SF Pro Rounded", var(--font-sans);
+  --tile-a: #6a4df5; --tile-b: #e8435e; --tile-c: #0b8577; --tile-d: #f5a524; --tile-e: #2a6fd6; --tile-f: #c2337a;
+  --yes: #0e9f6e; --no: #e0444e; --maybe: #f5a524;
+}
+[data-hue="coral"] { --g1: #e8435e; --g2: #ff8a4c; }
+[data-hue="teal"] { --g1: #0b8577; --g2: #1a9bd1; }
+[data-hue="amber"] { --g1: #c25e00; --g2: #e89a00; }
+[data-hue="blue"] { --g1: #2a5bd7; --g2: #3a9bff; }
+[data-hue="pink"] { --g1: #c2337a; --g2: #f0609e; }
+[data-hue="night"] { --g1: #1d1838; --g2: #5a2a82; }
+
+* { box-sizing: border-box; }
+.game { display: flex; flex-direction: column; gap: 12px; font-family: var(--game-font); }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+.chip.game-name { background: linear-gradient(135deg, var(--g1), var(--g2)); color: #fff; }
+.progress { display: flex; gap: 4px; align-items: center; }
+.progress i { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+.progress i.done { background: var(--g1); }
+.progress i.now { background: var(--g2); transform: scale(1.35); box-shadow: 0 0 0 3px color-mix(in srgb, var(--g2) 25%, transparent); }
+
+.banner { display: flex; gap: 10px; align-items: flex-start; padding: 10px 14px; border-radius: 14px; font-weight: 600; animation: slide .5s cubic-bezier(.2,.9,.3,1.2) backwards; }
+.banner.right { background: color-mix(in srgb, var(--success) 16%, transparent); }
+.banner.wrong { background: color-mix(in srgb, var(--destructive) 14%, transparent); }
+.banner.said { background: var(--muted); }
+.banner .big { font-size: 22px; line-height: 1; }
+.banner small { display: block; font-weight: 500; color: var(--muted-foreground); margin-top: 2px; }
+
+.stage { position: relative; overflow: hidden; border-radius: 20px; padding: 22px 20px; color: #fff; background: linear-gradient(135deg, var(--g1), var(--g2)); box-shadow: 0 10px 30px -12px color-mix(in srgb, var(--g1) 70%, transparent); animation: rise .55s cubic-bezier(.2,.9,.3,1.15) backwards; }
+.stage > * { position: relative; }
+.stage .deco { position: absolute; inset: 0; pointer-events: none; }
+.stage .deco span { position: absolute; border-radius: 50%; background: rgba(255,255,255,.12); animation: float 7s ease-in-out infinite; }
+.stage .deco span:nth-child(1) { width: 120px; height: 120px; right: -30px; top: -40px; }
+.stage .deco span:nth-child(2) { width: 60px; height: 60px; left: 12%; bottom: -24px; animation-delay: -2s; }
+.stage .deco span:nth-child(3) { width: 26px; height: 26px; right: 22%; bottom: 18px; animation-delay: -4s; background: rgba(255,255,255,.2); }
+.stage .deco span:nth-child(4) { width: 14px; height: 14px; left: 8%; top: 16px; animation-delay: -1s; background: rgba(255,255,255,.28); }
+.kicker { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .85; }
+.qtext { margin: 6px 0 0; font-size: clamp(19px, 4.4vw, 26px); font-weight: 800; line-height: 1.25; text-wrap: balance; }
+.stage-row { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; }
+.picture { display: block; margin: 14px auto 0; max-width: 100%; max-height: 240px; border-radius: 14px; object-fit: cover; box-shadow: 0 8px 24px rgba(0,0,0,.25); transition: filter 1.2s ease; }
+
+.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 460px) { .opts { grid-template-columns: 1fr; } }
+.opt { position: relative; display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 12px 14px; border-radius: 16px; color: #fff; background: var(--c); font-size: 16px; font-weight: 700; line-height: 1.25; box-shadow: inset 0 -4px 0 rgba(0,0,0,.16); animation: pop .45s cubic-bezier(.2,.9,.3,1.4) backwards; animation-delay: calc(var(--i) * 70ms + 150ms); transition: opacity .4s, filter .4s, transform .4s; }
+.opt.ink-dark { color: #2b1a00; }
+.opt .key { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: rgba(255,255,255,.24); font-size: 15px; font-weight: 800; }
+.opt .mark { margin-left: auto; font-size: 20px; }
+.opt.dim { opacity: .32; filter: saturate(.3); }
+.opt.right { transform: scale(1.03); box-shadow: inset 0 -4px 0 rgba(0,0,0,.16), 0 0 0 3px var(--background), 0 0 0 6px var(--success); animation: bounce .7s cubic-bezier(.2,.9,.3,1.4); }
+.opt.picked:not(.right) { box-shadow: inset 0 -4px 0 rgba(0,0,0,.16), 0 0 0 3px var(--background), 0 0 0 6px var(--destructive); }
+
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+button { font: inherit; font-weight: 800; font-size: 14px; border: 0; border-radius: 12px; padding: 10px 16px; cursor: pointer; color: #fff; background: linear-gradient(135deg, var(--g1), var(--g2)); box-shadow: inset 0 -3px 0 rgba(0,0,0,.18); transition: transform .15s; }
+button:active { transform: translateY(1px) scale(.98); }
+button.quiet { background: var(--muted); color: var(--foreground); box-shadow: none; }
+button[disabled] { opacity: .45; cursor: default; }
+
+.timer { flex: none; position: relative; width: 58px; height: 58px; }
+.timer svg { width: 58px; height: 58px; transform: rotate(-90deg); }
+.timer circle { fill: none; stroke-width: 6; }
+.timer .track { stroke: rgba(255,255,255,.25); }
+.timer .left { stroke: #fff; stroke-linecap: round; transition: stroke-dashoffset 1s linear, stroke .3s; }
+.timer b { position: absolute; inset: 0; display: grid; place-items: center; font-size: 18px; font-weight: 800; }
+.timer.hurry .left { stroke: #ffd166; }
+.timer.hurry b { animation: pulse .5s ease-in-out infinite alternate; }
+
+.board { display: flex; gap: 6px; flex-wrap: wrap; }
+.board .chip { background: var(--card); border: 1px solid var(--border); color: var(--foreground); }
+.board .chip b { color: var(--g1); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); display: inline-block; }
+.source { font-size: 11px; color: var(--muted-foreground); text-align: right; }
+
+/* title */
+.title-stage { text-align: center; padding: 30px 20px 26px; }
+.hero { font-size: 64px; line-height: 1; display: inline-block; animation: wiggle 2.4s ease-in-out infinite; filter: drop-shadow(0 8px 14px rgba(0,0,0,.25)); }
+.title-stage h1 { margin: 12px 0 4px; font-size: clamp(28px, 7vw, 40px); font-weight: 900; letter-spacing: -.01em; line-height: 1.05; }
+.title-stage p { margin: 0; font-size: 15px; font-weight: 600; opacity: .9; }
+.players { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 18px; }
+.player { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 5px; border-radius: 999px; background: rgba(255,255,255,.18); font-weight: 700; animation: pop .45s cubic-bezier(.2,.9,.3,1.4) backwards; animation-delay: calc(var(--i) * 90ms + 300ms); }
+.avatar { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--c); color: #fff; font-size: 14px; font-weight: 800; box-shadow: 0 0 0 2px rgba(255,255,255,.7); }
+.rules { list-style: none; margin: 0; padding: 14px 16px; border-radius: var(--radius); background: var(--card); border: 1px solid var(--border); display: grid; gap: 8px; }
+.rules li { display: flex; gap: 10px; align-items: baseline; font-weight: 600; }
+.rules li::before { content: attr(data-n); flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: linear-gradient(135deg, var(--g1), var(--g2)); color: #fff; font-size: 12px; font-weight: 800; }
+
+/* scores */
+.podium { display: flex; justify-content: center; align-items: flex-end; gap: 10px; padding-top: 8px; }
+.step { display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(150px, 30%); }
+.step .avatar { width: 44px; height: 44px; font-size: 20px; box-shadow: 0 0 0 3px var(--background), 0 0 0 5px var(--c); }
+.step .who { font-weight: 800; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.block { width: 100%; border-radius: 14px 14px 6px 6px; background: linear-gradient(180deg, var(--c), color-mix(in srgb, var(--c) 70%, #000)); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 10px; font-weight: 900; font-size: 22px; transform-origin: bottom; animation: grow .9s cubic-bezier(.2,.9,.3,1.1) backwards; }
+.block small { font-size: 11px; font-weight: 700; opacity: .85; }
+.medal { font-size: 26px; line-height: 1; }
+.rows { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); font-weight: 700; animation: slide .5s backwards; animation-delay: calc(var(--i) * 80ms + 500ms); }
+.row .rank { color: var(--muted-foreground); }
+.bar { height: 8px; border-radius: 99px; background: var(--muted); overflow: hidden; margin-top: 4px; }
+.bar i { display: block; height: 100%; border-radius: inherit; background: var(--c); transform-origin: left; animation: fill 1s cubic-bezier(.2,.9,.3,1) backwards; animation-delay: calc(var(--i) * 80ms + 600ms); }
+.gauge { display: grid; place-items: center; position: relative; width: 170px; height: 170px; margin: 0 auto; }
+.gauge svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.gauge circle { fill: none; stroke-width: 14; }
+.gauge .track { stroke: rgba(255,255,255,.25); }
+.gauge .left { stroke: #fff; stroke-linecap: round; animation: dial 1.4s cubic-bezier(.2,.9,.3,1) backwards .3s; }
+.gauge b { font-size: 40px; font-weight: 900; line-height: 1; }
+.gauge small { display: block; text-align: center; font-size: 14px; font-weight: 700; opacity: .85; }
+.winner { text-align: center; }
+.winner .hero { font-size: 56px; }
+.winner h2 { margin: 6px 0 0; font-size: clamp(22px, 5.6vw, 30px); font-weight: 900; }
+
+/* clues */
+.mystery { display: grid; place-items: center; width: 132px; height: 132px; margin: 14px auto 2px; border-radius: 50%; background: rgba(255,255,255,.16); box-shadow: inset 0 0 0 3px rgba(255,255,255,.35); font-size: 64px; font-weight: 900; animation: breathe 2.2s ease-in-out infinite; }
+.emojis { margin: 14px 0 4px; text-align: center; font-size: clamp(34px, 9vw, 52px); letter-spacing: .08em; line-height: 1.2; }
+.emojis .gap { width: .5em; }
+.emojis span { display: inline-block; animation: pop .5s cubic-bezier(.2,.9,.3,1.4) backwards; animation-delay: calc(var(--i) * 120ms + 200ms); }
+.worth { display: flex; justify-content: center; gap: 4px; margin-top: 10px; font-size: 18px; }
+.worth .off { opacity: .3; filter: grayscale(1); }
+.clue-list { display: grid; gap: 8px; }
+.clue { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); font-weight: 600; font-size: 15px; }
+.clue .n { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg, var(--g1), var(--g2)); color: #fff; font-size: 13px; font-weight: 800; }
+.clue.new { border-color: color-mix(in srgb, var(--g1) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--g1) 16%, transparent); animation: flipin .6s cubic-bezier(.2,.9,.3,1.2) backwards; }
+.locked { display: flex; gap: 6px; flex-wrap: wrap; }
+.locked .chip { background: transparent; border: 1px dashed var(--border); }
+.missed { display: flex; gap: 6px; flex-wrap: wrap; }
+.missed .chip { color: var(--foreground); text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: var(--destructive); }
+.reveal-name { margin: 12px 0 0; text-align: center; font-size: clamp(24px, 6vw, 34px); font-weight: 900; animation: stamp .6s cubic-bezier(.2,.9,.3,1.4) backwards .2s; }
+.reveal-note { margin: 6px 0 0; text-align: center; font-weight: 600; opacity: .92; }
+
+/* yes / no */
+.count { flex: none; text-align: center; }
+.count b { display: block; font-size: 34px; font-weight: 900; line-height: 1; }
+.count small { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
+.thought { margin-top: 12px; display: inline-block; padding: 10px 14px; border-radius: 18px 18px 18px 4px; background: rgba(255,255,255,.2); font-size: 17px; font-weight: 800; animation: pop .5s cubic-bezier(.2,.9,.3,1.4) backwards .25s; }
+.asked { display: grid; gap: 6px; }
+.ask { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); font-weight: 600; }
+.ask .n { color: var(--muted-foreground); font-size: 12px; font-weight: 800; }
+.ask.new { animation: slide .5s cubic-bezier(.2,.9,.3,1.2) backwards; border-color: color-mix(in srgb, var(--g1) 55%, transparent); }
+.pill { padding: 3px 10px; border-radius: 999px; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; background: var(--c); }
+.pill.dark { color: #2b1a00; }
+.meter { display: flex; gap: 3px; }
+.meter i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255,255,255,.25); }
+.meter i.used { background: #fff; }
+
+/* cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.card { position: relative; perspective: 900px; animation: pop .5s cubic-bezier(.2,.9,.3,1.4) backwards; animation-delay: calc(var(--i) * 110ms + 150ms); }
+.card .inner { display: grid; height: 100%; transition: transform .7s cubic-bezier(.3,1.2,.4,1); transform-style: preserve-3d; }
+.card.flipped .inner { transform: rotateY(180deg); }
+.face { grid-area: 1 / 1; position: relative; min-height: 130px; display: flex; flex-direction: column; gap: 6px; padding: 16px; border-radius: 18px; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; }
+.front { background: var(--card); border: 1px solid var(--border); }
+.front .top-band { position: absolute; left: 0; right: 0; top: 0; height: 6px; background: var(--c); }
+.back { transform: rotateY(180deg); color: #fff; background: linear-gradient(135deg, var(--g1), var(--g2)); }
+.face .em { font-size: 30px; line-height: 1; }
+.face h3 { margin: 0; font-size: 17px; font-weight: 800; }
+.face p { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.35; }
+.face .hint { margin-top: auto; font-size: 11px; font-weight: 700; color: var(--muted-foreground); letter-spacing: .04em; text-transform: uppercase; }
+.back .hint { color: rgba(255,255,255,.75); }
+.card.flippable { cursor: pointer; }
+.stamp { position: absolute; right: 10px; top: 12px; z-index: 2; padding: 4px 10px; border: 3px solid var(--c); border-radius: 10px; color: var(--c); background: color-mix(in srgb, var(--card) 85%, transparent); font-size: 15px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; transform: rotate(-9deg); animation: stamp .55s cubic-bezier(.2,.9,.3,1.4) backwards; animation-delay: calc(var(--i) * 110ms + 600ms); }
+.card.dim .front { opacity: .55; }
+
+/* guesses */
+.guess-top { text-align: center; }
+.guess-top .hero { font-size: 54px; }
+.guess-top h2 { margin: 8px 0 0; font-size: clamp(22px, 5.4vw, 30px); font-weight: 900; }
+.guess-top .sure { margin-top: 4px; font-weight: 700; opacity: .9; }
+.guess-rows { display: grid; gap: 8px; }
+.guess-row { padding: 10px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); font-weight: 700; animation: slide .5s backwards; animation-delay: calc(var(--i) * 90ms + 300ms); }
+.guess-row .line { display: flex; justify-content: space-between; gap: 10px; }
+.guess-row .line span:last-child { color: var(--muted-foreground); }
+
+.unseen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(14px) scale(.98); } }
+@keyframes pop { from { opacity: 0; transform: scale(.6); } }
+@keyframes slide { from { opacity: 0; transform: translateX(-14px); } }
+@keyframes float { 50% { transform: translateY(-12px) scale(1.06); } }
+@keyframes bounce { 30% { transform: scale(1.1); } 60% { transform: scale(.98); } }
+@keyframes pulse { to { transform: scale(1.18); } }
+@keyframes wiggle { 0%, 100% { transform: rotate(-6deg) scale(1); } 50% { transform: rotate(6deg) scale(1.08); } }
+@keyframes grow { from { transform: scaleY(0); } }
+@keyframes fill { from { transform: scaleX(0); } }
+@keyframes dial { from { stroke-dashoffset: var(--full); } }
+@keyframes breathe { 50% { transform: scale(1.06); box-shadow: inset 0 0 0 3px rgba(255,255,255,.6); } }
+@keyframes flipin { from { opacity: 0; transform: rotateX(-80deg); } }
+@keyframes stamp { from { opacity: 0; transform: rotate(-9deg) scale(2.2); } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="game" id="game"></div>
+<script>
+(function () {
+  'use strict'
+  var data = {}
+  // What the bot showed the page with (show_page's data), put at the top of the page.
+  var given = document.getElementById('page-data')
+  try { data = JSON.parse((given && given.textContent) || '{}') || {} } catch (e) { data = {} }
+  var root = document.getElementById('game')
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  // Shown just now, rather than drawn again later: only then does it celebrate by itself.
+  var fresh = typeof data.shownAt === 'number' && Date.now() - data.shownAt < 90000
+  var TILES = ['--tile-a', '--tile-b', '--tile-c', '--tile-d', '--tile-e', '--tile-f']
+  var DARK_INK = { '--tile-d': true }
+  var HUES = ['coral', 'teal', 'amber', 'blue', 'pink', 'night']
+  var VIEW_HUE = { title: '', question: '', scores: 'amber', clues: 'pink', yesno: 'teal', cards: 'coral', guesses: 'blue' }
+
+  // ---- small helpers: everything from the data goes in as text, never as markup
+  function h(tag, attrs) {
+    var el = document.createElement(tag)
+    if (attrs) for (var k in attrs) {
+      var v = attrs[k]
+      if (v == null || v === false) continue
+      if (k === 'text') el.textContent = String(v)
+      else if (k === 'style') el.setAttribute('style', v)
+      else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2), v)
+      else el.setAttribute(k, v === true ? '' : String(v))
+    }
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i])
+    return el
+  }
+  function add(el, child) {
+    if (child == null || child === false) return
+    if (Array.isArray(child)) { child.forEach(function (c) { add(el, c) }); return }
+    el.appendChild(typeof child === 'object' ? child : document.createTextNode(String(child)))
+  }
+  var text = function (v) { return v == null ? '' : String(v).trim() }
+  var list = function (v) { return Array.isArray(v) ? v : [] }
+  var num = function (v, d) { var n = Number(v); return isFinite(n) ? n : d }
+  var tile = function (i) { return TILES[i % TILES.length] }
+  var tileVar = function (i) { return '--c: var(' + tile(i) + ')' }
+  // Whole emoji, as they are seen: 🧙‍♂️ is made of four characters.
+  function graphemes(t) {
+    if (window.Intl && Intl.Segmenter) return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(t), function (s) { return s.segment })
+    return Array.from(t)
+  }
+  function picture(url) {
+    try { var u = new URL(String(url)); return u.protocol === 'https:' ? u.href : '' } catch (e) { return '' }
+  }
+  function initials(name) {
+    var t = text(name)
+    var parts = t.split(/\s+/).filter(Boolean)
+    if (!parts.length) return '?'
+    return (parts.length > 1 ? Array.from(parts[0])[0] + Array.from(parts[1])[0] : Array.from(parts[0])[0]).toUpperCase()
+  }
+  function people(v) {
+    return list(v).map(function (p, i) {
+      if (typeof p === 'string') p = { name: p }
+      p = p || {}
+      return { name: text(p.name) || 'Player ' + (i + 1), points: num(p.points, 0), emoji: text(p.emoji), i: i }
+    })
+  }
+  function avatar(p) { return h('span', { class: 'avatar', style: tileVar(p.i) }, p.emoji || initials(p.name)) }
+  function deco() { return h('div', { class: 'deco', 'aria-hidden': 'true' }, h('span'), h('span'), h('span'), h('span')) }
+
+  // ---- sound: only after a tap, as browsers allow
+  var audio = null
+  function tone(freq, length, type, gain) {
+    try {
+      audio = audio || new (window.AudioContext || window.webkitAudioContext)()
+      var o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime
+      o.type = type || 'sine'; o.frequency.value = freq
+      g.gain.setValueAtTime(gain || 0.12, t); g.gain.exponentialRampToValueAtTime(0.0001, t + length)
+      o.connect(g); g.connect(audio.destination); o.start(t); o.stop(t + length)
+    } catch (e) {}
+  }
+  var tick = function () { tone(880, 0.08, 'square', 0.05) }
+  var buzz = function () { tone(140, 0.5, 'sawtooth', 0.09) }
+  var ding = function () { tone(988, 0.18); setTimeout(function () { tone(1319, 0.35) }, 120) }
+
+  // ---- confetti
+  function confetti(amount) {
+    if (still) return
+    var canvas = h('canvas', { class: 'confetti', 'aria-hidden': 'true' })
+    document.body.appendChild(canvas)
+    var ctx = canvas.getContext('2d'), ratio = window.devicePixelRatio || 1
+    var w = canvas.width = innerWidth * ratio, ht = canvas.height = innerHeight * ratio
+    var colours = ['#6a4df5', '#e8435e', '#0b8577', '#f5a524', '#2a6fd6', '#f0609e', '#ffd166']
+    var bits = []
+    for (var i = 0; i < (amount || 140); i++) bits.push({
+      x: w * (0.2 + Math.random() * 0.6), y: ht * 0.35, vx: (Math.random() - 0.5) * 16 * ratio, vy: (-Math.random() * 15 - 5) * ratio,
+      r: (4 + Math.random() * 5) * ratio, a: Math.random() * 6, va: (Math.random() - 0.5) * 0.4, c: colours[i % colours.length], round: Math.random() < 0.3,
+    })
+    var start = performance.now()
+    ;(function frame(now) {
+      ctx.clearRect(0, 0, w, ht)
+      var alive = false
+      bits.forEach(function (b) {
+        b.vy += 0.42 * ratio; b.vx *= 0.99; b.x += b.vx; b.y += b.vy; b.a += b.va
+        if (b.y < ht + 20) alive = true
+        ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.a); ctx.fillStyle = b.c
+        if (b.round) { ctx.beginPath(); ctx.arc(0, 0, b.r / 2, 0, 7); ctx.fill() } else ctx.fillRect(-b.r / 2, -b.r / 4, b.r, b.r / 2)
+        ctx.restore()
+      })
+      if (alive && now - start < 4500) requestAnimationFrame(frame)
+      else canvas.remove()
+    })(start)
+  }
+
+  // ---- what every view can carry: the game's name, where it is, how the last answer went, the scores, the source
+  function top() {
+    var game = text(data.game)
+    var where = text(data.round)
+    var n = num(data.number, 0), total = num(data.total, 0)
+    var dots = null
+    if (n > 0 && total > 0 && total <= 20) {
+      dots = h('span', { class: 'progress', 'aria-label': 'Question ' + n + ' of ' + total })
+      for (var i = 1; i <= total; i++) dots.appendChild(h('i', { class: i < n ? 'done' : i === n ? 'now' : '' }))
+    }
+    if (!game && !where && !dots) return null
+    return h('div', { class: 'top' },
+      h('span', null, game && h('span', { class: 'chip game-name' }, game), where && [' ', h('span', { class: 'chip' }, where)]),
+      dots || (n > 0 && h('span', { class: 'chip' }, total ? n + ' / ' + total : '#' + n)))
+  }
+  function lastAnswer() {
+    var last = data.last
+    if (!last || typeof last !== 'object') return null
+    var right = last.right === true, wrong = last.right === false
+    return h('div', { class: 'banner ' + (right ? 'right' : wrong ? 'wrong' : 'said') },
+      h('span', { class: 'big', 'aria-hidden': 'true' }, text(last.emoji) || (right ? '🎉' : wrong ? '😬' : '💬')),
+      h('div', null, text(last.text), text(last.note) && h('small', null, text(last.note))))
+  }
+  function board() {
+    var players = people(data.board)
+    if (!players.length) return null
+    return h('div', { class: 'board' }, players.map(function (p) {
+      return h('span', { class: 'chip' }, h('span', { class: 'dot', style: tileVar(p.i) }), p.name, ' ', h('b', null, p.points))
+    }))
+  }
+  function source() { return text(data.source) && h('div', { class: 'source' }, text(data.source)) }
+
+  // ---- the views
+  function titleView() {
+    var players = people(data.players)
+    var rules = list(data.rules).map(text).filter(Boolean)
+    return [
+      h('section', { class: 'stage title-stage' }, deco(),
+        h('div', { class: 'hero', 'aria-hidden': 'true' }, text(data.emoji) || '🎲'),
+        h('h1', null, text(data.game) || 'Game night'),
+        text(data.subtitle) && h('p', null, text(data.subtitle)),
+        players.length > 0 && h('div', { class: 'players' }, players.map(function (p) {
+          return h('span', { class: 'player', style: '--i:' + p.i }, avatar(p), p.name)
+        }))),
+      rules.length > 0 && h('ol', { class: 'rules' }, rules.map(function (r, i) { return h('li', { 'data-n': i + 1 }, r) })),
+    ]
+  }
+
+  function questionView() {
+    var options = list(data.options).map(text).slice(0, 6)
+    var answer = Number.isInteger(data.answer) && data.answer >= 0 && data.answer < options.length ? data.answer : -1
+    var picked = Number.isInteger(data.picked) ? data.picked : -1
+    var shown = data.revealed === true && answer >= 0
+    var seconds = Math.min(120, Math.max(0, num(data.seconds, 0)))
+    var tiles = options.map(function (o, i) {
+      var cls = 'opt' + (DARK_INK[tile(i)] ? ' ink-dark' : '')
+      return h('div', { class: cls, style: tileVar(i) + ';--i:' + i, role: 'listitem' },
+        h('span', { class: 'key' }, String.fromCharCode(65 + i)), h('span', null, o), h('span', { class: 'mark' }))
+    })
+    var timer = null, timerText = null, ring = null, full = 2 * Math.PI * 24
+    if (seconds && !shown) {
+      timerText = h('b', null, seconds)
+      ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+      ring.setAttribute('class', 'left'); ring.setAttribute('cx', '29'); ring.setAttribute('cy', '29'); ring.setAttribute('r', '24')
+      ring.setAttribute('stroke-dasharray', String(full)); ring.setAttribute('stroke-dashoffset', '0')
+      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      svg.setAttribute('viewBox', '0 0 58 58')
+      var track = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+      track.setAttribute('class', 'track'); track.setAttribute('cx', '29'); track.setAttribute('cy', '29'); track.setAttribute('r', '24')
+      svg.appendChild(track); svg.appendChild(ring)
+      timer = h('div', { class: 'timer', role: 'timer', 'aria-label': seconds + ' seconds' }, svg, timerText)
+    }
+    var every = null, shownNow = false
+    function reveal(sound) {
+      if (answer < 0 || shownNow) return
+      shownNow = true
+      if (every) clearInterval(every)
+      tiles.forEach(function (t, i) {
+        t.classList.toggle('right', i === answer)
+        t.classList.toggle('dim', i !== answer && i !== picked)
+        t.classList.toggle('picked', i === picked)
+        var mark = t.querySelector('.mark')
+        mark.textContent = ''
+        // The mark is seen; a screen reader says what it means.
+        if (i === answer) add(mark, ['✓', h('span', { class: 'unseen' }, ', the right answer')])
+        else if (i === picked) add(mark, ['✗', h('span', { class: 'unseen' }, ', chosen, wrong')])
+      })
+      if (revealButton) revealButton.disabled = true
+      if (startButton) startButton.disabled = true
+      if (sound) ding()
+      if (sound || (fresh && picked === answer)) confetti(picked >= 0 && picked !== answer ? 0 : 120)
+    }
+    var running = false
+    function start() {
+      if (running) return
+      running = true
+      startButton.disabled = true
+      var left = seconds
+      tick()
+      every = setInterval(function () {
+        left--
+        timerText.textContent = Math.max(0, left)
+        ring.setAttribute('stroke-dashoffset', String(full * (1 - left / seconds)))
+        timer.classList.toggle('hurry', left <= 5)
+        if (left > 0 && left <= 5) tick()
+        if (left <= 0) {
+          clearInterval(every)
+          timerText.textContent = '⏰'
+          buzz()
+          setTimeout(function () { reveal(true) }, 700)
+        }
+      }, 1000)
+    }
+    var startButton = timer && h('button', { onclick: start }, '▶ Start the clock')
+    var revealButton = answer >= 0 && !shown && h('button', { class: 'quiet', onclick: function () { reveal(true) } }, '👀 Show the answer')
+    var image = picture(data.image)
+    var view = [
+      h('section', { class: 'stage' }, deco(),
+        h('div', { class: 'stage-row' },
+          h('div', null, h('div', { class: 'kicker' }, text(data.category) || (num(data.number, 0) ? 'Question ' + num(data.number, 0) : 'Question')),
+            h('p', { class: 'qtext' }, text(data.question))),
+          timer),
+        image && h('img', { class: 'picture', src: image, alt: '' })),
+      tiles.length > 0 && h('div', { class: 'opts', role: 'list' }, tiles),
+      (startButton || revealButton) && h('div', { class: 'actions' }, startButton, revealButton),
+    ]
+    if (shown) setTimeout(function () { reveal(false) }, 450)
+    return view
+  }
+
+  function scoresView() {
+    var players = people(data.players).sort(function (a, b) { return b.points - a.points })
+    var outOf = num(data.outOf, 0)
+    var final = data.final === true
+    var view = []
+    if (players.length === 1 && outOf > 0) {
+      var p = players[0], share = Math.max(0, Math.min(1, p.points / outOf))
+      var r = 70, full = 2 * Math.PI * r
+      var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      svg.setAttribute('viewBox', '0 0 170 170')
+      ;[['track', 0], ['left', share]].forEach(function (c) {
+        var circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
+        circle.setAttribute('class', c[0]); circle.setAttribute('cx', '85'); circle.setAttribute('cy', '85'); circle.setAttribute('r', String(r))
+        if (c[0] === 'left') {
+          circle.setAttribute('stroke-dasharray', String(full)); circle.setAttribute('stroke-dashoffset', String(full * (1 - share)))
+          circle.setAttribute('style', '--full:' + full)
+        }
+        svg.appendChild(circle)
+      })
+      var verdict = text(data.note) || (share >= 0.9 ? 'Genius level!' : share >= 0.7 ? 'Brilliant!' : share >= 0.4 ? 'Not bad at all' : 'Rematch?')
+      view.push(h('section', { class: 'stage winner' }, deco(),
+        h('div', { class: 'kicker' }, text(data.title) || (final ? 'Final score' : 'Score so far')),
+        h('div', { class: 'gauge', style: 'margin-top:12px' }, svg, h('div', null, h('b', null, p.points), h('small', null, 'of ' + outOf))),
+        h('h2', null, verdict)))
+      if (final && fresh && share >= 0.5) setTimeout(function () { confetti(160) }, 900)
+      return view
+    }
+    var lead = players[0]
+    var tie = players.length > 1 && players[1].points === lead.points
+    view.push(h('section', { class: 'stage winner' }, deco(),
+      h('div', { class: 'kicker' }, text(data.title) || (final ? 'Final scores' : 'Scores so far')),
+      lead && h('div', { class: 'hero', 'aria-hidden': 'true', style: 'margin-top:10px' }, final ? (tie ? '🤝' : '🏆') : '📊'),
+      lead && h('h2', null, final ? (tie ? 'A tie at the top!' : lead.name + ' wins!') : tie ? 'Neck and neck!' : lead.name + ' is in the lead'),
+      text(data.note) && h('p', { class: 'reveal-note' }, text(data.note))))
+    var top3 = players.slice(0, 3)
+    var most = Math.max(1, lead ? lead.points : 1)
+    if (top3.length) {
+      var order = top3.length === 3 ? [top3[1], top3[0], top3[2]] : top3.length === 2 ? [top3[1], top3[0]] : [top3[0]]
+      var medals = ['🥇', '🥈', '🥉']
+      view.push(h('div', { class: 'podium' }, order.map(function (p, k) {
+        var place = players.indexOf(p)
+        var tall = 60 + Math.round(90 * (p.points / most))
+        return h('div', { class: 'step', style: tileVar(p.i) },
+          h('span', { class: 'medal', 'aria-hidden': 'true' }, medals[place]), avatar(p), h('span', { class: 'who' }, p.name),
+          h('div', { class: 'block', style: 'height:' + tall + 'px;animation-delay:' + (k * 150 + 200) + 'ms' }, p.points, h('small', null, p.points === 1 ? 'point' : 'points')))
+      })))
+    }
+    var rest = players.slice(3)
+    if (rest.length) view.push(h('div', { class: 'rows' }, rest.map(function (p, k) {
+      return h('div', { class: 'row', style: tileVar(p.i) + ';--i:' + k },
+        h('span', { class: 'rank' }, '#' + (k + 4)),
+        h('div', null, p.name, h('div', { class: 'bar' }, h('i', { style: 'width:' + Math.round(100 * p.points / most) + '%;--i:' + k }))),
+        h('span', null, p.points))
+    })))
+    if (final && fresh) setTimeout(function () { confetti(180) }, 900)
+    return view
+  }
+
+  function cluesView() {
+    var clues = list(data.clues).map(text).filter(Boolean)
+    var total = Math.max(clues.length, Math.min(20, num(data.cluesTotal, clues.length)))
+    var answer = data.answer && typeof data.answer === 'object' ? data.answer : null
+    var image = picture(answer && answer.image) || picture(data.image)
+    var blur = answer ? 0 : Math.round(26 * (1 - Math.min(clues.length, total) / Math.max(total, 1)) + 4)
+    var worth = num(data.points, 0)
+    var most = Math.max(worth, num(data.maxPoints, total))
+    var emojis = graphemes(text(data.emojis).replace(/\s+/g, ' '))
+    var stars = null
+    if (worth > 0 && most <= 10) {
+      stars = h('div', { class: 'worth', 'aria-label': 'Worth ' + worth + ' points now' })
+      for (var s = 0; s < most; s++) stars.appendChild(h('span', { class: s < worth ? '' : 'off' }, '⭐'))
+    }
+    var stage = h('section', { class: 'stage' }, deco(),
+      h('div', { class: 'kicker', style: 'text-align:center' }, text(data.prompt) || (answer ? 'The answer' : 'Who or what is it?')),
+      image ? h('img', { class: 'picture', src: image, alt: '', style: 'filter: blur(' + blur + 'px)' })
+        : emojis.length ? h('div', { class: 'emojis', 'aria-label': emojis.join('') }, emojis.map(function (e, i) { return e === ' ' ? h('span', { class: 'gap' }) : h('span', { style: '--i:' + i }, e) }))
+        : !answer && h('div', { class: 'mystery', 'aria-hidden': 'true' }, '?'),
+      answer ? [h('div', { class: 'reveal-name' }, text(answer.name)), text(answer.note) && h('p', { class: 'reveal-note' }, text(answer.note))]
+        : stars)
+    var cards = clues.map(function (c, i) {
+      return h('div', { class: 'clue' + (i === clues.length - 1 && !answer ? ' new' : '') }, h('span', { class: 'n' }, i + 1), h('span', null, c))
+    })
+    var locked = []
+    if (!answer) for (var k = clues.length; k < total; k++) locked.push(h('span', { class: 'chip' }, '🔒 Clue ' + (k + 1)))
+    var missed = list(data.guesses).map(text).filter(Boolean)
+    if (answer && answer.solved === true && fresh) setTimeout(function () { confetti(150) }, 500)
+    return [stage,
+      missed.length > 0 && h('div', { class: 'missed', 'aria-label': 'Wrong guesses' }, missed.map(function (g) { return h('span', { class: 'chip' }, g) })),
+      cards.length > 0 && h('div', { class: 'clue-list' }, cards),
+      locked.length > 0 && h('div', { class: 'locked', 'aria-label': locked.length + ' clues to come' }, locked)]
+  }
+
+  function yesnoView() {
+    var asked = list(data.asked).map(function (a) {
+      if (typeof a === 'string') a = { q: a }
+      a = a || {}
+      return { q: text(a.q || a.question), a: text(a.a || a.answer).toLowerCase() }
+    }).filter(function (a) { return a.q })
+    var limit = Math.max(1, Math.min(40, num(data.limit, 20)))
+    var answer = data.answer && typeof data.answer === 'object' ? data.answer : null
+    var guessing = text(data.guesser) || 'you'
+    var meter = h('div', { class: 'meter', 'aria-hidden': 'true', style: 'margin-top:14px' })
+    for (var i = 0; i < limit; i++) meter.appendChild(h('i', { class: i < asked.length ? 'used' : '' }))
+    var ANSWERS = { yes: ['Yes', '--yes'], no: ['No', '--no'], sometimes: ['Sort of', '--maybe'], 'sort of': ['Sort of', '--maybe'], maybe: ['Maybe', '--maybe'] }
+    var stage = h('section', { class: 'stage' }, deco(),
+      h('div', { class: 'stage-row' },
+        h('div', null,
+          h('div', { class: 'kicker' }, text(data.category) ? 'It is ' + text(data.category).replace(/^(a|an|the)\s+/i, function (m) { return m.toLowerCase() }) : 'Yes or no?'),
+          h('p', { class: 'qtext' }, text(data.prompt) || (guessing === 'you' ? 'I’m thinking of something…' : 'Think of something. I’ll guess it.'))),
+        h('div', { class: 'count' }, h('b', null, Math.max(0, limit - asked.length)), h('small', null, 'left'))),
+      text(data.guess) && !answer && h('div', { class: 'thought' }, text(data.guess)),
+      answer && [h('div', { class: 'emojis' }, h('span', null, text(answer.emoji) || '🎯')), h('div', { class: 'reveal-name', style: 'margin-top:0' }, text(answer.name)),
+        text(answer.note) && h('p', { class: 'reveal-note' }, text(answer.note))],
+      meter)
+    if (answer && answer.solved === true && fresh) setTimeout(function () { confetti(150) }, 500)
+    var rows = asked.map(function (a, k) {
+      var said = ANSWERS[a.a] || [a.a || '?', '--muted-foreground']
+      return h('div', { class: 'ask' + (k === asked.length - 1 && !answer ? ' new' : '') },
+        h('span', { class: 'n' }, k + 1), h('span', null, a.q),
+        h('span', { class: 'pill' + (said[1] === '--maybe' ? ' dark' : ''), style: '--c: var(' + said[1] + ')' }, said[0]))
+    })
+    return [stage, rows.length > 0 && h('div', { class: 'asked' }, rows.reverse())]
+  }
+
+  function cardsView() {
+    var cards = list(data.cards).map(function (c, i) {
+      if (typeof c === 'string') c = { text: c }
+      c = c || {}
+      return { title: text(c.title), text: text(c.text), emoji: text(c.emoji), back: text(c.back), stamp: text(c.stamp), tone: text(c.tone), i: i }
+    })
+    var TONES = { good: '--success', bad: '--destructive', neutral: '--g1' }
+    var stamped = cards.some(function (c) { return c.stamp })
+    var faces = function (c, back) {
+      return [c.emoji && h('div', { class: 'em', 'aria-hidden': 'true' }, back ? '🤫' : c.emoji),
+        (back ? 'Secret' : c.title) && h('h3', null, back ? (c.title ? c.title + ' — secret' : 'Secret') : c.title),
+        h('p', null, back ? c.back : c.text),
+        c.back && h('div', { class: 'hint' }, back ? 'Tap to hide' : 'Tap to flip')]
+    }
+    var grid = h('div', { class: 'cards' }, cards.map(function (c) {
+      var el = h('div', { class: 'card' + (c.back ? ' flippable' : '') + (stamped && !c.stamp ? ' dim' : ''), style: tileVar(c.i) + ';--i:' + c.i },
+        h('div', { class: 'inner' },
+          h('div', { class: 'face front' }, h('span', { class: 'top-band' }), faces(c, false)),
+          c.back && h('div', { class: 'face back', 'aria-hidden': 'true' }, faces(c, true))),
+        c.stamp && h('span', { class: 'stamp', style: '--c: var(' + (TONES[c.tone] || TONES.neutral) + ');--i:' + c.i }, c.stamp))
+      if (c.back) {
+        el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0')
+        var flip = function () {
+          var over = el.classList.toggle('flipped')
+          el.querySelector('.front').setAttribute('aria-hidden', String(over))
+          el.querySelector('.back').setAttribute('aria-hidden', String(!over))
+          tone(660, 0.12, 'triangle', 0.06)
+        }
+        el.addEventListener('click', flip)
+        el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip() } })
+      }
+      return el
+    }))
+    if (stamped && fresh && cards.some(function (c) { return c.stamp && c.tone === 'good' })) setTimeout(function () { confetti(100) }, 900)
+    return [
+      (text(data.prompt) || text(data.title)) && h('section', { class: 'stage', style: 'padding:16px 20px' }, deco(),
+        text(data.title) && h('div', { class: 'kicker' }, text(data.title)), text(data.prompt) && h('p', { class: 'qtext', style: 'margin-top:2px' }, text(data.prompt))),
+      grid,
+    ]
+  }
+
+  function guessesView() {
+    var guesses = list(data.guesses).map(function (g) {
+      if (typeof g === 'string') g = { text: g }
+      g = g || {}
+      return { text: text(g.text || g.name), sure: Math.max(0, Math.min(100, num(g.sure, 0))) }
+    }).filter(function (g) { return g.text })
+    var first = guesses[0]
+    return [
+      h('section', { class: 'stage guess-top' }, deco(),
+        h('div', { class: 'kicker' }, text(data.prompt) || 'My guess'),
+        h('div', { class: 'hero', 'aria-hidden': 'true', style: 'margin-top:10px' }, text(data.emoji) || '🤔'),
+        first && h('h2', null, first.text),
+        first && first.sure > 0 && h('div', { class: 'sure' }, first.sure + '% sure'),
+        text(data.note) && h('p', { class: 'reveal-note' }, text(data.note))),
+      guesses.length > 1 && h('div', { class: 'guess-rows' }, guesses.slice(1).map(function (g, k) {
+        return h('div', { class: 'guess-row', style: tileVar(k + 1) + ';--i:' + k },
+          h('div', { class: 'line' }, h('span', null, g.text), h('span', null, g.sure ? g.sure + '%' : '')),
+          h('div', { class: 'bar' }, h('i', { style: 'width:' + g.sure + '%;--i:' + k })))
+      })),
+    ]
+  }
+
+  var VIEWS = { title: titleView, question: questionView, scores: scoresView, clues: cluesView, yesno: yesnoView, cards: cardsView, guesses: guessesView }
+  var view = VIEWS[data.view] ? data.view : 'title'
+  var hue = HUES.indexOf(data.hue) >= 0 ? data.hue : VIEW_HUE[view]
+  if (hue) document.documentElement.setAttribute('data-hue', hue)
+  add(root, [top(), lastAnswer(), VIEWS[view](), board(), source()])
+  if (view === 'title' && fresh) setTimeout(function () { confetti(90) }, 400)
+})()
+</script>
+</body>
+</html>

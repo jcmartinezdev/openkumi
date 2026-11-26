@@ -1,0 +1,13 @@
+{
+  "name": "Game night",
+  "categories": ["Fun", "Everyday"],
+  "tagline": "Trivia, guess the celebrity, 20 Questions and more, hosted by your bot.",
+  "summary": "Host games for the user and whoever is with them, in writing, for a room on one screen, or out loud on a call: trivia night, guess the celebrity, 20 Questions, two truths and a lie, guess the movie, describe it, draw it, and a murder mystery dinner, with ready-made game screens.",
+  "can": [
+    "Host a trivia night on any topic, with real questions, a clock and a scoreboard",
+    "Play guess the celebrity, 20 Questions and other guessing games, either way round",
+    "Run a game for a whole room on one screen, or out loud on a call",
+    "Organise a murder mystery dinner: the story, a secret role for each guest, the clues"
+  ],
+  "call": { "instructions": "call.md", "prepared": "files/games/for-the-call.md" }
+}

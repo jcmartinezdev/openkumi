@@ -40,6 +40,8 @@ import { settings } from './settings.ts'
 import { TIME_ZONE } from './automations.ts'
 import { track } from './telemetry.ts'
 import { passedOnAt } from './tools.ts'
+import { callParts } from './superpowers.ts'
+import * as ws from './workspace.ts'
 
 /** How long Codex is given to answer with the other half of the connection. */
 const ANSWER_WITHIN = 25_000
@@ -49,6 +51,10 @@ const QUIET_FOR = 5 * 60_000
 const GONE_AFTER = 40_000
 /** The most of a bot's answer that is given to the voice to say. */
 const SAYABLE = 3500
+/** What a bot made ready for a call is given to the voice for this long after it was written: later it is likely for a call that has been. */
+const PREPARED_FOR = 24 * 60 * 60_000
+/** The most of what a bot made ready that the voice is given. */
+const PREPARED_SIZE = 10_000
 
 /** Thrown for what the owner can put right: no Codex, a bot that is gone. */
 export class CallError extends Error {}
@@ -224,9 +230,39 @@ function voiceInstructions(bot: Bot): string {
 
 type Opening = { role: 'developer' | 'user' | 'assistant'; text: string }
 
+/** How long ago, for the voice: "20 minutes", "3 hours". */
+function ago(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000))
+  return minutes < 90 ? `${minutes} minute${minutes === 1 ? '' : 's'}` : `${Math.round(ms / 3_600_000)} hours`
+}
+
 /**
- * What the call starts with, for the voice: its instructions, then the end of the bot's written
- * conversation, so that it knows what the two were just talking about.
+ * What the voice is told about the bot's superpowers that work on a call, such as hosting a game:
+ * how to go about it, and what the bot made ready for a call in writing, when that is recent.
+ */
+function superpowersOnACall(bot: Bot): Opening[] {
+  return callParts(bot.id).map(({ name, instructions, prepared }) => {
+    let ready = ''
+    if (prepared) {
+      try {
+        const file = ws.resolve(bot.id, prepared)
+        const info = fs.statSync(file.abs)
+        const age = Date.now() - info.mtimeMs
+        if (!file.readOnly && info.isFile() && age < PREPARED_FOR) {
+          const text = fs.readFileSync(file.abs, 'utf8').trim().slice(0, PREPARED_SIZE)
+          if (text) ready = `\n\n## What you made ready for a call, in writing, ${ago(age)} ago\n\n${text}`
+        }
+      } catch {
+        // Nothing made ready.
+      }
+    }
+    return { role: 'developer', text: `# ${name}, on this call\n\n${instructions}${ready}` }
+  })
+}
+
+/**
+ * What the call starts with, for the voice: its instructions, what its superpowers say for a call,
+ * then the end of the bot's written conversation, so that it knows what the two were just talking about.
  */
 function opening(bot: Bot): Opening[] {
   const conversation = db.mainThread(bot.id)
@@ -235,6 +271,7 @@ function opening(bot: Bot): Opening[] {
     .slice(-8)
   return [
     { role: 'developer', text: voiceInstructions(bot) },
+    ...superpowersOnACall(bot),
     ...(kept.length ? [{ role: 'developer' as const, text: 'For what the two of you were last talking about, this is the end of your written conversation with the user, from before this call:' }, ...kept] : []),
     { role: 'developer', text: 'The call begins now.' },
   ]

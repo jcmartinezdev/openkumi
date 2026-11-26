@@ -7,6 +7,8 @@ import path from 'node:path'
 import * as ws from './workspace.ts'
 
 const MAX_HTML = 1_000_000
+/** The data a page made to be filled in is given, as JSON. */
+const MAX_DATA = 100_000
 /** Pictures put into the page, together. */
 const MAX_PICTURES = 6_000_000
 
@@ -23,6 +25,8 @@ export const PAGE_GUIDE = [
     '(such as a chart library from https://cdn.jsdelivr.net/npm/, with an exact version), but it cannot fetch or send anything itself.',
   'Pictures from your workspace can be named by path (<img src="files/photo.jpg">); they are put into the page.',
   'A page saved as a file is not shown to the user until you show it here with its path.',
+  'A page made to be filled in (one of your superpowers may bring some) is shown with its path and data: an object, put at the top of the page as ' +
+    '<script id="page-data" type="application/json">, together with shownAt, when it was shown, in ms; the page reads it with document.getElementById.',
   'Layout: the page is as wide as the conversation (about 720px on a computer, 360px on a phone) and sits on its background. ' +
     'Leave html and body without a background, border, outer padding or a heading that repeats the title. Use fluid widths. ' +
     'A box with a background of its own gets padding: 16px and border-radius: var(--radius). Give charts a fixed height in px. ' +
@@ -75,6 +79,35 @@ export function makePage(botId: string, args: Record<string, unknown>): Page {
       return whole
     }
   })
+  if (args.data != null) html = withData(html, args.data)
   const given = Number(args.height)
   return { title, html, height: Number.isFinite(given) && given > 0 ? Math.round(given) : 400, missing }
+}
+
+/**
+ * Puts the data a page is shown with at the top of it, the first element with its id, which is the
+ * one the page finds: first in its <head> when it has one (anything before that tag would make it
+ * lose its attributes), else after a doctype, else first. Written so that nothing in it can end the
+ * block it is in.
+ */
+function withData(html: string, given: unknown): string {
+  let data = given
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data)
+    } catch {
+      throw new Error('The data is not valid JSON. Give it as an object.')
+    }
+  }
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('Give the data as an object, such as {"view": "question"}.')
+  const json = JSON.stringify({ ...data, shownAt: Date.now() }).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
+  if (json.length > MAX_DATA) throw new Error(`The data is too large (${Math.round(json.length / 1000)} KB; at most ${MAX_DATA / 1000} KB).`)
+  const block = `<script id="page-data" type="application/json">${json}</script>`
+  // Comments are blanked out first (keeping every position), so a tag written in one is not taken for the page's own.
+  const scan = html.replace(/<!--[\s\S]*?-->/g, (comment) => ' '.repeat(comment.length))
+  const head = /<head(?:\s[^>]*)?>/i.exec(scan)
+  const body = scan.search(/<body[\s>]/i)
+  const at = head && (body === -1 || head.index < body) ? head : /^\s*<!doctype[^>]*>/i.exec(scan)
+  const cut = at ? at.index + at[0].length : 0
+  return `${html.slice(0, cut)}${block}${html.slice(cut)}`
 }
