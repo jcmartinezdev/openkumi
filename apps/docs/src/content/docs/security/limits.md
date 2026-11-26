@@ -70,6 +70,51 @@ without it. A program that runs under your account can still ask for the key, as
 Nothing else in the folder is encrypted yet: not the sign-ins of superpowers, the access code or
 an API key in `auth.json`, nor the conversations.
 
+## A saved login is the whole account
+
+A [login](/secrets/#logins) lets a bot sign in to a site by itself. The bot never sees the
+password, the model's service is never sent it, and it is kept encrypted. It is still not
+completely safe:
+
+- **Anyone who can use your account on the computer that runs OpenKumi can get the passwords.**
+  In the app on that computer, **Show** displays one. A program that runs as you can ask for the
+  vault's key as OpenKumi does and decrypt them all. While the server runs, a password it has
+  used is in its memory. On a computer several people share under one account, that includes
+  them.
+- **The bot acts as you on that site.** Signed in, it can do whatever the account can, in its
+  conversation and in runs nobody watches, and it can be [misled](#bots-can-be-misled) by what it
+  reads there. Not seeing the password does not limit what it does with the account.
+- **What you type is read to make the offer.** While you have control of a bot's browser, the
+  server reads the sign-in form you fill in, so that it can ask whether to save it. It holds the
+  password in memory until you answer, for ten minutes at most, and keeps nothing if you say no.
+  While it holds the password, it takes it out of what the bot reads. A login's password has
+  six characters at least, since a shorter one could not be found there, so a shorter one is
+  not offered.
+- **A password you make visible can be read.** A bot reads the pages in its browser, and a
+  password field hides what is in it. If you use a site's "show password" while you type by
+  hand and leave it showing, the bot can read it once the server no longer holds it. Hide it
+  again, or send the form, before you hand the window back.
+- **The password goes where the site's form sends it.** It is only entered on a page of the
+  login's site, and not into a form that says it sends to another site. What the site's own
+  scripts do with it after that is the site's business.
+- **A sign-in outlives the password.** The bot's browser profile, and the cookies kept beside
+  it, hold the bot's sign-ins. A copy of the profile may be enough to be signed in as the bot,
+  whatever becomes of the saved password.
+- **Signing in by itself is new.** It has so far been tried against test pages, not against
+  many real sites. A site may also treat repeated automatic sign-ins as suspicious and lock the
+  account.
+
+**What to do:**
+
+- Give a bot an account of its own where the site allows it, with only the rights its work needs.
+- Never save the password of your main e-mail, your bank or your password manager, nor a
+  password you use on more than one site.
+- Keep two-factor sign-in on for accounts that matter. The bot then needs you for the code,
+  which is the point.
+- Lock the computer that runs OpenKumi when you leave it, and keep its disk encrypted.
+- Remove a login the bot no longer needs. If the computer is lost or somebody else got into it,
+  change those passwords on the sites themselves and sign the sessions out there.
+
 ## Keys on the desktop are in a file, not the keychain
 
 The desktop app keeps the keys of remote environments in `desktop.json`, readable only by your

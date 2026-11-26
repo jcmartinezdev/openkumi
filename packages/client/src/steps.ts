@@ -29,7 +29,9 @@ export function describe(call: { name: string; arguments: string }): string {
     case 'browser_eval': return 'Run a script in the page'
     // An address may name a secret where its value goes; what is said of it stops before that.
     case 'web_fetch': return `${a.method && a.method !== 'GET' ? 'Send to' : 'Fetch'} ${site(String(a.url ?? '').split(/[?#]/)[0])}`
+    case 'browser_sign_in': return a.login ? `Sign in with the login “${a.login}”` : 'Sign in'
     case 'ask_secret': return `Ask for ${a.what || 'a secret'}`
+    case 'ask_login': return `Ask for the login of ${a.what || a.site || 'a site'}`
     case 'save_secret': return a.value ? `Keep ${a.what || 'a secret'} in its vault` : `Make up a password for ${a.site ?? 'a site'}`
     case 'spawn_subagent': return `Start subagent “${a.name ?? ''}”`
     case 'wait_subagents': return 'Wait for subagents'

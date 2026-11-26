@@ -20,7 +20,7 @@ import { Asked, Questions } from './Questions'
 import { StatusDot } from './Sidebar'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { parseReport, reportWord } from '@openkumi/client/reports'
-import { type SecretAsk, answerSecret, declineSecret, secretAsk } from '@openkumi/client/secrets'
+import { type SecretAsk, answerSecret, declineSecret, isSecretAsk, secretAsk } from '@openkumi/client/secrets'
 import { describe, parse, site } from '@openkumi/client/steps'
 import { api, loadOlder, loadThread, mainThread, navigate, onEnvironmentChange, openAutomations, openSettings, openThread, recentSubagents, rootOf, useStore } from './store'
 import { BotHead, Mascot } from './Mascot'
@@ -30,7 +30,7 @@ type Call = Extract<ItemData, { type: 'function_call' }>
 const FILE_TOOLS = new Set(['list_files', 'read_file', 'write_file', 'edit_file', 'search_files', 'move_file', 'delete_file'])
 const toolIcon = (name: string) =>
   name.startsWith('browser_') || name === 'web_fetch' ? 'globe'
-  : name.endsWith('_secret') ? 'key'
+  : name.endsWith('_secret') || name === 'ask_login' ? 'key'
   : name.includes('subagent') ? 'agents'
   : name.endsWith('_automation') || name === 'list_automations' ? 'clock'
   : FILE_TOOLS.has(name) ? 'file'
@@ -137,12 +137,14 @@ function Report({ id, text }: { id: number; text: string }) {
 }
 
 /**
- * A bot asking for a secret (ask_secret): an API key, a password. While the bot waits, its owner
- * types the value here. It goes to the server and into the bot's vault, and is never part of the
- * conversation; afterwards the card says what became of it.
+ * A bot asking for a secret (ask_secret): an API key, a password; or for a login (ask_login): the
+ * user name and password of an account. While the bot waits, its owner types it here. It goes to
+ * the server and into the bot's vault, and is never part of the conversation; afterwards the card
+ * says what became of it.
  */
 function SecretCard({ id, ask, name }: { id: number; ask: SecretAsk; name: string }) {
   const [value, setValue] = useState('')
+  const [user, setUser] = useState(ask.user)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const act = (doing: Promise<unknown>) => {
@@ -153,9 +155,9 @@ function SecretCard({ id, ask, name }: { id: number; ask: SecretAsk; name: strin
   if (ask.state !== 'waiting') {
     return (
       <div data-item={id} className="msg secret-card">
-        <div className="secret-head"><Icon name="key" size={13} /><span className="eyebrow">Secret</span></div>
+        <div className="secret-head"><Icon name="key" size={13} /><span className="eyebrow">{ask.login ? 'Login' : 'Secret'}</span></div>
         <div>
-          {ask.what} <span className="report-word">{ask.state === 'saved' ? `saved as “${ask.name}”, for ${ask.site}` : ask.state === 'declined' ? 'not given' : 'not entered'}</span>
+          {ask.what} <span className="report-word">{ask.state === 'saved' ? `saved as ${ask.login ? 'the login ' : ''}“${ask.name}”, for ${ask.site}` : ask.state === 'declined' ? 'not given' : 'not entered'}</span>
         </div>
       </div>
     )
@@ -166,18 +168,28 @@ function SecretCard({ id, ask, name }: { id: number; ask: SecretAsk; name: strin
       className="msg secret-card waiting"
       onSubmit={(e) => {
         e.preventDefault()
-        if (value && !busy) act(answerSecret(ask.callId, value))
+        if (value && (!ask.login || user.trim()) && !busy) act(ask.login ? answerSecret(ask.callId, value, user) : answerSecret(ask.callId, value))
       }}
     >
-      <div className="secret-head"><Icon name="key" size={13} /><span className="eyebrow">{name} needs a secret</span></div>
+      <div className="secret-head"><Icon name="key" size={13} /><span className="eyebrow">{name} needs {ask.login ? 'a login' : 'a secret'}</span></div>
       <div className="secret-what">{ask.what}</div>
-      <p>
-        It is kept encrypted as “{ask.name}”{ask.replaces && ', in place of the one it has'}. {name} uses it without seeing it, and it is sent only to <strong>{ask.site}</strong>.
-        {ask.where && <> <a href={ask.where} target="_blank" rel="noreferrer">Where to find it</a></>}
-      </p>
+      {ask.login ? (
+        <p>
+          The password is kept encrypted as “{ask.name}”{ask.replaces && ', in place of the one it has'}. {name} signs in to <strong>{ask.site}</strong> with it by itself, without seeing it, whenever the site has signed it out.
+          {ask.where && <> <a href={ask.where} target="_blank" rel="noreferrer">Where to find it</a></>}
+        </p>
+      ) : (
+        <p>
+          It is kept encrypted as “{ask.name}”{ask.replaces && ', in place of the one it has'}. {name} uses it without seeing it, and it is sent only to <strong>{ask.site}</strong>.
+          {ask.where && <> <a href={ask.where} target="_blank" rel="noreferrer">Where to find it</a></>}
+        </p>
+      )}
       <div className="secret-entry">
-        <input type="password" autoComplete="off" spellCheck={false} aria-label={ask.what} placeholder="Paste or type it here" value={value} disabled={busy} onChange={(e) => setValue(e.target.value)} />
-        <button type="submit" className="primary" disabled={!value || busy}>Save</button>
+        {ask.login && (
+          <input type="text" autoComplete="off" autoCapitalize="off" spellCheck={false} aria-label={`User name: ${ask.what}`} placeholder="User name or e-mail" value={user} disabled={busy} onChange={(e) => setUser(e.target.value)} />
+        )}
+        <input type="password" autoComplete="off" spellCheck={false} aria-label={ask.login ? `Password: ${ask.what}` : ask.what} placeholder={ask.login ? 'Password' : 'Paste or type it here'} value={value} disabled={busy} onChange={(e) => setValue(e.target.value)} />
+        <button type="submit" className="primary" disabled={!value || (ask.login && !user.trim()) || busy}>Save</button>
         <button type="button" className="ghost" disabled={busy} onClick={() => act(declineSecret(ask.callId))}>Not now</button>
       </div>
       {error && <small className="err">{error}</small>}
@@ -346,7 +358,7 @@ function Items({ items, running, openFile, name }: { items: Item[]; running: boo
       continue
     }
     // A bot asking for a secret is answered in a card, where its owner types it. One that could not be asked is a step like any that failed.
-    if (data.type === 'function_call' && data.name === 'ask_secret') {
+    if (data.type === 'function_call' && isSecretAsk(data.name)) {
       const ask = secretAsk(data, outputs.get(data.call_id), running)
       if (ask.state !== 'failed') {
         flush(id)

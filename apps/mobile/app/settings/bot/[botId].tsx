@@ -11,7 +11,7 @@ import { useBotId } from '@openkumi/client/bots'
 import { api, useFiles, useStore } from '@openkumi/client/store'
 import { triggerLabel } from '@openkumi/client/automations'
 import { inShort, summarize } from '@openkumi/client/workspace'
-import { NEW_SECRET, useSecrets } from '@openkumi/client/secrets'
+import { NEW_LOGIN, NEW_SECRET, howLogins, loginsOf, plainSecretsOf, siteName, useSecrets } from '@openkumi/client/secrets'
 import { ProviderIcon, SuperpowerIcon } from '../../../src/icons'
 import { useBotModel } from '../../../src/ModelChip'
 import { Field, ICON_INSET, Row, Section, SettingsPage, Slot, SwitchRow } from '../../../src/SettingsUi'
@@ -35,7 +35,8 @@ export default function BotSettings() {
   const statuses = useStatuses(botId)
   const { entries } = useFiles(botId)
   const { data: vault, error: secretsError } = useSecrets(botId)
-  const secrets = vault?.secrets
+  const secrets = vault && plainSecretsOf(vault.secrets)
+  const logins = vault && loginsOf(vault.secrets)
   const allAutomations = useStore((s) => s.automations)
   const calls = useStore((s) => s.calls)
   const voices = useVoiceChoices(stored?.voice ?? '')
@@ -154,6 +155,20 @@ export default function BotSettings() {
           />
         ))}
         <Row icon="compass" label="Browse superpowers" tone="action" opens onPress={() => router.push({ pathname: '/superpowers/[botId]', params: { botId: bot.id } })} />
+      </Section>
+
+      <Section title="Logins" inset={ICON_INSET} footer={secretsError ? `Its logins could not be fetched: ${secretsError}` : `${howLogins(bot.name)} You can also sign in yourself in its browser, and say yes when you are asked whether to save it.`}>
+        {logins?.map((login) => (
+          <Row
+            key={login.name}
+            icon="key"
+            label={siteName(login.sites[0])}
+            detail={login.problem ? 'Cannot be read: enter the password again' : login.user}
+            opens
+            onPress={() => router.push({ pathname: '/settings/secrets/[botId]/[name]', params: { botId: bot.id, name: login.name } })}
+          />
+        ))}
+        <Row icon="plus" label="Add a login" tone="action" onPress={() => router.push({ pathname: '/settings/secrets/[botId]/[name]', params: { botId: bot.id, name: NEW_LOGIN } })} />
       </Section>
 
       <Section title="Secrets" inset={ICON_INSET} footer={secretsError ? `Its secrets could not be fetched: ${secretsError}` : `Keys and passwords ${bot.name} works with. They are kept encrypted: it uses one by name without seeing it, and each is sent only to the site it is for.`}>

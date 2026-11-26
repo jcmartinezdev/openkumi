@@ -4,12 +4,16 @@
 // same time never get in each other's way. The UI watches a window's tabs through a CDP screencast
 // and, once the owner takes control of it, drives them; agent tools drive them through Playwright.
 import crypto from 'node:crypto'
+import fs from 'node:fs'
 import path from 'node:path'
 import { type BrowserContext, type CDPSession, type Page, type Request, chromium } from 'playwright-core'
-import type { BrowserInput, BrowserState } from '@openkumi/shared'
+import type { BrowserInput, BrowserState, LoginOffer } from '@openkumi/shared'
 import { PORT, emit, privateDir, serverPorts } from './config.ts'
+import * as secrets from './secrets.ts'
 import { settings } from './settings.ts'
+import { type Typed, stillAsks, typedIn } from './sign-in.ts'
 import { track } from './telemetry.ts'
+import * as vault from './vault.ts'
 import { incoming, resolve } from './workspace.ts'
 
 const VIEWPORT = { width: 1280, height: 800 }
@@ -93,12 +97,60 @@ interface Win {
   secrets: Set<string>
   /** What the bot asked the owner to do in it (browser_ask_user), and how to tell it how that ended. */
   request: { text: string; taken: boolean; settle: (outcome: AskOutcome) => void } | null
+  /**
+   * What its owner typed into a sign-in form while they had control of it, until it is known
+   * whether the site took it; and the user name of a form that asked for that alone, to go with the
+   * password its next page asks for. Held here and nowhere else.
+   */
+  typed: (Typed & { password: string }) | null
+  typedUser: { user: string; host: string; page: string; at: number } | null
+  /** A login made of that, which the owner is asked whether to keep. The password waits here for their answer, and is let go after a while. */
+  offer: (LoginOffer & { password: string; page: string; expires: NodeJS.Timeout }) | null
   /** When the bot last used it. */
   usedAt: number
   retiring?: NodeJS.Timeout
 }
 
 const newId = () => crypto.randomBytes(4).toString('hex')
+
+/** How long after a form was sent it is looked at again, to see whether the site took what was typed. */
+const LOOKS = [1500, 2500, 4000]
+/** How long an offer to keep a login waits for its answer. */
+const OFFER_FOR = 10 * 60_000
+/** How long a user name waits for the password its form asks for on the next page. */
+const USER_FOR = 10 * 60_000
+
+// Chrome forgets a cookie that has no end date when it closes, and many sites keep a sign-in in
+// just such a cookie. A bot's Chrome closes whenever the server stops (an update, a restart of the
+// computer), which would sign the bot out of those sites each time. So these cookies are kept
+// beside the profile, encrypted as the bot's secrets are, and given back to Chrome when it starts.
+type Cookie = Awaited<ReturnType<BrowserContext['cookies']>>[number]
+const cookieFile = (botId: string) => path.join(privateDir(botId), 'session-cookies.json')
+/** What the file is the cookies of. Not the bot's id: the file moves with the bot's folder when its id changes. */
+const COOKIES = 'session-cookies'
+/** How often a running browser's cookies are looked at, so that one that is killed loses little. */
+const COOKIES_EVERY = 30_000
+
+function readCookies(botId: string): Cookie[] {
+  try {
+    const cookies = JSON.parse(vault.open(JSON.parse(fs.readFileSync(cookieFile(botId), 'utf8')), COOKIES))
+    return Array.isArray(cookies) ? cookies : []
+  } catch {
+    // None kept, or kept with a key that is not here: the bot signs in again, as it did before these were kept.
+    return []
+  }
+}
+
+function writeCookies(botId: string, cookies: Cookie[]) {
+  const file = cookieFile(botId)
+  if (!cookies.length) return fs.rmSync(file, { force: true })
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  // Written beside it and moved into place, so that a write cut short leaves what was there.
+  const next = `${file}.new`
+  fs.writeFileSync(next, JSON.stringify(vault.seal(JSON.stringify(cookies), COOKIES)) + '\n', { mode: 0o600 })
+  fs.chmodSync(next, 0o600)
+  fs.renameSync(next, file)
+}
 
 class BotBrowser {
   botId: string
@@ -119,9 +171,14 @@ class BotBrowser {
   private stateTimer: NodeJS.Timeout | null = null
   /** The servers on this computer it was started to keep away from. */
   private keptFrom: number[] = []
+  /** The cookies without an end date as they were last written down, and what looks at them again. */
+  private cookies = ''
+  private cookieTimer: NodeJS.Timeout | null = null
 
   constructor(botId: string) {
     this.botId = botId
+    // What its owner typed by hand and is held here is taken out of what the bot reads, as its secrets are.
+    secrets.holding(botId, () => [...this.windows.values()].flatMap((win) => [win.typed?.password, win.offer?.password]).filter((held): held is string => !!held))
   }
 
   state(): BrowserState {
@@ -136,6 +193,7 @@ class BotBrowser {
         activeTab: w.active?.id ?? null,
         controller: w.controller,
         request: w.request?.text ?? null,
+        offer: w.offer ? { id: w.offer.id, site: w.offer.site, user: w.offer.user, ...(w.offer.replaces ? { replaces: w.offer.replaces } : {}) } : null,
         usedAt: w.usedAt,
       })),
     }
@@ -166,7 +224,7 @@ class BotBrowser {
       if (tries === 3) throw new Error('The browser could not be started. Try again.')
       const old = this.context
       if (old) this.forget()
-      this.starting = (old ? old.close().catch(() => {}) : Promise.resolve())
+      this.starting = (old ? this.keepCookies(old).then(() => old.close().catch(() => {})) : Promise.resolve())
         .then(() => this.launch(headless))
         .finally(() => (this.starting = null))
     }
@@ -197,9 +255,12 @@ class BotBrowser {
         )
       }
     }
+    await this.giveCookies(context)
     this.context = context
     this.headless = headless
     this.keptFrom = ports
+    this.cookieTimer = setInterval(() => void this.keepCookies(context), COOKIES_EVERY)
+    this.cookieTimer.unref()
     // Seen however the browser gets there: services usually send it back with a redirect.
     context.on('request', (request) => request.url().startsWith(`${SIGN_IN_RETURN}?`) && void this.signInReturned(request))
     context.on('page', (page) => void this.adopt(page))
@@ -208,6 +269,28 @@ class BotBrowser {
     })
     for (const page of context.pages()) await this.adopt(page, true)
     this.announce()
+  }
+
+  /** Gives Chrome back the cookies it forgot when it last closed. */
+  private async giveCookies(context: BrowserContext) {
+    const kept = readCookies(this.botId)
+    this.cookies = JSON.stringify(kept)
+    if (!kept.length) return
+    // One that Chrome does not take must not keep the others out.
+    await context.addCookies(kept).catch(() => Promise.all(kept.map((cookie) => context.addCookies([cookie]).catch(() => {}))))
+  }
+
+  /** Writes down the cookies Chrome would forget on closing, when they are not the ones written down already. */
+  private async keepCookies(context: BrowserContext) {
+    try {
+      const forgotten = (await context.cookies()).filter((cookie) => cookie.expires === -1)
+      const text = JSON.stringify(forgotten)
+      if (text === this.cookies) return
+      writeCookies(this.botId, forgotten)
+      this.cookies = text
+    } catch {
+      // A browser that is closing, or a vault that cannot be opened right now: what was written before stays.
+    }
   }
 
   private adopt(page: Page, spare = false): Promise<Tab | null> {
@@ -229,7 +312,7 @@ class BotBrowser {
     if (page.isClosed() || !context || this.context !== context) return null
     let win = parent?.win.tabs.length ? parent.win : [...this.windows.values()].find((w) => chromeId !== null && w.chromeIds.has(chromeId))
     if (!win) {
-      win = { id: newId(), chromeIds: new Set(), threadId: null, spare, tabs: [], active: null, controller: null, touched: false, scripted: new Set(), secrets: new Set(), request: null, usedAt: 0 }
+      win = { id: newId(), chromeIds: new Set(), threadId: null, spare, tabs: [], active: null, controller: null, touched: false, scripted: new Set(), secrets: new Set(), request: null, typed: null, typedUser: null, offer: null, usedAt: 0 }
       this.windows.set(win.id, win)
     }
     if (chromeId !== null) win.chromeIds.add(chromeId)
@@ -282,6 +365,7 @@ class BotBrowser {
       this.signIns.delete(win.id)
       clearTimeout(win.retiring)
       win.request?.settle('closed')
+      this.letGoOfTyped(win)
     }
     this.announce()
   }
@@ -290,7 +374,10 @@ class BotBrowser {
     for (const win of this.windows.values()) {
       clearTimeout(win.retiring)
       win.request?.settle('closed')
+      this.letGoOfTyped(win)
     }
+    if (this.cookieTimer) clearInterval(this.cookieTimer)
+    this.cookieTimer = null
     this.context = null
     this.tabs.clear()
     this.windows.clear()
@@ -428,6 +515,10 @@ class BotBrowser {
     if (!win?.controller || (viewer && win.controller !== viewer)) return
     win.controller = null
     if (win.request?.taken) win.request.settle(outcome)
+    // What they typed and sent just before handing back is looked at once more, and then let go.
+    const typed = win.typed
+    if (typed) void this.settleTyped(win, typed, [300, 1500])
+    win.typedUser = null
     this.announce()
   }
 
@@ -571,12 +662,88 @@ class BotBrowser {
     }
   }
 
+  /**
+   * The owner, in control of a window, is about to send something (Enter, or a click): what is in
+   * the page's sign-in form is read first, since a form that is sent takes it along. Not in the
+   * window of a superpower's sign-in, where the service keeps the bot signed in by itself.
+   */
+  private async noteTyped(tab: Tab) {
+    const win = tab.win
+    if (!win.controller || win.threadId?.startsWith('sign-in:')) return
+    const typed = await typedIn(tab.page).catch(() => null)
+    if (!typed) return
+    if (!typed.password) return void (win.typedUser = { user: typed.user, host: typed.host, page: typed.page, at: Date.now() })
+    // One too short to be found in what the bot reads is not held: it could not be kept out of it.
+    if (!secrets.findable(typed.password)) return
+    // The user name of the page before goes with a password on the same site, and with no other. That page is where signing in begins.
+    const before = win.typedUser && win.typedUser.host === typed.host && Date.now() - win.typedUser.at < USER_FOR ? win.typedUser : null
+    win.typed = { ...typed, password: typed.password, ...(typed.user || !before ? {} : { user: before.user, page: before.page }) }
+  }
+
+  /**
+   * Looks whether the site took what was typed: its form is gone from the window. Then the owner
+   * is asked whether to keep it, unless the bot has just that login already. A form that is still
+   * there was not sent, or was refused.
+   */
+  private async settleTyped(win: Win, typed: NonNullable<Win['typed']>, looks = LOOKS) {
+    for (const wait of looks) {
+      await new Promise((done) => setTimeout(done, wait).unref())
+      if (win.typed !== typed || !this.windows.has(win.id)) return
+      // A page that does not answer is taken to ask still: nothing is offered on its silence.
+      const silent = new Promise<boolean[]>((done) => setTimeout(() => done([true]), 2000).unref())
+      const asks = await Promise.race([Promise.all(win.tabs.map((tab) => stillAsks(tab.page, typed.host, typed.password))), silent])
+      // Another look at the same form may have settled it meanwhile, or the window has gone.
+      if (win.typed !== typed || !this.windows.has(win.id)) return
+      if (asks.some(Boolean)) continue
+      win.typed = null
+      win.typedUser = null
+      const { same, replaces, user } = secrets.standing(this.botId, typed.host, typed.user, typed.password)
+      if (same) return
+      if (win.offer) clearTimeout(win.offer.expires)
+      const offer: NonNullable<Win['offer']> = {
+        id: newId(),
+        site: typed.host,
+        // A page that asks for the password alone: the account is the one the bot has for the site.
+        user: typed.user || user || '',
+        ...(replaces ? { replaces } : {}),
+        password: typed.password,
+        page: typed.page,
+        expires: setTimeout(() => win.offer === offer && ((win.offer = null), this.announce()), OFFER_FOR),
+      }
+      offer.expires.unref()
+      win.offer = offer
+      return this.announce()
+    }
+    // Still there after all that: it was not sent, or the site refused it. What is sent next is read anew.
+    if (win.typed === typed) win.typed = null
+  }
+
+  private letGoOfTyped(win: Win) {
+    if (win.offer) clearTimeout(win.offer.expires)
+    win.offer = null
+    win.typed = null
+    win.typedUser = null
+  }
+
+  /** The owner's answer to an offer: keep what they typed as the bot's login, under the user name they confirmed, or not. */
+  answerOffer(windowId: string, offerId: string, answer: { save: boolean; user?: unknown }) {
+    const win = this.windows.get(windowId)
+    const offer = win?.offer
+    if (!win || !offer || offer.id !== offerId) throw new Error('That sign-in is no longer held. Sign in again, or add the login under the bot’s Secrets.')
+    if (answer.save) secrets.keepLogin(this.botId, { site: offer.site, user: answer.user ?? offer.user, password: offer.password, page: offer.page })
+    clearTimeout(offer.expires)
+    win.offer = null
+    this.announce()
+  }
+
   input(tabId: string, ev: BrowserInput) {
     const tab = this.tabs.get(tabId)
     if (!tab) return
     const { mouse, keyboard } = tab.page
+    const sends = ev.kind === 'down' || (ev.kind === 'keydown' && ev.key === 'Enter')
     tab.queue = tab.queue
       .then(async () => {
+        if (sends) await this.noteTyped(tab)
         switch (ev.kind) {
           case 'move':
             return mouse.move(ev.x, ev.y)
@@ -598,6 +765,11 @@ class BotBrowser {
         }
       })
       .catch(() => {})
+      .then(() => {
+        const typed = tab.win.typed
+        // A click sends a form when the button is let go of, so the looking begins anew then.
+        if (typed && (sends || ev.kind === 'up')) void this.settleTyped(tab.win, typed)
+      })
   }
 
   async stop() {
@@ -605,6 +777,7 @@ class BotBrowser {
     while (this.starting) await this.starting.catch(() => {})
     const context = this.context
     this.forget()
+    if (context) await this.keepCookies(context)
     await context?.close().catch(() => {})
   }
 }

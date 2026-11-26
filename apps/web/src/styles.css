@@ -734,6 +734,10 @@ button.chip { padding: 0 10px; }
 .control-bar .grow { overflow-wrap: anywhere; }
 .control-bar.you { background: color-mix(in srgb, var(--primary) 7%, transparent); }
 .control-bar.asking { background: color-mix(in srgb, var(--run) 12%, transparent); }
+/* "Save this login?": the question takes a line of its own, and what answers it goes under it. */
+.control-bar.offer { flex-wrap: wrap; background: color-mix(in srgb, var(--primary) 7%, transparent); }
+.control-bar.offer .grow { flex: 1 1 100%; }
+.control-bar.offer .set-input { flex: 1 1 160px; min-width: 0; height: 30px; }
 /* Filling the app's window: over the sidebar and the chat, under the settings and dialogs. */
 .pane.full { position: fixed; inset: 0; z-index: 14; border: none; }
 html[data-inset] .pane.full .pane-bar { padding-left: 86px; }

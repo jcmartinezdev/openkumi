@@ -165,6 +165,27 @@ export interface Secret {
   usedAt: number | null
   /** Why it cannot be read right now, when it cannot: its key is not on this computer, or cannot be had. */
   problem?: string
+  /**
+   * With a user name it is a login: an account on its site, whose password is the value. The bot
+   * signs in with it by itself (browser_sign_in), and is told the user name, never the password.
+   */
+  user?: string
+  /** A login's sign-in page, when it is known. */
+  page?: string
+}
+
+/**
+ * What the owner typed into a sign-in form in a bot's browser window while they had control of
+ * it, offered to be kept as that bot's login. The password stays on the server until they say yes.
+ */
+export interface LoginOffer {
+  id: string
+  /** The site the form was on, as a login names it: its host. */
+  site: string
+  /** The user name as it was read from the form: empty when none was found, and the owner's to correct. */
+  user: string
+  /** The login it would give a new password, when the bot has one for this account. */
+  replaces?: string
 }
 
 /** A bot's secrets, and where the key they are encrypted with is kept (null before the first one). */
@@ -788,6 +809,8 @@ export interface BrowserWindow {
   controller: string | null
   /** What the bot asked the owner to do in it, such as signing in, while it waits for them. */
   request: string | null
+  /** A login the owner typed in it, which they are asked whether to keep. Not sent by servers from before logins. */
+  offer?: LoginOffer | null
   /** When the bot last used it. */
   usedAt: number
 }

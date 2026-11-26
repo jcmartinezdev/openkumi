@@ -164,6 +164,7 @@ web page that has pointed a name of its own at this computer learns nothing.
 | Hashes of paired devices' keys | `clients.json` | your account only |
 | A bot's tokens for its apps | `bots/<id>/private/superpowers/<id>.json` | your account only |
 | A bot's cookies and sign-ins | `bots/<id>/private/browser-profile/` | as Chrome keeps them |
+| The cookies Chrome forgets when it closes | `bots/<id>/private/session-cookies.json` | your account only, and encrypted with the vault's key |
 | Webhook signing secrets | `openkumi.db` | as your system makes new files (see [Known limits](/security/limits/)) |
 | The keys of remote environments, on a computer | `desktop.json` in the app's own data folder, not here | your account only |
 | The key of the environment, on an iPhone | the iPhone's keychain | the app |
