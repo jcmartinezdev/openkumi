@@ -164,6 +164,8 @@ export function nameFor(botId: string, site: string): string {
 
 /** Whether a login's user name, which the bot is told, gives its password away: it is the password, or has it in it. */
 const inUser = (user: string | undefined, value: string) => !!user && (user === value || (value.length >= SHORTEST && user.includes(value)))
+/** A login's password is entered for the bot, and has to be long enough to be found in what comes back to it afterwards. */
+const TOO_SHORT = 'A login’s password is six characters at least: a shorter one could not be kept out of what the bot reads.'
 
 const whatOf = (given: unknown) => String(given ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
 /** A text with a secret's value taken out of it, a short one too (down to a PIN): the secret's name stands there instead. */
@@ -206,6 +208,7 @@ export function save(
   const all = load(botId)
   const before = all.find((s) => s.name === given.name)
   if (inUser(user || before?.user, value)) throw new Error('The user name is told to the bot: the password has no place in it.')
+  if ((user || before?.user) && value.length < SHORTEST) throw new Error(TOO_SHORT)
   if (before && !replace) throw new Error(`There is already a secret named "${given.name}".`)
   if (!before && all.length >= MOST) throw new Error(`A bot keeps ${MOST} secrets at most.`)
   const now = Date.now()
@@ -259,6 +262,7 @@ export function change(botId: string, name: string, patch: { sites?: unknown; wh
   try {
     const value = valueOf(botId, next)
     if (inUser(next.user, value)) throw new Refused('The user name is told to the bot: the password has no place in it.')
+    if (next.user && value.length < SHORTEST) throw new Refused(TOO_SHORT)
     next.what = said(next.what, value, name)
   } catch (e) {
     if (e instanceof Refused) throw e

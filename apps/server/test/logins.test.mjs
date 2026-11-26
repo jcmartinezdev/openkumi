@@ -220,6 +220,8 @@ test('the owner adds a login: a user name the bot is told, and a password it is 
   // The password has no place in what the bot is told.
   assert.match((await call('PUT', `/api/bots/${bot.id}/secrets/${name}`, { user: `me ${PASSWORD}` })).json.error, /The user name is told to the bot: the password has no place in it\./)
   assert.match((await call('POST', `/api/bots/${bot.id}/secrets`, { sites: 'short.example.com', user: 'abc12', value: 'abc12' })).json.error, /The user name is told to the bot/, 'a short one neither')
+  // A password too short to be found in what the bot reads is no login's.
+  assert.match((await call('POST', `/api/bots/${bot.id}/secrets`, { sites: 'short.example.com', user: 'someone', value: 'abc12' })).json.error, /A login’s password is six characters at least/)
   // A second login for the site gets a name of its own, and a secret without a user name is no login.
   const second = await api('POST', `/api/bots/${bot.id}/secrets`, { sites: site, user: 'other@example.com', value: 'another-password-000' })
   assert.equal(second.name, `${name}-2`)

@@ -95,13 +95,13 @@ function look({ want, from, value }: { want: Want; from?: Node | null; value?: s
   /** The buttons that send a form, wherever on the page they are written: one outside it can name it as its form. */
   const senders = (form: HTMLFormElement) =>
     everything.filter((el): el is HTMLButtonElement | HTMLInputElement => ((el instanceof HTMLButtonElement && el.type === 'submit') || (el instanceof HTMLInputElement && ['submit', 'image'].includes(el.type))) && el.form === form)
-  const sending = (form: HTMLFormElement) => senders(form).filter((el) => seen(el) && !el.disabled)
+  const sending = (form: HTMLFormElement) => senders(form).filter((el) => seen(el) && !el.matches(':disabled'))
   if (want === 'formed') {
     if (!from.form) return false
     // Enter sends a form through its first button, seen or not. A form without one is sent when it has a single field to type into.
     const first = senders(from.form)[0]
     const typedInto = fields.filter((el) => el.form === from.form && ['text', 'search', 'url', 'tel', 'email', 'password', 'number', 'date', 'month', 'week', 'time', 'datetime-local'].includes(el.type))
-    return first ? !first.disabled : typedInto.length === 1
+    return first ? !first.matches(':disabled') : typedInto.length === 1
   }
   if (want === 'sends') {
     if (!from.form) return []
