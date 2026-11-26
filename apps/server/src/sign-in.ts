@@ -92,12 +92,21 @@ function look({ want, from, value }: { want: Want; from?: Node | null; value?: s
     return { password: one?.value ?? null, user: user?.value.trim() ?? '', host: location.host, page: `${location.origin}${location.pathname}` }
   }
   if (!(from instanceof HTMLInputElement)) return null
-  const sending = (form: HTMLFormElement) => [...form.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button[type=submit], input[type=submit], input[type=image], button:not([type])')].filter((el) => seen(el) && !el.disabled)
-  if (want === 'formed') return !!from.form && sending(from.form).length > 0
+  /** The buttons that send a form, wherever on the page they are written: one outside it can name it as its form. */
+  const senders = (form: HTMLFormElement) =>
+    everything.filter((el): el is HTMLButtonElement | HTMLInputElement => ((el instanceof HTMLButtonElement && el.type === 'submit') || (el instanceof HTMLInputElement && ['submit', 'image'].includes(el.type))) && el.form === form)
+  const sending = (form: HTMLFormElement) => senders(form).filter((el) => seen(el) && !el.disabled)
+  if (want === 'formed') {
+    if (!from.form) return false
+    // Enter sends a form through its first button, seen or not. A form without one is sent when it has a single field to type into.
+    const first = senders(from.form)[0]
+    const typedInto = fields.filter((el) => el.form === from.form && ['text', 'search', 'url', 'tel', 'email', 'password', 'number', 'date', 'month', 'week', 'time', 'datetime-local'].includes(el.type))
+    return first ? !first.disabled : typedInto.length === 1
+  }
   if (want === 'sends') {
     if (!from.form) return []
     // As the page wrote them: a field named "action" stands in the way of asking the form itself.
-    const written = [from.form.getAttribute('action'), ...sending(from.form).map((el) => el.getAttribute('formaction'))].filter((address): address is string => !!address)
+    const written = [from.form.getAttribute('action'), ...senders(from.form).map((el) => el.getAttribute('formaction'))].filter((address): address is string => !!address)
     return written.map((address) => { try { return new URL(address, document.baseURI).href } catch { return '' } })
   }
   if (want === 'remember') {
@@ -330,7 +339,8 @@ export async function stillAsks(page: Page, host: string, value: string): Promis
     page
       .frames()
       .filter((frame) => hostOf(frame) === host)
-      .map((frame) => frame.evaluate(look, { want: 'shows' as Want, value }).catch(() => false)),
+      // A page that cannot be read just now (it is on its way elsewhere) has not said that its form is gone.
+      .map((frame) => frame.evaluate(look, { want: 'shows' as Want, value }).catch(() => true)),
   )
   return shows.some(Boolean)
 }

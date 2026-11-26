@@ -145,6 +145,7 @@ const site_ = http.createServer(async (req, res) => {
   }
   // A form on the site that sends what is typed into it to another one.
   if (url.pathname === '/sends-away') return html(res, 'Sign in', `<form method="post" action="http://${elsewhere}/session"><input name="email" type="email" placeholder="Email"><input name="password" type="password" placeholder="Password"><button>Sign in</button></form>`)
+  if (url.pathname === '/sends-away-by-button') return html(res, 'Sign in', `<form id="f" method="post" action="/session"><input name="email" type="email" placeholder="Email"><input name="password" type="password" placeholder="Password"></form><button form="f" formaction="http://${elsewhere}/session">Sign in</button>`)
   // A page that knows who is coming back, and asks for the password alone.
   if (url.pathname === '/welcome-back') return html(res, 'Welcome back', `<p>Welcome back, ${USER}</p><form method="post" action="/session"><input type="hidden" name="email" value="${USER}"><input name="password" type="password" placeholder="Password" autofocus><button>Sign in</button></form>`)
   // A site that says back the password it was sent.
@@ -271,6 +272,10 @@ test('a bot signs in with a login by itself: the form is found, filled in and se
   await toolIn(id, 'browser_navigate', { url: `http://${site}/sends-away` })
   seen.length = 0
   assert.match(await toolIn(id, 'browser_sign_in', {}), new RegExp(`^Error: The sign-in form here sends what is typed into it to ${elsewhere}, and the login "${name}" is for ${site.replace(/\./g, '\\.')}, so the password was not entered\\.`))
+  assert.deepEqual(seen, [])
+  // Nor one whose button, written outside the form, says so.
+  await toolIn(id, 'browser_navigate', { url: `http://${site}/sends-away-by-button` })
+  assert.match(await toolIn(id, 'browser_sign_in', {}), new RegExp(`^Error: The sign-in form here sends what is typed into it to ${elsewhere},`))
   assert.deepEqual(seen, [])
 
   // On a page of another site nothing is entered: not when the bot names the login either.

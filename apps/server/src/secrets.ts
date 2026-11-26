@@ -388,7 +388,7 @@ export function login(botId: string, name: string): Login {
  * would give a new password, and neither when it would be a new login. Without a user name, the
  * site's only login is the one meant.
  */
-export function standing(botId: string, host: string, user: string, password: string): { same: boolean; replaces?: string; user?: string } {
+export function standing(botId: string, host: string, user: string, password: string): { same: boolean; has?: string; replaces?: string; user?: string } {
   let all: Stored[]
   try {
     all = load(botId).filter((s) => s.user && s.sites.includes(host))
@@ -398,7 +398,7 @@ export function standing(botId: string, host: string, user: string, password: st
   const mine = user ? all.find((s) => s.user!.toLowerCase() === user.toLowerCase()) : all.length === 1 ? all[0] : undefined
   if (!mine) return { same: false }
   try {
-    if (valueOf(botId, mine) === password) return { same: true }
+    if (valueOf(botId, mine) === password) return { same: true, has: mine.name }
   } catch {
     // One that cannot be read is there to be entered again.
   }
@@ -411,7 +411,10 @@ export function standing(botId: string, host: string, user: string, password: st
  */
 export function keepLogin(botId: string, typed: { site: string; user: unknown; password: string; page?: string }): Secret {
   const given = userOf(typed.user)
-  const { replaces } = standing(botId, typed.site, given, typed.password)
+  const { has, replaces } = standing(botId, typed.site, given, typed.password)
+  // Kept already, since it was offered: there is nothing more to keep.
+  const kept = has ? load(botId).find((s) => s.name === has) : undefined
+  if (kept) return shown(botId, kept)
   const before = replaces ? load(botId).find((s) => s.name === replaces) : undefined
   // A new password for the account the bot has, typed into a page that asked for nothing else.
   const user = given || before?.user
@@ -522,6 +525,8 @@ export async function fill(botId: string, text: string, url: URL, as: (value: st
 
 /** A value shorter than this is not looked for in what comes back: it would be found in words that have nothing to do with it. */
 const SHORTEST = 6
+/** Whether a value is long enough to be looked for in what comes back to a bot. */
+export const findable = (value: string) => value.length >= SHORTEST
 /**
  * A longer value is known by this many of its first characters. What shows it may cut it short (a
  * page's outline gives the first 80 characters of a field), and the part that is left is as much
@@ -535,7 +540,7 @@ const inJson = (value: string) => JSON.stringify(value).slice(1, -1)
  * inside JSON that is itself kept as text (a service that says back the body it was sent). They
  * only differ for a value with something to escape in it.
  */
-const forms = (value: string) => [...new Set([value, encodeURIComponent(value), inJson(value), inJson(inJson(value))])]
+const forms = (value: string) => [...new Set([value, encodeURIComponent(value), new URLSearchParams({ a: value }).toString().slice(2), inJson(value), inJson(inJson(value))])]
 
 /**
  * What takes values out of a text, in every way each may be written there, leaving the name of

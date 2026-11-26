@@ -103,7 +103,7 @@ interface Win {
    * password its next page asks for. Held here and nowhere else.
    */
   typed: (Typed & { password: string }) | null
-  typedUser: { user: string; host: string; at: number } | null
+  typedUser: { user: string; host: string; page: string; at: number } | null
   /** A login made of that, which the owner is asked whether to keep. The password waits here for their answer, and is let go after a while. */
   offer: (LoginOffer & { password: string; page: string; expires: NodeJS.Timeout }) | null
   /** When the bot last used it. */
@@ -672,10 +672,12 @@ class BotBrowser {
     if (!win.controller || win.threadId?.startsWith('sign-in:')) return
     const typed = await typedIn(tab.page).catch(() => null)
     if (!typed) return
-    if (!typed.password) return void (win.typedUser = { user: typed.user, host: typed.host, at: Date.now() })
-    // The user name of the page before goes with a password on the same site, and with no other.
-    const before = win.typedUser && win.typedUser.host === typed.host && Date.now() - win.typedUser.at < USER_FOR ? win.typedUser.user : ''
-    win.typed = { ...typed, password: typed.password, user: typed.user || before }
+    if (!typed.password) return void (win.typedUser = { user: typed.user, host: typed.host, page: typed.page, at: Date.now() })
+    // One too short to be found in what the bot reads is not held: it could not be kept out of it.
+    if (!secrets.findable(typed.password)) return
+    // The user name of the page before goes with a password on the same site, and with no other. That page is where signing in begins.
+    const before = win.typedUser && win.typedUser.host === typed.host && Date.now() - win.typedUser.at < USER_FOR ? win.typedUser : null
+    win.typed = { ...typed, password: typed.password, ...(typed.user || !before ? {} : { user: before.user, page: before.page }) }
   }
 
   /**

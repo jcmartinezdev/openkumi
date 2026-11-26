@@ -87,7 +87,9 @@ completely safe:
 - **What you type is read to make the offer.** While you have control of a bot's browser, the
   server reads the sign-in form you fill in, so that it can ask whether to save it. It holds the
   password in memory until you answer, for ten minutes at most, and keeps nothing if you say no.
-  While it holds the password, it takes it out of what the bot reads.
+  While it holds the password, it takes it out of what the bot reads. A password shorter than
+  six characters is not offered, since it could not be found there: add such a login under the
+  bot's Secrets.
 - **A password you make visible can be read.** A bot reads the pages in its browser, and a
   password field hides what is in it. If you use a site's "show password" while you type by
   hand and leave it showing, the bot can read it once the server no longer holds it. Hide it
