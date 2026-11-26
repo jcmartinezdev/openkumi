@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import type { Bot } from '@openkumi/shared'
 import { windowCount } from '@openkumi/client/browser'
 import { useVoiceChoices } from '@openkumi/client/calls'
+import { useBotId } from '@openkumi/client/bots'
 import { api, useFiles, useStore } from '@openkumi/client/store'
 import { triggerLabel } from '@openkumi/client/automations'
 import { inShort, summarize } from '@openkumi/client/workspace'
@@ -23,7 +24,9 @@ import { Mascot } from '../../../src/Mascot'
 export default function BotSettings() {
   const theme = useTheme()
   const router = useRouter()
-  const { botId } = useLocalSearchParams<{ botId: string }>()
+  const params = useLocalSearchParams<{ botId: string }>()
+  // Its id may change while this is open, here or on another device: the screen goes on with the bot.
+  const botId = useBotId(params.botId)
   const stored = useStore((s) => s.bots.find((b) => b.id === botId))
   const main = useStore((s) => s.bots[0]?.id === botId && s.bots.length > 1)
   const browser = useStore((s) => s.browsers[botId])
@@ -38,6 +41,18 @@ export default function BotSettings() {
   const voices = useVoiceChoices(stored?.voice ?? '')
   /** What was just changed, shown at once instead of when the server has said so. */
   const [changed, setChanged] = useState<Partial<Bot> | null>(null)
+  /**
+   * The id: shown, until Change id is pressed; then typed in, and changed with Save. What the other
+   * bots, automations and links name the bot by is not changed by a field that was merely left, as
+   * the others here are saved.
+   */
+  const [editingId, setEditingId] = useState(false)
+  const [newId, setNewId] = useState(stored?.id ?? '')
+  const [moving, setMoving] = useState(false)
+  // Changed here or elsewhere: what is shown is the id it has now, as the server made it ("Trip Planner" is "trip-planner").
+  useEffect(() => {
+    if (!editingId) setNewId(stored?.id ?? '')
+  }, [stored?.id, editingId])
   // Nothing connects until it is needed, so how the bot's services stand is asked for here.
   useEffect(() => void check(botId).catch(() => {}), [botId])
   useEffect(() => setChanged(null), [stored])
@@ -50,6 +65,15 @@ export default function BotSettings() {
   const save = (patch: Partial<Bot>) => {
     setChanged((before) => ({ ...before, ...patch }))
     api('PATCH', `/api/bots/${bot.id}`, patch).catch((e) => (setChanged(null), Alert.alert('Not saved', (e as Error).message)))
+  }
+  const stopEditingId = () => (setEditingId(false), setNewId(bot.id))
+  const move = () => {
+    const id = newId.trim()
+    if (id === bot.id) return stopEditingId()
+    setMoving(true)
+    api('POST', `/api/bots/${bot.id}/move`, { id })
+      .then(() => setEditingId(false), (e) => Alert.alert('Id not changed', (e as Error).message))
+      .finally(() => setMoving(false))
   }
   const openLook = () => router.push({ pathname: '/settings/look/[botId]', params: { botId: bot.id } })
   const remove = () =>
@@ -72,6 +96,24 @@ export default function BotSettings() {
       <Section>
         <Field label="Name" value={bot.name} required onCommit={(name) => save({ name })} />
         <Row label="Look" detail={bot.choosingLook ? 'Choosing its look…' : describeLook(bot.look)} opens onPress={openLook} />
+      </Section>
+
+      <Section
+        title="Id"
+        footer={`What the other bots and automations call ${bot.name} by, and the name of its folder. It was made from its first name, and changing the name leaves it as it is.${bot.formerIds?.length ? ` Its earlier ${bot.formerIds.length > 1 ? 'ids' : 'id'}, ${bot.formerIds.join(', ')}, still ${bot.formerIds.length > 1 ? 'reach' : 'reaches'} it.` : ''}`}
+      >
+        {editingId ? (
+          <>
+            <Field label="Id" value={newId} onChange={setNewId} autoCapitalize="none" autoFocus />
+            <Row label={moving ? 'Saving…' : 'Save'} tone="action" disabled={!newId.trim() || moving} onPress={move} />
+            <Row label="Cancel" disabled={moving} onPress={stopEditingId} />
+          </>
+        ) : (
+          <>
+            <Row label="Id" value={bot.id} />
+            <Row label="Change id" tone="action" onPress={() => setEditingId(true)} />
+          </>
+        )}
       </Section>
 
       <Section title="What it is for" footer="One line. The other bots are told it, so they know what to pass on to this bot. Only you change it: here, or by asking your main assistant.">

@@ -7,6 +7,7 @@ import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Tex
 import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
+import { useBotId } from '@openkumi/client/bots'
 import { sizeOf } from '@openkumi/client/attachments'
 import { api, useChanges, useFiles, useServerFile, useStore } from '@openkumi/client/store'
 import { INSTRUCTIONS, authorOf, fileUrl, folderOf, isRecorded, kindOfFile, lastChange, nameOf, since } from '@openkumi/client/workspace'
@@ -26,7 +27,9 @@ export default function FileScreen() {
   const theme = useTheme()
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { botId, path, edit } = useLocalSearchParams<{ botId: string; path: string; edit?: string }>()
+  const { botId: given, path, edit } = useLocalSearchParams<{ botId: string; path: string; edit?: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const version = useStore((s) => s.filesVersion[botId] ?? 0)
   // Above this the bot's instructions are cut off when they are loaded.

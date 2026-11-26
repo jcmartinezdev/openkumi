@@ -7,7 +7,7 @@
 // for every bot.
 import type { Automation, Bot, Effort, RunsOn, Schedule, Thread, Trigger, Watch } from '@openkumi/shared'
 import * as agent from './agent.ts'
-import { EFFORTS, getBot, mainBot } from './bots.ts'
+import { EFFORTS, findBot, getBot, mainBot } from './bots.ts'
 import * as db from './db.ts'
 import * as hooks from './hooks.ts'
 import { effortsOf, keptAs, modelCalled, readyModels } from './models.ts'
@@ -322,6 +322,8 @@ function fire(automation: Automation, hook: Extract<Trigger, { kind: 'hook' }>['
 
 /** The watches being looked at right now, so that none is looked at twice at once. */
 const looking = new Set<string>()
+/** Whether one of a bot's watches is being looked at: through its services, with the automation as it was when the look began. */
+export const lookingFor = (botId: string) => [...looking].some((id) => db.getAutomation(id)?.botId === botId)
 
 /**
  * Looks at what a watch watches, and starts a run when it changed. `byHand` is the owner asking for
@@ -470,10 +472,13 @@ function changeable(bot: Bot, id: unknown): Automation {
 
 /** The bot an automation a bot makes is for: the bot itself, unless it is the main assistant. */
 function target(bot: Bot, botId: unknown): string {
-  if (botId === undefined || botId === null || botId === '' || botId === bot.id) return bot.id
+  if (botId === undefined || botId === null || botId === '') return bot.id
+  // An id a bot had before reaches it too.
+  const found = findBot(String(botId))
+  if (found?.id === bot.id) return bot.id
   if (!isMain(bot)) throw new Error(`Only the main assistant, ${mainBot()?.name}, can make automations for other bots. You can make them for yourself.`)
-  if (!getBot(String(botId))) throw new Error(`No bot with id ${botId}. Use list_bots.`)
-  return String(botId)
+  if (!found) throw new Error(`No bot with id ${botId}. Use list_bots.`)
+  return found.id
 }
 
 function dayNumber(day: unknown): number {

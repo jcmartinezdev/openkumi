@@ -11,6 +11,7 @@ import { ActivityIndicator, Alert, type LayoutChangeEvent, Pressable, ScrollView
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import type { Bot, Effort, ModelInfo, RunsOn } from '@openkumi/shared'
+import { useBotId } from '@openkumi/client/bots'
 import { type Choice, EFFORT_LABEL, choicesOf, effortsOf, loadModels, modelOf, switchTo, useModelLists } from '@openkumi/client/models'
 import { api, useStore } from '@openkumi/client/store'
 import { toggleFavorite, useFavorites } from '../../src/favorites'
@@ -21,7 +22,9 @@ import { type Theme, useTheme } from '../../src/theme'
 export default function ModelSheet() {
   const theme = useTheme()
   const router = useRouter()
-  const { botId, for: form } = useLocalSearchParams<{ botId: string; for?: string }>()
+  const { botId: given, for: form } = useLocalSearchParams<{ botId: string; for?: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bots = useStore((s) => s.bots)
   /** The form this was opened from, when it is an automation's model that is being chosen. */
   const held = form ? handedOver(form) : undefined

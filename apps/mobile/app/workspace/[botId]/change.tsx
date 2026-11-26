@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import type { HistoryEntry } from '@openkumi/shared'
+import { useBotId } from '@openkumi/client/bots'
 import { moment } from '@openkumi/client/automations'
 import { api, useFiles, useStore } from '@openkumi/client/store'
 import { type DiffLine, authorOf, nameOf, parseDiff } from '@openkumi/client/workspace'
@@ -12,7 +13,9 @@ import { useTheme } from '../../../src/theme'
 
 export default function Change() {
   const router = useRouter()
-  const { botId, id, message, author, time } = useLocalSearchParams<{ botId: string; id: string; message: string; author: HistoryEntry['author']; time: string }>()
+  const { botId: given, id, message, author, time } = useLocalSearchParams<{ botId: string; id: string; message: string; author: HistoryEntry['author']; time: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const { entries } = useFiles(botId)
   const [diff, setDiff] = useState<string | null>(null)

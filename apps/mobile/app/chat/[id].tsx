@@ -6,6 +6,7 @@ import { LegendList, type LegendListRef } from '@legendapp/list/react-native'
 import { Stack, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { Attachment, Bot, BotRef, CallLine, Item, Thread } from '@openkumi/shared'
+import { useBotId } from '@openkumi/client/bots'
 import { note } from '@openkumi/client/telemetry'
 import { MAX, addFiles, ready, removeFile, sent, usePending } from '@openkumi/client/attachments'
 import { clearFlag, markRead, unread } from '@openkumi/client/attention'
@@ -418,7 +419,10 @@ export default function Chat() {
   const { id, item } = useLocalSearchParams<{ id: string; item?: string }>()
   // "bot:<bot>" is that bot's conversation, which does not exist until its first message is sent
   // and is another thread after its owner starts fresh. Anything else is a thread, such as a subagent's.
-  const forBot = id.startsWith('bot:') ? id.slice(4) : null
+  // An id the bot had before finds it too: its id may change while this is open, or the link be from before.
+  const named = id.startsWith('bot:') ? id.slice(4) : ''
+  const movedTo = useBotId(named)
+  const forBot = named ? movedTo : null
   const thread = useStore((s) => (forBot ? mainThread(s.threads, forBot) : s.threads.find((t) => t.id === id)))
   const bot = useStore((s) => s.bots.find((b) => b.id === (forBot ?? thread?.botId)))
   const items = useStore((s) => (thread ? s.items[thread.id] : undefined))

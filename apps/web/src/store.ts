@@ -2,7 +2,8 @@
 // are shared with the phone app (packages/client); what is added here is what only a window has:
 // the connection on its own thread, saving files, the canvas for a bot's browser, and the address bar.
 import { useEffect, useState } from 'react'
-import { receive, request, useApp, useTransport } from '@openkumi/client/store'
+import type { Bot } from '@openkumi/shared'
+import { receive, request, useApp, useStore, useTransport } from '@openkumi/client/store'
 import { desktopState } from './desktop'
 import type { WorkerCommand, WorkerReport } from './connection.worker'
 
@@ -109,10 +110,33 @@ export function closeSettings() {
 
 export function useRoute() {
   const [route, setRoute] = useState(parseHash)
+  const bots = useStore((s) => s.bots)
   useEffect(() => {
     const update = () => setRoute(parseHash())
     window.addEventListener('hashchange', update)
     return () => window.removeEventListener('hashchange', update)
   }, [])
+  useEffect(() => followMoved(bots), [bots, route])
   return route
+}
+
+/**
+ * An address with an id a bot had before (Bot.formerIds) is changed to the one it has now: the
+ * page that was showing when its id changed, a notification or a link in a message from before.
+ */
+function followMoved(bots: Bot[]) {
+  const parts = location.hash.replace(/^#\/?/, '').split('/')
+  // Where an address names a bot: first, or after settings/bots/ or automations/new/.
+  const at = parts[0] === 'settings' ? (parts[1] === 'bots' ? 2 : -1) : parts[0] === 'automations' ? (parts[1] === 'new' ? 2 : -1) : parts[0] === USAGE ? -1 : 0
+  let id = ''
+  try {
+    id = at >= 0 ? decodeURIComponent(parts[at] ?? '') : ''
+  } catch {
+    return
+  }
+  if (!id || bots.some((bot) => bot.id === id)) return
+  const bot = bots.find((b) => b.formerIds?.includes(id))
+  if (!bot) return
+  parts[at] = encodeURIComponent(bot.id)
+  location.replace(`#/${parts.join('/')}`)
 }

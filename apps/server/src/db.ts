@@ -342,6 +342,45 @@ export function setSession(threadId: string, session: EngineSession | null) {
   db.prepare('UPDATE threads SET session = ? WHERE id = ?').run(session ? JSON.stringify(session) : null, threadId)
 }
 
+/**
+ * Files what is kept here under a bot's id under its new one (move.ts): its threads, the
+ * automations it does and the ones it made, its webhooks and what it used. All of it or none.
+ *
+ * The conversations engines keep of its threads are let go, but for Codex's: Claude Code and Grok
+ * file theirs by the folder they worked in, which moved, and would not find them. The next turn of
+ * each thread starts a new one from what was said, as when an engine loses its own.
+ */
+export function moveBotRecords(from: string, to: string) {
+  let threads: { id: string; seq: number }[]
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    const moved = db.prepare('UPDATE threads SET bot_id = ? WHERE bot_id = ? RETURNING id').all(to, from) as { id: string }[]
+    db.prepare(
+      `UPDATE threads SET session = NULL WHERE bot_id = ? AND session IS NOT NULL
+       AND (CASE WHEN json_valid(session) THEN json_extract(session, '$.provider') END) IS NOT 'codex'`,
+    ).run(to)
+    db.prepare('UPDATE automations SET bot_id = ? WHERE bot_id = ?').run(to, from)
+    db.prepare('UPDATE automations SET created_by = ? WHERE created_by = ?').run(to, from)
+    db.prepare('UPDATE hooks SET bot_id = ? WHERE bot_id = ?').run(to, from)
+    // A bot deleted long ago may have had the new id, and what it used is kept: the two are added up.
+    db.prepare(
+      `INSERT INTO usage (hour, bot_id, provider, model, costed, input, cached, output, cost)
+       SELECT hour, ?, provider, model, costed, input, cached, output, cost FROM usage WHERE bot_id = ?
+       ON CONFLICT (hour, bot_id, provider, model, costed) DO UPDATE SET
+         input = input + excluded.input, cached = cached + excluded.cached, output = output + excluded.output, cost = cost + excluded.cost`,
+    ).run(to, from)
+    db.prepare('DELETE FROM usage WHERE bot_id = ?').run(from)
+    threads = moved.map(({ id }) => ({ id, seq: changed(id) }))
+    db.exec('COMMIT')
+  } catch (e) {
+    db.exec('ROLLBACK')
+    throw e
+  }
+  for (const { id, seq } of threads) emit({ type: 'thread.upsert', thread: getThread(id)!, seq })
+  for (const automation of listAutomations()) if (automation.botId === to || automation.createdBy === to) emit({ type: 'automation.upsert', automation })
+  for (const hook of listHooks()) if (hook.botId === to) emit({ type: 'hook.upsert', hook: shown(hook) })
+}
+
 /** Deletes every conversation of a bot. */
 export function deleteBotThreads(botId: string) {
   for (const t of listThreads().filter((t) => t.botId === botId && !t.parentId)) deleteThread(t.id)

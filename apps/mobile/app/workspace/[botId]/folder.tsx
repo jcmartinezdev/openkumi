@@ -1,12 +1,15 @@
 // One folder of a bot's workspace: its folders, then its files, each opening to its own screen.
 import { useLocalSearchParams } from 'expo-router'
+import { useBotId } from '@openkumi/client/bots'
 import { useChanges, useFiles, useStore } from '@openkumi/client/store'
 import { childrenOf, isRecorded, nameOf } from '@openkumi/client/workspace'
 import { ICON_INSET, Row, Section, SettingsPage } from '../../../src/SettingsUi'
 import { FileRow } from '../../../src/Workspace'
 
 export default function Folder() {
-  const { botId, path } = useLocalSearchParams<{ botId: string; path: string }>()
+  const { botId: given, path } = useLocalSearchParams<{ botId: string; path: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const { entries } = useFiles(botId)
   const { data } = useChanges(botId)

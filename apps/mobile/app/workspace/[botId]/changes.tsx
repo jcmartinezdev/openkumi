@@ -2,6 +2,7 @@
 // Changes view lists them. Each opens to what it changed, with a way to undo it.
 import { Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useBotId } from '@openkumi/client/bots'
 import { useChanges, useStore } from '@openkumi/client/store'
 import { byDay, clockOf } from '@openkumi/client/workspace'
 import { Note, Row, Section, SettingsPage } from '../../../src/SettingsUi'
@@ -13,7 +14,9 @@ const FOOTER = 'Changes to its instructions and memory are recorded here, and ea
 export default function Changes() {
   const theme = useTheme()
   const router = useRouter()
-  const { botId } = useLocalSearchParams<{ botId: string }>()
+  const { botId: given } = useLocalSearchParams<{ botId: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const { data, error, showOlder } = useChanges(botId)
   if (!bot) return null

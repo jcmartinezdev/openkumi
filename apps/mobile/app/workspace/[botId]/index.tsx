@@ -3,6 +3,7 @@
 // newest notes and the top of files/ are shown here; the rest are a tap away.
 import { useState } from 'react'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { useBotId } from '@openkumi/client/bots'
 import { useChanges, useFiles, useStore } from '@openkumi/client/store'
 import { INSTRUCTIONS, authorOf, childrenOf, findFiles, since, summarize } from '@openkumi/client/workspace'
 import { ICON_INSET, Note, Row, Section, SettingsPage } from '../../../src/SettingsUi'
@@ -13,7 +14,9 @@ const SHOWN = 3
 
 export default function Workspace() {
   const router = useRouter()
-  const { botId } = useLocalSearchParams<{ botId: string }>()
+  const { botId: given } = useLocalSearchParams<{ botId: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const { entries, error } = useFiles(botId)
   const { data } = useChanges(botId)

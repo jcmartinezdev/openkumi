@@ -2,7 +2,8 @@
 import crypto from 'node:crypto'
 import type { Bot, ItemData, Thread } from '@openkumi/shared'
 import * as agent from './agent.ts'
-import { createBot, getBot, listBots, updateBot } from './bots.ts'
+import { createBot, findBot, getBot, idFrom, listBots, updateBot } from './bots.ts'
+import { moveBot } from './move.ts'
 import { browserFor, byRef, isWebPage, snapshot } from './browser.ts'
 import { serverPorts } from './config.ts'
 import { settings } from './settings.ts'
@@ -83,6 +84,8 @@ function isOwnServer(url: URL) {
 
 const botSummary = (b: Bot) => ({
   id: b.id,
+  // Ids it had before, which still reach it: other bots' notes from then may name it so.
+  ...(b.formerIds?.length ? { former_ids: b.formerIds } : {}),
   name: b.name,
   emoji: b.emoji,
   description: b.description,
@@ -291,7 +294,7 @@ const changedSummary = (b: Bot) => ({ ...botSummary(b), effort: b.effort || '(mo
 const updateBotTool: Tool = {
   name: 'update_bot',
   description:
-    "Change one of the user's bots, yourself among them: its name, its description, its emoji, the model it runs on and how hard " +
+    "Change one of the user's bots, yourself among them: its name, its id, its description, its emoji, the model it runs on and how hard " +
     'that model thinks, its web search, whether its browser window shows. Give only what changes. Use this only when the user has ' +
     'just asked you for the change: it is refused at any other time. How a bot works is in its own instructions, which it keeps ' +
     'itself: to change those, message the bot and ask it to.',
@@ -299,6 +302,10 @@ const updateBotTool: Tool = {
     {
       bot_id: str('The bot to change, from the list of the other bots or list_bots; your own id to change yourself'),
       name: str('A new display name'),
+      id: str(
+        'A new id, of letters a to z, digits and "-" (e.g. "scheduler"): what the other bots and automations name it by. Changing the ' +
+          'name leaves the id as it was. The old id goes on reaching the bot. Not for your own id, which only the user can change, in your settings',
+      ),
       description: str('A new line saying what the bot is for, e.g. "Plans trips and books travel". Every other bot is told it, to know what to pass on to it.'),
       emoji: str('A single emoji for the sign its mascot holds'),
       model: str('The model it is to run on, by name (e.g. "sonnet"), from any engine that is ready. A name that fits no model is answered with the models there are.'),
@@ -310,10 +317,13 @@ const updateBotTool: Tool = {
   ),
   run: async (a, ctx) => {
     if (!agent.basisOf(ctx.thread).owner) throw new Error('A bot can only be changed when the user has just asked you to. Ask them first.')
-    const bot = getBot(String(a.bot_id ?? ''))
+    let bot = findBot(String(a.bot_id ?? ''))
     if (!bot) throw new Error(`No bot with id ${a.bot_id}. Use list_bots to see the bots that exist.`)
     // A model may fill what it does not change with nothing.
     const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '')
+    const id = text(a.id) && idFrom(text(a.id), bot) !== bot.id ? text(a.id) : ''
+    // A bot's id changes only while it is not at work, and the bot asking always is.
+    if (id && bot.id === ctx.bot.id) throw new Error('Your own id cannot change while you are at work, which you are whenever you ask. The user can change it in your settings, under Identity.')
     const patch: Record<string, unknown> = {
       ...(text(a.name) ? { name: text(a.name) } : {}),
       ...(text(a.description) ? { description: text(a.description) } : {}),
@@ -324,10 +334,16 @@ const updateBotTool: Tool = {
     }
     // Stopped while the models were being looked up: nothing is changed.
     ctx.signal.throwIfAborted()
-    if (!Object.keys(patch).length) throw new Error('Nothing to change: give what changes, such as name or description.')
-    const changed = updateBot(bot.id, patch)
-    const moved = changed.id === ctx.bot.id && (changed.provider !== bot.provider || changed.model !== bot.model || changed.effort !== bot.effort)
-    return `Changed bot ${JSON.stringify(changedSummary(changed))}${moved ? '\nYou work on the new model from your next turn.' : ''}`
+    if (!Object.keys(patch).length && !id) throw new Error('Nothing to change: give what changes, such as name or description.')
+    const before = bot
+    if (id) bot = await moveBot(bot.id, id)
+    const changed = Object.keys(patch).length ? updateBot(bot.id, patch) : bot
+    const moved = changed.id === ctx.bot.id && (changed.provider !== before.provider || changed.model !== before.model || changed.effort !== before.effort)
+    return (
+      `Changed bot ${JSON.stringify(changedSummary(changed))}` +
+      (changed.id !== before.id ? `\nIts id was ${before.id}, which still reaches it.` : '') +
+      (moved ? '\nYou work on the new model from your next turn.' : '')
+    )
   },
 }
 

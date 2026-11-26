@@ -8,6 +8,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallBarRoom } from '../../src/CallBar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { BrowserInput } from '@openkumi/shared'
+import { useBotId } from '@openkumi/client/bots'
 import { control, driverOf, hostOf, sessionName, windowOf } from '@openkumi/client/browser'
 import { api, mainThread, send, useStore } from '@openkumi/client/store'
 import { fit, useLivePage } from '../../src/LivePage'
@@ -21,7 +22,8 @@ export default function Browser() {
   const callBarRoom = useCallBarRoom()
   // No thread is the bot's conversation; `take` asks for control as soon as the window is there.
   const params = useLocalSearchParams<{ botId: string; threadId?: string; take?: string }>()
-  const { botId } = params
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(params.botId)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const browser = useStore((s) => s.browsers[botId])
   const threads = useStore((s) => s.threads)

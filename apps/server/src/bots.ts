@@ -23,8 +23,8 @@ const file = (id: string) => path.join(botDir(id), 'bot.md')
 
 /** Settings as stored in bot.md; the list of superpowers is read from its own file. */
 type Settings = Omit<Bot, 'superpowers' | 'choosingLook'>
-/** A look can be changed a part at a time. */
-export type BotPatch = Partial<Omit<Settings, 'id' | 'createdAt' | 'look'>> & { look?: Partial<Look> }
+/** A look can be changed a part at a time. The id changes only by moving the bot (moveFolder). */
+export type BotPatch = Partial<Omit<Settings, 'id' | 'formerIds' | 'createdAt' | 'look'>> & { look?: Partial<Look> }
 
 function readSettings(id: string): Settings | undefined {
   if (!ID.test(id)) return
@@ -39,6 +39,8 @@ function readSettings(id: string): Settings | undefined {
   const flag = (value: string | undefined, fallback: boolean) => (value === undefined ? fallback : /^(true|yes|on|1)$/i.test(value))
   return {
     id,
+    // Only a bot whose id changed has any (moveFolder).
+    ...formerIdsOf(data.former_ids, id),
     name: data.name || id,
     emoji: data.emoji || '🤖',
     description: oneLine(data.description ?? ''),
@@ -52,6 +54,11 @@ function readSettings(id: string): Settings | undefined {
     headless: !flag(data.show_browser, false),
     createdAt: Date.parse(data.created) || fs.statSync(file(id)).birthtimeMs,
   }
+}
+
+function formerIdsOf(written: string | undefined, id: string): Pick<Settings, 'formerIds'> {
+  const formerIds = [...new Set((written ?? '').split(/[\s,]+/))].filter((former) => ID.test(former) && former !== id)
+  return formerIds.length ? { formerIds } : {}
 }
 
 function writeSettings(s: Settings) {
@@ -69,6 +76,7 @@ function writeSettings(s: Settings) {
     web_search: s.webSearch,
     show_browser: !s.headless,
     created: new Date(s.createdAt).toISOString(),
+    ...(s.formerIds?.length ? { former_ids: s.formerIds.join(', ') } : {}),
   }
   fs.writeFileSync(file(s.id), formatFrontMatter(front, s.rules))
 }
@@ -138,15 +146,70 @@ function clean(patch: Record<string, unknown>): BotPatch {
   return out
 }
 
+/** A readable folder name from a name, e.g. "Trip Planner" -> "trip-planner". Empty when nothing in it can be one. */
+const slugOf = (name: string) => name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '')
+
+/**
+ * The bot that has an id, or had it: one it had before still reaches it (formerIds), for what
+ * still calls it that way. Only where an id comes from outside, such as a bot's tool call or an app
+ * that has not heard of the change yet; everything else knows the current one.
+ */
+export function findBot(id: string): Bot | undefined {
+  return getBot(id) ?? (ID.test(id) ? listBots().find((bot) => bot.formerIds?.includes(id)) : undefined)
+}
+
+/** Why no bot can take an id, if none can: it is a page of the app, or it is, or was, another bot's. */
+function takenBy(id: string, bot?: Bot): string | undefined {
+  // "settings" and "automations" are pages of the app, so no bot may have those addresses.
+  if (id === 'settings' || id === 'automations') return `“${id}” is the address of a page in the app, so no bot can have it as its id.`
+  // A folder there that is not a bot's is not taken over either.
+  if (fs.existsSync(botDir(id))) return `${getBot(id)?.name ?? 'Another bot'} already has the id “${id}”.`
+  const before = listBots().find((other) => other.id !== bot?.id && other.formerIds?.includes(id))
+  if (before) return `“${id}” was ${before.name}’s id, and what was written to it then still reaches ${before.name}.`
+}
+
 /** A readable folder name from the bot's name, e.g. "Trip Planner" -> "trip-planner". */
 function newId(name: string): string {
-  const slug = name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+  const slug = slugOf(name)
   if (!slug) return `bot-${crypto.randomBytes(4).toString('hex')}`
   for (let n = 1; ; n++) {
     const id = n === 1 ? slug : `${slug}-${n}`
-    // "settings" and "automations" are pages of the app, so no bot may have those addresses.
-    if (id !== 'settings' && id !== 'automations' && !fs.existsSync(botDir(id))) return id
+    if (!takenBy(id)) return id
   }
+}
+
+/** The id the owner asked a bot to have, as an id: "Trip Planner" is "trip-planner". */
+export function idFrom(given: unknown, bot: Bot): string {
+  const id = typeof given === 'string' ? slugOf(given) : ''
+  if (!id) throw new Error('An id is made of letters a to z, digits and "-", such as "trip-planner".')
+  if (id === bot.id) return id
+  const taken = takenBy(id, bot)
+  if (taken) throw new Error(taken)
+  return id
+}
+
+/**
+ * Moves a bot's folder to a new id, and keeps the one it leaves among the ids that still reach
+ * it. The rest of a move (what is filed under the id elsewhere, and its vault) is move.ts's. Gives
+ * back what puts the folder back as it was, should what comes after this fail.
+ */
+export function moveFolder(from: string, to: string): () => void {
+  const settings = readSettings(from)
+  if (!settings) throw new Error(`No bot with id ${from}`)
+  const before = fs.readFileSync(file(from), 'utf8')
+  fs.renameSync(botDir(from), botDir(to))
+  const back = () => {
+    fs.renameSync(botDir(to), botDir(from))
+    fs.writeFileSync(file(from), before)
+  }
+  try {
+    // Its look is written down too: one it never chose is made from its id, which is changing.
+    writeSettings({ ...settings, id: to, formerIds: [from, ...(settings.formerIds ?? []).filter((former) => former !== to)] })
+  } catch (e) {
+    back()
+    throw e
+  }
+  return back
 }
 
 type Engine = Pick<Settings, 'provider' | 'model' | 'effort'>

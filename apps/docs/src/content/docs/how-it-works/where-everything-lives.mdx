@@ -16,7 +16,7 @@ starts: under the name you gave the app then, or after your account on the compu
   people/<name>/             a person's data folder: all that follows, once for each person
     bots/<id>/
       bot.md                 yours: name, emoji, what it is for, look, voice, what it runs on,
-                             and below the header, the rules the bot must follow
+                             the ids it had before, and below the header, the rules the bot must follow
       superpowers.json       yours: the superpowers switched on for it (once there is one)
       workspace/             the bot's own, and the only place its file tools reach
         AGENTS.md            its instructions to itself, which it writes and updates
@@ -48,7 +48,9 @@ starts: under the name you gave the app then, or after your account on the compu
 ```
 
 The app's settings screens only read and write these files, so you can also read and edit them by
-hand, and back the folder up like any other. `openkumi people` says what your name here is, and
+hand, and back the folder up like any other. A bot's folder is the exception to renaming by hand:
+its conversations, automations and secrets are kept under its id, so change the id in the app
+instead (see [Its id](/setup/bots/#its-id)). `openkumi people` says what your name here is, and
 `openkumi people rename` changes it. A version from before people had folders kept all of it in
 `~/.openkumi` itself; the first start of a newer one moves it into your folder.
 

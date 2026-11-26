@@ -6,6 +6,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Bot, Effort, FileEntry, HistoryEntry, Look } from '@openkumi/shared'
 import { Icon } from './Icon'
 import { triggerLabel } from '@openkumi/client/automations'
+import { botById } from '@openkumi/client/bots'
 import { sizeOf } from '@openkumi/client/attachments'
 import { windowCount } from '@openkumi/client/browser'
 import { describeLook } from '@openkumi/client/mascot'
@@ -65,14 +66,75 @@ function LookRow({ bot }: { bot: Bot }) {
   )
 }
 
+/**
+ * The bot's id, shown greyed out until Change id is clicked; then it is typed in and changed with
+ * Save. What the other bots, automations and links name the bot by is not changed by a field that
+ * was merely left, as the others on this page are saved.
+ */
+function IdControl({ bot }: { bot: Bot }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(bot.id)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const field = useRef<HTMLInputElement>(null)
+  // Changed here or elsewhere: what is shown is the id it has now, as the server made it ("Trip Planner" is "trip-planner").
+  useEffect(() => {
+    if (!editing) setDraft(bot.id)
+  }, [bot.id, editing])
+  useEffect(() => {
+    if (editing) field.current?.focus()
+  }, [editing])
+  const asked = draft.trim()
+  const stop = () => (setEditing(false), setError(''), setDraft(bot.id))
+  const save = async () => {
+    if (!asked || saving) return
+    if (asked === bot.id) return stop()
+    setError('')
+    setSaving(true)
+    try {
+      await api('POST', `/api/bots/${bot.id}/move`, { id: asked })
+      setEditing(false)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <>
+      <input
+        ref={field}
+        className="set-input id"
+        aria-label="Id"
+        value={draft}
+        disabled={!editing || saving}
+        spellCheck={false}
+        autoCapitalize="off"
+        onChange={(e) => (setDraft(e.target.value), setError(''))}
+        onKeyDown={(e) => e.key === 'Enter' && void save()}
+      />
+      {editing ? (
+        <>
+          <button onClick={stop} disabled={saving}>Cancel</button>
+          <button className="primary" onClick={save} disabled={!asked || saving}>{saving ? 'Saving…' : 'Save'}</button>
+        </>
+      ) : (
+        <button onClick={() => setEditing(true)}>Change id</button>
+      )}
+      {error && <small className="err set-control-note">{error}</small>}
+    </>
+  )
+}
+
 /** `file` is the file open in Workspace; `power`, the superpower whose page is open in Superpowers; `voice`, the page for choosing the bot's voice, under Bot. */
 export function BotPage({ botId, tab, file, power, voice }: { botId: string; tab: BotTab; file?: string; power?: string; voice?: boolean }) {
-  const bot = useStore((s) => s.bots).find((b) => b.id === botId)
+  // Found by an id it had before too: the page stays while its address follows a change of id.
+  const bot = botById(useStore((s) => s.bots), botId)
   // The bot can be deleted from here or from another window.
   useEffect(() => {
     if (!bot) openSettings('bots')
   }, [bot])
-  const secrets = useSecrets(botId).data?.secrets.length
+  const secrets = useSecrets(bot?.id ?? botId).data?.secrets.length
   if (!bot) return null
   const counts: Partial<Record<BotTab, number>> = { superpowers: bot.superpowers.length, secrets }
   return (
@@ -133,6 +195,17 @@ function General({ bot }: { bot: Bot }) {
       {note}
       <Section title="Identity">
         <Row id="bot-name" title="Name" control={<Field label="Name" value={bot.name} onCommit={(name) => api('PATCH', `/api/bots/${bot.id}`, { name })} />} />
+        <Row
+          id="bot-id"
+          title="Id"
+          description={
+            <>
+              What the other bots and automations call {bot.name} by, and the name of its folder. It was made from its first name, and changing the name leaves it as it is.
+              {!!bot.formerIds?.length && <> Its earlier {bot.formerIds.length > 1 ? 'ids' : 'id'}, {bot.formerIds.map((id, i) => <span key={id}>{i > 0 && ', '}<code>{id}</code></span>)}, still {bot.formerIds.length > 1 ? 'reach' : 'reaches'} it.</>}
+            </>
+          }
+          control={<IdControl bot={bot} />}
+        />
         <Row
           id="bot-description"
           title="What it is for"

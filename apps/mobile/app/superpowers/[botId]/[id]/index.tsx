@@ -8,6 +8,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
 import type { Bot, Superpower, SuperpowerStatus } from '@openkumi/shared'
+import { useBotId } from '@openkumi/client/bots'
 import { unwrap } from '@openkumi/client/superpowers'
 import { hookStanding } from '@openkumi/client/webhooks'
 import { useStore } from '@openkumi/client/store'
@@ -30,7 +31,9 @@ export default function SuperpowerScreen() {
   const theme = useTheme()
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { botId, id } = useLocalSearchParams<{ botId: string; id: string }>()
+  const { botId: given, id } = useLocalSearchParams<{ botId: string; id: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const power = useStore((s) => s.superpowers.find((p) => p.id === id))
   const status = useStore((s) => s.superpowerStatus[botId]?.[id])

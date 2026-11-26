@@ -7,7 +7,7 @@ import { shownName, typedName } from '@openkumi/shared/people'
 import { ALPHA_NOTE, ISSUES_URL } from '@openkumi/shared/alpha'
 import qrcode from 'qrcode-generator'
 import { type Answer, KIND_NAMES, kindOf, ordered } from '@openkumi/client/addresses'
-import { BOT_SORTS, useBotOrder } from '@openkumi/client/bots'
+import { BOT_SORTS, botById, useBotOrder } from '@openkumi/client/bots'
 import { windowCount } from '@openkumi/client/browser'
 import { pairingLink } from '@openkumi/client/pair'
 import { BotPage, TABS } from './BotPage'
@@ -125,7 +125,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
   const page: PageId = path[0] in PAGES ? (path[0] as PageId) : 'general'
   const showing = useShowing()
   const bots = useStore((s) => s.bots)
-  const bot = page === 'bots' && path[1] ? bots.find((b) => b.id === path[1]) : undefined
+  const bot = page === 'bots' && path[1] ? botById(bots, path[1]) : undefined
   const power = useStore((s) => (page === 'superpowers' && path[1] ? s.superpowers.find((p) => p.id === path[1]) : undefined))
   // A superpower's page opened from a bot's settings, which is about that bot.
   const botPower = useStore((s) => (bot && path[2] === 'superpowers' && path[3] ? s.superpowers.find((p) => p.id === path[3]) : undefined))
@@ -180,7 +180,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           {page === 'chat' && <ChatPage />}
           {page === 'providers' && <Providers selected={path[1]} />}
           {page === 'prompt' && <MasterPrompt />}
-          {page === 'bots' && (path[1] ? <BotPage botId={path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} power={path[2] === 'superpowers' ? path[3] : undefined} voice={botVoice} /> : <Bots newBot={newBot} />)}
+          {page === 'bots' && (path[1] ? <BotPage botId={bot?.id ?? path[1]} tab={TABS.find(([tab]) => tab === path[2])?.[0] ?? 'bot'} file={path.slice(3).join('/') || undefined} power={path[2] === 'superpowers' ? path[3] : undefined} voice={botVoice} /> : <Bots newBot={newBot} />)}
           {page === 'superpowers' && (path[1] ? <SuperpowerPage id={path[1]} /> : <SuperpowerCatalog />)}
           {page === 'browser' && <BrowserPage />}
           {page === 'environments' && <Environments adding={path[1] === 'add'} />}

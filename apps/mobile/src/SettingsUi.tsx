@@ -136,7 +136,7 @@ export function SwitchRow({ value, onChange, disabled, ...row }: Omit<RowProps, 
  * over as it is typed (`onChange`). One line has its label beside it, as the phone's own forms do;
  * several lines are a box of their own, with the label as the placeholder.
  */
-export function Field({ label, value, placeholder, onCommit, onChange, multiline, required, maxLength, autoCapitalize, keyboardType, secure }: {
+export function Field({ label, value, placeholder, onCommit, onChange, multiline, required, maxLength, autoCapitalize, keyboardType, secure, autoFocus }: {
   label: string
   value: string
   placeholder?: string
@@ -150,6 +150,8 @@ export function Field({ label, value, placeholder, onCommit, onChange, multiline
   keyboardType?: 'default' | 'number-pad' | 'url'
   /** What is typed is not shown: a password, a key. */
   secure?: boolean
+  /** Typed in as soon as it shows: it was asked for. */
+  autoFocus?: boolean
 }) {
   const theme = useTheme()
   const [typed, setTyped] = useState(value)
@@ -204,6 +206,7 @@ export function Field({ label, value, placeholder, onCommit, onChange, multiline
         returnKeyType="done"
         textAlign="right"
         clearButtonMode="while-editing"
+        autoFocus={autoFocus}
       />
     </View>
   )

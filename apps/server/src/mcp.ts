@@ -237,6 +237,9 @@ export function finishAppSignIn(address: string) {
   return finishLogin(new URL(address).searchParams, 'app')
 }
 
+/** Whether one of a bot's sign-ins is under way: what it brings back is kept in the bot's folder. */
+export const signingIn = (botId: string) => [...pending.values()].some((p) => p.botId === botId && Date.now() - p.at < 15 * 60_000)
+
 /** The owner gave up on a sign-in. A superpower that was being activated is left as it was, with nothing kept. */
 export function cancelLogin(botId: string, id: string) {
   browserFor(botId).endSignIn(id)
