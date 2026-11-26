@@ -2,14 +2,18 @@
 // may be sent to, and a value that is kept encrypted (vault.ts) in the bot's private folder,
 // which its file tools cannot reach:
 //   bots/<id>/private/secrets.json
+// One that has a user name with it is a login: an account on its site, whose password is the
+// value. The bot signs in with it by name (browser_sign_in, see sign-in.ts), and is told the user
+// name, never the password.
 // The bot uses a secret by its name and never sees the value. The server puts it in as a request
 // leaves (web_fetch) or types it into a page (browser_type), and only where the secret is for; and
 // whatever comes back to the bot has the value taken out of it again. So a secret is neither in
 // the conversation, nor in what the model's service is sent, nor in a file the bot keeps.
 //
-// A value gets in three ways: the owner types it into a card the bot asked for (ask_secret) or
-// into the bot's settings, the bot keeps one it came to hold (save_secret), or OpenKumi makes up a
-// password the bot never sees. Only the owner replaces, removes or shows one, or changes where it
+// A value gets in four ways: the owner types it into a card the bot asked for (ask_secret,
+// ask_login) or into the bot's settings, the owner signs in by hand in the bot's browser and says
+// yes to keeping what they typed, the bot keeps one it came to hold (save_secret), or OpenKumi
+// makes up a password the bot never sees. Only the owner replaces, removes or shows one, or changes where it
 // may go.
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -29,6 +33,10 @@ interface Stored extends vault.Sealed {
   createdAt: number
   changedAt: number
   usedAt: number | null
+  /** A login's user name. Kept as it is: the bot is told it, and it is typed into the site's form in plain sight. */
+  user?: string
+  /** A login's sign-in page, when it is known: where the form was when its owner filled it in. */
+  page?: string
 }
 
 const fileOf = (botId: string) => path.join(privateDir(botId), 'secrets.json')
@@ -123,6 +131,37 @@ function valueGiven(given: unknown): string {
   return given
 }
 
+/** A login's user name as it is typed into a form: one line. Empty when none was given. */
+export function userOf(given: unknown): string {
+  const user = String(given ?? '').trim()
+  if (/[\r\n]/.test(user) || user.length > 200) throw new Error('A user name is one line, of 200 characters at most.')
+  return user
+}
+
+/**
+ * A login's sign-in page as it is kept: its address without what follows "?" or "#", which is
+ * where a site puts what belongs to one visit. Only a page of one of the login's sites is kept.
+ */
+function pageOf(given: unknown, sites: string[]): string | undefined {
+  try {
+    const url = new URL(String(given ?? ''))
+    if (!/^https?:$/.test(url.protocol) || !sites.includes(url.host)) return undefined
+    return `${url.origin}${url.pathname}`.slice(0, 500)
+  } catch {
+    return undefined
+  }
+}
+
+/** The name a login for a site is kept under when nobody gave it one: "github-com", then "github-com-2". */
+export function nameFor(botId: string, site: string): string {
+  const base = site.replace(/^www\./, '').replace(/[^a-z0-9_-]+/g, '-').replace(/^[^a-z0-9]+|-+$/g, '').slice(0, 36) || 'login'
+  const taken = new Set(load(botId).map((s) => s.name))
+  for (let n = 1; ; n++) {
+    const name = n === 1 ? base : `${base}-${n}`
+    if (!taken.has(name)) return name
+  }
+}
+
 const whatOf = (given: unknown) => String(given ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
 /** A text with a secret's value taken out of it, a short one too (down to a PIN): the secret's name stands there instead. */
 const plainly = (text: string, value: string, name: string) => (value.length < 4 ? text : taker([{ name, value }])(text))
@@ -136,14 +175,14 @@ const said = (given: unknown, value: string, name: string) => plainly(whatOf(pla
 // ---- what the owner sees and does
 
 function shown(botId: string, secret: Stored): Secret {
-  const { name, what, sites, by, createdAt, changedAt, usedAt } = secret
+  const { name, what, sites, by, createdAt, changedAt, usedAt, user, page } = secret
   let problem: string | undefined
   try {
     valueOf(botId, secret)
   } catch (e: any) {
     problem = String(e?.message ?? e)
   }
-  return { name, what, sites, by, createdAt, changedAt, usedAt, ...(problem ? { problem } : {}) }
+  return { name, what, sites, by, createdAt, changedAt, usedAt, ...(user ? { user } : {}), ...(user && page ? { page } : {}), ...(problem ? { problem } : {}) }
 }
 
 export const list = (botId: string): Secrets => ({ secrets: load(botId).map((secret) => shown(botId, secret)), kept: vault.keptIn() })
@@ -152,15 +191,24 @@ export const list = (botId: string): Secrets => ({ secrets: load(botId).map((sec
  * Keeps a value under a name. One that is there already is only replaced when `replace` says so:
  * the owner replaces, a bot does not, since what was there may be kept nowhere else.
  */
-export function save(botId: string, given: { name: string; sites: string[]; value: unknown; what?: unknown; by: 'owner' | 'bot' }, { replace = false } = {}): Secret {
+export function save(
+  botId: string,
+  given: { name: string; sites: string[]; value: unknown; what?: unknown; by: 'owner' | 'bot'; user?: unknown; page?: unknown },
+  { replace = false } = {},
+): Secret {
   if (!NAME.test(given.name)) throw new Error('A secret’s name is up to 40 lower-case letters, digits, "-" and "_", such as "plausible".')
   const value = valueGiven(given.value)
   if (value.length >= SHORTEST && given.name.includes(value)) throw new Error('A secret’s name is what it is called, not the secret itself.')
+  const user = userOf(given.user)
+  if (user && value.length >= SHORTEST && user.includes(value)) throw new Error('The user name is told to the bot: the password has no place in it.')
   const all = load(botId)
   const before = all.find((s) => s.name === given.name)
   if (before && !replace) throw new Error(`There is already a secret named "${given.name}".`)
   if (!before && all.length >= MOST) throw new Error(`A bot keeps ${MOST} secrets at most.`)
   const now = Date.now()
+  // A login that is given a new password stays a login, with the user name and the page it had.
+  const account = user || before?.user
+  const page = account ? (pageOf(given.page, given.sites) ?? pageOf(before?.page, given.sites)) : undefined
   const secret: Stored = {
     name: given.name,
     // What it is said to be is kept as it is, and told to the bot: the value itself has no place in it.
@@ -170,20 +218,33 @@ export function save(botId: string, given: { name: string; sites: string[]; valu
     createdAt: before?.createdAt ?? now,
     changedAt: now,
     usedAt: before?.usedAt ?? null,
+    ...(account ? { user: account } : {}),
+    ...(page ? { page } : {}),
     ...vault.seal(value, about(botId, given.name)),
   }
   if (before) opened.delete(readAs(botId, before))
+  tries.delete(about(botId, given.name))
   store(botId, before ? all.map((s) => (s === before ? secret : s)) : [...all, secret])
   return shown(botId, secret)
 }
 
 /** The owner changes what a secret is, where it may go, or its value. */
-export function change(botId: string, name: string, patch: { sites?: unknown; what?: unknown; value?: unknown }): Secret {
+export function change(botId: string, name: string, patch: { sites?: unknown; what?: unknown; value?: unknown; user?: unknown }): Secret {
   const all = load(botId)
   const before = all.find((s) => s.name === name)
   if (!before) throw new Error(`There is no secret named "${name}".`)
   const next: Stored = { ...before }
   if (patch.sites !== undefined) next.sites = sitesOf(patch.sites)
+  // With a user name it is a login, and without one it is a secret like any other.
+  if (patch.user !== undefined) {
+    const user = userOf(patch.user)
+    if (user) next.user = user
+    else delete next.user
+  }
+  // A sign-in page is a login's, on one of its sites.
+  if (!next.user || !pageOf(next.page, next.sites)) delete next.page
+  // Whatever its owner changes, it is theirs to try again.
+  tries.delete(about(botId, name))
   // As it was written, for now: the value is taken out of it below, before it is tidied up.
   if (patch.what !== undefined) next.what = String(patch.what ?? '')
   if (patch.value !== undefined && patch.value !== '') {
@@ -193,8 +254,11 @@ export function change(botId: string, name: string, patch: { sites?: unknown; wh
   }
   // What it is said to be is kept as it is, and told to the bot: the value itself has no place in it.
   try {
-    next.what = said(next.what, valueOf(botId, next), name)
-  } catch {
+    const value = valueOf(botId, next)
+    if (next.user && value.length >= SHORTEST && next.user.includes(value)) throw new Refused('The user name is told to the bot: the password has no place in it.')
+    next.what = said(next.what, value, name)
+  } catch (e) {
+    if (e instanceof Refused) throw e
     // One that cannot be read: there is no telling what its value was.
     next.what = whatOf(next.what)
   }
@@ -237,6 +301,9 @@ export function resealed(from: string, to: string): { write: () => void; undo: (
   }
 }
 
+/** Something its owner asked for that is not done, as against a vault that cannot be read. */
+class Refused extends Error {}
+
 export function remove(botId: string, name: string) {
   const all = load(botId)
   const gone = all.find((s) => s.name === name)
@@ -275,7 +342,103 @@ export function index(botId: string): string[] {
   } catch {
     return []
   }
-  return all.map((s) => `- ${s.name}${s.what ? `: ${s.what}` : ''} (for ${s.sites.join(', ')})`)
+  return all.map((s) => `- ${s.name}${s.what ? `: ${s.what}` : ''} (${s.user ? `a login, user name ${JSON.stringify(s.user)}, ` : ''}for ${s.sites.join(', ')})`)
+}
+
+// ---- logins
+
+/** A login as the bot and the sign-in know it: everything but the password. */
+export interface Login {
+  name: string
+  user: string
+  sites: string[]
+  page?: string
+}
+
+const asLogin = (s: Stored): Login => ({ name: s.name, user: s.user!, sites: s.sites, ...(s.page ? { page: s.page } : {}) })
+
+/** A bot's logins: all of them, or the ones for a site. */
+export function logins(botId: string, host?: string): Login[] {
+  let all: Stored[]
+  try {
+    all = load(botId)
+  } catch {
+    return []
+  }
+  return all.filter((s) => s.user && (host === undefined || s.sites.includes(host))).map(asLogin)
+}
+
+/** One of a bot's logins by its name, as the bot gave it. */
+export function login(botId: string, name: string): Login {
+  const all = load(botId)
+  const found = all.find((s) => s.name === name)
+  const names = all.filter((s) => s.user).map((s) => s.name)
+  const yours = names.length ? `Your logins: ${names.join(', ')}.` : 'You have no logins yet.'
+  if (!found) throw new Error(`You have no login named "${name}". ${yours}`)
+  if (!found.user) throw new Error(`"${name}" is a secret without a user name, not a login. ${yours} Type a secret into a field with browser_type.`)
+  return asLogin(found)
+}
+
+/**
+ * How what was typed into a site's sign-in form stands to what the bot has: `same` when a login
+ * for that site has this user name and this password, `replaces` with the name of the login it
+ * would give a new password, and neither when it would be a new login. Without a user name, the
+ * site's only login is the one meant.
+ */
+export function standing(botId: string, host: string, user: string, password: string): { same: boolean; replaces?: string } {
+  let all: Stored[]
+  try {
+    all = load(botId).filter((s) => s.user && s.sites.includes(host))
+  } catch {
+    return { same: false }
+  }
+  const mine = user ? all.find((s) => s.user!.toLowerCase() === user.toLowerCase()) : all.length === 1 ? all[0] : undefined
+  if (!mine) return { same: false }
+  try {
+    if (valueOf(botId, mine) === password) return { same: true }
+  } catch {
+    // One that cannot be read is there to be entered again.
+  }
+  return { same: false, replaces: mine.name }
+}
+
+/**
+ * Keeps what the owner typed into a site's sign-in form as the bot's login for it: a new one, or
+ * a new password for the one the bot has for that account.
+ */
+export function keepLogin(botId: string, typed: { site: string; user: unknown; password: string; page?: string }): Secret {
+  const user = userOf(typed.user)
+  if (!user) throw new Error('Give the user name too.')
+  const { replaces } = standing(botId, typed.site, user, typed.password)
+  const before = replaces ? load(botId).find((s) => s.name === replaces) : undefined
+  if (before) return save(botId, { name: before.name, sites: before.sites, value: typed.password, user, page: typed.page, by: 'owner' }, { replace: true })
+  return save(botId, { name: nameFor(botId, typed.site), sites: [typed.site], value: typed.password, what: `Login for ${typed.site.replace(/^www\./, '')}`, user, page: typed.page, by: 'owner' })
+}
+
+/**
+ * How often a login was sent and the site still showed its form: a site locks an account after a
+ * few wrong tries, and a bot that keeps trying would get there. Forgotten when a sign-in goes
+ * through, when the owner changes the login, and after a while.
+ */
+const tries = new Map<string, { count: number; at: number }>()
+const TRIES = 3
+const TRIES_FOR = 60 * 60_000
+
+/** Whether a login may be tried, and what the bot is told when it may not. */
+export function mayTry(botId: string, name: string) {
+  const tried = tries.get(about(botId, name))
+  if (!tried || Date.now() - tried.at > TRIES_FOR) return void tries.delete(about(botId, name))
+  if (tried.count >= TRIES) {
+    throw new Error(`The login "${name}" was sent ${TRIES} times and the site did not take it, so it is not tried again for now: a site locks an account after a few wrong tries. Tell the user: they can sign in themselves in your browser, or give the login a new password in your settings, under Secrets.`)
+  }
+}
+
+/** Notes how a try went. */
+export function tried(botId: string, name: string, went: boolean) {
+  const key = about(botId, name)
+  if (went) return void tries.delete(key)
+  const before = tries.get(key)
+  tries.set(key, { count: before && Date.now() - before.at <= TRIES_FOR ? before.count + 1 : 1, at: Date.now() })
 }
 
 /**
@@ -478,6 +641,10 @@ interface Ask {
   what: string
   /** The bot asked for one it has to be replaced, and the card said so. */
   replace: boolean
+  /** A login is asked for: a user name with the password. */
+  login?: boolean
+  /** The user name the bot gave, which the owner may have typed another in place of. */
+  user?: string
   settle: (outcome: AskOutcome) => void
 }
 
@@ -523,12 +690,15 @@ export function ask(callId: string, wanted: Omit<Ask, 'settle'>, signal: AbortSi
 }
 
 /** The owner's answer to a card: the value, which is kept under the name and for the site the card showed, or no. */
-export function answer(callId: string, given: { value?: unknown; declined?: unknown }) {
+export function answer(callId: string, given: { value?: unknown; declined?: unknown; user?: unknown }) {
   const asked = asks.get(callId)
   if (!asked) throw new Error('The bot is no longer waiting for this. Add it under the bot’s Secrets, or have the bot ask again.')
   if (given.declined === true) return asked.settle('declined')
+  // An app from before logins sends the password alone: the user name is then the one the bot gave.
+  const user = asked.login ? userOf(given.user) || userOf(asked.user) : ''
+  if (asked.login && !user) throw new Error('Give the user name too.')
   // What the owner types takes the place of one that is there only when the card said it would, or when that one
   // cannot be read any more. One that was added under the name while the card waited is not written over.
-  save(asked.botId, { name: asked.name, sites: [asked.site], value: given.value, what: asked.what, by: 'owner' }, { replace: asked.replace || !has(asked.botId, asked.name) })
+  save(asked.botId, { name: asked.name, sites: [asked.site], value: given.value, what: asked.what, by: 'owner', ...(user ? { user } : {}) }, { replace: asked.replace || !has(asked.botId, asked.name) })
   asked.settle('saved')
 }

@@ -421,7 +421,13 @@ route('GET', '/api/bots/:id/secrets', ([id]) => secrets.list(needBot(id).id))
 // Adds one. A name that is taken is said to be: what is kept under it is never written over by adding.
 route('POST', '/api/bots/:id/secrets', ([id], body) => {
   const botId = needBot(id).id
-  return checked(() => secrets.save(botId, { name: secrets.nameOf(body.name), sites: secrets.sitesOf(body.sites), value: body.value, what: body.what, by: 'owner' }))
+  return checked(() => {
+    const sites = secrets.sitesOf(body.sites)
+    const user = secrets.userOf(body.user)
+    // A login needs no name of its own: it is called after its site.
+    const name = user && !String(body.name ?? '').trim() ? secrets.nameFor(botId, sites[0]) : secrets.nameOf(body.name)
+    return secrets.save(botId, { name, sites, value: body.value, what: body.what || (user ? `Login for ${sites[0].replace(/^www\./, '')}` : ''), by: 'owner', ...(user ? { user, page: body.page } : {}) })
+  })
 })
 // Changes what one is, where it may go, or its value.
 route('PUT', '/api/bots/:id/secrets/:name', ([id, given], body) => {
@@ -534,6 +540,8 @@ route('POST', '/api/bots/:id/browser/:action', async ([id, action], body) => {
   const bot = needBot(id)
   const browser = browserFor(id)
   if (action === 'stop') return void (await browser.stop())
+  // The owner's answer to "keep this login?", about what they typed into a sign-in form in one of its windows.
+  if (action === 'login-offer') return void (await checked(() => browser.answerOffer(String(body.windowId), String(body.offerId), { save: body.save === true, user: body.user })))
   await browser.start(bot.headless)
   // The window of one of the bot's threads, opened if it has none: the conversation's unless another
   // thread is named. ("start" is what apps from before windows ask for.) An earlier conversation's

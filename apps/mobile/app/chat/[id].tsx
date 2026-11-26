@@ -16,7 +16,7 @@ import { useDictation } from '@openkumi/client/dictation'
 import { bothEnds, canTakeBack, fromWhom, letGo, sendNow, takeBack, useWaiting, waitingText } from '@openkumi/client/queue'
 import { callLength, useCalling } from '@openkumi/client/calls'
 import { type Report, parseReport, reportWord } from '@openkumi/client/reports'
-import { type SecretAsk, answerSecret, declineSecret, secretAsk } from '@openkumi/client/secrets'
+import { type SecretAsk, answerSecret, declineSecret, isSecretAsk, secretAsk } from '@openkumi/client/secrets'
 import { describe } from '@openkumi/client/steps'
 import { useSync } from '@openkumi/client/sync'
 import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
@@ -94,7 +94,7 @@ function rows(items: Item[], running: boolean): Row[] {
     // What the bot asked its owner is said to them, like a reply: it stands in the conversation, not among the steps. A call that failed asked nothing.
     else if (d.type === 'function_call' && d.name === 'ask_user' && done.has(d.call_id) && !failed.has(d.call_id) && askedIn(d).length) out.push({ key, kind: 'asked', questions: askedIn(d) })
     // A bot asking for a secret is answered in a card; one that could not be asked is a step like any that failed.
-    else if (d.type === 'function_call' && d.name === 'ask_secret' && !failed.has(d.call_id)) out.push({ key, kind: 'secret', ask: secretAsk(d, outputs.get(d.call_id), running) })
+    else if (d.type === 'function_call' && isSecretAsk(d.name) && !failed.has(d.call_id)) out.push({ key, kind: 'secret', ask: secretAsk(d, outputs.get(d.call_id), running) })
     // A page stands for the call that showed it, and a message to another bot for the call that sent it; the call is only listed when it failed.
     else if (d.type === 'function_call' && ((d.name !== 'show_page' && d.name !== 'message_bot') || failed.has(d.call_id))) step(key, describe(d))
     else if (d.type === 'web_search_call') step(key, 'Search the web')
@@ -211,6 +211,7 @@ function SecretCard({ row, theme, scale }: { row: Row & { kind: 'secret' }; them
   const name = useContext(BotName)
   const { ask } = row
   const [value, setValue] = useState('')
+  const [user, setUser] = useState(ask.user)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const act = (doing: Promise<unknown>) => {
@@ -224,34 +225,60 @@ function SecretCard({ row, theme, scale }: { row: Row & { kind: 'secret' }; them
       <View style={[styles.report, styles.secret, { borderColor: theme.border }]}>
         <View style={styles.reportKind}>
           <Glyph name="key" size={12} color={theme.faint} />
-          <Text style={[styles.eyebrow, { color: theme.faint }]}>Secret</Text>
+          <Text style={[styles.eyebrow, { color: theme.faint }]}>{ask.login ? 'Login' : 'Secret'}</Text>
         </View>
         <Text style={body}>
-          {ask.what} <Text style={{ color: theme.muted }}>{ask.state === 'saved' ? `saved as “${ask.name}”, for ${ask.site}` : ask.state === 'declined' ? 'not given' : 'not entered'}</Text>
+          {ask.what} <Text style={{ color: theme.muted }}>{ask.state === 'saved' ? `saved as ${ask.login ? 'the login ' : ''}“${ask.name}”, for ${ask.site}` : ask.state === 'declined' ? 'not given' : 'not entered'}</Text>
         </Text>
       </View>
     )
   }
-  const save = () => value && !busy && act(answerSecret(ask.callId, value))
+  const ready = !!value && (!ask.login || !!user.trim())
+  const save = () => ready && !busy && act(ask.login ? answerSecret(ask.callId, value, user) : answerSecret(ask.callId, value))
   return (
     <View style={[styles.report, styles.secret, { borderColor: theme.muted }]}>
       <View style={styles.reportKind}>
         <Glyph name="key" size={12} color={theme.faint} />
-        <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{name} needs a secret</Text>
+        <Text style={[styles.eyebrow, { color: theme.faint }]} numberOfLines={1}>{name} needs {ask.login ? 'a login' : 'a secret'}</Text>
       </View>
       <Text style={[body, { fontWeight: '600' }]}>{ask.what}</Text>
-      <Text style={{ color: theme.muted, fontSize: 13.5 * scale, lineHeight: 19 * scale }}>
-        It is kept encrypted as “{ask.name}”{ask.replaces ? ', in place of the one it has' : ''}. {name} uses it without seeing it, and it is sent only to <Text style={{ color: theme.text, fontWeight: '600' }}>{ask.site}</Text>.
-      </Text>
+      {ask.login ? (
+        <Text style={{ color: theme.muted, fontSize: 13.5 * scale, lineHeight: 19 * scale }}>
+          The password is kept encrypted as “{ask.name}”{ask.replaces ? ', in place of the one it has' : ''}. {name} signs in to <Text style={{ color: theme.text, fontWeight: '600' }}>{ask.site}</Text> with it by itself, without seeing it, whenever the site has signed it out.
+        </Text>
+      ) : (
+        <Text style={{ color: theme.muted, fontSize: 13.5 * scale, lineHeight: 19 * scale }}>
+          It is kept encrypted as “{ask.name}”{ask.replaces ? ', in place of the one it has' : ''}. {name} uses it without seeing it, and it is sent only to <Text style={{ color: theme.text, fontWeight: '600' }}>{ask.site}</Text>.
+        </Text>
+      )}
       {!!ask.where && (
         <Pressable accessibilityRole="link" hitSlop={6} onPress={() => void Linking.openURL(ask.where!)}>
           <Text style={{ color: theme.text, fontSize: 13.5 * scale, textDecorationLine: 'underline' }}>Where to find it</Text>
         </Pressable>
       )}
+      {ask.login && (
+        <TextInput
+          accessibilityLabel={`User name: ${ask.what}`}
+          style={[styles.secretInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.bg }]}
+          placeholder="User name or e-mail"
+          placeholderTextColor={theme.faint}
+          // The bot's account, not the phone owner's: the phone is not to offer theirs, nor to keep this one.
+          textContentType="none"
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          keyboardType="email-address"
+          returnKeyType="next"
+          editable={!busy}
+          value={user}
+          onChangeText={setUser}
+        />
+      )}
       <TextInput
-        accessibilityLabel={ask.what}
+        accessibilityLabel={ask.login ? `Password: ${ask.what}` : ask.what}
         style={[styles.secretInput, { color: theme.text, borderColor: theme.border, backgroundColor: theme.bg }]}
-        placeholder="Paste or type it here"
+        placeholder={ask.login ? 'Password' : 'Paste or type it here'}
         placeholderTextColor={theme.faint}
         secureTextEntry
         // Not a password of the phone's owner: said to be a one-time code, the phone neither offers one of its own nor asks to keep this one in Passwords.
@@ -267,7 +294,7 @@ function SecretCard({ row, theme, scale }: { row: Row & { kind: 'secret' }; them
         onSubmitEditing={save}
       />
       <View style={styles.secretButtons}>
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: !value || busy }} disabled={!value || busy} style={[styles.pill, { borderColor: 'transparent', backgroundColor: theme.primary, opacity: !value || busy ? 0.4 : 1 }]} onPress={save}>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: !ready || busy }} disabled={!ready || busy} style={[styles.pill, { borderColor: 'transparent', backgroundColor: theme.primary, opacity: !ready || busy ? 0.4 : 1 }]} onPress={save}>
           <Text style={{ color: theme.onPrimary, fontSize: 14, fontWeight: '600' }}>Save</Text>
         </Pressable>
         <Pressable accessibilityRole="button" disabled={busy} hitSlop={6} style={[styles.pill, { borderColor: theme.border }]} onPress={() => act(declineSecret(ask.callId))}>

@@ -39,6 +39,12 @@ that stays logged in.
 - **A vault for keys and passwords.** When a bot needs an API key or a password, it asks in a card
   and you type it once. It is kept encrypted, the bot uses it by name without ever seeing it, and
   it is sent only to the sites it is for. See [Secrets](/secrets/).
+- **Logins a bot signs in with by itself.** Sign in once in a bot's browser and say yes to saving
+  the login, and the bot signs in again whenever the site signs it out, also in an automation
+  nobody watches. OpenKumi fills in the form; the bot never has the password. A saved password is
+  encrypted but not out of reach of someone who can use your computer: read
+  [what a saved login risks](/security/limits/#a-saved-login-is-the-whole-account) first. See
+  [Logins](/secrets/#logins).
 - **Bots that write their own instructions.** A bot keeps an `AGENTS.md` and a `memory/` folder
   and updates them as it learns how you want it to work. Every change it makes is recorded, shown
   in the app, and can be undone. See [Making and shaping a bot](/setup/bots/).

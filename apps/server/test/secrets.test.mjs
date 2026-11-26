@@ -204,14 +204,15 @@ test('a bot is told of its secrets by name, never by value', async () => {
   assert.ok(told.includes(`Your secrets:\n- plausible: Plausible key for reports (for ${site})\n`))
   assert.match(told, /call ask_secret: the user types it into a private card/)
   assert.ok(!told.includes(KEY))
-  // In its conversation with its owner it can ask for one; anywhere it can keep one.
-  assert.match(lastText(await say(await fresh(), '!tools')), /\bweb_fetch ask_secret save_secret\b/)
+  // In its conversation with its owner it can ask for one, or for a login; anywhere it can keep one.
+  assert.match(lastText(await say(await fresh(), '!tools')), /\bweb_fetch ask_secret ask_login save_secret\b/)
   const id = await fresh()
   await say(id, '!tool spawn_subagent {"name":"Offered","task":"!tools"}')
   const child = await until(async () => (await api('GET', '/api/state')).threads.find((t) => t.parentId === id && t.kind === 'subagent'))
   const offered = lastText(await settle(child.id))
   assert.match(offered, /\bsave_secret\b/)
-  assert.doesNotMatch(offered, /ask_secret/, 'nobody reads a subagent’s thread, so it cannot ask there')
+  assert.doesNotMatch(offered, /ask_secret|ask_login/, 'nobody reads a subagent’s thread, so it cannot ask there')
+  assert.match(offered, /\bbrowser_sign_in\b/, 'but it signs in with the logins there are')
   await settle(id)
   // A bot that has none is told so.
   const other = await api('POST', '/api/bots', { name: 'Empty', provider: 'mock' })

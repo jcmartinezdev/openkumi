@@ -7,13 +7,61 @@ import { Canvas, Image } from '@shopify/react-native-skia'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallBarRoom } from '../../src/CallBar'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import type { BrowserInput } from '@openkumi/shared'
+import type { BrowserInput, LoginOffer } from '@openkumi/shared'
 import { useBotId } from '@openkumi/client/bots'
-import { control, driverOf, hostOf, sessionName, windowOf } from '@openkumi/client/browser'
+import { answerLoginOffer, control, driverOf, hostOf, loginOfferText, sessionName, windowOf } from '@openkumi/client/browser'
 import { api, mainThread, send, useStore } from '@openkumi/client/store'
 import { fit, useLivePage } from '../../src/LivePage'
 import { ScreenTitle } from '../../src/ScreenTitle'
 import { useTheme } from '../../src/theme'
+
+/**
+ * The owner signed in by hand in this window: whether what they typed is kept as the bot's login,
+ * so that the bot signs in by itself the next time. The user name is as it was read from the
+ * form, and theirs to correct.
+ */
+function LoginOfferBar({ botId, botName, windowId, offer }: { botId: string; botName: string; windowId: string; offer: LoginOffer }) {
+  const theme = useTheme()
+  const [user, setUser] = useState(offer.user)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const answer = (save: boolean) => {
+    setBusy(true)
+    setError('')
+    answerLoginOffer(botId, windowId, offer, save, user)
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setBusy(false))
+  }
+  const ready = !!user.trim() && !busy
+  return (
+    <View style={[styles.offer, { borderTopColor: theme.border, backgroundColor: theme.side }]}>
+      <Text style={{ color: theme.text, fontSize: 14, lineHeight: 19, fontWeight: '600' }}>{loginOfferText(offer, botName)}</Text>
+      <Text style={{ color: error ? theme.err : theme.muted, fontSize: 13, lineHeight: 18 }}>{error || 'The password is kept encrypted, and the bot never sees it.'}</Text>
+      <View style={styles.offerRow}>
+        <TextInput
+          accessibilityLabel="User name of the login"
+          style={[styles.address, { color: theme.text, backgroundColor: theme.bg }]}
+          value={user}
+          onChangeText={setUser}
+          placeholder="User name"
+          placeholderTextColor={theme.faint}
+          // The bot's account, not the phone owner's: the phone is not to offer theirs.
+          textContentType="none"
+          autoComplete="off"
+          autoCapitalize="none"
+          autoCorrect={false}
+          editable={!busy && !offer.replaces}
+        />
+        <Pressable accessibilityRole="button" hitSlop={6} disabled={busy} style={[styles.button, styles.small, { borderColor: theme.border, borderWidth: 1 }]} onPress={() => answer(false)}>
+          <Text style={{ color: theme.text, fontSize: 14, fontWeight: '600' }}>Not now</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: !ready }} hitSlop={6} disabled={!ready} style={[styles.button, styles.small, { backgroundColor: theme.primary, opacity: ready ? 1 : 0.4 }]} onPress={() => answer(true)}>
+          <Text style={{ color: theme.onPrimary, fontSize: 14, fontWeight: '600' }}>{offer.replaces ? 'Update' : 'Save'}</Text>
+        </Pressable>
+      </View>
+    </View>
+  )
+}
 
 export default function Browser() {
   const theme = useTheme()
@@ -179,6 +227,8 @@ export default function Browser() {
         {/* While someone has control, the page is framed, as on the computer. */}
         {drive && image && <View pointerEvents="none" style={[styles.frame, { left: shown.x - 2, top: shown.y - 2, width: shown.width + 4, height: shown.height + 4, borderColor: theme.primary }]} />}
       </View>
+      {/* A new offer is a new question: what was typed into the last one does not carry over. */}
+      {win?.offer && bot && <LoginOfferBar key={win.offer.id} botId={botId} botName={bot.name} windowId={win.id} offer={win.offer} />}
       {win && bot && (
         <View style={[styles.control, { borderTopColor: theme.border, backgroundColor: win.request && !drive ? `${theme.run}22` : 'transparent', paddingBottom: drive ? 8 : Math.max(insets.bottom, 10) }]}>
           <Text style={{ flex: 1, color: driver === 'bot' && !win.request ? theme.muted : theme.text, fontSize: 14, lineHeight: 19 }}>
@@ -239,5 +289,7 @@ const styles = StyleSheet.create({
   button: { height: 46, paddingHorizontal: 22, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   small: { height: 36, paddingHorizontal: 14, borderRadius: 18 },
   control: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  offer: { gap: 4, paddingHorizontal: 14, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  offerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   typebar: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth },
 })

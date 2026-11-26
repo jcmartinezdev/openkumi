@@ -61,6 +61,12 @@ may go, and a value is shown only on the computer that runs OpenKumi.
 
 - **Its own profile.** Each bot has its own Chrome profile in `private/browser-profile/`: its
   cookies and sign-ins are its alone, and your own Chrome is never touched.
+- **It signs in by itself only with a login you gave it.** A login is a user name and a password
+  in its vault. The bot names the login, and OpenKumi fills in the site's sign-in form: the model
+  never has the password, and it goes only into a page of the login's site. What you type into a
+  sign-in form while you have control is read to offer it to you as a login, and kept only when
+  you say yes. See [Logins](/secrets/#logins), and
+  [what a saved login risks](/security/limits/#a-saved-login-is-the-whole-account).
 - **A window per thread.** The conversation, each subagent and each automation run browse in a
   window of their own.
 - **Web addresses only.** It opens `http` and `https` (and blank and data pages). Files on the

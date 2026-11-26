@@ -1,5 +1,6 @@
 // A bot's secrets as its owner meets them in the apps: the list in the bot's settings, and the
-// card a bot's ask_secret call is in the conversation. The words are the same in every app.
+// card a bot's ask_secret or ask_login call is in the conversation. A secret with a user name is a
+// login, which the bot signs in to a site with. The words are the same in every app.
 import { useEffect, useState } from 'react'
 import type { Secret, Secrets, VaultKeeper } from '@openkumi/shared'
 import { moment } from './automations'
@@ -30,17 +31,21 @@ export function useSecrets(botId: string): { data: Secrets | null; error: string
 
 /** What stands in for a name where a new secret is being added: no secret can be called this (a name begins with a letter or a digit). */
 export const NEW_SECRET = '_new'
+/** The same for a new login. */
+export const NEW_LOGIN = '_new-login'
 
 /** Adds a secret. A name that is taken is refused: adding never writes over what is kept. */
 export const addSecret = (botId: string, secret: { name: string; value: string; sites: string; what?: string }) => api<Secret>('POST', path(botId), secret)
-/** Changes a secret that is there: what it is, where it may go, or (with `value`) the value itself. */
-export const saveSecret = (botId: string, name: string, patch: { value?: string; sites?: string; what?: string }) => api<Secret>('PUT', path(botId, name), patch)
+/** Adds a login: a user name and its password, for a site. It is named after the site. */
+export const addLogin = (botId: string, login: { sites: string; user: string; value: string }) => api<Secret>('POST', path(botId), login)
+/** Changes a secret that is there: what it is, where it may go, a login's user name, or (with `value`) the value itself. */
+export const saveSecret = (botId: string, name: string, patch: { value?: string; sites?: string; what?: string; user?: string }) => api<Secret>('PUT', path(botId, name), patch)
 export const removeSecret = (botId: string, name: string) => api('DELETE', path(botId, name))
 /** The value itself. Only the computer that runs OpenKumi is given it. */
 export const showSecret = async (botId: string, name: string) => (await api<{ value: string }>('GET', `${path(botId, name)}/value`)).value
 
-/** The owner's answer to a bot that asked for a secret: the value, or no. */
-export const answerSecret = (callId: string, value: string) => api('POST', `/api/secret-requests/${encodeURIComponent(callId)}`, { value })
+/** The owner's answer to a bot that asked for a secret: the value, with the user name when it asked for a login, or no. */
+export const answerSecret = (callId: string, value: string, user?: string) => api('POST', `/api/secret-requests/${encodeURIComponent(callId)}`, { value, ...(user === undefined ? {} : { user }) })
 export const declineSecret = (callId: string) => api('POST', `/api/secret-requests/${encodeURIComponent(callId)}`, { declined: true })
 
 /** Where the key that a person's secrets are encrypted with is kept, in words. */
@@ -54,6 +59,20 @@ export const KEPT: Record<VaultKeeper, string> = {
 /** How a bot's secrets are kept, said once above the list. */
 export const howKept = (kept: VaultKeeper | null) =>
   `A secret is kept encrypted, and the bot uses it by name without ever seeing it. It is sent only to the sites it is for.${kept ? ` The key that opens them is in ${KEPT[kept]}.` : ''}`
+
+/** How a login's password is kept, said under its field. */
+export const howPasswordKept = (kept: VaultKeeper | null) => `It is kept encrypted, and entered only on its site.${kept ? ` The key that opens it is in ${KEPT[kept]}.` : ''}`
+
+/** What a login is for, said above the logins. */
+export const howLogins = (botName: string) =>
+  `An account ${botName} signs in to by itself, whenever the site has signed it out. It is told the user name, never the password.`
+
+/** The logins among a bot's secrets, and the rest. */
+export const loginsOf = (secrets: Secret[]) => secrets.filter((s) => s.user)
+export const plainSecretsOf = (secrets: Secret[]) => secrets.filter((s) => !s.user)
+
+/** A site as a login names it, without the "www." nobody says. */
+export const siteName = (site: string) => site.replace(/^www\./, '')
 
 /** When a secret was last used, and who put it there, in a line. */
 export function secretStanding(secret: Secret, botName: string): string {
@@ -76,10 +95,17 @@ export interface SecretAsk {
   where: string | null
   /** The bot has one of this name, which what is typed takes the place of. */
   replaces: boolean
+  /** It asked for a login (ask_login): a user name with the password. */
+  login: boolean
+  /** The user name the bot gave for it, for the owner to correct. */
+  user: string
   state: 'waiting' | 'saved' | 'declined' | 'unanswered' | 'failed'
 }
 
-export function secretAsk(call: { arguments: string; call_id: string }, output: string | undefined, running: boolean): SecretAsk {
+/** The calls a card is drawn from. */
+export const isSecretAsk = (name: string) => name === 'ask_secret' || name === 'ask_login'
+
+export function secretAsk(call: { name?: string; arguments: string; call_id: string }, output: string | undefined, running: boolean): SecretAsk {
   const a = parse(call.arguments)
   const where = typeof a.where === 'string' && /^https?:\/\//i.test(a.where) ? a.where : null
   const state =
@@ -88,5 +114,16 @@ export function secretAsk(call: { arguments: string; call_id: string }, output: 
     : output.startsWith('The user said no') ? 'declined'
     : output.startsWith('Error:') ? 'failed'
     : 'unanswered'
-  return { callId: call.call_id, name: String(a.name ?? ''), site: String(a.site ?? ''), what: String(a.what ?? '') || 'A secret', where, replaces: a.replace === true, state }
+  const login = call.name === 'ask_login'
+  return {
+    callId: call.call_id,
+    name: String(a.name ?? ''),
+    site: String(a.site ?? ''),
+    what: String(a.what ?? '') || (login ? 'A login' : 'A secret'),
+    where,
+    replaces: a.replace === true,
+    login,
+    user: login ? String(a.user ?? '') : '',
+    state,
+  }
 }

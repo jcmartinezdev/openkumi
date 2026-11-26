@@ -13,6 +13,7 @@ import { track, whereOf } from './telemetry.ts'
 import * as db from './db.ts'
 import { PAGE_GUIDE, makePage } from './pages.ts'
 import * as secrets from './secrets.ts'
+import { put, signIn } from './sign-in.ts'
 import * as automations from './automations.ts'
 import { htmlText } from './watch.ts'
 import * as ws from './workspace.ts'
@@ -741,8 +742,7 @@ const browserTools: Tool[] = withNews([
         // A secret goes into the very field that was found, in the document whose site was checked. The
         // field is held on to first: if the page goes elsewhere meanwhile, the field is gone and nothing
         // is put anywhere. And the value is set in the field itself, not typed at whatever has the
-        // focus: something else on the page (an advertisement in a frame of its own) could take the
-        // focus in the moment between.
+        // focus (see put).
         const field = await el.elementHandle({ timeout: 8000 })
         const frame = await field.ownerFrame()
         if (!frame) throw new Error('That field is no longer on the page. Take a new snapshot.')
@@ -756,23 +756,7 @@ const browserTools: Tool[] = withNews([
         const value = await secrets.use(ctx.bot.id, String(a.secret), where)
         // From here on the window has held this secret on this site, whatever becomes of the secret.
         marks.secrets.add(where.host)
-        const put = await field
-          .evaluate((el, value) => {
-            const plain = ['text', 'password', 'email', 'search', 'tel', 'url', 'number']
-            if (el instanceof HTMLInputElement && plain.includes(el.type) && !el.disabled && !el.readOnly) Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value)
-            else if (el instanceof HTMLTextAreaElement && !el.disabled && !el.readOnly) Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, value)
-            else if (el instanceof HTMLElement && el.isContentEditable) el.textContent = value
-            else return false
-            // A field that did not take it as it is (one for numbers, given letters) holds something else now, or nothing.
-            if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && el.value !== value) return false
-            el.focus()
-            // As if it had been typed: the page hears of it the way it hears of typing.
-            el.dispatchEvent(new Event('input', { bubbles: true }))
-            el.dispatchEvent(new Event('change', { bubbles: true }))
-            return true
-          }, value)
-          .catch(() => false)
-        if (!put) throw new Error('The secret was not typed: that is not a field text can be put into, or it is no longer on the page.')
+        if (!(await put(field, value))) throw new Error('The secret was not typed: that is not a field text can be put into, or it is no longer on the page.')
         if (!a.submit) return `Typed the secret "${a.secret}".`
         await field.press('Enter')
       } else {
@@ -786,6 +770,57 @@ const browserTools: Tool[] = withNews([
       }
       await p.waitForTimeout(800)
       return snapshot(p)
+    },
+  },
+  {
+    name: 'browser_sign_in',
+    description:
+      'Sign in to a site with one of your logins. The sign-in form on the page is found, filled in with the user name and the password, and sent, ' +
+      'without you seeing the password; you get the page that follows. Use it whenever a site you have a login for has signed you out, instead of asking the user. ' +
+      'Open the site\'s sign-in page first. When this page has no sign-in form, the page the login was kept from is opened, if it is known.',
+    parameters: params({ login: str('The name of the login. Leave it out when you have just one for the site the page is on.') }),
+    run: async (a, ctx) => {
+      // A window that was only just opened shows no page yet: the login may know where to go.
+      const p = await page(ctx, { leaving: true })
+      const botId = ctx.bot.id
+      let login: secrets.Login
+      if (a.login != null && a.login !== '') login = secrets.login(botId, String(a.login))
+      else {
+        const hosts = new Set(p.frames().map((frame) => { try { return new URL(frame.url()).host } catch { return '' } }).filter(Boolean))
+        const fitting = new Map([...hosts].flatMap((host) => secrets.logins(botId, host)).map((l) => [l.name, l]))
+        const all = secrets.logins(botId)
+        const yours = all.length ? `Your logins: ${all.map((l) => `${l.name} (${l.user}, for ${l.sites.join(', ')})`).join('; ')}.` : 'You have no logins yet.'
+        if (!fitting.size) throw new Error(`You have no login for the site this page is on. ${yours}${all.length ? ' Name the one to use, or open its site first.' : ''}`)
+        if (fitting.size > 1) throw new Error(`You have several logins for this site: ${[...fitting.values()].map((l) => `${l.name} (${l.user})`).join(', ')}. Say which with login.`)
+        login = fitting.values().next().value!
+      }
+      secrets.mayTry(botId, login.name)
+      const marks = browserFor(botId).marks(ctx.thread.id)
+      // A script of the bot's that ran on this site in this window may still be there, and would read what is put in.
+      const scripted = (host: string) => {
+        if (marks.scripted.has(host) || marks.scripted.has(EVERY_SITE)) {
+          throw new Error(`You ran a script of your own on ${host} in this browser window, or in a page that may belong to it, and it could read what is put into the page. A password is only entered where no script of yours has run: have a subagent sign in, in a window of its own.`)
+        }
+      }
+      login.sites.forEach(scripted)
+      const { went } = await signIn(p, login, async (where) => {
+        scripted(where.host)
+        const value = await secrets.use(botId, login.name, where)
+        // From here on the window has held this password on this site, whatever becomes of the login.
+        marks.secrets.add(where.host)
+        return value
+      })
+      secrets.tried(botId, login.name, went)
+      // Signing in may have opened another page, which is where the work goes on.
+      const now = await snapshot(await page(ctx, { reading: true }))
+      const more = ctx.thread.kind === 'automation' ? 'say in your final message what it asks for' : 'have the user do that step: call browser_ask_user'
+      if (went) {
+        return `The sign-in form was sent with the login "${login.name}" (${login.user}), and the site moved on from it. This is the page now. If it asks for a code, a CAPTCHA or anything else only the user has, ${more}.\n\n${now}`
+      }
+      return (
+        `Not signed in: the form was sent with the login "${login.name}" (${login.user}), and the site still shows it. It may have refused the user name or the password, or want something more first, such as a CAPTCHA. ` +
+        `Read the page below, and do not send the login again unless the page says why it should work now: a site locks an account after a few wrong tries. If the password is wrong, only the user can give the login a new one.\n\n${now}`
+      )
     },
   },
   {
@@ -1057,44 +1092,69 @@ const SECRET_PARAMS = {
   what: str('What it is, in a few words: "Plausible API key"'),
 }
 
+/** What ask_secret and ask_login do: a card in the conversation that the owner types into, which the bot waits for. */
+async function asking(a: Record<string, any>, ctx: ToolContext, login: boolean): Promise<string> {
+  const { name, site, what } = named(a)
+  if (a.where != null && a.where !== '' && !/^https?:\/\//i.test(String(a.where))) throw new Error('where is a web address that begins with https://, or is left out.')
+  if (!ctx.callId) throw new Error('This cannot be asked from here.')
+  const user = login ? secrets.userOf(a.user) : ''
+  // What the user types would take the place of the one there is, which may be kept nowhere else: only when that is meant, and said on the card.
+  if (a.replace !== true && secrets.has(ctx.bot.id, name)) {
+    throw new Error(`You already have a secret named "${name}". Use it, or pick another name. If it no longer works, ask again with replace set to true: what the user types then takes its place.`)
+  }
+  if (a.replace === true && !secrets.has(ctx.bot.id, name, true)) throw new Error(`You have no secret named "${name}" to replace. Ask for it without replace.`)
+  const outcome = await secrets.ask(ctx.callId, { botId: ctx.bot.id, name, site, what, replace: a.replace === true, ...(login ? { login, user } : {}) }, ctx.signal, ctx.hurry, ASK_TIMEOUT)
+  switch (outcome) {
+    case 'saved':
+      return login
+        ? `Saved as the login "${name}", for ${site}. Sign in with it: open the sign-in page and call browser_sign_in.`
+        : `Saved as "${name}", for ${site}. Use it by name: {{secret:${name}}} in web_fetch, or secret: "${name}" in browser_type.`
+    case 'declined':
+      return 'The user said no. Do not ask again for the same thing now; go on without it, or tell them what you needed.'
+    case 'hurried':
+      return 'Not entered: the user sent a message for you to read now instead. Read it, and ask again only if it is still needed.'
+    case 'timeout':
+      return `Nothing was entered in ${ASK_TIMEOUT / 60_000} minutes. End your turn and tell the user what you need; they can add it themselves in your settings, under Secrets, or you can ask again when they are back.`
+    case 'stopped':
+      throw new Error('Stopped')
+  }
+}
+
+const ASK_PARAMS = {
+  where: str('A web address where the user makes or finds it, if you know one: the card links to it'),
+  replace: { type: 'boolean', description: 'Set it to ask again for one you have, because it no longer works: what the user types takes its place, and the card says so' },
+}
+
 /** Only in the bot's conversation with its owner, who reads it: nobody watches a subagent or a run of an automation. */
 const askSecretTool: Tool = {
   name: 'ask_secret',
   description:
     'Ask the user for a secret you need and do not have: an API key, a password, a token. They type it into a private card in the conversation. ' +
     'It goes straight into your vault, encrypted, without passing through this conversation, and you do not see it: afterwards you use it by its name. ' +
-    'Say what you need and where they find it. It waits until they have entered it or said no. Never ask for a secret to be written in a message.',
+    'Say what you need and where they find it. It waits until they have entered it or said no. Never ask for a secret to be written in a message. ' +
+    'For the user name and password of an account you sign in to in the browser, use ask_login.',
+  parameters: params({ ...SECRET_PARAMS, ...ASK_PARAMS }, ['name', 'site', 'what']),
+  run: (a, ctx) => asking(a, ctx, false),
+}
+
+const askLoginTool: Tool = {
+  name: 'ask_login',
+  description:
+    'Ask the user for the user name and password of an account on a site, so that you can sign in there by yourself from now on, also when the site signs you out again. ' +
+    'They type both into a private card in the conversation. The password goes straight into your vault, encrypted, and you never see it: you sign in with browser_sign_in. ' +
+    'It waits until they have entered it or said no. Use it for a site you will come back to. When the site signs in through another service (Google, Apple), with a passkey, ' +
+    'or the user would rather sign in themselves, use browser_ask_user: they can then keep what they typed as your login.',
   parameters: params(
     {
-      ...SECRET_PARAMS,
-      where: str('A web address where the user makes or finds it, if you know one: the card links to it'),
-      replace: { type: 'boolean', description: 'Set it to ask again for one you have, because it no longer works: what the user types takes its place, and the card says so' },
+      name: str('A short name for the login: lower-case letters, digits and "-", such as "github"'),
+      site: str('The site whose page asks for the password, as its host: "github.com". Some sites sign in on another host than their own, such as "accounts.google.com".'),
+      what: str('Which account it is, in a few words: "GitHub account"'),
+      user: str('The user name or e-mail address, if you know it: the user can correct it on the card'),
+      ...ASK_PARAMS,
     },
     ['name', 'site', 'what'],
   ),
-  run: async (a, ctx) => {
-    const { name, site, what } = named(a)
-    if (a.where != null && a.where !== '' && !/^https?:\/\//i.test(String(a.where))) throw new Error('where is a web address that begins with https://, or is left out.')
-    if (!ctx.callId) throw new Error('This cannot be asked from here.')
-    // What the user types would take the place of the one there is, which may be kept nowhere else: only when that is meant, and said on the card.
-    if (a.replace !== true && secrets.has(ctx.bot.id, name)) {
-      throw new Error(`You already have a secret named "${name}". Use it, or pick another name. If it no longer works, ask again with replace set to true: what the user types then takes its place.`)
-    }
-    if (a.replace === true && !secrets.has(ctx.bot.id, name, true)) throw new Error(`You have no secret named "${name}" to replace. Ask for it without replace.`)
-    const outcome = await secrets.ask(ctx.callId, { botId: ctx.bot.id, name, site, what, replace: a.replace === true }, ctx.signal, ctx.hurry, ASK_TIMEOUT)
-    switch (outcome) {
-      case 'saved':
-        return `Saved as "${name}", for ${site}. Use it by name: {{secret:${name}}} in web_fetch, or secret: "${name}" in browser_type.`
-      case 'declined':
-        return 'The user said no. Do not ask again for the same thing now; go on without it, or tell them what you needed.'
-      case 'hurried':
-        return 'Not entered: the user sent a message for you to read now instead. Read it, and ask again only if it is still needed.'
-      case 'timeout':
-        return `Nothing was entered in ${ASK_TIMEOUT / 60_000} minutes. End your turn and tell the user what you need; they can add it themselves in your settings, under Secrets, or you can ask again when they are back.`
-      case 'stopped':
-        throw new Error('Stopped')
-    }
-  },
+  run: (a, ctx) => asking(a, ctx, true),
 }
 
 const saveSecretTool: Tool = {
@@ -1102,11 +1162,13 @@ const saveSecretTool: Tool = {
   description:
     'Keep a secret in your vault, encrypted, to use later by its name. Give value for one you have in front of you, such as a key a page showed you. ' +
     'Leave value out to have a strong password made up that you never see, for signing up somewhere: type it with browser_type and its name. ' +
-    'For a secret only the user has, use ask_secret. You cannot replace or delete a secret: the user does that, in your settings.',
+    'Give user as well when it is the password of an account, and it is kept as a login that browser_sign_in signs in with. ' +
+    'For a secret only the user has, use ask_secret or ask_login. You cannot replace or delete a secret: the user does that, in your settings.',
   parameters: params(
     {
       ...SECRET_PARAMS,
       value: str('The value to keep. Leave it out to have a password made up.'),
+      user: str('For the password of an account: the user name or e-mail address it goes with. It is then kept as a login.'),
       length: { type: 'number', description: 'For a made-up password: how many characters, 24 unless the site wants otherwise' },
     },
     ['name', 'site', 'what'],
@@ -1116,14 +1178,16 @@ const saveSecretTool: Tool = {
     const { name, site } = named(a)
     const made = a.value == null || a.value === ''
     const value = made ? secrets.generate(a.length) : String(a.value)
+    const user = secrets.userOf(a.user)
+    const asLogin = user ? ` It is a login now: once the account exists, sign in with browser_sign_in and login: "${name}".` : ''
     try {
       // What it is said to be goes as the bot wrote it: the value is taken out of it before it is tidied up.
-      secrets.save(ctx.bot.id, { name, sites: [site], value, what: a.what, by: 'bot' })
+      secrets.save(ctx.bot.id, { name, sites: [site], value, what: a.what, by: 'bot', ...(user ? { user } : {}) })
     } catch (e: any) {
       if (/already a secret/.test(String(e?.message))) throw new Error(`${e.message} Pick another name: only the user replaces or removes one, in your settings under Secrets.`)
       throw e
     }
-    if (made) return `Made up a password and kept it as "${name}", for ${site}. Type it with browser_type and secret: "${name}". The user can see it in your settings, under Secrets.`
+    if (made) return `Made up a password and kept it as "${name}", for ${site}. Type it with browser_type and secret: "${name}". The user can see it in your settings, under Secrets.${asLogin}`
     // Where it was written out before now (a page that showed it, a message it was pasted into), it is taken out:
     // in this thread, and in the ones above it, since a subagent is told what it knows by the conversation it works for.
     const { heads, take } = secrets.eraser(value, name)
@@ -1131,7 +1195,8 @@ const saveSecretTool: Tool = {
     for (let thread: Thread | undefined = ctx.thread; thread; thread = thread.parentId ? db.getThread(thread.parentId) : undefined) rewritten += db.rewriteItems(thread.id, heads, take)
     return (
       `Kept as "${name}", for ${site}. From now on use it by name ({{secret:${name}}} in web_fetch, secret: "${name}" in browser_type) and do not write the value anywhere.` +
-      (rewritten ? ' Where it stood earlier in this conversation, its name stands now.' : '')
+      (rewritten ? ' Where it stood earlier in this conversation, its name stands now.' : '') +
+      asLogin
     )
   },
 }
@@ -1222,7 +1287,7 @@ export async function toolsFor(thread: Thread): Promise<{ tools: Tool[]; problem
   ]
   // Only its own conversation is the owner's to read: a subagent and a run of an automation report to it.
   const reaching = thread.kind === 'chat' ? [notifyTool, askTool] : []
-  const secretTools = [...(thread.kind === 'chat' ? [askSecretTool] : []), saveSecretTool]
+  const secretTools = [...(thread.kind === 'chat' ? [askSecretTool, askLoginTool] : []), saveSecretTool]
   const own = [...botTools, ...fileTools, ...historyTools, ...(canSpawn ? [spawnTool, ...subagentTools] : []), ...automationTools, ...browsing, ...webTools, ...secretTools, pageTool, ...reaching]
   return { tools: [...own, ...services.tools], problems: services.problems }
 }

@@ -1,6 +1,6 @@
 ---
 title: A bot's browser
-description: "The browser every bot has: watching it, taking control for a sign-in or a CAPTCHA, handing back, and how it stays signed in."
+description: "The browser every bot has: watching it, taking control for a sign-in or a CAPTCHA, handing back, saving a login so the bot signs in by itself, and how it stays signed in."
 ---
 
 import { Aside, Steps } from '@astrojs/starlight/components'
@@ -53,6 +53,33 @@ A bot that needs you for something it cannot or should not do (a sign-in, a CAPT
 form) asks with `browser_ask_user`. Its window shows what it needs ("Sign in to LinkedIn") with
 **Take control** and **Not now**. The bot waits until you hand back, say no, or 25 minutes pass.
 Runs of automations cannot ask, since nobody is watching them.
+
+## Staying signed in
+
+A bot stays signed in to a site the way your own browser does: the site's cookies are kept in the
+bot's profile. Cookies that a browser forgets when it closes are kept too, encrypted, and given
+back when the bot's browser starts again, so restarting OpenKumi or the computer does not sign a
+bot out by itself.
+
+Some sites sign everybody out after a while all the same. For those, give the bot a **login**:
+when you have signed in by hand, the browser asks **Save this login for** the bot**?**
+
+- **Save login** keeps the user name and the password in the bot's vault, encrypted. From then on
+  the bot signs in to that site by itself whenever it finds itself signed out, also in an
+  automation. It never sees the password.
+- **Not now** keeps nothing.
+
+You can also add a login in the bot's settings, or the bot can ask for one in a card. See
+[Logins](/secrets/#logins) for how a bot signs in, and what it still needs you for (a CAPTCHA, a
+code sent to your phone).
+
+<Aside type="caution" title="Think before you save a password">
+A saved password is encrypted and the bot never sees it, but it is not out of reach. Anyone who
+can use your account on the computer that runs OpenKumi can read it, and the bot can then use that
+account whenever it likes, also when nobody is watching. Save a login only for an account you
+would hand to the bot, ideally one made for it, and never a password you use elsewhere. See
+[A saved login is the whole account](/security/limits/#a-saved-login-is-the-whole-account).
+</Aside>
 
 ## Downloads and files
 

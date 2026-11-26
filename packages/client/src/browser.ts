@@ -1,8 +1,8 @@
 // What every app needs to show a bot's browser: which window is whose, and who is driving it. Each
 // thread of a bot (its conversation, a subagent, a run of an automation) browses in a window of its own;
 // the owner watches one, and takes control of it to use the page themselves.
-import type { BrowserState, BrowserWindow, Thread } from '@openkumi/shared'
-import { mainThread, send } from './store'
+import type { BrowserState, BrowserWindow, LoginOffer, Thread } from '@openkumi/shared'
+import { api, mainThread, send } from './store'
 
 /** This view's own name for itself when it takes control of a window. A new one each time the app starts. */
 export const viewer = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
@@ -16,6 +16,19 @@ export const driverOf = (win: BrowserWindow | undefined): Driver => (!win?.contr
 export function control(botId: string, windowId: string, action: 'take' | 'give' | 'decline') {
   send({ type: 'browser.control', botId, windowId, viewer, action })
 }
+
+/**
+ * The owner's answer to "keep this login?", about what they typed into a sign-in form in a window
+ * they had control of: yes, under the user name they confirmed, or no.
+ */
+export const answerLoginOffer = (botId: string, windowId: string, offer: LoginOffer, save: boolean, user?: string) =>
+  api('POST', `/api/bots/${encodeURIComponent(botId)}/browser/login-offer`, { windowId, offerId: offer.id, save, ...(save ? { user: user ?? offer.user } : {}) })
+
+/** What the owner is asked about a sign-in they typed, in a line. */
+export const loginOfferText = (offer: LoginOffer, botName: string) =>
+  offer.replaces
+    ? `Update ${botName}’s password for ${offer.site.replace(/^www\./, '')}?`
+    : `Save this login for ${botName}, so it can sign in to ${offer.site.replace(/^www\./, '')} by itself?`
 
 /** The window a thread works in, if it has one. */
 export function windowOf(browser: BrowserState | undefined, threadId: string | undefined): BrowserWindow | undefined {

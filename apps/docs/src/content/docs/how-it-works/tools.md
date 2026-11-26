@@ -10,9 +10,9 @@ description: "Every tool a bot can call, and where each one is withheld: subagen
 | Its conversation | `search_history`, `read_history` |
 | Subagents | `spawn_subagent`, `wait_subagents`, `list_subagents`, `read_subagent`, `message_subagent`, `cancel_subagent` |
 | Automations | `list_automations`, `create_automation`, `update_automation`, `delete_automation` |
-| Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval`, `browser_ask_user` |
+| Browser | `browser_navigate`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_select`, `browser_upload`, `browser_press_key`, `browser_scroll`, `browser_back`, `browser_read`, `browser_eval`, `browser_sign_in`, `browser_ask_user` |
 | Web | `web_fetch`, plus the engine's own web search on Codex, Claude Code and Grok (when the bot's **Web search** is on) |
-| Secrets | `ask_secret`, `save_secret` |
+| Secrets | `ask_secret`, `ask_login`, `save_secret` |
 | The conversation | `show_page`, `notify_user`, `ask_user` |
 | Superpowers | every tool of the services its superpowers bring, named `mcp__<superpower>__<tool>` |
 
@@ -28,8 +28,8 @@ A bot does not have every tool everywhere:
 | --- | --- |
 | Its conversation, answering you | nothing is withheld; `create_bot` and `update_bot` only for the main assistant, and only in a turn that answers something you wrote |
 | Its conversation, answering another bot | `create_bot`, `update_bot`; `message_bot` reaches only the bot that wrote, and only if it asked for a reply |
-| A subagent | `message_bot`, `create_bot`, `update_bot`, `notify_user`, `ask_user`, `ask_secret` (nobody reads its thread); at the last level of subagents, the subagent tools |
-| A run of an automation | `message_bot`, `create_bot`, `update_bot`, `notify_user`, `ask_user`, `browser_ask_user` and `ask_secret` (nobody is watching) |
+| A subagent | `message_bot`, `create_bot`, `update_bot`, `notify_user`, `ask_user`, `ask_secret`, `ask_login` (nobody reads its thread); at the last level of subagents, the subagent tools |
+| A run of an automation | `message_bot`, `create_bot`, `update_bot`, `notify_user`, `ask_user`, `browser_ask_user`, `ask_secret` and `ask_login` (nobody is watching) |
 | A turn that answers something asked on a call | everything but `list_bots`, `message_bot`, `create_bot`, `update_bot`, the subagent tools (but `wait_subagents`) and the automation tools; automations it makes must start at a time. No web search. |
 | Any thread, when **Bots can message each other** is off | `message_bot`, and `create_bot`'s first message |
 
@@ -64,6 +64,11 @@ A bot does not have every tool everywhere:
   by name, without seeing them. `ask_secret` shows a card in the conversation where you type one;
   `save_secret` keeps one the bot came to hold, or makes up a password. The value given to
   `save_secret` is not written into the conversation with the call. See [Secrets](/secrets/).
+- **`browser_sign_in` and `ask_login`.** A secret with a user name is a login. `browser_sign_in`
+  takes the name of one and nothing else: OpenKumi finds the sign-in form on the page, fills in
+  the user name and the password, sends it, and gives the bot the page that follows, saying
+  whether the form is still there. The model takes no part in it and never has the password.
+  `ask_login` shows a card for the user name and the password. See [Logins](/secrets/#logins).
 - **`notify_user`** reaches you about what the bot says in that turn, with a reason in a few
   words: `answer` when it cannot go on without you, `read` when it has something that should not
   wait until you next look. The mark is put beside the bot when the turn is over, and nothing is

@@ -250,6 +250,8 @@ apps/
       superpowers.ts   the superpowers that ship, which bot has which, and what a bot is told of them
       mcp.ts           the services superpowers bring: each bot's connection and sign-in
       browser.ts       one persistent Chrome profile per bot, a window per thread; live view via CDP screencast
+      sign-in.ts       signs a bot in with one of its logins (finds the form, fills it in, sends it), and reads
+                       a sign-in the owner does by hand, to offer it as a login
       providers/       what bots run on: the Codex and Claude Code engines (codex.ts,
                        claude-code.ts, grok.ts), local models, OpenAI-compatible APIs, a mock for tests
       tool-endpoint.ts serves a bot's tools to an engine over MCP for the length of one turn

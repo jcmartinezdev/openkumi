@@ -2017,6 +2017,140 @@ test('secrets: a bot asks for a key in a card where its owner types it, and the 
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('logins: the owner signs in by hand and keeps what they typed, the bot’s settings list its logins, and a bot asks for one in a card', async () => {
+  fs.mkdirSync(`${tmp}/app`, { recursive: true })
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  // A site with an account: it signs in whoever sends the right user name and password, and says who is signed in.
+  const USER = 'ana@example.com'
+  const PASSWORD = 'correct-horse-battery-staple-42'
+  const accounts = http.createServer(async (req, res) => {
+    let body = ''
+    for await (const chunk of req) body += chunk
+    const form = new URLSearchParams(body)
+    const page = (title, inner, headers = {}) => res.writeHead(200, { 'Content-Type': 'text/html', ...headers }).end(`<!doctype html><title>${title}</title><body style="font:18px system-ui;padding:40px">${inner}`)
+    if (req.url === '/session') {
+      return form.get('email') === USER && form.get('password') === PASSWORD
+        ? res.writeHead(302, { Location: '/home', 'Set-Cookie': 'session=in; Path=/' }).end()
+        : res.writeHead(302, { Location: '/login' }).end()
+    }
+    if (req.url === '/home' && (req.headers.cookie ?? '').includes('session=in')) return page('Home', `<h1>Signed in as ${USER}</h1>`)
+    if (req.url === '/logout') return res.writeHead(302, { Location: '/login', 'Set-Cookie': 'session=; Path=/; Max-Age=0' }).end()
+    page('Sign in', '<h1>Sign in</h1><form method="post" action="/session"><input name="email" type="email" placeholder="Email" autofocus> <input name="password" type="password" placeholder="Password"> <button>Sign in</button></form>')
+  })
+  await new Promise((resolve) => accounts.listen(0, '127.0.0.1', resolve))
+  // A test that fails does not get to close it, and the run would wait for it for good.
+  accounts.unref()
+  const site = `127.0.0.1:${accounts.address().port}`
+
+  const win = await launch()
+  await showsBot(win, 'Kumi')
+  win.on('dialog', (dialog) => dialog.accept())
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
+  const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
+  const clerk = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Clerk', provider: 'mock' })
+  const kept = async () => (await ask(LOCAL_PORT, 'local-home', 'GET', `/api/bots/${clerk.id}/secrets`)).secrets
+  const said = (text) => win.locator('.msg.assistant', { hasText: text }).last().waitFor({ timeout: 60_000 })
+  const tell = async (text) => {
+    await win.locator('.composer textarea').fill(text)
+    await win.keyboard.press('Meta+Enter')
+  }
+
+  // The bot comes to a site that wants it signed in. Its owner takes control and signs in, as they always have.
+  await win.locator('.sidebar .row.bot', { hasText: 'Clerk' }).click()
+  await win.locator('.empty h1', { hasText: 'Clerk' }).waitFor()
+  await tell(`!tool browser_navigate {"url":"http://${site}/home"}`)
+  await said('Page: Sign in')
+  await win.getByRole('button', { name: 'Toggle browser' }).click()
+  await win.waitForFunction(() => getComputedStyle(document.querySelector('.pane .view canvas')).visibility === 'visible', null, { timeout: 60_000 })
+  await win.getByRole('button', { name: 'Take control' }).click()
+  await win.locator('.control-bar.you').waitFor()
+  assert.equal(await win.locator('.control-bar.offer').count(), 0)
+  // The page's e-mail field has the keyboard, as a sign-in page's does.
+  await win.locator('.pane .view').focus()
+  await win.keyboard.type(USER)
+  await win.keyboard.press('Tab')
+  await win.keyboard.type(PASSWORD)
+  await win.keyboard.press('Enter')
+  // The site let them in, so they are asked whether the bot may keep what they typed. No app is sent the password.
+  const offer = win.locator('.control-bar.offer')
+  await offer.waitFor({ timeout: 20_000 })
+  assert.match(await offer.innerText(), new RegExp(`^Save this login for Clerk, so it can sign in to ${site.replace(/\./g, '\\.')} by itself\\? The password is kept encrypted, and the bot never sees it\\.\\s+Not now\\s+Save login$`))
+  assert.equal(await offer.getByLabel('User name of the login').inputValue(), USER)
+  assert.ok(!JSON.stringify(await state()).includes(PASSWORD))
+  assert.deepEqual(await kept(), [])
+  await shot('login-offer')
+  await offer.getByRole('button', { name: 'Save login' }).click()
+  await offer.waitFor({ state: 'detached' })
+  const name = site.replace(/[.:]/g, '-')
+  assert.deepEqual((await kept()).map((s) => [s.name, s.user, s.sites, s.page, s.by]), [[name, USER, [site], `http://${site}/home`, 'owner']], 'with the page its form was on')
+  await win.getByRole('button', { name: 'Hand back' }).click()
+  await until(async () => (await state()).browsers[clerk.id].windows.every((w) => !w.controller), 10_000)
+
+  // Signed out by the site, the bot signs in by itself. It is given the page that follows, and never the password.
+  await tell(`!tool browser_navigate {"url":"http://${site}/logout"}`)
+  await said('Page: Sign in')
+  await tell('!tool browser_sign_in {}')
+  await said(`Tool result: The sign-in form was sent with the login "${name}" (${USER}), and the site moved on from it.`)
+  await said(`Signed in as ${USER}`)
+  assert.equal(await win.locator('.control-bar.offer').count(), 0, 'what the bot enters is not offered to anyone')
+  assert.ok(!(await win.locator('body').innerText()).includes(PASSWORD))
+  await win.getByRole('button', { name: 'Toggle browser' }).click()
+
+  // A bot that has no login for a site asks for one in a card: a user name, which it may know already, and a password.
+  await tell('!tool ask_login {"name":"ledger","site":"ledger.example.com","what":"Ledger account","user":"clerk@example.com"}')
+  const card = win.locator('.secret-card.waiting')
+  await card.waitFor({ timeout: 20_000 })
+  assert.match(await card.innerText(), /^CLERK NEEDS A LOGIN\s+Ledger account\s+The password is kept encrypted as “ledger”\. Clerk signs in to ledger\.example\.com with it by itself, without seeing it, whenever the site has signed it out\./i)
+  assert.equal(await card.getByLabel('User name: Ledger account').inputValue(), 'clerk@example.com')
+  assert.equal(await card.getByLabel('Password: Ledger account').getAttribute('type'), 'password')
+  assert.equal(await card.getByRole('button', { name: 'Save' }).isDisabled(), true, 'there is no password yet')
+  await shot('login-card')
+  await card.getByLabel('Password: Ledger account').fill('ledger-password-0001')
+  // The bot's browser floats over the chat while it is at work, and may lie over the button: Enter saves as well.
+  await card.getByLabel('Password: Ledger account').press('Enter')
+  await win.locator('.secret-card:not(.waiting)', { hasText: 'Ledger account saved as the login “ledger”, for ledger.example.com' }).waitFor()
+  await said('Tool result: Saved as the login "ledger", for ledger.example.com.')
+  assert.ok(!(await win.locator('body').innerText()).includes('ledger-password-0001'))
+
+  // In the bot's settings its logins come first: who signs in where. The other secrets follow.
+  await win.evaluate((id) => (location.hash = `/settings/bots/${id}/secrets`), clerk.id)
+  const row = (title) => win.locator('.set-row', { has: win.locator('h3', { hasText: title }) })
+  await row(`${USER} at ${site}`).waitFor()
+  assert.equal(await win.locator('.tabbar a.active').innerText(), 'Secrets\n2')
+  assert.deepEqual(await win.locator('.set-section-head h2').allInnerTexts(), ['Logins', 'Secrets'])
+  assert.match(await row(`${USER} at ${site}`).innerText(), new RegExp(`Login for ${site.replace(/\./g, '\\.')}\\. Called “${name}”\\. The password is entered only on ${site.replace(/\./g, '\\.')}\\.\\s+Added by you · last used `))
+  assert.match(await row('clerk@example.com at ledger.example.com').innerText(), /Ledger account\. Called “ledger”\. The password is entered only on ledger\.example\.com\.\s+Added by you · not used yet/)
+  await win.getByRole('button', { name: `Show the password of ${name}` }).click()
+  assert.equal(await row(`${USER} at ${site}`).locator('.secret-value code').innerText(), PASSWORD)
+  await win.getByRole('button', { name: `Hide the password of ${name}` }).click()
+  // Its owner adds one: a site, a user name and a password. It is named after its site.
+  await win.getByRole('button', { name: 'Add a login' }).click()
+  await win.getByLabel('Site: new login').fill('https://Shop.example.com/account/login')
+  await win.getByLabel('User name: new login').fill('buyer')
+  assert.equal(await win.getByRole('button', { name: 'Add login' }).isDisabled(), true, 'a login has a password')
+  await win.getByLabel('Password: new login').fill('shop-password-0002')
+  await win.getByRole('button', { name: 'Add login' }).click()
+  await row('buyer at shop.example.com').waitFor()
+  assert.equal(await win.locator('.secret-form').count(), 0)
+  await shot('logins-tab')
+  // The user name is theirs to change; the password stays as it was unless a new one is typed.
+  await win.getByRole('button', { name: 'Change shop-example-com' }).click()
+  await win.getByLabel('User name: “shop-example-com”').fill('buyer@example.com')
+  await win.locator('.secret-form').getByRole('button', { name: 'Save' }).click()
+  await row('buyer@example.com at shop.example.com').waitFor()
+  assert.equal((await ask(LOCAL_PORT, 'local-home', 'GET', `/api/bots/${clerk.id}/secrets/shop-example-com/value`)).value, 'shop-password-0002')
+  // The bot is told who signs in where, and no password.
+  const told = (await ask(LOCAL_PORT, 'local-home', 'GET', `/api/bots/${clerk.id}/instructions`)).text
+  assert.ok(told.includes(`- ledger: Ledger account (a login, user name "clerk@example.com", for ledger.example.com)\n- shop-example-com: Login for shop.example.com (a login, user name "buyer@example.com", for shop.example.com)\n`), told)
+  await win.getByRole('button', { name: 'Remove shop-example-com' }).click()
+  await row('buyer@example.com at shop.example.com').waitFor({ state: 'detached' })
+  assert.deepEqual((await kept()).map((s) => s.name), [name, 'ledger'])
+
+  await app.close()
+  accounts.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('the model picker offers every provider and its models, and picking one moves the bot to it', async () => {
   fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
   const win = await launch()

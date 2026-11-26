@@ -1,7 +1,7 @@
 import type React from 'react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import type { Bot, BrowserInput, BrowserTab, BrowserWindow } from '@openkumi/shared'
-import { control, driverOf, hostOf, sessionName } from '@openkumi/client/browser'
+import type { Bot, BrowserInput, BrowserTab, BrowserWindow, LoginOffer } from '@openkumi/shared'
+import { answerLoginOffer, control, driverOf, hostOf, loginOfferText, sessionName } from '@openkumi/client/browser'
 import { Icon } from './Icon'
 import { isCommand } from './shortcuts'
 
@@ -200,6 +200,34 @@ export function PageView({ bot, tab, drive, onPress, children }: { bot: Bot; tab
         </form>
       )}
     </>
+  )
+}
+
+/**
+ * The owner signed in by hand in this window: whether what they typed is kept as the bot's login,
+ * so that the bot signs in by itself the next time. The user name is as it was read from the
+ * form, and theirs to correct.
+ */
+function LoginOfferBar({ bot, win, offer }: { bot: Bot; win: BrowserWindow; offer: LoginOffer }) {
+  const [user, setUser] = useState(offer.user)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const answer = (save: boolean) => {
+    setBusy(true)
+    setError('')
+    answerLoginOffer(bot.id, win.id, offer, save, user)
+      .catch((e) => setError(e.message))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <form className="control-bar offer" role="status" onSubmit={(e) => (e.preventDefault(), user.trim() && !busy && answer(true))}>
+      <span className="grow">
+        <strong>{loginOfferText(offer, bot.name)}</strong> {error ? <span className="err">{error}</span> : 'The password is kept encrypted, and the bot never sees it.'}
+      </span>
+      <input className="set-input" autoComplete="off" autoCapitalize="off" spellCheck={false} aria-label="User name of the login" placeholder="User name" value={user} disabled={busy || !!offer.replaces} onChange={(e) => setUser(e.target.value)} />
+      <button type="button" disabled={busy} onClick={() => answer(false)}>Not now</button>
+      <button type="submit" className="primary" disabled={busy || !user.trim()}>{offer.replaces ? 'Update' : 'Save login'}</button>
+    </form>
   )
 }
 
@@ -413,6 +441,8 @@ export function BrowserPane({ bot, threadId, other, full, setFull, popOut, close
           </div>
         ) : undefined}
       </PageView>
+      {/* A new offer is a new question: what was typed into the last one does not carry over. */}
+      {win?.offer && <LoginOfferBar key={win.offer.id} bot={bot} win={win} offer={win.offer} />}
       {win && <ControlBar bot={bot} win={win} />}
     </aside>
   )

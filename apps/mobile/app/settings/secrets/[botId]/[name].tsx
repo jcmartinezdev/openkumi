@@ -1,12 +1,13 @@
 // One of a bot's secrets, or a new one (NEW_SECRET in place of a name): what it is, the sites it is sent to, and its
 // value, which is typed here and never shown again on the phone. Only the computer that runs
-// OpenKumi reads a value back.
+// OpenKumi reads a value back. One with a user name is a login (a new one: NEW_LOGIN), which
+// shows its site, its user name and its password instead.
 import { useEffect, useState } from 'react'
 import { Alert } from 'react-native'
 import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import { useBotId } from '@openkumi/client/bots'
-import { NEW_SECRET, addSecret, howKept, removeSecret, saveSecret, secretStanding, useSecrets } from '@openkumi/client/secrets'
+import { NEW_LOGIN, NEW_SECRET, addLogin, addSecret, howKept, howLogins, howPasswordKept, removeSecret, saveSecret, secretStanding, siteName, useSecrets } from '@openkumi/client/secrets'
 import { useStore } from '@openkumi/client/store'
 import { Field, Note, Row, Section, SettingsPage } from '../../../../src/SettingsUi'
 
@@ -17,8 +18,10 @@ export default function SecretPage() {
   const botId = useBotId(forBot)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const { data, error: fetchError } = useSecrets(botId)
-  const isNew = given === NEW_SECRET
+  const isNew = given === NEW_SECRET || given === NEW_LOGIN
   const secret = isNew ? undefined : data?.secrets.find((s) => s.name === given)
+  const login = given === NEW_LOGIN || !!secret?.user
+  const [user, setUser] = useState('')
   const [name, setName] = useState('')
   const [what, setWhat] = useState('')
   const [sites, setSites] = useState('')
@@ -29,24 +32,28 @@ export default function SecretPage() {
   // Passwords. So leaving waits a moment for the field to be emptied, whichever way the screen is left.
   usePreventRemove(!!value, ({ repeat }) => (setValue(''), void setTimeout(repeat, 150)))
   // The fields start from what is kept, once that has come.
-  const known = secret ? `${secret.what}\n${secret.sites.join(', ')}` : ''
+  const known = secret ? `${secret.what}\n${secret.sites.join(', ')}\n${secret.user ?? ''}` : ''
   useEffect(() => {
     if (!secret) return
     setWhat(secret.what)
     setSites(secret.sites.join(', '))
+    setUser(secret.user ?? '')
   }, [known])
 
   // Removed here or on another device: there is nothing left to show.
   useEffect(() => void (!isNew && data && !secret && router.back()), [isNew, data, secret])
   if (!bot) return null
 
-  const changed = isNew ? !!(name.trim() && sites.trim() && value) : !!secret && (what !== secret.what || sites !== secret.sites.join(', ') || !!value)
+  const changed = login
+    ? !!(sites.trim() && user.trim()) && (isNew ? !!value : !!secret && (sites !== secret.sites.join(', ') || user !== secret.user || !!value))
+    : isNew ? !!(name.trim() && sites.trim() && value) : !!secret && (what !== secret.what || sites !== secret.sites.join(', ') || !!value)
   const save = async () => {
     setBusy(true)
     setError('')
     try {
       // Adding never writes over one that is there: a name that is taken is said to be.
-      if (isNew) await addSecret(bot.id, { name, what, sites, value })
+      if (login) await (isNew ? addLogin(bot.id, { sites, user, value }) : saveSecret(bot.id, given, { sites, user, ...(value ? { value } : {}) }))
+      else if (isNew) await addSecret(bot.id, { name, what, sites, value })
       else await saveSecret(bot.id, given, { what, sites, ...(value ? { value } : {}) })
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       setValue('')
@@ -59,13 +66,19 @@ export default function SecretPage() {
   }
   const remove = () =>
     secret &&
-    Alert.alert(`Remove “${secret.name}”?`, `Its value is deleted. ${secret.by === 'bot' ? `${bot.name} kept it itself, so it may be written down nowhere else.` : 'What needs it will ask for it again.'}`, [
+    Alert.alert(
+      login ? `Remove the login for ${siteName(secret.sites[0])}?` : `Remove “${secret.name}”?`,
+      login
+        ? `Its password is deleted here, and ${bot.name} can no longer sign in there by itself.${secret.by === 'bot' ? ` ${bot.name} made the account itself, so the password may be written down nowhere else.` : ''}`
+        : `Its value is deleted. ${secret.by === 'bot' ? `${bot.name} kept it itself, so it may be written down nowhere else.` : 'What needs it will ask for it again.'}`,
+      [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => void removeSecret(bot.id, secret.name).catch((e) => setError((e as Error).message)) },
-    ])
+        { text: 'Remove', style: 'destructive', onPress: () => void removeSecret(bot.id, secret.name).catch((e) => setError((e as Error).message)) },
+      ],
+    )
 
   return (
-    <SettingsPage title={isNew ? 'New secret' : given} subtitle={isNew ? bot.name : `${bot.name} · Secret`} buttons={1}>
+    <SettingsPage title={login ? (secret ? siteName(secret.sites[0]) : 'New login') : isNew ? 'New secret' : given} subtitle={isNew ? bot.name : `${bot.name} · ${login ? 'Login' : 'Secret'}`} buttons={1}>
       <Stack.Toolbar placement="right">
         <Stack.Toolbar.Button variant="done" disabled={busy || !changed} onPress={() => void save()}>
           {isNew ? 'Add' : 'Save'}
@@ -80,22 +93,38 @@ export default function SecretPage() {
         </Section>
       )}
 
-      <Section footer={isNew ? `The name is what ${bot.name} calls it: lower-case letters, digits and “-”.` : undefined}>
-        {isNew && <Field label="Name" value={name} placeholder="plausible" onChange={setName} autoCapitalize="none" maxLength={40} />}
-        <Field label="What it is" value={what} placeholder="Plausible API key" onChange={setWhat} autoCapitalize="sentences" maxLength={120} />
-      </Section>
+      {login ? (
+        <>
+          <Section footer="The site whose page asks for the password, exactly as its address names it. Some sign in on another address than their own, such as accounts.google.com. Separate several with commas.">
+            <Field label="Site" value={sites} placeholder="github.com" onChange={setSites} autoCapitalize="none" keyboardType="url" />
+          </Section>
+          <Section footer={`${howLogins(bot.name)}${secret ? ` It calls this login “${secret.name}”.` : ''}`}>
+            <Field label="User name" value={user} placeholder="User name or e-mail" onChange={setUser} autoCapitalize="none" maxLength={200} />
+          </Section>
+          <Section footer={`${secret ? 'Leave it empty to keep the password it has. ' : ''}${howPasswordKept(data?.kept ?? null)} A password is read back only on that computer.`}>
+            <Field label={secret ? 'New password' : 'Password'} value={value} placeholder={secret ? 'Unchanged' : 'Paste or type it'} onChange={setValue} autoCapitalize="none" secure />
+          </Section>
+        </>
+      ) : (
+        <>
+          <Section footer={isNew ? `The name is what ${bot.name} calls it: lower-case letters, digits and “-”.` : undefined}>
+            {isNew && <Field label="Name" value={name} placeholder="plausible" onChange={setName} autoCapitalize="none" maxLength={40} />}
+            <Field label="What it is" value={what} placeholder="Plausible API key" onChange={setWhat} autoCapitalize="sentences" maxLength={120} />
+          </Section>
 
-      <Section footer="The site it is for, exactly as its address names it. It is sent nowhere else. Separate several with commas.">
-        <Field label="Sent only to" value={sites} placeholder="plausible.io" onChange={setSites} autoCapitalize="none" keyboardType="url" />
-      </Section>
+          <Section footer="The site it is for, exactly as its address names it. It is sent nowhere else. Separate several with commas.">
+            <Field label="Sent only to" value={sites} placeholder="plausible.io" onChange={setSites} autoCapitalize="none" keyboardType="url" />
+          </Section>
 
-      <Section footer={`${secret ? 'Leave it empty to keep the value it has. ' : ''}${howKept(data?.kept ?? null)} A value is read back only on that computer.`}>
-        <Field label={secret ? 'New value' : 'Value'} value={value} placeholder={secret ? 'Unchanged' : 'Paste or type it'} onChange={setValue} autoCapitalize="none" secure />
-      </Section>
+          <Section footer={`${secret ? 'Leave it empty to keep the value it has. ' : ''}${howKept(data?.kept ?? null)} A value is read back only on that computer.`}>
+            <Field label={secret ? 'New value' : 'Value'} value={value} placeholder={secret ? 'Unchanged' : 'Paste or type it'} onChange={setValue} autoCapitalize="none" secure />
+          </Section>
+        </>
+      )}
 
       {secret && (
         <Section>
-          <Row label="Remove secret" tone="destructive" disabled={busy} onPress={remove} />
+          <Row label={login ? 'Remove login' : 'Remove secret'} tone="destructive" disabled={busy} onPress={remove} />
         </Section>
       )}
     </SettingsPage>

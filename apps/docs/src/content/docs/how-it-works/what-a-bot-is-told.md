@@ -28,7 +28,8 @@ in what it knows of the bot and the thread, so in this order a bot is told:
 8. **Automations**: what it may set up, and who set up the ones it runs.
 9. **Its workspace**: where its files are, and what goes where.
 10. **Its secrets**: that it has a vault, how to use a secret by its name, and one line for each
-    it has, with what it is and the sites it is for. Never a value. See [Secrets](/secrets/).
+    it has, with what it is and the sites it is for, and for a login its user name. Never a
+    value. See [Secrets](/secrets/).
 11. **Its own `AGENTS.md`**, cut short past **Settings → Advanced → Size of a bot's own
     instructions** (12,000 characters unless you change it).
 12. **The list of its notes** in `memory/` (the first 60 lines); it reads a note when it needs it.
