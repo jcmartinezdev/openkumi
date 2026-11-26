@@ -162,7 +162,8 @@ function checked(automation: Automation, before?: Automation): Automation {
 const ofNow = (automation: Automation): Automation => ({
   ...automation,
   botId: findBot(automation.botId)?.id ?? automation.botId,
-  createdBy: findBot(automation.createdBy)?.id ?? automation.createdBy,
+  // "user" is the owner, even where a bot from before that was kept for them once had it as its id.
+  createdBy: automation.createdBy === 'user' ? 'user' : (findBot(automation.createdBy)?.id ?? automation.createdBy),
 })
 
 /** A first look at what a watch watches, which notes where things stand without starting a run. */
