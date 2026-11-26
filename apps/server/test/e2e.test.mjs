@@ -978,6 +978,10 @@ test('pages: a bot shows a chart in its conversation, with pictures from its wor
   assert.equal(board.html.match(/page-data/g).length, 1, 'the empty block is replaced, not added to')
   const top = await filled({ title: 'Top', path: 'files/report.html', data: '{"a":1}' })
   assert.match(top.html, /^<script id="page-data" type="application\/json">\{"a":1,"shownAt":\d+\}<\/script><h1>Report<\/h1>$/)
+  // Only the block with exactly that id: a script of the page's own with a name like it is left alone.
+  fs.writeFileSync(botPath('workspace', 'files', 'own.html'), '<script data-id="page-data">go()</script><script id="page-data-helper">help()</script>')
+  const own = await filled({ title: 'Own', path: 'files/own.html', data: { a: 2 } })
+  assert.match(own.html, /^<script id="page-data" type="application\/json">\{"a":2,"shownAt":\d+\}<\/script><script data-id="page-data">go\(\)<\/script><script id="page-data-helper">help\(\)<\/script>$/)
   assert.match(await tool('show_page', { title: 'Bad', path: 'files/board.html', data: '{nope' }), /^Error: The data is not valid JSON/)
   assert.match(await tool('show_page', { title: 'List', path: 'files/board.html', data: [1, 2] }), /^Error: Give the data as an object/)
   assert.match(await tool('show_page', { title: 'Big', path: 'files/board.html', data: { text: 'x'.repeat(120_000) } }), /^Error: The data is too large/)

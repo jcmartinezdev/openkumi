@@ -84,7 +84,7 @@ export function makePage(botId: string, args: Record<string, unknown>): Page {
   return { title, html, height: Number.isFinite(given) && given > 0 ? Math.round(given) : 400, missing }
 }
 
-const DATA_BLOCK = /<script\b(?=[^>]*\bid\s*=\s*["']?page-data\b)[^>]*>[\s\S]*?<\/script\s*>/i
+const DATA_BLOCK = /<script\b(?=[^>]*(?<![\w-])id\s*=\s*["']?page-data(?![\w-]))[^>]*>[\s\S]*?<\/script\s*>/i
 
 /**
  * Puts the data a page is shown with into it, where the page reads it: in its own data block, or

@@ -24,10 +24,11 @@ make ready well in advance.
 ## On the night
 
 Each round, show that round's clues (`clues` page, or `cards` for evidence) and a line of
-story. At the end, everyone accuses: ask_user "Who did it?" with `multiple: true` if several
-are voting, the characters as options. Then the reveal: the `cards` page with "GUILTY"
+story. At the end, everyone accuses: ask_user "Who accused whom?" with no options, and the
+host writes each guest's accusation ("Ana: Dr. Finch"). Then the reveal: the `cards` page with "GUILTY"
 (`tone: "bad"`) on the culprit's card and the others stamped "INNOCENT" (`tone: "good"`),
 followed by the solution told as a short story.
 
-On a call, your voice can narrate it: when the case is ready, also write a short version
-(setting, characters, clues by round, solution) to `files/games/for-the-call.md`.
+On a call, your voice can narrate it. Your voice is given what you made ready only for a day,
+so when the host says they are about to call (not when the case is first written), write a
+short version (setting, characters, clues by round, solution) to `files/games/for-the-call.md`.

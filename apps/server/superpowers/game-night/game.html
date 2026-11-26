@@ -375,8 +375,11 @@ button[disabled] { opacity: .45; cursor: default; }
       svg.appendChild(track); svg.appendChild(ring)
       timer = h('div', { class: 'timer', role: 'timer', 'aria-label': seconds + ' seconds' }, svg, timerText)
     }
+    var every = null, shownNow = false
     function reveal(sound) {
-      if (answer < 0) return
+      if (answer < 0 || shownNow) return
+      shownNow = true
+      if (every) clearInterval(every)
       tiles.forEach(function (t, i) {
         t.classList.toggle('right', i === answer)
         t.classList.toggle('dim', i !== answer && i !== picked)
@@ -395,7 +398,7 @@ button[disabled] { opacity: .45; cursor: default; }
       startButton.disabled = true
       var left = seconds
       tick()
-      var every = setInterval(function () {
+      every = setInterval(function () {
         left--
         timerText.textContent = Math.max(0, left)
         ring.setAttribute('stroke-dashoffset', String(full * (1 - left / seconds)))
@@ -405,7 +408,7 @@ button[disabled] { opacity: .45; cursor: default; }
           clearInterval(every)
           timerText.textContent = '⏰'
           buzz()
-          if (answer >= 0) setTimeout(function () { reveal(true) }, 700)
+          setTimeout(function () { reveal(true) }, 700)
         }
       }, 1000)
     }

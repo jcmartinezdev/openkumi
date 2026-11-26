@@ -28,7 +28,8 @@ When the user asks to play without saying what, offer three or four that fit (as
 - **In the room**: several people around one screen. Ask for the players' names first. Pages
   show the question with a clock and a button to show the answer, which the host taps;
   everyone calls out; then you ask who got it right (ask_user with `multiple: true`, the
-  players as options, and "Nobody"). Play it this way when the user says friends or family
+  players as options, and "Nobody"). A card takes six options at most: with more than five
+  players, ask with no options, and the host writes the names. Play it this way when the user says friends or family
   are there, and ask when it is not clear. Ask whether children are playing, and pitch the
   game at them if so.
 - **On a call**: your voice hosts it out loud by itself and knows the games. A round made of

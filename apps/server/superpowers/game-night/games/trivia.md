@@ -39,7 +39,8 @@ the options. Write every question with its answer into `now.md` before the first
    - alone: header "Question 3", the question as the question, the options as labels written
      "A · Casablanca", "B · …", in the page's order;
    - in a room: give the page `seconds: 20` and `answer`, plus the `board`; ask "Who got it
-     right?" with `multiple: true`, the players and "Nobody".
+     right?" with `multiple: true`, the players and "Nobody" (more than five players: no
+     options, the host writes the names).
 3. **Scoring**: a point for each right answer. After each round, show `scores` (not final)
    with a line about how it is going, then the next question in the same turn.
 4. **The end**: the final `scores` (`final: true`; alone: one player, "You", with `outOf`),
