@@ -176,6 +176,7 @@ button[disabled] { opacity: .45; cursor: default; }
 .guess-row .line { display: flex; justify-content: space-between; gap: 10px; }
 .guess-row .line span:last-child { color: var(--muted-foreground); }
 
+.unseen { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(14px) scale(.98); } }
@@ -361,7 +362,7 @@ button[disabled] { opacity: .45; cursor: default; }
     var tiles = options.map(function (o, i) {
       var cls = 'opt' + (DARK_INK[tile(i)] ? ' ink-dark' : '')
       return h('div', { class: cls, style: tileVar(i) + ';--i:' + i, role: 'listitem' },
-        h('span', { class: 'key' }, String.fromCharCode(65 + i)), h('span', null, o), h('span', { class: 'mark', 'aria-hidden': 'true' }))
+        h('span', { class: 'key' }, String.fromCharCode(65 + i)), h('span', null, o), h('span', { class: 'mark' }))
     })
     var timer = null, timerText = null, ring = null, full = 2 * Math.PI * 24
     if (seconds && !shown) {
@@ -385,7 +386,11 @@ button[disabled] { opacity: .45; cursor: default; }
         t.classList.toggle('right', i === answer)
         t.classList.toggle('dim', i !== answer && i !== picked)
         t.classList.toggle('picked', i === picked)
-        t.querySelector('.mark').textContent = i === answer ? '✓' : i === picked ? '✗' : ''
+        var mark = t.querySelector('.mark')
+        mark.textContent = ''
+        // The mark is seen; a screen reader says what it means.
+        if (i === answer) add(mark, ['✓', h('span', { class: 'unseen' }, ', the right answer')])
+        else if (i === picked) add(mark, ['✗', h('span', { class: 'unseen' }, ', chosen, wrong')])
       })
       if (revealButton) revealButton.disabled = true
       if (startButton) startButton.disabled = true
@@ -572,11 +577,16 @@ button[disabled] { opacity: .45; cursor: default; }
       var el = h('div', { class: 'card' + (c.back ? ' flippable' : '') + (stamped && !c.stamp ? ' dim' : ''), style: tileVar(c.i) + ';--i:' + c.i },
         h('div', { class: 'inner' },
           h('div', { class: 'face front' }, h('span', { class: 'top-band' }), faces(c, false)),
-          c.back && h('div', { class: 'face back' }, faces(c, true))),
+          c.back && h('div', { class: 'face back', 'aria-hidden': 'true' }, faces(c, true))),
         c.stamp && h('span', { class: 'stamp', style: '--c: var(' + (TONES[c.tone] || TONES.neutral) + ');--i:' + c.i }, c.stamp))
       if (c.back) {
         el.setAttribute('role', 'button'); el.setAttribute('tabindex', '0')
-        var flip = function () { el.classList.toggle('flipped'); tone(660, 0.12, 'triangle', 0.06) }
+        var flip = function () {
+          var over = el.classList.toggle('flipped')
+          el.querySelector('.front').setAttribute('aria-hidden', String(over))
+          el.querySelector('.back').setAttribute('aria-hidden', String(!over))
+          tone(660, 0.12, 'triangle', 0.06)
+        }
         el.addEventListener('click', flip)
         el.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip() } })
       }
