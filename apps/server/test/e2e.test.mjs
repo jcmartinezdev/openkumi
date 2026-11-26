@@ -965,6 +965,22 @@ test('pages: a bot shows a chart in its conversation, with pictures from its wor
   fs.writeFileSync(botPath('workspace', 'files', 'report.html'), '<h1>Report</h1>')
   assert.match(await tool('show_page', { title: 'Report', path: 'files/report.html' }), /^Shown “Report”/)
   assert.match(await told(), /show_page/, 'the bot is told it can show pages')
+
+  // A page made to be filled in is shown with data, which goes where the page reads it, with when it was shown, and
+  // written so that nothing in it can end the block it is in. Without a place for it, it goes at the top.
+  fs.writeFileSync(botPath('workspace', 'files', 'board.html'), '<!doctype html><head><script id="page-data" type="application/json">{}</script></head><p id="x"></p>')
+  const filled = async (args) => (await say(await fresh(), `!tool show_page ${JSON.stringify(args)}`)).findLast((d) => d.type === 'page')
+  const board = await filled({ title: 'Board', path: 'files/board.html', data: { view: 'scores', name: '</script><b>Ana</b>' } })
+  const data = JSON.parse(/<script id="page-data" type="application\/json">(.*?)<\/script>/.exec(board.html)[1])
+  assert.deepEqual([data.view, data.name, typeof data.shownAt], ['scores', '</script><b>Ana</b>', 'number'])
+  assert.ok(Math.abs(data.shownAt - Date.now()) < 60_000)
+  assert.doesNotMatch(board.html, /<\/script><b>/)
+  assert.equal(board.html.match(/page-data/g).length, 1, 'the empty block is replaced, not added to')
+  const top = await filled({ title: 'Top', path: 'files/report.html', data: '{"a":1}' })
+  assert.match(top.html, /^<script id="page-data" type="application\/json">\{"a":1,"shownAt":\d+\}<\/script><h1>Report<\/h1>$/)
+  assert.match(await tool('show_page', { title: 'Bad', path: 'files/board.html', data: '{nope' }), /^Error: The data is not valid JSON/)
+  assert.match(await tool('show_page', { title: 'List', path: 'files/board.html', data: [1, 2] }), /^Error: Give the data as an object/)
+  assert.match(await tool('show_page', { title: 'Big', path: 'files/board.html', data: { text: 'x'.repeat(120_000) } }), /^Error: The data is too large/)
 })
 
 test('a bot rewrites its own instructions, and the owner can see and undo it', async () => {
@@ -1023,10 +1039,10 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
     'atlassian', 'attio', 'clickup', 'evernote', 'fathom', 'folk', 'granola', 'jotform', 'klaviyo', 'linear', 'miro', 'notion',
     'otter', 'pandadoc', 'pocketsmith', 'posthog', 'readwise', 'sentry', 't3-code', 'tldv', 'todoist', 'typefully', 'webflow', 'wix',
   ]
-  const knowHow = ['competitors', 'exchange-rates', 'holidays', 'landing-pages', 'launch', 'seo', 'social-posts', 'watch-a-page', 'weather']
+  const knowHow = ['competitors', 'exchange-rates', 'game-night', 'holidays', 'landing-pages', 'launch', 'seo', 'social-posts', 'watch-a-page', 'weather']
   assert.deepEqual(Object.keys(all), [...shipped, ...knowHow, 'field-guide'].sort(), 'by name, apps and know-how together')
   // Grouped by what they are for, in the catalog's order, the same one in as many groups as fit; the tests' own group comes last.
-  assert.deepEqual((await api('GET', '/api/state')).superpowerCategories, ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday', 'Tests'])
+  assert.deepEqual((await api('GET', '/api/state')).superpowerCategories, ['Productivity', 'Work', 'Creative', 'Marketing', 'Travel', 'Everyday', 'Fun', 'Tests'])
   assert.deepEqual([all.notion.categories, all.weather.categories, all['field-guide'].categories], [['Productivity', 'Work'], ['Travel', 'Everyday'], ['Tests']])
   const { notion, 'field-guide': guide } = all
   assert.deepEqual([notion.name, notion.instructions, notion.service, notion.site, notion.onFor], ['Notion', true, 'mcp.notion.com', 'https://www.notion.so/', []])
@@ -2889,6 +2905,48 @@ test('calls: a bot is called through Codex; the voice hands what is asked to the
   } finally {
     watcher.close()
     await api('DELETE', `/api/bots/${caller.id}`).catch(() => {})
+  }
+})
+
+test('game night: a bot hosts games with the game page it brings, and its voice hosts them on a call, with a round made ready in writing', async () => {
+  await api('POST', '/api/providers/check')
+  const host = await api('POST', '/api/bots', { name: 'Host', provider: 'mock' })
+  const startedWith = (sdp) => JSON.parse(Buffer.from(sdp.match(/^s=(.+)$/m)[1], 'base64').toString())
+  const voiceIsTold = async () => {
+    const { call, sdp } = await api('POST', `/api/bots/${host.id}/call`, { sdp: 'v=0\r\n' })
+    await api('DELETE', `/api/calls/${call.id}`)
+    return startedWith(sdp).initialItems.map((item) => item.text)
+  }
+  const ready = path.join(dataOf(home), 'bots', host.id, 'workspace', 'files', 'games', 'for-the-call.md')
+  try {
+    // Without the superpower, neither the page nor anything for a call.
+    const page = { title: 'Trivia · Question 1', path: 'superpowers/game-night/game.html', data: { view: 'question', question: 'Two plus two?', options: ['3', '4'] } }
+    assert.match(await tool('show_page', page, host.id), /^Error: No file at superpowers\/game-night\/game\.html/)
+    assert.ok(!(await voiceIsTold()).some((text) => /Game night/.test(text)))
+
+    await api('PUT', `/api/bots/${host.id}/superpowers/game-night`, { on: true })
+    assert.match(await told('!system', host.id), /- Game night: Host games for the user[^\n]*Instructions: superpowers\/game-night\/instructions\.md\./)
+    // The game page it brings is shown filled in with what the bot gives it.
+    const shown = (await say(await fresh(host.id), `!tool show_page ${JSON.stringify(page)}`)).findLast((d) => d.type === 'page')
+    assert.equal(shown.title, 'Trivia · Question 1')
+    assert.match(shown.html, /<script id="page-data" type="application\/json">\{"view":"question","question":"Two plus two\?","options":\["3","4"\],"shownAt":\d+\}<\/script>/)
+    assert.match(shown.html, /function questionView\(\)/)
+
+    // On a call, the voice is told how to host the games, after who it is and before the conversation.
+    let heard = await voiceIsTold()
+    const games = heard.findIndex((text) => text.startsWith('# Game night, on this call\n\nYou can host games on this call yourself, out loud.'))
+    assert.equal(games, 1)
+    assert.doesNotMatch(heard[games], /What you made ready/)
+    // What the bot made ready for a call in writing comes with it, for a day.
+    fs.mkdirSync(path.dirname(ready), { recursive: true })
+    fs.writeFileSync(ready, '# Trivia: our trip\n\n1. Which city did we fly into? Answer: Lisbon\n')
+    heard = await voiceIsTold()
+    assert.match(heard[1], /\n\n## What you made ready for a call, in writing, 1 minute ago\n\n# Trivia: our trip\n\n1\. Which city did we fly into\? Answer: Lisbon$/)
+    const old = new Date(Date.now() - 25 * 3_600_000)
+    fs.utimesSync(ready, old, old)
+    assert.doesNotMatch((await voiceIsTold())[1], /What you made ready|Lisbon/)
+  } finally {
+    await api('DELETE', `/api/bots/${host.id}`).catch(() => {})
   }
 })
 

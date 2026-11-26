@@ -4,6 +4,8 @@
 //   icon.svg          its app icon, on a square, with nothing outside a viewBox (the apps round its corners)
 //   README.md         its page in the app
 //   instructions.md   how the bot goes about it, read when a task calls for it
+// and anything else the bot reads: more instructions, pages to show (show_page), and what its voice
+// is told on a call (superpower.json "call").
 // Beside them, categories.json lists the groups the catalog shows, in its order. A superpower names
 // the ones it belongs to, as many as fit, so the same one can be found under each.
 // A superpower has instructions, a service the bot signs in to and works in (over MCP, see mcp.ts),
@@ -80,6 +82,12 @@ interface Manifest {
     | { command: string; args?: string[] }
   ) & { reads?: string[]; tools?: string[] }
   hooks?: HookRecipe
+  /**
+   * What the bot's voice is told on a call (calls.ts), for a superpower the voice can use by itself,
+   * such as hosting a game: a file of its folder, and the file in the bot's workspace where the bot
+   * writes down what it makes ready for a call.
+   */
+  call?: { instructions: string; prepared?: string }
   site?: string
 }
 
@@ -299,6 +307,31 @@ export function superpowerIndex(botId: string, problems: Record<string, string>)
       problems[id] && `Not available right now: ${problems[id]}.`,
     ].filter(Boolean)
     return `- ${m.name}: ${m.summary}${how.length ? ` ${how.join(' ')}` : ''}`
+  })
+}
+
+/** What a call is told about one of a bot's superpowers: the voice's instructions, and where the bot writes down what it makes ready. */
+export interface CallPart {
+  name: string
+  instructions: string
+  /** A path in the bot's workspace. */
+  prepared?: string
+}
+
+/** The most of a superpower's instructions for a call that the voice is given. */
+const CALL_INSTRUCTIONS = 12_000
+
+/** What the bot's voice is told about its superpowers on a call: those that say anything for one. */
+export function callParts(botId: string): CallPart[] {
+  return enabledSuperpowers(botId).flatMap((id): CallPart[] => {
+    const call = manifest(id)?.call
+    if (typeof call?.instructions !== 'string' || !filesOf(id).includes(call.instructions)) return []
+    try {
+      const instructions = fs.readFileSync(path.join(SUPERPOWERS, id, call.instructions), 'utf8').trim().slice(0, CALL_INSTRUCTIONS)
+      return [{ name: manifest(id)!.name, instructions, ...(typeof call.prepared === 'string' ? { prepared: call.prepared } : {}) }]
+    } catch {
+      return []
+    }
   })
 }
 

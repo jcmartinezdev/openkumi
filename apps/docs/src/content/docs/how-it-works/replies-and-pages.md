@@ -22,6 +22,10 @@ bot's reply is, fitted to its height, and opens full size.
 - **It keeps working.** Pictures from the bot's workspace are put into the page itself when it is
   shown, so it keeps working when the files change or move.
 - **Previews too.** An ```` ```html ```` block in a reply can be previewed the same way.
+- **Pages to fill in.** A page saved as a file, or one a superpower brings (such as Game night's
+  game page), can be shown with data: the bot gives an object, which is written into the page
+  where its script reads it, along with when it was shown. The bot then sends a few lines of data
+  for each step instead of a whole page.
 
 ## The frame a page runs in
 

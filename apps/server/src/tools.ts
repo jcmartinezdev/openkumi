@@ -956,7 +956,8 @@ const pageTool: Tool = {
     {
       title: str('A short name for the page, e.g. "Spending by month"'),
       html: str('The page: a whole HTML document, or just its body'),
-      path: str('Instead of html: an .html file in your workspace'),
+      path: str('Instead of html: an .html file in your workspace, or a page one of your superpowers brings (superpowers/<id>/…)'),
+      data: { type: 'object', description: 'With path, for a page made to be filled in: what it shows, as the page says it takes it' },
       height: { type: 'number', description: 'Roughly how tall the page is in px at 720px wide (it is measured when shown)' },
     },
     ['title'],
