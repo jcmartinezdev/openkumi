@@ -699,7 +699,7 @@ function createServer() {
       } catch {
         return
       }
-      const browser = browserFor(msg.botId)
+      const browser = browserFor(findBot(msg.botId)?.id ?? msg.botId)
       if (msg.type === 'browser.control') {
         const viewer = String(msg.viewer)
         if (msg.action === 'take') {

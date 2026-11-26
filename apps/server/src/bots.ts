@@ -162,6 +162,8 @@ export function findBot(id: string): Bot | undefined {
 function takenBy(id: string, bot?: Bot): string | undefined {
   // "settings" and "automations" are pages of the app, so no bot may have those addresses.
   if (id === 'settings' || id === 'automations') return `“${id}” is the address of a page in the app, so no bot can have it as its id.`
+  // What the owner made is marked "user" (an automation's createdBy), and a bot with that id would pass for the owner.
+  if (id === 'user') return '“user” stands for you, so no bot can have it as its id.'
   // A folder there that is not a bot's is not taken over either.
   if (fs.existsSync(botDir(id))) return `${getBot(id)?.name ?? 'Another bot'} already has the id “${id}”.`
   const before = listBots().find((other) => other.id !== bot?.id && other.formerIds?.includes(id))
@@ -308,7 +310,7 @@ async function dress(id: string, purpose: string, emoji: boolean) {
  * its own instructions). Before a bot exists, by the model a new bot would run on. Nothing is saved.
  */
 export async function pickLook(input: Record<string, unknown>): Promise<{ look: Look; emoji: string }> {
-  const bot = typeof input.botId === 'string' ? getBot(input.botId) : undefined
+  const bot = typeof input.botId === 'string' ? findBot(input.botId) : undefined
   if (input.botId !== undefined && !bot) throw new Error(`No bot with id ${input.botId}`)
   const name = (typeof input.name === 'string' && input.name.trim()) || bot?.name || 'A new bot'
   let purpose = typeof input.purpose === 'string' ? input.purpose : ''

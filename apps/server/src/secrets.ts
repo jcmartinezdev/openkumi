@@ -215,9 +215,8 @@ export function resealed(from: string, to: string): { write: () => void; undo: (
     try {
       value = valueOf(from, secret)
     } catch (e) {
-      // One that could not be read before cannot be read after either: it is kept as it is.
-      if (e instanceof vault.Missing) return secret
-      throw new Error(`The bot’s secrets have to be opened to move them to the new id, and could not be: ${(e as Error).message}`)
+      // Even one whose key is not here now: were the key put back later, it would not open under the new id.
+      throw new Error(`The bot’s secrets are sealed to its id, and each has to be opened to seal it to the new one. “${secret.name}” could not be: ${(e as Error).message} Or remove it.`)
     }
     return { ...secret, ...vault.seal(value, about(to, secret.name)) }
   })

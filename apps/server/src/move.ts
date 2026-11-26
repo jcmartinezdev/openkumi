@@ -49,18 +49,26 @@ export async function moveBot(from: string, given: unknown): Promise<Bot> {
   // A vault that cannot be opened stops it here, before anything moved.
   const vault = secrets.resealed(from, to)
   const back = moveFolder(from, to)
+  let announce: () => void
   try {
     vault.write()
-    db.moveBotRecords(from, to)
+    announce = db.moveBotRecords(from, to)
   } catch (e) {
-    vault.undo()
+    // The folder goes back even when the vault could not be put back as it was.
+    try {
+      vault.undo()
+    } catch (undo) {
+      console.error(`The vault of ${from} could not be put back as it was:`, undo)
+    }
     back()
     throw e
   }
+  // Moved: nothing after this puts it back.
   const order = settings().botOrder
   if (order.includes(from)) updateSettings({ botOrder: order.map((id) => (id === from ? to : id)) })
 
   const moved = getBot(to)!
+  announce()
   emit({ type: 'bot.move', from, bot: moved })
   // What an app from before bot.move understands: a bot gone, and one come.
   emit({ type: 'bot.delete', id: from })

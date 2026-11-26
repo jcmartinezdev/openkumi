@@ -76,6 +76,8 @@ type Via = 'app' | 'bot'
 
 /** Sign-ins waiting for the browser to come back, by the `state` value sent with them. */
 const pending = new Map<string, { botId: string; id: string; via: Via; url?: string; at: number }>()
+/** How long a sign-in that was started may take to come back. */
+const SIGN_IN_TIME = 15 * 60_000
 
 interface Saved {
   client?: StoredOAuthClientInformation
@@ -145,7 +147,7 @@ class Credentials implements OAuthClientProvider {
 
   state() {
     const now = Date.now()
-    for (const [key, p] of pending) if (now - p.at > 15 * 60_000) pending.delete(key)
+    for (const [key, p] of pending) if (now - p.at > SIGN_IN_TIME) pending.delete(key)
     const state = crypto.randomBytes(18).toString('base64url')
     pending.set(state, { botId: this.botId, id: this.id, via: this.via, url: this.url, at: now })
     return state
@@ -219,15 +221,20 @@ async function finishLogin(params: URLSearchParams, via: Via, botId?: string): P
   const state = params.get('state') ?? ''
   const waiting = pending.get(state)
   // Only a sign-in that was started here, the way it came back, for that bot, and only once.
-  if (!waiting || waiting.via !== via || (botId && waiting.botId !== botId)) throw new Error('This sign-in has expired. Start it again from the bot’s Superpowers.')
+  if (!waiting || waiting.via !== via || (botId && waiting.botId !== botId) || Date.now() - waiting.at > SIGN_IN_TIME) throw new Error('This sign-in has expired. Start it again from the bot’s Superpowers.')
   pending.delete(state)
   const code = params.get('code')
   if (!code) throw new Error(params.get('error_description') || 'The sign-in was not completed.')
   // At the address the sign-in began at: if the app has moved since, the bot is asked to sign in again there.
   const signIn = { ...signInTo(waiting.id), ...(waiting.url && { serverUrl: waiting.url }) }
-  await auth(new Credentials(waiting.botId, waiting.id, via, signIn.serverUrl), { ...signIn, authorizationCode: code, iss: params.get('iss') ?? undefined })
-  signedIn(waiting.botId, waiting.id)
-  await reconnect(waiting.botId, waiting.id)
+  finishing.add(waiting)
+  try {
+    await auth(new Credentials(waiting.botId, waiting.id, via, signIn.serverUrl), { ...signIn, authorizationCode: code, iss: params.get('iss') ?? undefined })
+    signedIn(waiting.botId, waiting.id)
+    await reconnect(waiting.botId, waiting.id)
+  } finally {
+    finishing.delete(waiting)
+  }
   return { botId: waiting.botId, id: waiting.id }
 }
 
@@ -237,8 +244,12 @@ export function finishAppSignIn(address: string) {
   return finishLogin(new URL(address).searchParams, 'app')
 }
 
+/** Sign-ins that have come back and whose keys are being fetched and kept. */
+const finishing = new Set<{ botId: string }>()
+
 /** Whether one of a bot's sign-ins is under way: what it brings back is kept in the bot's folder. */
-export const signingIn = (botId: string) => [...pending.values()].some((p) => p.botId === botId && Date.now() - p.at < 15 * 60_000)
+export const signingIn = (botId: string) =>
+  [...pending.values()].some((p) => p.botId === botId && Date.now() - p.at <= SIGN_IN_TIME) || [...finishing].some((p) => p.botId === botId)
 
 /** The owner gave up on a sign-in. A superpower that was being activated is left as it was, with nothing kept. */
 export function cancelLogin(botId: string, id: string) {

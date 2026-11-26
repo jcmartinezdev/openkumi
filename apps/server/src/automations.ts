@@ -158,6 +158,13 @@ function checked(automation: Automation, before?: Automation): Automation {
   return { ...automation, title, prompt, nextRunAt }
 }
 
+/** An automation as it is saved: under the ids its bots have now, should one have moved while it was being made (move.ts). */
+const ofNow = (automation: Automation): Automation => ({
+  ...automation,
+  botId: findBot(automation.botId)?.id ?? automation.botId,
+  createdBy: findBot(automation.createdBy)?.id ?? automation.createdBy,
+})
+
 /** A first look at what a watch watches, which notes where things stand without starting a run. */
 async function baseline(automation: Automation): Promise<{ automation: Automation; reading: watching.Reading | null }> {
   if (automation.trigger.kind !== 'watch') return { automation: { ...automation, lastCheck: null }, reading: null }
@@ -168,7 +175,8 @@ async function baseline(automation: Automation): Promise<{ automation: Automatio
 /** Makes an automation. `by` is 'user' for the owner, or the id of the bot that is making it. */
 export async function createAutomation(input: Record<string, any>, by: string): Promise<Automation> {
   const now = Date.now()
-  const botId = String(input.botId ?? '')
+  // An app that has not heard yet that the bot's id changed sends the one it had.
+  const botId = findBot(String(input.botId ?? ''))?.id ?? String(input.botId ?? '')
   if (!getBot(botId)) throw new Error(`No bot with id ${botId}.`)
   const draft = checked({
     id: db.newAutomationId(),
@@ -190,7 +198,7 @@ export async function createAutomation(input: Record<string, any>, by: string): 
   })
   // A watch that cannot be looked at is refused here, where whoever is making it can still put it right.
   const { automation, reading } = await baseline(draft)
-  const saved = db.saveAutomation(automation)
+  const saved = db.saveAutomation(ofNow(automation))
   if (reading) db.setSeen(saved.id, reading)
   // One that starts on a webhook's calls is for the calls from now on.
   if (saved.trigger.kind === 'hook') db.setCursor(saved.id, db.lastHookEvent())
@@ -202,7 +210,7 @@ export async function createAutomation(input: Record<string, any>, by: string): 
 /** Changes what an automation is and what starts it. Who made it, and how it last went, stay as they were. */
 export async function updateAutomation(automation: Automation, patch: Record<string, any>): Promise<Automation> {
   const next = { ...automation }
-  if (typeof patch.botId === 'string') next.botId = patch.botId
+  if (typeof patch.botId === 'string') next.botId = findBot(patch.botId)?.id ?? patch.botId
   if (typeof patch.title === 'string') next.title = patch.title
   if (typeof patch.prompt === 'string') next.prompt = patch.prompt
   if (typeof patch.enabled === 'boolean') next.enabled = patch.enabled
@@ -216,13 +224,13 @@ export async function updateAutomation(automation: Automation, patch: Record<str
   // A watch on something else, or by another bot's account, starts from where things stand now.
   if (draft.trigger.kind !== automation.trigger.kind || !same(looksAt(draft.trigger), looksAt(automation.trigger)) || draft.botId !== automation.botId) {
     const { automation: looked, reading } = await baseline(draft)
-    const saved = db.saveAutomation(looked)
+    const saved = db.saveAutomation(ofNow(looked))
     db.setSeen(saved.id, reading)
     if (saved.trigger.kind === 'hook') db.setCursor(saved.id, db.lastHookEvent())
     plan()
     return saved
   }
-  const saved = db.saveAutomation(draft)
+  const saved = db.saveAutomation(ofNow(draft))
   // Other events of the same webhook: from now on, like a new one.
   if (saved.trigger.kind === 'hook' && !same(saved.trigger, automation.trigger)) db.setCursor(saved.id, db.lastHookEvent())
   // Turned on again, a watch that was paused for failing is given its time again.

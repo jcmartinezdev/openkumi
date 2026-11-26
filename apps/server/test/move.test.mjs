@@ -1,12 +1,13 @@
 // A bot's id changing, against a real server process (src/move.ts): what is filed under the id
 // moves with it (its folder, conversation, automations, vault and place in the owner's order), and
-// the id it had still reaches it, so that what other bots wrote down before goes on working. The
-// model is the scripted one.
+// the id it had still reaches it, so that what other bots wrote down before goes on working. One
+// that cannot be finished is put back. The model is the scripted one.
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { after, before, test } from 'node:test'
 
 /** A server keeps its data in the folder of the person it runs for: here the first one, made when it first starts. */
@@ -147,6 +148,9 @@ test('what still names a bot by the id it had reaches it, and no other bot can t
   // The other bots are told both, so that what they wrote down before still makes sense to them.
   assert.match(lastText(await say(await fresh(other.id), '!system')), /- 📅 Scheduler \(bot_id: scheduler, formerly assistant\): /)
   assert.match(await tool('list_bots', {}, other.id), /"id": "scheduler",\s*"former_ids": \[\s*"assistant"\s*\],\s*"name": "Scheduler"/)
+  // An app that has not heard yet makes an automation for it by the id it had.
+  const weekly = await api('POST', '/api/automations', { botId: 'assistant', title: 'Weekly', prompt: '!say Done.', trigger: { kind: 'time', schedule: { type: 'interval', minutes: 60 } } })
+  assert.equal(weekly.botId, 'scheduler')
 
   // A new bot named as it was first does not get the id it had, nor can another bot move to it.
   const again = await api('POST', '/api/bots', { name: 'Assistant', provider: 'mock' })
@@ -181,4 +185,44 @@ test('the main assistant changes another bot’s id on the owner’s word, not i
   assert.equal(await refused('author', 'later'), 'Author is at work. Its id can change once it has finished.')
   await settle(working)
   assert.equal((await api('POST', '/api/bots/author/move', { id: 'later' })).id, 'later')
+})
+
+test('a move that cannot be finished leaves the bot as it was', async () => {
+  await api('POST', '/api/bots', { name: 'Keeper', provider: 'mock', emoji: '🔐', look: { creature: 'blob', color: 'tangerine' } })
+  await api('POST', '/api/bots/keeper/secrets', { name: 'plausible', sites: 'plausible.io', value: KEY, what: 'Plausible key' })
+  const talk = await fresh('keeper')
+  await say(talk, 'hello')
+  const folder = (id) => path.join(dataOf(home), 'bots', id)
+  const asItWas = async () => {
+    assert.ok(fs.existsSync(folder('keeper')) && !fs.existsSync(folder('kept')))
+    assert.doesNotMatch(fs.readFileSync(path.join(folder('keeper'), 'bot.md'), 'utf8'), /former_ids/)
+    assert.equal((await api('GET', '/api/bots/keeper/secrets/plausible/value')).value, KEY)
+    assert.equal((await state()).threads.find((t) => t.id === talk).botId, 'keeper')
+  }
+
+  // The database refuses its part, after the folder has moved and the vault was sealed to the new id: both are put back.
+  const sql = new DatabaseSync(path.join(dataOf(home), 'openkumi.db'), { timeout: 5000 })
+  sql.exec(`CREATE TRIGGER refuse_move BEFORE UPDATE OF bot_id ON threads WHEN NEW.bot_id = 'kept' BEGIN SELECT RAISE(ABORT, 'refused for the test'); END`)
+  try {
+    assert.equal(await refused('keeper', 'kept'), 'refused for the test')
+  } finally {
+    sql.exec('DROP TRIGGER refuse_move')
+    sql.close()
+  }
+  await asItWas()
+
+  // A secret that cannot be opened stops it before anything moves: sealed to the old id, it would never open again.
+  const vault = path.join(folder('keeper'), 'private', 'secrets.json')
+  const sealed = fs.readFileSync(vault, 'utf8')
+  const damaged = JSON.parse(sealed)
+  damaged.secrets[0].data = Buffer.from('changed by hand, and longer than sixteen bytes').toString('base64')
+  fs.writeFileSync(vault, JSON.stringify(damaged))
+  assert.match(await refused('keeper', 'kept'), /“plausible” could not be: .*damaged\. Enter it again\. Or remove it\.$/)
+  fs.writeFileSync(vault, sealed)
+  await asItWas()
+
+  // What the owner makes is marked "user": no bot can pass for them.
+  assert.equal(await refused('keeper', 'user'), '“user” stands for you, so no bot can have it as its id.')
+  assert.equal((await api('POST', '/api/bots/keeper/move', { id: 'kept' })).id, 'kept')
+  assert.equal((await api('GET', '/api/bots/kept/secrets/plausible/value')).value, KEY)
 })

@@ -350,7 +350,7 @@ export function setSession(threadId: string, session: EngineSession | null) {
  * file theirs by the folder they worked in, which moved, and would not find them. The next turn of
  * each thread starts a new one from what was said, as when an engine loses its own.
  */
-export function moveBotRecords(from: string, to: string) {
+export function moveBotRecords(from: string, to: string): () => void {
   let threads: { id: string; seq: number }[]
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -360,7 +360,8 @@ export function moveBotRecords(from: string, to: string) {
        AND (CASE WHEN json_valid(session) THEN json_extract(session, '$.provider') END) IS NOT 'codex'`,
     ).run(to)
     db.prepare('UPDATE automations SET bot_id = ? WHERE bot_id = ?').run(to, from)
-    db.prepare('UPDATE automations SET created_by = ? WHERE created_by = ?').run(to, from)
+    // "user" is what the owner's own are marked with, which a bot from before it was kept for may have as its id.
+    if (from !== 'user') db.prepare('UPDATE automations SET created_by = ? WHERE created_by = ?').run(to, from)
     db.prepare('UPDATE hooks SET bot_id = ? WHERE bot_id = ?').run(to, from)
     // A bot deleted long ago may have had the new id, and what it used is kept: the two are added up.
     db.prepare(
@@ -376,9 +377,12 @@ export function moveBotRecords(from: string, to: string) {
     db.exec('ROLLBACK')
     throw e
   }
-  for (const { id, seq } of threads) emit({ type: 'thread.upsert', thread: getThread(id)!, seq })
-  for (const automation of listAutomations()) if (automation.botId === to || automation.createdBy === to) emit({ type: 'automation.upsert', automation })
-  for (const hook of listHooks()) if (hook.botId === to) emit({ type: 'hook.upsert', hook: shown(hook) })
+  // Told once the whole move is done (move.ts): what fails in telling it does not undo what is committed.
+  return () => {
+    for (const { id, seq } of threads) emit({ type: 'thread.upsert', thread: getThread(id)!, seq })
+    for (const automation of listAutomations()) if (automation.botId === to || automation.createdBy === to) emit({ type: 'automation.upsert', automation })
+    for (const hook of listHooks()) if (hook.botId === to) emit({ type: 'hook.upsert', hook: shown(hook) })
+  }
 }
 
 /** Deletes every conversation of a bot. */
