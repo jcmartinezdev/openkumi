@@ -976,6 +976,9 @@ test('pages: a bot shows a chart in its conversation, with pictures from its wor
   assert.ok(Math.abs(data.shownAt - Date.now()) < 60_000)
   assert.doesNotMatch(board.html, /<\/script><b>/)
   assert.match(board.html, /^<!doctype html><head id="h"><script id="page-data" type="application\/json">\{[^<]*\}<\/script><\/head><p id="x"><\/p>$/)
+  // A head or body written in a comment is not the page's.
+  fs.writeFileSync(botPath('workspace', 'files', 'noted.html'), '<!doctype html><!-- <head> <body> --><head id="h"></head><p>Hi</p>')
+  assert.match((await filled({ title: 'Noted', path: 'files/noted.html', data: { a: 4 } })).html, /^<!doctype html><!-- <head> <body> --><head id="h"><script id="page-data" type="application\/json">\{"a":4,"shownAt":\d+\}<\/script><\/head><p>Hi<\/p>$/)
   fs.writeFileSync(botPath('workspace', 'files', 'bare.html'), '<!doctype html><p>Hi</p>')
   assert.match((await filled({ title: 'Bare', path: 'files/bare.html', data: { a: 3 } })).html, /^<!doctype html><script id="page-data" type="application\/json">\{"a":3,"shownAt":\d+\}<\/script><p>Hi<\/p>$/)
   const top = await filled({ title: 'Top', path: 'files/report.html', data: '{"a":1}' })

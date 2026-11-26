@@ -103,9 +103,11 @@ function withData(html: string, given: unknown): string {
   const json = JSON.stringify({ ...data, shownAt: Date.now() }).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
   if (json.length > MAX_DATA) throw new Error(`The data is too large (${Math.round(json.length / 1000)} KB; at most ${MAX_DATA / 1000} KB).`)
   const block = `<script id="page-data" type="application/json">${json}</script>`
-  const head = /<head(?:\s[^>]*)?>/i.exec(html)
-  const body = html.search(/<body[\s>]/i)
-  const at = head && (body === -1 || head.index < body) ? head : /^\s*<!doctype[^>]*>/i.exec(html)
+  // Comments are blanked out first (keeping every position), so a tag written in one is not taken for the page's own.
+  const scan = html.replace(/<!--[\s\S]*?-->/g, (comment) => ' '.repeat(comment.length))
+  const head = /<head(?:\s[^>]*)?>/i.exec(scan)
+  const body = scan.search(/<body[\s>]/i)
+  const at = head && (body === -1 || head.index < body) ? head : /^\s*<!doctype[^>]*>/i.exec(scan)
   const cut = at ? at.index + at[0].length : 0
   return `${html.slice(0, cut)}${block}${html.slice(cut)}`
 }
