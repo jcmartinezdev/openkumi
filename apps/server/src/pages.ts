@@ -25,8 +25,8 @@ export const PAGE_GUIDE = [
     '(such as a chart library from https://cdn.jsdelivr.net/npm/, with an exact version), but it cannot fetch or send anything itself.',
   'Pictures from your workspace can be named by path (<img src="files/photo.jpg">); they are put into the page.',
   'A page saved as a file is not shown to the user until you show it here with its path.',
-  'A page made to be filled in (one of your superpowers may bring some) is shown with its path and data: an object, which the page reads ' +
-    'from <script id="page-data" type="application/json"> with JSON.parse, together with shownAt, when it was shown, in ms.',
+  'A page made to be filled in (one of your superpowers may bring some) is shown with its path and data: an object, put at the top of the page as ' +
+    '<script id="page-data" type="application/json">, together with shownAt, when it was shown, in ms; the page reads it with document.getElementById.',
   'Layout: the page is as wide as the conversation (about 720px on a computer, 360px on a phone) and sits on its background. ' +
     'Leave html and body without a background, border, outer padding or a heading that repeats the title. Use fluid widths. ' +
     'A box with a background of its own gets padding: 16px and border-radius: var(--radius). Give charts a fixed height in px. ' +
@@ -84,11 +84,9 @@ export function makePage(botId: string, args: Record<string, unknown>): Page {
   return { title, html, height: Number.isFinite(given) && given > 0 ? Math.round(given) : 400, missing }
 }
 
-const DATA_BLOCK = /<script\b(?=[^>]*(?<![\w-])id\s*=\s*["']?page-data(?![\w-]))[^>]*>[\s\S]*?<\/script\s*>/i
-
 /**
- * Puts the data a page is shown with into it, where the page reads it: in its own data block, or
- * else at the top. Written so that nothing in it can end the block it is in.
+ * Puts the data a page is shown with at the top of it, the first element with its id, which is the
+ * one the page finds. Written so that nothing in it can end the block it is in.
  */
 function withData(html: string, given: unknown): string {
   let data = given
@@ -103,7 +101,6 @@ function withData(html: string, given: unknown): string {
   const json = JSON.stringify({ ...data, shownAt: Date.now() }).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
   if (json.length > MAX_DATA) throw new Error(`The data is too large (${Math.round(json.length / 1000)} KB; at most ${MAX_DATA / 1000} KB).`)
   const block = `<script id="page-data" type="application/json">${json}</script>`
-  if (DATA_BLOCK.test(html)) return html.replace(DATA_BLOCK, () => block)
   const doctype = /^\s*<!doctype[^>]*>/i.exec(html)
   return doctype ? `${doctype[0]}${block}${html.slice(doctype[0].length)}` : `${block}${html}`
 }

@@ -966,19 +966,19 @@ test('pages: a bot shows a chart in its conversation, with pictures from its wor
   assert.match(await tool('show_page', { title: 'Report', path: 'files/report.html' }), /^Shown “Report”/)
   assert.match(await told(), /show_page/, 'the bot is told it can show pages')
 
-  // A page made to be filled in is shown with data, which goes where the page reads it, with when it was shown, and
-  // written so that nothing in it can end the block it is in. Without a place for it, it goes at the top.
-  fs.writeFileSync(botPath('workspace', 'files', 'board.html'), '<!doctype html><head><script id="page-data" type="application/json">{}</script></head><p id="x"></p>')
+  // A page made to be filled in is shown with data, which goes at the top of it, after a doctype, with when it was
+  // shown, and written so that nothing in it can end the block it is in.
+  fs.writeFileSync(botPath('workspace', 'files', 'board.html'), '<!doctype html><head></head><p id="x"></p>')
   const filled = async (args) => (await say(await fresh(), `!tool show_page ${JSON.stringify(args)}`)).findLast((d) => d.type === 'page')
   const board = await filled({ title: 'Board', path: 'files/board.html', data: { view: 'scores', name: '</script><b>Ana</b>' } })
   const data = JSON.parse(/<script id="page-data" type="application\/json">(.*?)<\/script>/.exec(board.html)[1])
   assert.deepEqual([data.view, data.name, typeof data.shownAt], ['scores', '</script><b>Ana</b>', 'number'])
   assert.ok(Math.abs(data.shownAt - Date.now()) < 60_000)
   assert.doesNotMatch(board.html, /<\/script><b>/)
-  assert.equal(board.html.match(/page-data/g).length, 1, 'the empty block is replaced, not added to')
+  assert.match(board.html, /^<!doctype html><script id="page-data" type="application\/json">\{[^<]*\}<\/script><head><\/head><p id="x"><\/p>$/)
   const top = await filled({ title: 'Top', path: 'files/report.html', data: '{"a":1}' })
   assert.match(top.html, /^<script id="page-data" type="application\/json">\{"a":1,"shownAt":\d+\}<\/script><h1>Report<\/h1>$/)
-  // Only the block with exactly that id: a script of the page's own with a name like it is left alone.
+  // The page's own scripts are left as they are, whatever they are called.
   fs.writeFileSync(botPath('workspace', 'files', 'own.html'), '<script data-id="page-data">go()</script><script id="page-data-helper">help()</script>')
   const own = await filled({ title: 'Own', path: 'files/own.html', data: { a: 2 } })
   assert.match(own.html, /^<script id="page-data" type="application\/json">\{"a":2,"shownAt":\d+\}<\/script><script data-id="page-data">go\(\)<\/script><script id="page-data-helper">help\(\)<\/script>$/)

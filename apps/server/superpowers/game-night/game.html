@@ -1,7 +1,6 @@
 <!doctype html>
 <html>
 <head>
-<script id="page-data" type="application/json">{}</script>
 <style>
 /* The game page: one page for every game, drawn from the data it is shown with (see instructions.md).
    It sits on the conversation in the app's colours; the stage and the answer tiles have colours of
@@ -201,7 +200,9 @@ button[disabled] { opacity: .45; cursor: default; }
 (function () {
   'use strict'
   var data = {}
-  try { data = JSON.parse(document.getElementById('page-data').textContent || '{}') || {} } catch (e) { data = {} }
+  // What the bot showed the page with (show_page's data), put at the top of the page.
+  var given = document.getElementById('page-data')
+  try { data = JSON.parse((given && given.textContent) || '{}') || {} } catch (e) { data = {} }
   var root = document.getElementById('game')
   var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   // Shown just now, rather than drawn again later: only then does it celebrate by itself.
@@ -489,7 +490,7 @@ button[disabled] { opacity: .45; cursor: default; }
 
   function cluesView() {
     var clues = list(data.clues).map(text).filter(Boolean)
-    var total = Math.max(clues.length, num(data.cluesTotal, clues.length))
+    var total = Math.max(clues.length, Math.min(20, num(data.cluesTotal, clues.length)))
     var answer = data.answer && typeof data.answer === 'object' ? data.answer : null
     var image = picture(answer && answer.image) || picture(data.image)
     var blur = answer ? 0 : Math.round(26 * (1 - Math.min(clues.length, total) / Math.max(total, 1)) + 4)
@@ -554,7 +555,7 @@ button[disabled] { opacity: .45; cursor: default; }
   }
 
   function cardsView() {
-    var cards = list(data.cards).slice(0, 8).map(function (c, i) {
+    var cards = list(data.cards).map(function (c, i) {
       if (typeof c === 'string') c = { text: c }
       c = c || {}
       return { title: text(c.title), text: text(c.text), emoji: text(c.emoji), back: text(c.back), stamp: text(c.stamp), tone: text(c.tone), i: i }
