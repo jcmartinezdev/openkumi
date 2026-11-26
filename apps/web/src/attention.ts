@@ -3,6 +3,7 @@
 // them or has something to be read now (see @openkumi/client/attention). The app shows a
 // notification only while the window is not in front, and takes it back when the bot no longer waits.
 import { attentionOf, noticeOf, wantsOwner } from '@openkumi/client/attention'
+import { botById } from '@openkumi/client/bots'
 import type { Notice } from '@openkumi/shared/desktop'
 import { desktop } from './desktop'
 import { getPrefs, onPrefs } from './prefs'
@@ -49,5 +50,9 @@ export function watchAttention() {
   onState(later)
   onPrefs(later)
   later()
-  desktop.onNotice?.((id) => stateNow().bots.some((bot) => bot.id === id) && navigate(id))
+  desktop.onNotice?.((id) => {
+    // Its id may have changed since the notification was shown.
+    const bot = botById(stateNow().bots, id)
+    if (bot) navigate(bot.id)
+  })
 }

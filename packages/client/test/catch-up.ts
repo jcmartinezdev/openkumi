@@ -164,4 +164,19 @@ const afresh = now.items[conv]!.map((i) => i.id)
 assert.deepEqual(afresh, [...afresh].sort((a, b) => a - b))
 assert.equal(new Set(afresh).size, afresh.length)
 
+// 6. The bot's id changes while the store is connected: it stays where it was in the list (the first
+// is the main assistant), under its new id and once, and its conversation goes with it.
+const place = now.bots.findIndex((b) => b.id === bot.id)
+assert.ok(place > 0)
+const heldThen = now.items[conv]
+await http('POST', `/api/bots/${bot.id}/move`, { id: 'Checked' })
+await until(() => now.bots.some((b) => b.id === 'checked') && !now.bots.some((b) => b.id === bot.id) && now.threads.find((t) => t.id === conv)?.botId === 'checked')
+// The event an app from before understands comes last: a bot with that id, which this store already holds.
+await until(() => seen.at(-1)!.bots.find((b) => b.id === 'checked')?.formerIds?.length)
+await new Promise((r) => setTimeout(r, 300))
+assert.equal(now.bots.findIndex((b) => b.id === 'checked'), place)
+assert.equal(now.bots.filter((b) => b.id === 'checked').length, 1)
+assert.deepEqual(now.bots[place]!.formerIds, [bot.id])
+assert.equal(now.items[conv], heldThen, 'what is held of its conversation stays as it was')
+
 process.exit(0)

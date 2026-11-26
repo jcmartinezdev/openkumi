@@ -202,6 +202,9 @@ function handle(ev: ServerEvent) {
       return set({ bots: upsert(state.bots, ev.bot) })
     case 'bot.delete':
       return set({ bots: state.bots.filter((b) => b.id !== ev.id) })
+    case 'bot.move':
+      // The same bot under a new id, where it was in the list: the first is the main assistant.
+      return set({ bots: state.bots.some((b) => b.id === ev.from) ? state.bots.map((b) => (b.id === ev.from ? ev.bot : b)) : upsert(state.bots, ev.bot) })
     case 'thread.upsert': {
       // Older than what is held: it was already in what the server sent when the connection opened.
       if (ev.seq <= state.seq) return

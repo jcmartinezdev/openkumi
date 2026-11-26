@@ -10,7 +10,8 @@ import { WebSocketServer, type WebSocket } from 'ws'
 import type { AppState, ClientEvent, ServerEvent } from '@openkumi/shared'
 import * as agent from './agent.ts'
 import { checkWaiting, isPicture, kept, stage, typeOf, unstage } from './attachments.ts'
-import { announce, createBot, deleteBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
+import { announce, createBot, deleteBot, findBot, getBot, listBots, pickLook, updateBot } from './bots.ts'
+import { moveBot } from './move.ts'
 import { type Frame, browserFor, browserStates, isWebPage, letGo, stopBrowser } from './browser.ts'
 import { FIRST, FROM_REPOSITORY, HOME, HOME_LABEL, LAN, PERSON, PORT, ROOT, accessToken, botDir, onEvent, people, readSecrets, serverId, shown, writeSecret } from './config.ts'
 import { beginPairing, computerWith, finishPairing, listComputers, newPairingCode, proveTo, removeComputer } from './clients.ts'
@@ -243,6 +244,8 @@ route('DELETE', '/api/threads', () => {
 route('POST', '/api/bots', (_, body) => createBot(body))
 route('POST', '/api/looks/pick', (_, body) => pickLook(body))
 route('PATCH', '/api/bots/:id', ([id], body) => updateBot(needBot(id).id, body))
+// A new id for a bot, from what its owner typed (move.ts). The one it had goes on reaching it.
+route('POST', '/api/bots/:id/move', ([id], body) => moveBot(needBot(id).id, body.id).catch((e) => fail(400, e.message)))
 // Everything the bot is told in its conversation, for its owner to read.
 route('GET', '/api/bots/:id/instructions', ([id]) => ({ text: agent.systemPrompt(needBot(id)) }))
 route('DELETE', '/api/bots/:id', async ([id]) => {
@@ -625,7 +628,10 @@ function createServer() {
         const match = req.method === method && url.pathname.match(pattern)
         if (!match) continue
         const body = method === 'GET' || raw ? {} : await readJson(req)
-        const result = await handler(match.slice(1).map(decodeURIComponent), body, { url, req, res })
+        const params = match.slice(1).map(decodeURIComponent)
+        // An app that has not heard yet that a bot's id changed still reaches it by the one it had.
+        if (url.pathname.startsWith('/api/bots/') && params.length) params[0] = findBot(params[0])?.id ?? params[0]
+        const result = await handler(params, body, { url, req, res })
         if (result === SENT) return
         return void json(200, result ?? { ok: true })
       }
@@ -693,7 +699,7 @@ function createServer() {
       } catch {
         return
       }
-      const browser = browserFor(msg.botId)
+      const browser = browserFor(findBot(msg.botId)?.id ?? msg.botId)
       if (msg.type === 'browser.control') {
         const viewer = String(msg.viewer)
         if (msg.action === 'take') {

@@ -5,13 +5,16 @@ import { useEffect, useState } from 'react'
 import { Alert } from 'react-native'
 import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router'
 import * as Haptics from 'expo-haptics'
+import { useBotId } from '@openkumi/client/bots'
 import { NEW_SECRET, addSecret, howKept, removeSecret, saveSecret, secretStanding, useSecrets } from '@openkumi/client/secrets'
 import { useStore } from '@openkumi/client/store'
 import { Field, Note, Row, Section, SettingsPage } from '../../../../src/SettingsUi'
 
 export default function SecretPage() {
   const router = useRouter()
-  const { botId, name: given } = useLocalSearchParams<{ botId: string; name: string }>()
+  const { botId: forBot, name: given } = useLocalSearchParams<{ botId: string; name: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(forBot)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const { data, error: fetchError } = useSecrets(botId)
   const isNew = given === NEW_SECRET

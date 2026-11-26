@@ -5,6 +5,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View 
 import { Stack, useLocalSearchParams } from 'expo-router'
 import * as Haptics from 'expo-haptics'
 import type { Look } from '@openkumi/shared'
+import { useBotId } from '@openkumi/client/bots'
 import { api, useStore } from '@openkumi/client/store'
 import { BODY_COLORS, CLOTHES_COLORS, CREATURES, EXTRAS, HATS, SIGN_EMOJIS, describeLook, surprise } from '@openkumi/client/mascot'
 import { Mascot } from '../../../src/Mascot'
@@ -18,7 +19,9 @@ interface Dress {
 
 export default function LookSettings() {
   const theme = useTheme()
-  const { botId } = useLocalSearchParams<{ botId: string }>()
+  const { botId: given } = useLocalSearchParams<{ botId: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const stored = useStore((s) => s.bots.find((b) => b.id === botId))
   /** What was just chosen, shown at once instead of when the server has said so. */
   const [shown, setShown] = useState<Dress | null>(null)

@@ -34,8 +34,16 @@ export interface RunsOn {
  * What the bot knows (its instructions, memory and files) lives in its workspace instead.
  */
 export interface Bot {
-  /** Also the name of the bot's folder. */
+  /**
+   * Also the name of the bot's folder. Made from the name the bot was given first, and changed only
+   * when its owner changes it (POST /api/bots/:id/move).
+   */
   id: string
+  /**
+   * The ids it had before, the latest first. They still reach it: other bots' notes, automations and
+   * links from before name it that way. Missing from servers from before ids could change.
+   */
+  formerIds?: string[]
   name: string
   emoji: string
   /**
@@ -799,6 +807,11 @@ export interface Partial {
 export type ServerEvent =
   | { type: 'bot.upsert'; bot: Bot }
   | { type: 'bot.delete'; id: string }
+  /**
+   * A bot's id changed from `from` to `bot.id`: the same bot, in the same place in the list. Apps
+   * from before this event are sent a bot.delete and a bot.upsert after it, which say as much to them.
+   */
+  | { type: 'bot.move'; from: string; bot: Bot }
   /** `seq`: the number of the change, from one count for every thread (see AppState.seq). */
   | { type: 'thread.upsert'; thread: Thread; seq: number }
   | { type: 'thread.delete'; id: string; seq: number }

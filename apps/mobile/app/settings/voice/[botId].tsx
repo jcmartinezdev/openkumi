@@ -8,6 +8,7 @@ import { ActivityIndicator, Alert, Animated, type FlatList, Linking, Pressable, 
 import { useIsFocused, useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as Haptics from 'expo-haptics'
+import { useBotId } from '@openkumi/client/bots'
 import { stopHearing, useCalling, useHearing, useVoices } from '@openkumi/client/calls'
 import { type Shelf, type VoiceChoice, isVoice, shelvesOf } from '@openkumi/client/voices'
 import { api, useStore } from '@openkumi/client/store'
@@ -27,7 +28,9 @@ export default function Voice() {
   const insets = useSafeAreaInsets()
   const { width } = useWindowDimensions()
   const focused = useIsFocused()
-  const { botId } = useLocalSearchParams<{ botId: string }>()
+  const { botId: given } = useLocalSearchParams<{ botId: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const known = useVoices()
   const hearing = useHearing()

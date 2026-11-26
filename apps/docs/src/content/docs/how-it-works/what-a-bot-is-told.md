@@ -12,10 +12,10 @@ in what it knows of the bot and the thread, so in this order a bot is told:
    OpenKumi is and who made it, and the name of the model that powers it. Asked who it is, a bot
    answers as itself, not as that model; it may say what it is powered by.
 2. **Principles**: how to behave, how to work, and how to work with the others.
-3. **The other bots**: each one's name, its `bot_id`, the line saying what it is for, the
-   superpowers it has, and which is the main assistant. Then how to reach them, with
-   `message_bot`, from its own conversation (see [Messages between
-   bots](/how-it-works/messages-between-bots/)).
+3. **The other bots**: each one's name, its `bot_id` (and the ids it had before, which still
+   reach it), the line saying what it is for, the superpowers it has, and which is the main
+   assistant. Then how to reach them, with `message_bot`, from its own conversation (see
+   [Messages between bots](/how-it-works/messages-between-bots/)).
 4. **Other people on this computer**, when someone else has bots on it too: that their bots,
    conversations and files are out of its reach, and that everything still lies under the one
    account on the computer, so that it can say plainly who can see what.

@@ -996,6 +996,11 @@ a.set-link:hover { background: var(--hover); }
 .set-input.emoji { width: 56px; text-align: center; }
 .set-input.wide { width: 320px; }
 .set-input.number { width: 96px; }
+.set-input.id { width: 180px; }
+/* Greyed out until it is to be changed (the bot's id: Change id, then Save). */
+.set-input:disabled { color: var(--muted); background: var(--hover); cursor: default; }
+/* Under the control it is about, rather than beside it. */
+.set-control-note { flex-basis: 100%; text-align: right; }
 .set-area { width: 100%; height: auto; margin-top: 10px; padding: 8px 10px; line-height: 1.5; }
 .set-input.set-line { width: 100%; margin-top: 10px; }
 .prompt-text { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 8px 20px 20px; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }

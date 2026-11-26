@@ -28,12 +28,12 @@ said so.
 Everything is on the bot's page: its name in **Settings → Bots**, or **Bot settings** in the
 header of its conversation. Changes are saved as you make them. You can also ask your main
 assistant: "Rename Assistant to Scheduler and say it keeps my calendar", or "Put Research on
-Sonnet". It changes a bot's name, what it is for, emoji, model and reasoning effort, web search and
-browser window, never its rules or superpowers.
+Sonnet". It changes a bot's name, its id, what it is for, emoji, model and reasoning effort, web
+search and browser window, never its rules or superpowers.
 
 | Section | What it holds |
 | --- | --- |
-| **Identity** | its **Name**, emoji and **What it is for**: the one line every other bot is told about it, so they know when to pass it work. Only you set this line, here or by asking your main assistant; no other bot can change it. |
+| **Identity** | its **Name**, its **Id** (see below), emoji and **What it is for**: the one line every other bot is told about it, so they know when to pass it work. Only you set this line, here or by asking your main assistant; no other bot can change it. |
 | **Look** | its mascot: creature, colour, hat, extra and clothes. |
 | **Rules** | rules from you, which the bot must follow. They win where they and OpenKumi's principles disagree, and the bot cannot change them. |
 | **Model** | what it **Runs on**, the **Model**, and the **Reasoning effort** where the model has one. See [What bots run on](/setup/providers/). |
@@ -46,6 +46,25 @@ browser window, never its rules or superpowers.
 | **Workspace** | its files, and every recorded change to its instructions and notes. |
 | **Where it lives** | its folder, and **Open folder** on the computer that runs it. |
 | **Danger zone** | **Delete this bot**: removes its conversations, files, memory and saved logins. This cannot be undone. |
+
+## Its id
+
+A bot's id is what the other bots and automations call it by, and the name of its folder. It is
+made from the name you first give the bot, and renaming the bot leaves it as it was: a bot made as
+"Assistant" and renamed "Scheduler" is still `assistant` to the others. To change it, press
+**Change id** under **Identity → Id**, type the new one and press **Save**, or ask your main
+assistant ("give Scheduler the id scheduler"). Unlike the rest of the page, it is not saved when you
+leave the field.
+
+Everything the bot has goes with it: its folder, conversation, automations, webhooks, secrets and
+what it used. The id it had goes on reaching it, so what the other bots wrote down before still
+works, and they are told both. No other bot can take that id. A bot on Claude Code or Grok starts
+a new conversation with its engine on its next turn, from the conversation as OpenKumi keeps it.
+
+An id changes only while the bot is not at work, on a call or being signed in to an app, and only
+when each of its secrets can be opened: a secret is sealed to the bot's id, and one that cannot be
+read on this computer has to be entered again or removed first. The main assistant cannot change
+its own: that one you change in its settings.
 
 ## Rules or instructions?
 

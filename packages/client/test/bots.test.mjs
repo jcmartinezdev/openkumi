@@ -35,6 +35,17 @@ const made = [
 const chat = (botId, updatedAt, more = {}) => ({ id: `t_${botId}_${updatedAt}`, botId, parentId: null, archivedAt: null, updatedAt, ...more })
 const ids = (list) => list.map((bot) => bot.id)
 
+test('a bot is found by an id it had before, and a bot that has the id now comes first', () => {
+  const list = [{ id: 'kumi' }, { id: 'scheduler', formerIds: ['assistant', 'planner'] }, { id: 'cook', formerIds: ['kumi'] }]
+  assert.equal(bots.botById(list, 'scheduler'), list[1])
+  assert.equal(bots.botById(list, 'planner'), list[1])
+  assert.equal(bots.botById(list, 'kumi'), list[0])
+  assert.equal(bots.botById(list, 'nobody'), undefined)
+  assert.equal(bots.botById(list, undefined), undefined)
+  // From a server from before ids could change: none had any other.
+  assert.equal(bots.botById([{ id: 'kumi' }], 'assistant'), undefined)
+})
+
 test('as they were made, which is also what a server from before there was a choice gets', () => {
   assert.equal(bots.sortBots(made, [], 'created'), made)
   assert.equal(bots.sortBots(made, [chat('scout', 900)], undefined), made)

@@ -9,7 +9,7 @@
 import crypto from 'node:crypto'
 import type { Attachment, Bot, Flag, Item, ItemData, Partial, Queued, Question, RunsOn, Said, Thread } from '@openkumi/shared'
 import { attach, discard, handOver, outgoing, stageCopy, toShow, unstage, withFiles } from './attachments.ts'
-import { getBot, listBots } from './bots.ts'
+import { findBot, getBot, listBots } from './bots.ts'
 import { browserFor, retireWindow } from './browser.ts'
 import { emit, sharedComputer, workspaceDir } from './config.ts'
 import * as db from './db.ts'
@@ -66,6 +66,8 @@ let closing = false
 const waiters = new Map<string, Set<() => void>>()
 
 export const isRunning = (threadId: string) => running.has(threadId)
+/** Whether a bot is at work: in its conversation, a subagent or a run of an automation. */
+export const atWork = (botId: string) => [...running.keys()].some((id) => db.getThread(id)?.botId === botId)
 /** How many conversations, subagents and runs are at work: what stopping the server now would cut off. */
 export const working = () => running.size
 export const partialOf = (threadId: string): Partial => running.get(threadId)?.partial ?? { text: '', reasoning: '' }
@@ -88,7 +90,7 @@ function team(bot: Bot): string {
   const line = (b: Bot) => {
     const powers = superpowerNames(b.id)
     return (
-      `- ${b.emoji} ${b.name} (bot_id: ${b.id})${b.id === main.id ? ', the main assistant' : ''}: ` +
+      `- ${b.emoji} ${b.name} (bot_id: ${b.id}${b.formerIds?.length ? `, formerly ${b.formerIds.join(', ')}` : ''})${b.id === main.id ? ', the main assistant' : ''}: ` +
       `${b.description || '(no description yet)'}${powers.length ? ` Superpowers: ${powers.join(', ')}.` : ''}`
     )
   }
@@ -792,7 +794,8 @@ export function basisOf(thread: Thread): Basis {
   if (!bots.length || causes.some((m) => m.source === 'user')) return { owner, mayMessage: null, chain: 0 }
   return {
     owner,
-    mayMessage: new Map(bots.filter((m) => m.replyWanted && m.bot).map((m) => [m.bot!.id, m.key ?? ''])),
+    // Under the id the bot has now: it may have changed since it wrote (move.ts).
+    mayMessage: new Map(bots.filter((m) => m.replyWanted && m.bot).map((m) => [findBot(m.bot!.id)?.id ?? m.bot!.id, m.key ?? ''])),
     chain: Math.max(...bots.map((m) => m.chain ?? 1)),
   }
 }
@@ -806,7 +809,8 @@ export function basisOf(thread: Thread): Basis {
  */
 export function messageBot(from: Thread, sender: Bot, to: unknown, text: unknown, replyWanted: boolean, files?: unknown): Delivery & { bot: Bot; sent: Attachment[] } {
   if (!canMessage(from)) throw new Error('Bots cannot message each other from here.')
-  const target = typeof to === 'string' ? getBot(to) : undefined
+  // An id the bot had before reaches it too: the sender's notes may be from then.
+  const target = typeof to === 'string' ? findBot(to) : undefined
   if (!target) throw new Error(`No bot with id ${to}. Use list_bots to see the bots that exist.`)
   if (target.id === sender.id) throw new Error('That is you. Give the id of another bot.')
   const words = typeof text === 'string' ? text.trim() : ''

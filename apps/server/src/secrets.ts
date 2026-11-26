@@ -202,6 +202,41 @@ export function change(botId: string, name: string, patch: { sites?: unknown; wh
   return shown(botId, next)
 }
 
+/**
+ * A bot's vault, sealed again for the id the bot is moving to (move.ts): each value is sealed to
+ * the bot's id, and would not open under another. Read before the folder moves, so that a vault
+ * that cannot be opened right now stops the move before anything has changed. `write` puts it in
+ * the folder once that is under the new id, and `undo` puts back what was there.
+ */
+export function resealed(from: string, to: string): { write: () => void; undo: () => void } {
+  const all = load(from)
+  const next = all.map((secret) => {
+    let value: string
+    try {
+      value = valueOf(from, secret)
+    } catch (e) {
+      // Even one whose key is not here now: were the key put back later, it would not open under the new id.
+      throw new Error(`The bot’s secrets are sealed to its id, and each has to be opened to seal it to the new one. “${secret.name}” could not be: ${(e as Error).message} Or remove it.`)
+    }
+    return { ...secret, ...vault.seal(value, about(to, secret.name)) }
+  })
+  return {
+    write: () => {
+      if (!all.length) return
+      store(to, next)
+      // What it was given before still comes back to it, under its new id.
+      const given = handedOut.get(from)
+      if (given) handedOut.set(to, given), handedOut.delete(from)
+    },
+    undo: () => {
+      if (!all.length) return
+      store(to, all, false)
+      const given = handedOut.get(to)
+      if (given) handedOut.set(from, given), handedOut.delete(to)
+    },
+  }
+}
+
 export function remove(botId: string, name: string) {
   const all = load(botId)
   const gone = all.find((s) => s.name === name)

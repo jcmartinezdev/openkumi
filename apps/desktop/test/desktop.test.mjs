@@ -2267,6 +2267,68 @@ test('master prompt: each bot’s line set from one page, and all a bot is told 
   await until(async () => !(await up(LOCAL_PORT)), 15_000)
 })
 
+test('a bot’s id: changed on its page, which follows the bot to its new address, as do links from before', async () => {
+  fs.mkdirSync(`${tmp}/app`, { recursive: true })
+  fs.writeFileSync(`${tmp}/app/desktop.json`, JSON.stringify({ local: { enabled: true }, environments: [], current: 'local' }))
+  const win = await launch()
+  await showsBot(win, 'Kumi')
+  const shot = (name) => process.env.OPENKUMI_TEST_SHOTS && win.screenshot({ path: path.join(process.env.OPENKUMI_TEST_SHOTS, `${name}.png`), fullPage: true })
+  const state = () => ask(LOCAL_PORT, 'local-home', 'GET', '/api/state')
+  const here = () => win.evaluate(() => location.hash)
+  // Made as "Assistant" and renamed since: the id it was made with stayed.
+  const made = await ask(LOCAL_PORT, 'local-home', 'POST', '/api/bots', { name: 'Assistant', provider: 'mock', emoji: '📅', look: { creature: 'cat', color: 'mint' } })
+  await ask(LOCAL_PORT, 'local-home', 'PATCH', `/api/bots/${made.id}`, { name: 'Scheduler' })
+  await ask(LOCAL_PORT, 'local-home', 'POST', `/api/bots/${made.id}/messages`, { text: 'hello' })
+  await until(async () => (await state()).threads.some((t) => t.botId === 'assistant' && t.status === 'idle' && !t.parentId), 20_000)
+
+  await win.evaluate(() => (location.hash = '/settings/bots/assistant'))
+  const field = win.getByLabel('Id', { exact: true })
+  const button = (name) => win.locator('#bot-id').getByRole('button', { name, exact: true })
+  // Greyed out until it is to be changed, and only Save changes it: not leaving the field, not Cancel.
+  assert.equal(await field.inputValue(), 'assistant')
+  assert.ok(await field.isDisabled())
+  await button('Change id').click()
+  assert.ok(await field.isEnabled())
+  await field.fill('Planner')
+  await field.blur()
+  await button('Cancel').click()
+  assert.ok(await field.isDisabled())
+  assert.equal(await field.inputValue(), 'assistant')
+  await new Promise((r) => setTimeout(r, 300))
+  assert.ok((await state()).bots.some((b) => b.id === 'assistant'))
+  assert.equal(await here(), '#/settings/bots/assistant')
+  await button('Change id').click()
+  await field.fill('Scheduler')
+  await button('Save').click()
+  // The page stays, at the bot's new address, and says the id it had still reaches it.
+  await until(async () => (await here()) === '#/settings/bots/scheduler', 10_000)
+  await until(async () => (await field.inputValue()) === 'scheduler')
+  assert.ok(await field.isDisabled(), 'greyed out again once saved')
+  await win.locator('#bot-id p', { hasText: 'Its earlier id, assistant, still reaches it.' }).waitFor()
+  assert.deepEqual((await state()).bots.find((b) => b.id === 'scheduler').formerIds, ['assistant'])
+  await shot('bot-id')
+
+  // A link from before (a notification, a message it sent) goes to its conversation, which went with it.
+  await win.evaluate(() => (location.hash = '/assistant'))
+  await until(async () => (await here()) === '#/scheduler', 10_000)
+  await win.locator('.msg.assistant', { hasText: 'Echo: hello' }).waitFor()
+
+  // An id it cannot have is refused under the field, and nothing changes.
+  await win.evaluate(() => (location.hash = '/settings/bots/scheduler'))
+  await button('Change id').click()
+  await field.fill('settings')
+  // Enter saves too, once it is being changed.
+  await field.press('Enter')
+  await win.locator('#bot-id .err', { hasText: '“settings” is the address of a page in the app' }).waitFor()
+  assert.ok(await field.isEnabled(), 'still being changed, to put right')
+  await shot('bot-id-refused')
+  assert.ok((await state()).bots.some((b) => b.id === 'scheduler'))
+
+  await ask(LOCAL_PORT, 'local-home', 'DELETE', '/api/bots/scheduler')
+  await app.close()
+  await until(async () => !(await up(LOCAL_PORT)), 15_000)
+})
+
 test('usage: what the bots’ models used by provider, model and bot, what it would cost as API calls, and how much of each plan is used', async (t) => {
   // The list of prices is a stand-in: nothing is fetched from outside.
   const list = http.createServer((_, res) => res.end(JSON.stringify({ 'fake-model': { input_cost_per_token: 0.000001, cache_read_input_token_cost: 0.0000001, output_cost_per_token: 0.00001, mode: 'chat' } })))

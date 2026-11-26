@@ -1,6 +1,6 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { useBotOrder } from '@openkumi/client/bots'
+import { botById, useBotOrder } from '@openkumi/client/bots'
 import { browsingThread, control, windowOf } from '@openkumi/client/browser'
 import { screen } from '@openkumi/client/telemetry'
 import { BrowserPane, BrowserPip } from './BrowserPane'
@@ -107,13 +107,15 @@ export function App() {
   useEffect(() => setNavOpen(false), [route.botId, route.threadId, route.usage])
 
   // A bot's address shows its conversation; a longer one shows a subagent's thread or an earlier conversation.
-  const thread = threads.find((t) => t.id === route.threadId) ?? mainThread(threads, route.botId)
+  // An address from before the bot's id changed names it by the one it had, until it is changed (useRoute).
+  const routeBot = botById(bots, route.botId)
+  const thread = threads.find((t) => t.id === route.threadId) ?? mainThread(threads, routeBot?.id ?? route.botId)
   // A subagent or run older than what the list holds is fetched, which puts it in the list.
   const missing = !!route.threadId && !threads.some((t) => t.id === route.threadId)
   useEffect(() => {
     if (missing && connected) loadThread(route.threadId).catch(() => {})
   }, [missing, connected, route.threadId])
-  const bot = bots.find((b) => b.id === (thread?.botId ?? route.botId))
+  const bot = thread ? botById(bots, thread.botId) : routeBot
 
   // Land on the first bot, as the sidebar lists them, when the URL names nothing that exists.
   const first = order[0]?.id

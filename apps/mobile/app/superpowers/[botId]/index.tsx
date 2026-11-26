@@ -9,6 +9,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Canvas, LinearGradient, Rect, vec } from '@shopify/react-native-skia'
 import type { Superpower } from '@openkumi/shared'
+import { useBotId } from '@openkumi/client/bots'
 import { matches, searchWords } from '@openkumi/client/superpowers'
 import { useStore } from '@openkumi/client/store'
 import { Glyph } from '../../../src/icons'
@@ -22,7 +23,9 @@ export default function Catalog() {
   const theme = useTheme()
   const router = useRouter()
   const insets = useSafeAreaInsets()
-  const { botId, group, at } = useLocalSearchParams<{ botId: string; group?: string; at?: string }>()
+  const { botId: given, group, at } = useLocalSearchParams<{ botId: string; group?: string; at?: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const powers = useStore((s) => s.superpowers)
   const listed = useStore((s) => s.superpowerCategories)

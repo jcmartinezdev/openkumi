@@ -4,13 +4,16 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import * as Clipboard from 'expo-clipboard'
 import * as Haptics from 'expo-haptics'
+import { useBotId } from '@openkumi/client/bots'
 import { useStore } from '@openkumi/client/store'
 import { useTheme } from '../../../../src/theme'
 
 export default function Problem() {
   const theme = useTheme()
   const router = useRouter()
-  const { botId, id } = useLocalSearchParams<{ botId: string; id: string }>()
+  const { botId: given, id } = useLocalSearchParams<{ botId: string; id: string }>()
+  // Its id may change while this is open: the screen goes on with the bot.
+  const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
   const power = useStore((s) => s.superpowers.find((p) => p.id === id))
   const status = useStore((s) => s.superpowerStatus[botId]?.[id])

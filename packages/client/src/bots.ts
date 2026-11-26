@@ -7,6 +7,18 @@ import { useMemo } from 'react'
 import type { Bot, BotSort, Thread } from '@openkumi/shared'
 import { saveSettings, useStore } from './store'
 
+/**
+ * The bot with this id, or the one that had it before (Bot.formerIds): an address, a notification
+ * or a message from before a bot's id changed still finds it.
+ */
+export function botById(bots: Bot[], id: string | undefined): Bot | undefined {
+  if (!id) return undefined
+  return bots.find((bot) => bot.id === id) ?? bots.find((bot) => bot.formerIds?.includes(id))
+}
+
+/** The id a bot has now, from one it may have had before: what a screen opened for a bot goes on with. */
+export const useBotId = (id: string) => useStore((s) => botById(s.bots, id)?.id ?? id)
+
 /** The orders to choose from, as both apps call them. */
 export const BOT_SORTS: readonly (readonly [BotSort, string])[] = [
   ['created', 'Date created'],
