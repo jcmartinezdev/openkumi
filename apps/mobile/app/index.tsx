@@ -9,9 +9,11 @@ import { mainThread, useStore } from '@openkumi/client/store'
 import { type Attention, MARK_WORDS, attentionOf } from '@openkumi/client/attention'
 import { moment } from '@openkumi/client/automations'
 import { BOT_SORTS, useBotOrder } from '@openkumi/client/bots'
+import { useSync } from '@openkumi/client/sync'
 import { Glyph } from '../src/icons'
 import { forget, useSession } from '../src/session'
 import { SortableList } from '../src/SortableList'
+import { SyncNote } from '../src/SyncNote'
 import { type Theme, useTheme } from '../src/theme'
 import { BotHead } from '../src/Mascot'
 
@@ -66,7 +68,8 @@ export default function Home() {
   const browsers = useStore((s) => s.browsers)
   const queue = useStore((s) => s.queue)
   const loaded = useStore((s) => s.loaded)
-  const connected = useStore((s) => s.connected)
+  // Reconnecting, or catching up on what changed while the phone was away (at its owner's computer, say).
+  const sync = useSync()
   const refused = useStore((s) => s.refused)
   const outdated = useStore((s) => s.outdated)
   const newer = useStore((s) => s.newer)
@@ -133,7 +136,7 @@ export default function Home() {
   return (
     <>
       {header}
-      {!connected && <Text style={[styles.banner, { color: theme.muted, backgroundColor: theme.side }]}>Reconnecting…</Text>}
+      <SyncNote sync={sync} />
       <SortableList
         items={bots}
         rowHeight={ROW}
@@ -180,7 +183,6 @@ export default function Home() {
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 28, gap: 14 },
   lead: { fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  banner: { textAlign: 'center', fontSize: 13, paddingVertical: 6 },
   bot: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: ROW, borderRadius: 14 },
   avatar: { width: 40, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
   botName: { fontSize: 17, fontWeight: '600' },

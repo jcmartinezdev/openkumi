@@ -42,6 +42,7 @@ const idle = (id: string) => until(() => now.threads.find((t) => t.id === id)?.s
 const texts = (id: string) => (now.items[id] ?? []).map((i) => (i.data as any).text ?? i.data.type)
 
 await until(() => now?.connected && now.loaded)
+assert.ok(!seen.some((s) => s.syncing), 'the first load, with nothing shown yet, is not syncing')
 const firstSeq = now.seq
 assert.ok(now.database.startsWith('db_'))
 const bot = await http('POST', '/api/bots', { name: 'Checker', provider: 'mock' })
@@ -83,9 +84,24 @@ for (;;) {
 }
 await http('DELETE', `/api/threads/${run.id}`)
 const cleared = seen.length
+assert.ok(!now.syncing, 'nothing is being caught up while away')
 back()
 await until(() => now.connected)
-await openThread(conv)
+// Once the connection opened, and before it counted as connected, what changed meanwhile was being asked for.
+const syncing = seen.slice(cleared).findIndex((s) => s.syncing)
+assert.ok(syncing >= 0, 'said to be syncing')
+assert.ok(!seen[cleared + syncing]!.connected, 'syncing comes before connected')
+assert.ok(!now.syncing, 'not syncing once connected')
+const opening = seen.length
+const caughtUp = openThread(conv)
+// The chat on screen holds what it had from before: its newer messages are on their way.
+assert.ok(now.catchingUp[conv], 'the chat is said to be catching up')
+await caughtUp
+assert.ok(!now.catchingUp[conv], 'and not once it has')
+assert.deepEqual(now.catchingUp, {})
+// It stopped catching up in the same change that put the new messages in.
+const done = seen.slice(opening).find((s) => !s.catchingUp[conv])!
+assert.equal(done.items[conv]!.length, 6)
 assert.equal(texts(conv).length, 6)
 assert.deepEqual(texts(conv), ['one', 'Echo: one', 'two', 'Echo: two', 'three', 'Echo: three'])
 assert.ok(seen.slice(cleared).every((s) => s.items[conv]), 'the open chat was never emptied while catching up')

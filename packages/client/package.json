@@ -36,7 +36,8 @@
     "./bots": "./src/bots.ts",
     "./attention": "./src/attention.ts",
     "./questions": "./src/questions.ts",
-    "./car": "./src/car.ts"
+    "./car": "./src/car.ts",
+    "./sync": "./src/sync.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

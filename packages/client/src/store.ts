@@ -25,6 +25,10 @@ export interface State extends AppState {
   secretsVersion: Record<string, number>
   connected: boolean
   loaded: boolean
+  /** The connection is back, and what changed while it was away is being asked for: what is shown may be behind until it comes. */
+  syncing: boolean
+  /** Threads held from before (shown from a copy, or from before a drop) whose newer messages are on their way. */
+  catchingUp: Record<string, true>
   /** How many times in a row the environment could not be reached. */
   failures: number
   /** The environment answered, but did not accept the access code. */
@@ -68,6 +72,8 @@ const EMPTY: State = {
   secretsVersion: {},
   connected: false,
   loaded: false,
+  syncing: false,
+  catchingUp: {},
   failures: 0,
   refused: false,
   outdated: false,
@@ -192,8 +198,18 @@ interface Loading {
   cutText: boolean
   cutReasoning: boolean
   upserted: boolean
+  /** Something of the thread was held when it was asked for: this brings what is shown up to date. */
+  held: boolean
 }
 const loading = new Map<string, Loading>()
+
+/** The threads being fetched while something of them is held, as `catchingUp` says them: the same object while they are the same. */
+function catchingUpNow(): Record<string, true> {
+  const ids = [...loading].filter(([, l]) => l.held).map(([id]) => id)
+  const had = state.catchingUp
+  if (ids.length === Object.keys(had).length && ids.every((id) => had[id])) return had
+  return Object.fromEntries(ids.map((id) => [id, true]))
+}
 
 
 function handle(ev: ServerEvent) {
@@ -518,6 +534,8 @@ async function opened() {
   const mine = ++opens
   waiting = []
   current.clear()
+  // Catching up on what is shown. The first time, with nothing to show yet, the screen says it is connecting.
+  if (state.loaded) set({ syncing: true })
   // What was rewritten while disconnected was not told, so what was told before may be older than what is fetched
   // from now on. Forgotten at once, before anything is waited for: a page asked for meanwhile must not be given it.
   rewrittenItems.clear()
@@ -529,7 +547,7 @@ async function opened() {
   if (typeof snapshot === 'number') {
     // A failed snapshot means the connection is not usable; dropping it triggers the normal retry.
     waiting = null
-    set({ refused: snapshot === 401, failures: state.failures + 1 })
+    set({ refused: snapshot === 401, failures: state.failures + 1, syncing: false })
     return tell({ type: 'reconnect' })
   }
   // History requests still in flight were recording the old connection and missed whatever
@@ -542,7 +560,8 @@ async function opened() {
   const { removed, ...fresh } = snapshot
   // What was said on a call is not in a snapshot: it is kept only while it is the same call.
   const sameCall = !!fresh.call && fresh.call.id === state.call?.id
-  const live = { connected: true, loaded: true, failures: 0, refused: false, outdated: false, newer: false, ...(sameCall ? {} : { callLines: [], callSaying: EMPTY.callSaying }) }
+  // Nothing is being fetched of any thread now: the ones held catch up as views show them.
+  const live = { connected: true, loaded: true, syncing: false, catchingUp: catchingUpNow(), failures: 0, refused: false, outdated: false, newer: false, ...(sameCall ? {} : { callLines: [], callSaying: EMPTY.callSaying }) }
   if (removed) {
     // Only what changed: laid over the threads held. What is held of each chat stays, and the
     // chats catch up on what was said meanwhile as views show them (see openThread).
@@ -578,7 +597,7 @@ export function receive(data: Report) {
   waiting = null
   current.clear()
   at = null
-  set({ connected: false, address: null, failures: state.connected ? 0 : state.failures + 1 })
+  set({ connected: false, syncing: false, address: null, failures: state.connected ? 0 : state.failures + 1 })
   clearTimeout(again)
   again = setTimeout(find, 1000)
 }
@@ -601,8 +620,9 @@ export async function loadThread(id: string, after?: number): Promise<Thread | u
   // overwritten by the older response. The request already in flight will deliver the result.
   if (loading.has(id)) return
   // While the request is in flight the socket keeps delivering; record it so it can be laid over the response.
-  const during: Loading = { items: [], text: '', reasoning: '', cutText: false, cutReasoning: false, upserted: false }
+  const during: Loading = { items: [], text: '', reasoning: '', cutText: false, cutReasoning: false, upserted: false, held: !!state.items[id] }
   loading.set(id, during)
+  if (during.held && !state.catchingUp[id]) set({ catchingUp: catchingUpNow() })
   try {
     const res = await api<{ thread: Thread; items: Item[]; more?: boolean; gap?: boolean; partial: Partial }>('GET', `/api/threads/${id}${after === undefined ? '' : `?after=${after}`}`)
     // Abandoned by a reconnect or a change of environment: a fresh load has replaced this one.
@@ -629,7 +649,10 @@ export async function loadThread(id: string, after?: number): Promise<Thread | u
       text: !running ? '' : during.cutText ? during.text : join(res.partial.text, during.text),
       reasoning: !running ? '' : during.cutReasoning ? during.reasoning : join(res.partial.reasoning, during.reasoning),
     }
+    // Done, in the same change that shows it.
+    loading.delete(id)
     set({
+      catchingUp: catchingUpNow(),
       threads: upsert(state.threads, thread),
       // What was rewritten while this was on its way is as it was rewritten, wherever it came from.
       items: { ...state.items, [id]: asRewritten(id, [...got, ...extra]) },
@@ -641,6 +664,8 @@ export async function loadThread(id: string, after?: number): Promise<Thread | u
     return thread
   } finally {
     if (loading.get(id) === during) loading.delete(id)
+    const behind = catchingUpNow()
+    if (behind !== state.catchingUp) set({ catchingUp: behind })
   }
 }
 
