@@ -966,16 +966,18 @@ test('pages: a bot shows a chart in its conversation, with pictures from its wor
   assert.match(await tool('show_page', { title: 'Report', path: 'files/report.html' }), /^Shown “Report”/)
   assert.match(await told(), /show_page/, 'the bot is told it can show pages')
 
-  // A page made to be filled in is shown with data, which goes at the top of it, after a doctype, with when it was
-  // shown, and written so that nothing in it can end the block it is in.
-  fs.writeFileSync(botPath('workspace', 'files', 'board.html'), '<!doctype html><head></head><p id="x"></p>')
+  // A page made to be filled in is shown with data, which goes at the top of it (first in its head, which keeps its
+  // attributes), with when it was shown, and written so that nothing in it can end the block it is in.
+  fs.writeFileSync(botPath('workspace', 'files', 'board.html'), '<!doctype html><head id="h"></head><p id="x"></p>')
   const filled = async (args) => (await say(await fresh(), `!tool show_page ${JSON.stringify(args)}`)).findLast((d) => d.type === 'page')
   const board = await filled({ title: 'Board', path: 'files/board.html', data: { view: 'scores', name: '</script><b>Ana</b>' } })
   const data = JSON.parse(/<script id="page-data" type="application\/json">(.*?)<\/script>/.exec(board.html)[1])
   assert.deepEqual([data.view, data.name, typeof data.shownAt], ['scores', '</script><b>Ana</b>', 'number'])
   assert.ok(Math.abs(data.shownAt - Date.now()) < 60_000)
   assert.doesNotMatch(board.html, /<\/script><b>/)
-  assert.match(board.html, /^<!doctype html><script id="page-data" type="application\/json">\{[^<]*\}<\/script><head><\/head><p id="x"><\/p>$/)
+  assert.match(board.html, /^<!doctype html><head id="h"><script id="page-data" type="application\/json">\{[^<]*\}<\/script><\/head><p id="x"><\/p>$/)
+  fs.writeFileSync(botPath('workspace', 'files', 'bare.html'), '<!doctype html><p>Hi</p>')
+  assert.match((await filled({ title: 'Bare', path: 'files/bare.html', data: { a: 3 } })).html, /^<!doctype html><script id="page-data" type="application\/json">\{"a":3,"shownAt":\d+\}<\/script><p>Hi<\/p>$/)
   const top = await filled({ title: 'Top', path: 'files/report.html', data: '{"a":1}' })
   assert.match(top.html, /^<script id="page-data" type="application\/json">\{"a":1,"shownAt":\d+\}<\/script><h1>Report<\/h1>$/)
   // The page's own scripts are left as they are, whatever they are called.

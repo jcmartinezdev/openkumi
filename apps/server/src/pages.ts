@@ -86,7 +86,9 @@ export function makePage(botId: string, args: Record<string, unknown>): Page {
 
 /**
  * Puts the data a page is shown with at the top of it, the first element with its id, which is the
- * one the page finds. Written so that nothing in it can end the block it is in.
+ * one the page finds: first in its <head> when it has one (anything before that tag would make it
+ * lose its attributes), else after a doctype, else first. Written so that nothing in it can end the
+ * block it is in.
  */
 function withData(html: string, given: unknown): string {
   let data = given
@@ -101,6 +103,9 @@ function withData(html: string, given: unknown): string {
   const json = JSON.stringify({ ...data, shownAt: Date.now() }).replace(/</g, '\\u003c').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
   if (json.length > MAX_DATA) throw new Error(`The data is too large (${Math.round(json.length / 1000)} KB; at most ${MAX_DATA / 1000} KB).`)
   const block = `<script id="page-data" type="application/json">${json}</script>`
-  const doctype = /^\s*<!doctype[^>]*>/i.exec(html)
-  return doctype ? `${doctype[0]}${block}${html.slice(doctype[0].length)}` : `${block}${html}`
+  const head = /<head(?:\s[^>]*)?>/i.exec(html)
+  const body = html.search(/<body[\s>]/i)
+  const at = head && (body === -1 || head.index < body) ? head : /^\s*<!doctype[^>]*>/i.exec(html)
+  const cut = at ? at.index + at[0].length : 0
+  return `${html.slice(0, cut)}${block}${html.slice(cut)}`
 }
