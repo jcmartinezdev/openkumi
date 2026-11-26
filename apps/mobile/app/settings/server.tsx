@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router'
 import { KIND_NAMES, kindOf, ordered } from '@openkumi/client/addresses'
 import { useStore } from '@openkumi/client/store'
 import { addAddress, forget, hostOf, removeAddress, rename, useServerStatus, useSession } from '../../src/session'
-import { Field, Row, Section, SettingsPage } from '../../src/SettingsUi'
+import { Field, Row, Section, SettingsPage, Tag } from '../../src/SettingsUi'
 
 export default function ServerSettings() {
   const router = useRouter()
@@ -50,7 +50,7 @@ export default function ServerSettings() {
 
       <Section title="Connection">
         <Row label="Status" value={status.word} />
-        {!!inUse && <Row label="Through" value={KIND_NAMES[kindOf(inUse)]} />}
+        {!!inUse && <Row label="Through" detail={new URL(inUse).host} value={KIND_NAMES[kindOf(inUse)]} />}
         {!!about.version && <Row label="OpenKumi" value={about.version} />}
         {!!about.timeZone && <Row label="Time zone" value={about.timeZone} />}
       </Section>
@@ -69,7 +69,8 @@ export default function ServerSettings() {
             <Row
               key={url}
               label={new URL(url).host}
-              detail={[KIND_NAMES[kindOf(url)], url === inUse && 'in use', found && 'reported by the server'].filter(Boolean).join(' · ')}
+              detail={[KIND_NAMES[kindOf(url)], found && 'reported by the server'].filter(Boolean).join(' · ')}
+              trailing={url === inUse && <Tag>In use</Tag>}
               onPress={removable ? () => remove(url) : undefined}
               accessibilityHint={removable ? 'Removes this address' : undefined}
             />

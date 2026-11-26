@@ -1355,6 +1355,8 @@ html[data-inset] .set-nav::before { content: ''; position: fixed; top: 0; left: 
 .set-addresses .set-link-row { min-height: 30px; }
 .set-addresses .set-link-row > .faint:first-child { width: 96px; }
 .set-addresses .set-link-row > .address-state { width: auto; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The address the window is connected through: in full colour, with its In use mark. */
+.set-addresses .set-link-row.in-use code { color: var(--text); }
 .set-addresses .set-link-row > input { flex: 1; min-width: 0; width: auto; }
 
 /* ---- superpowers */

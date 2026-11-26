@@ -72,6 +72,8 @@ export interface RowProps {
   detail?: ReactNode
   /** At the end of the row, in fainter type, such as what is chosen on the page it opens. */
   value?: string
+  /** A mark at the end of the row, inside it, such as a Tag saying it is the one in use. */
+  trailing?: ReactNode
   onPress?: () => void
   /** Opens a page, so it ends with a chevron. Rows that act at once (Run now, Unpair) do not. */
   opens?: boolean
@@ -84,7 +86,7 @@ export interface RowProps {
   children?: ReactNode
 }
 
-export function Row({ icon, leading, label, detail, value, onPress, opens, checked, tone = 'normal', disabled, accessibilityHint, children }: RowProps) {
+export function Row({ icon, leading, label, detail, value, trailing, onPress, opens, checked, tone = 'normal', disabled, accessibilityHint, children }: RowProps) {
   const theme = useTheme()
   const color = tone === 'destructive' ? theme.err : theme.text
   const body = (
@@ -96,6 +98,7 @@ export function Row({ icon, leading, label, detail, value, onPress, opens, check
         {typeof detail === 'string' ? <Text style={[styles.detail, { color: theme.faint }]}>{detail}</Text> : detail}
       </View>
       {!!value && <Text style={[styles.value, { color: theme.faint }]} numberOfLines={1}>{value}</Text>}
+      {trailing}
       {checked && <Glyph name="check" size={18} color={theme.text} weight={2.2} />}
       {opens && <Glyph name="chevron" size={15} color={theme.faint} weight={2.2} />}
     </>
@@ -232,6 +235,16 @@ export function Segments<T extends string>({ label, value, options, onChange }: 
   )
 }
 
+/** A word or two in a small green capsule, at the end of a row: what is so of it now, such as In use. */
+export function Tag({ children }: { children: string }) {
+  const theme = useTheme()
+  return (
+    <View style={[styles.tag, { backgroundColor: theme.okTint }]}>
+      <Text style={[styles.tagText, { color: theme.okText }]} numberOfLines={1}>{children}</Text>
+    </View>
+  )
+}
+
 /** Where a row's icon goes, for a mark that is not one of the line icons, so the two line up. */
 export const Slot = ({ children }: { children: ReactNode }) => <View style={styles.icon}>{children}</View>
 
@@ -261,6 +274,8 @@ const styles = StyleSheet.create({
   detail: { fontSize: 13.5, lineHeight: 18 },
   value: { flexShrink: 1, maxWidth: '50%', fontSize: 16, textAlign: 'right' },
   control: { paddingRight: 16 },
+  tag: { minHeight: 22, paddingHorizontal: 9, paddingVertical: 2, borderRadius: 11, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  tagText: { fontSize: 12.5, fontWeight: '600' },
   fieldRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48, paddingLeft: 16, paddingRight: 12 },
   field: { flex: 1, height: 48, fontSize: 16.5 },
   area: { minHeight: 110, paddingHorizontal: 16, paddingTop: 13, paddingBottom: 13, fontSize: 16, lineHeight: 22 },

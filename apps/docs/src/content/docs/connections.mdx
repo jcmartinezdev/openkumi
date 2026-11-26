@@ -203,11 +203,13 @@ keys alone, so prefer Tailscale where you can.
 **Settings → Environments**, under each remote environment:
 
 - the line under its name says which address is in use and of what kind: "Connected · via Home
-  network · 192.168.1.20:4317";
-- **N addresses** opens the list, in the order they are tried. Each shows its kind, how it answered
-  just now (**In use**, **Answers**, **Not reachable from here**, **Something else answers**,
-  **Needs https**, **No longer lets this computer in**, **Runs an older/newer OpenKumi**), and
-  "reported by it" for those the server keeps up to date;
+  network · 192.168.1.20:4317" (for a computer the window is not showing, the address it would
+  use);
+- **N addresses** opens the list, in the order they are tried. In the environment the window
+  shows, the address it is connected through has a green **In use** mark. Each of the others
+  shows its kind, how it answered just now (**Answers**, **Not reachable from here**,
+  **Something else answers**, **Needs https**, **No longer lets this computer in**, **Runs an
+  older/newer OpenKumi**), and "reported by it" for those the server keeps up to date;
 - **Remove** takes away an address you added (the ones the server reported cannot be removed: it
   keeps them up to date);
 - **Add address** takes another; **Add address…** in the environment's **⋯** menu opens the list
@@ -231,8 +233,10 @@ first one, and the device learns the rest once it connects. Pair at home, or typ
 
 ### On the iPhone
 
-In the phone's Settings, the server's name at the top opens its page: **Addresses** lists them in
-the order they are tried, with which one is in use, and **Add** takes another, the same way.
+In the phone's Settings, the server's name at the top opens its page. **Connection → Through**
+says which address the phone is connected through, and of what kind. **Addresses** lists them in
+the order they are tried, with a green **In use** mark on that one, and **Add** takes another, the
+same way.
 
 <Aside title="Troubleshooting">
   An environment never connects away from home: it needs an `https` address (on Tailscale or on
