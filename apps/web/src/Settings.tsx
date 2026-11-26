@@ -537,7 +537,8 @@ export function EnvironmentList({ adding: addingFirst = false }: { adding?: bool
                 </>
               }
             >
-              {opened === environment.id && <Addresses environment={environment} report={report} inUse={via ?? null} busy={busy} change={change} typing={typing === environment.id} typed={() => setTyping(null)} />}
+              {/* Only the environment the window shows is connected to: for the others, an address that answers is not in use. */}
+              {opened === environment.id && <Addresses environment={environment} report={report} inUse={app.current === environment.id ? inUse : null} busy={busy} change={change} typing={typing === environment.id} typed={() => setTyping(null)} />}
             </Row>
           )
         })}
@@ -578,10 +579,11 @@ function Addresses({ environment, report, inUse, busy, change, typing, typed }: 
         const found = environment.addresses.find((a) => a.url === url)?.found
         const answer = report?.addresses[url]
         return (
-          <div key={url} className="set-link-row">
+          <div key={url} className={url === inUse ? 'set-link-row in-use' : 'set-link-row'}>
             <span className="faint">{KIND_NAMES[kindOf(url)]}</span>
             <code>{shown(url)}</code>
-            <span className="faint address-state">{[url === inUse ? 'In use' : answer && ANSWERS[answer], found && 'reported by it'].filter(Boolean).join(' · ')}</span>
+            {url === inUse && <span className="pill good">In use</span>}
+            <span className="faint address-state">{[url !== inUse && answer && ANSWERS[answer], found && 'reported by it'].filter(Boolean).join(' · ')}</span>
             {!found && environment.addresses.length > 1 && <button className="ghost danger" disabled={busy} onClick={() => change(() => desktop.removeAddress(environment.id, url))}>Remove</button>}
           </div>
         )
