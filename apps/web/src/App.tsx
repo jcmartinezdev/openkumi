@@ -2,6 +2,7 @@ import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { botById, useBotOrder } from '@openkumi/client/bots'
 import { browsingThread, control, windowOf } from '@openkumi/client/browser'
+import { SYNC_WORDS, useSync } from '@openkumi/client/sync'
 import { screen } from '@openkumi/client/telemetry'
 import { BrowserPane, BrowserPip } from './BrowserPane'
 import { CallPanel } from './Call'
@@ -116,6 +117,8 @@ export function App() {
     if (missing && connected) loadThread(route.threadId).catch(() => {})
   }, [missing, connected, route.threadId])
   const bot = thread ? botById(bots, thread.botId) : routeBot
+  // Reconnecting, or catching up on what changed while the connection was away, in the chat on screen too.
+  const sync = useSync(thread?.id)
 
   // Land on the first bot, as the sidebar lists them, when the URL names nothing that exists.
   const first = order[0]?.id
@@ -285,7 +288,7 @@ export function App() {
       {!modal && <TelemetryQuestion />}
       {/* A call goes on whatever the window shows. */}
       <CallPanel />
-      {!connected && <div className="toast">Reconnecting…</div>}
+      {sync && <div className="toast" role="status"><span className="spinner" aria-hidden />{SYNC_WORDS[sync]}</div>}
     </div>
   )
 }

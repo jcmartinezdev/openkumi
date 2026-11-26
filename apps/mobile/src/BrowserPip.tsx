@@ -16,7 +16,8 @@ import { useTheme } from './theme'
 const dismissed = new Set<string>()
 const PICTURE = { width: 168, height: 105 }
 
-export function BrowserPip({ botId, open }: { botId: string; open: (threadId: string, take: boolean) => void }) {
+/** `top`: how far down the chat it floats, when something else floats at the top. */
+export function BrowserPip({ botId, open, top }: { botId: string; open: (threadId: string, take: boolean) => void; top?: number }) {
   const theme = useTheme()
   const focused = useIsFocused()
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
@@ -54,7 +55,7 @@ export function BrowserPip({ botId, open }: { botId: string; open: (threadId: st
   const name = sessionName(threads, threadId)
 
   return (
-    <View style={styles.pip}>
+    <View style={[styles.pip, top !== undefined && { top }]}>
       <Pressable
         style={[styles.card, { backgroundColor: theme.raised, borderColor: asking ? theme.run : theme.border }]}
         accessibilityRole="button"

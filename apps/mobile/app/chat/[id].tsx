@@ -18,6 +18,7 @@ import { callLength, useCalling } from '@openkumi/client/calls'
 import { type Report, parseReport, reportWord } from '@openkumi/client/reports'
 import { type SecretAsk, answerSecret, declineSecret, secretAsk } from '@openkumi/client/secrets'
 import { describe } from '@openkumi/client/steps'
+import { useSync } from '@openkumi/client/sync'
 import { api, loadOlder, loadThread, mainThread, openThread, recentSubagents, useStore } from '@openkumi/client/store'
 import { SentFiles, Tray, chooseFiles } from '../../src/Attachments'
 import { Glyph } from '../../src/icons'
@@ -31,6 +32,7 @@ import { PageSheet, PageView, Sheet } from '../../src/PageView'
 import { Asked, Questions } from '../../src/Questions'
 import { useTextScale } from '../../src/prefs'
 import { ScreenTitle } from '../../src/ScreenTitle'
+import { PILL_ROOM, SyncNote } from '../../src/SyncNote'
 import { type Theme, useTheme } from '../../src/theme'
 import { Bobbing, BotHead, Mascot } from '../../src/Mascot'
 
@@ -429,6 +431,8 @@ export default function Chat() {
   const older = useStore((s) => (thread ? !!s.older[thread.id] : false))
   const partial = useStore((s) => (thread ? s.partial[thread.id] : undefined))
   const connected = useStore((s) => s.connected)
+  // Back in front after a while (its owner was at the computer, say): reconnecting, then catching up on what was said meanwhile.
+  const sync = useSync(thread?.id)
   const threads = useStore((s) => s.threads)
   const calls = useStore((s) => s.calls)
   const calling = useCalling()
@@ -666,10 +670,12 @@ export default function Chat() {
         </ShowText.Provider>
         </FileLinks.Provider>
       )}
-      {/* The bot's browser, small, while one of its threads browses. */}
+      <SyncNote sync={sync} floating />
+      {/* The bot's browser, small, while one of its threads browses: under the word on syncing, while it shows. */}
       {bot && (
         <BrowserPip
           botId={bot.id}
+          top={sync ? PILL_ROOM + 8 : undefined}
           open={(threadId, take) => router.push({ pathname: '/browser/[botId]', params: { botId: bot.id, threadId, ...(take ? { take: '1' } : {}) } })}
         />
       )}
