@@ -127,7 +127,9 @@ car's microphone and loudspeakers. It is in every build since Apple allowed it o
   (in `plugins` in `app.json`) adds the entitlement, and the car's screen to the app's `Info.plist`,
   which then also says the app has more than one screen at a time. An iPad has no CarPlay and
   would take that to mean the app can be opened in several windows, so it gets the screens as they
-  were before the car's (`UIApplicationSceneManifest~ipad`).
+  were before the car's (`UIApplicationSceneManifest~ipad`). An `ios` folder made before CarPlay was switched
+  on (2026-11-27) is kept as it was by a prebuild or `npx expo run:ios`: make it anew once with
+  `npx expo prebuild --platform ios --clean` in `apps/mobile`.
 - **How it works.** CarPlay draws the screens itself: a list, the screen for a voice, an alert. What
   goes on them is worked out in `packages/client/src/car.ts` (tried by its test, without a car),
   handed over by `apps/mobile/src/car.ts`, and put on the car's screen by `apps/mobile/modules/car`
