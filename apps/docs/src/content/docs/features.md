@@ -76,9 +76,8 @@ that stays logged in.
   with no API key, and it works for a bot on any engine: whatever needs the bot is handed to the
   bot itself, which on a call only passes work on, to another bot or to a background task of its
   own, and what comes back is read out. What was asked and what was said is kept in the
-  conversation. The voice is yours to choose for each bot, after hearing it. Calling a bot from a
-  car's screen, through CarPlay, is built but not switched on until Apple allows it. See
-  [Calls](/calls/).
+  conversation. The voice is yours to choose for each bot, after hearing it. A bot can also be
+  called from a car's screen, through CarPlay. See [Calls](/calls/).
 - **Automations.** A bot can work without being asked: at set times, when a page or one of its
   apps changes (OpenKumi looks, at no cost, and starts the bot only on a change), or the moment an
   app calls a webhook. It tells you in its conversation what came of it. Each automation runs on

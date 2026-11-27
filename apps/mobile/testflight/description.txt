@@ -2,6 +2,6 @@ OpenKumi is a free, open-source crew of AI bots that live on your own computer, 
 
 This is the iPhone app. It talks to OpenKumi on your computer, so you need that first: get the desktop app for Mac, Windows or Linux from openkumi.ai, then pair this phone by scanning the code it shows. At home the phone reaches your computer over Wi-Fi; away from home, over Tailscale.
 
-From the phone you can chat with your bots, send them photos and files, dictate, call a bot and talk with it, watch or take over a bot's browser, and set up automations.
+From the phone you can chat with your bots, send them photos and files, dictate, call a bot and talk with it (from your car too, through CarPlay), watch or take over a bot's browser, and set up automations.
 
 OpenKumi is in alpha: it changes from one version to the next, and some things will not work yet. Tell us what breaks: take a screenshot to send feedback through TestFlight, or open an issue at github.com/jcmartinezdev/openkumi/issues.
