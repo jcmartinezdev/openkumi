@@ -126,9 +126,11 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
   const showing = useShowing()
   const bots = useStore((s) => s.bots)
   const bot = page === 'bots' && path[1] ? botById(bots, path[1]) : undefined
-  const power = useStore((s) => (page === 'superpowers' && path[1] ? s.superpowers.find((p) => p.id === path[1]) : undefined))
-  // A superpower's page opened from a bot's settings, which is about that bot.
-  const botPower = useStore((s) => (bot && path[2] === 'superpowers' && path[3] ? s.superpowers.find((p) => p.id === path[3]) : undefined))
+  // A superpower's page, by the id in its address: the catalog that names it may still be on its way,
+  // and the page is not drawn again when it comes. Opened from a bot's settings, it is about that bot.
+  const power = page === 'superpowers' ? path[1] : undefined
+  const botPower = bot && path[2] === 'superpowers' ? path[3] : undefined
+  const powerName = useStore((s) => s.superpowers.find((p) => p.id === (power ?? botPower))?.name) ?? power ?? botPower
   // The page for choosing a bot's voice, under its Bot tab.
   const botVoice = !!bot && path[2] === 'bot' && path[3] === 'voice'
 
@@ -156,14 +158,14 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
                 {botPower || botVoice ? (
                   <a href={`#/settings/bots/${encodeURIComponent(bot!.id)}/${botVoice ? 'bot' : 'superpowers'}`}>{bot!.emoji} {bot!.name}</a>
                 ) : (
-                  <span aria-current="page">{bot ? `${bot.emoji} ${bot.name}` : power!.name}</span>
+                  <span aria-current="page">{bot ? `${bot.emoji} ${bot.name}` : powerName}</span>
                 )}
               </>
             )}
             {(botPower || botVoice) && (
               <>
                 <Icon name="chevron" size={12} />
-                <span aria-current="page">{botPower ? botPower.name : 'Voice'}</span>
+                <span aria-current="page">{botPower ? powerName : 'Voice'}</span>
               </>
             )}
           </nav>
@@ -173,7 +175,7 @@ export function SettingsView({ path, newBot }: { path: string[]; newBot: () => v
           <button className="icon" title="Close" aria-label="Close settings" onClick={closeSettings}><Icon name="x" /></button>
         </header>
         {/* Keyed by page so each one starts scrolled to the top. */}
-        <div className="set-body" key={bot ? `bot:${bot.id}${botPower ? `:${botPower.id}` : botVoice ? ':voice' : ''}` : power ? `superpower:${power.id}` : `${page}:${page === 'environments' ? (path[1] ?? '') : ''}`}>
+        <div className="set-body" key={bot ? `bot:${bot.id}${botPower ? `:${botPower}` : botVoice ? ':voice' : ''}` : power ? `superpower:${power}` : `${page}:${page === 'environments' ? (path[1] ?? '') : ''}`}>
           {page === 'profile' && <ProfilePage />}
           {page === 'general' && <General />}
           {page === 'appearance' && <Appearance />}

@@ -31,7 +31,9 @@ There is no OpenKumi service in the cloud.
 - **The apps and the server**: an HTTP API for everything you do, and one WebSocket for everything
   that happens (a reply being written, a step done, a bot starting to browse). Every request
   carries a key. Pictures of a bot's browser come down the same WebSocket as raw bytes, and are
-  drawn by a worker thread so the window never stutters.
+  drawn by a worker thread so the window never stutters. The server pings every WebSocket every 20
+  seconds, so an app can tell a connection that died without closing from a quiet one (see
+  [Connections](/connections/)).
 - **The server and an engine**: the server starts the engine program with what the bot is told and
   an address for its tools, a Model Context Protocol (MCP) endpoint that exists for that one turn
   and only answers this computer. See [Engines and models](/how-it-works/engines/).
@@ -50,6 +52,10 @@ a computer, in a small database on the phone. Opening the app shows that copy at
 the server only for what changed since. A copy from another server, or from a database that was
 replaced, is thrown away. The copy is limited (50 conversations, 300 messages each, 32 MB) and
 holds no keys.
+
+The superpower catalog is not part of what an app is sent when it connects, nor of the copy: the
+pages that show it (Superpowers, the command palette, an automation an app starts) fetch it when
+they open.
 
 ## Starting up
 

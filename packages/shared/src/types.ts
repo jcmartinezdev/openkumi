@@ -858,12 +858,21 @@ export type ServerEvent =
   | { type: 'call.words'; callId: string; role: 'user' | 'assistant'; text: string; done: boolean }
   | { type: 'settings'; settings: Settings }
   | { type: 'update'; update: ServerUpdate }
+  /** The superpower catalog changed. Sent to an app that fetches the catalog itself (see AppState.superpowers) as `superpowers.changed` instead. */
   | { type: 'superpowers'; superpowers: Superpower[]; categories: string[] }
+  /** The superpower catalog changed, for an app that connected with `without=superpowers`: one that shows it fetches it again. */
+  | { type: 'superpowers.changed' }
   | { type: 'superpower.status'; botId: string; id: string; status: SuperpowerStatus | null }
   | { type: 'files.changed'; botId: string }
   /** A bot's secrets changed: one was added, replaced or removed. */
   | { type: 'secrets.changed'; botId: string }
   | { type: 'browser.state'; botId: string; state: BrowserState }
+  /**
+   * The server is still there. Sent as a connection opens, every 20 seconds after, and in answer to
+   * an app's own ping. An app that hears nothing for a while asks, and takes a connection that does
+   * not answer as gone (packages/client/src/connection.ts); one that never heard a ping does not ask.
+   */
+  | { type: 'ping' }
 
 /** Another computer that was paired with this server and may use it. */
 export interface PairedComputer {
@@ -889,6 +898,8 @@ export type ClientEvent =
    * what the bot asked. Control goes back to the bot by itself when the connection closes.
    */
   | { type: 'browser.control'; botId: string; windowId: string; viewer: string; action: 'take' | 'give' | 'decline' }
+  /** Whether the connection is still there: the server answers with a ping of its own. Sent only to a server that sends pings. */
+  | { type: 'ping' }
 
 export interface AppState {
   bots: Bot[]
@@ -917,9 +928,12 @@ export interface AppState {
   /** The call under way, if there is one. */
   call: Call | null
   browsers: Record<string, BrowserState>
-  superpowers: Superpower[]
-  /** The groups the superpower catalog shows, in its order. */
-  superpowerCategories: string[]
+  /**
+   * The superpower catalog, and the groups it shows in their order. Left out for an app that asks
+   * with `without=superpowers`: it fetches them from /api/superpowers/catalog when a view shows them.
+   */
+  superpowers?: Superpower[]
+  superpowerCategories?: string[]
   /** How each bot's superpowers with a service stand, by bot id then superpower id. */
   superpowerStatus: Record<string, Record<string, SuperpowerStatus>>
   /** Where everything is stored, for display (e.g. "~/.openkumi"). */

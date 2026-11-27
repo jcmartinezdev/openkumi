@@ -1093,6 +1093,48 @@ test('superpowers: one is switched on for one bot, which is told of it and reads
   await api('DELETE', `/api/bots/${other.id}`)
 })
 
+test('the event stream says it is there: a ping as it opens, and one in answer to an app’s own', async () => {
+  const socket = new WebSocket(`ws://127.0.0.1:${PORT}/ws?token=${token}`)
+  const heard = []
+  socket.onmessage = (e) => typeof e.data === 'string' && heard.push(JSON.parse(e.data))
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve
+    socket.onerror = () => reject(new Error('The event stream failed'))
+  })
+  await until(() => heard.some((e) => e.type === 'ping'))
+  const before = heard.length
+  socket.send(JSON.stringify({ type: 'ping' }))
+  await until(() => heard.slice(before).some((e) => e.type === 'ping'))
+  socket.close()
+})
+
+test('superpowers: an app that fetches the catalog itself is not sent it as it connects, and is told when it changed', async () => {
+  const lean = await api('GET', '/api/state?without=superpowers')
+  assert.ok(!('superpowers' in lean) && !('superpowerCategories' in lean), 'the catalog is left out')
+  assert.ok(lean.bots.length > 0 && 'superpowerStatus' in lean, 'and nothing else')
+  const whole = await api('GET', '/api/state')
+  assert.ok(whole.superpowers.length > 0, 'an app from before is sent it as before')
+  const catalog = await api('GET', '/api/superpowers/catalog')
+  assert.deepEqual([catalog.superpowers, catalog.categories], [whole.superpowers, whole.superpowerCategories])
+
+  // Switched on, then off: an app that fetches the catalog itself hears that it changed, one from before is sent it whole.
+  const listen = async (query) => {
+    const socket = new WebSocket(`ws://127.0.0.1:${PORT}/ws?token=${token}${query}`)
+    const heard = []
+    socket.onmessage = (e) => typeof e.data === 'string' && heard.push(JSON.parse(e.data))
+    await new Promise((resolve) => (socket.onopen = resolve))
+    return { socket, heard: (type) => heard.filter((e) => e.type.startsWith(type)) }
+  }
+  const [apart, before] = await Promise.all([listen('&without=superpowers'), listen('')])
+  await api('PUT', `/api/bots/${bot.id}/superpowers/field-guide`, { on: true })
+  await api('PUT', `/api/bots/${bot.id}/superpowers/field-guide`, { on: false })
+  await until(() => apart.heard('superpowers').length >= 2 && before.heard('superpowers').length >= 2)
+  assert.deepEqual(apart.heard('superpowers'), [{ type: 'superpowers.changed' }, { type: 'superpowers.changed' }])
+  assert.deepEqual(before.heard('superpowers').map((e) => [e.type, e.superpowers.length > 0, e.categories.length > 0]), [['superpowers', true, true], ['superpowers', true, true]])
+  apart.socket.close()
+  before.socket.close()
+})
+
 test('superpowers: a service gives the bot its tools, named after the superpower', async () => {
   addPower('echo', { name: 'Echo', mcp: { command: process.execPath, args: [path.resolve('test/fixtures/mcp-stdio.mjs')] } })
   try {

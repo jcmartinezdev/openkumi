@@ -12,7 +12,7 @@ import { runsOnLabel, useModelLists } from '@openkumi/client/models'
 import { DAY_LETTERS, DAY_NAMES, WEEK, localZone, lookLabel, madeBy, nextRun, runStatus, runTime, standing, triggerLabel, trouble, useRuns, watchLabel } from '@openkumi/client/automations'
 import { Icon } from './Icon'
 import { Page, Pick, Row, Section, Switch } from './settingsUi'
-import { api, openAutomations, useStore } from './store'
+import { api, openAutomations, useStore, useSuperpowers } from './store'
 import { BotHead } from './Mascot'
 import { ModelPicker } from './ModelPicker'
 
@@ -197,7 +197,8 @@ function Editor({ automation, botId }: { automation?: Automation; botId?: string
   const bots = useStore((s) => s.bots)
   const zone = useStore((s) => s.about.timeZone)
   const hooks = useStore((s) => s.hooks)
-  const superpowers = useStore((s) => s.superpowers)
+  // The apps that can start an automation with a call.
+  const { superpowers } = useSuperpowers()
   const [draft, setDraft] = useState(() => draftOf(automation, botId && bots.some((b) => b.id === botId) ? botId : (bots[0]?.id ?? '')))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')

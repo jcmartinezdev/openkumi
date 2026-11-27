@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useLocalSearchParams } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { unwrap } from '@openkumi/client/superpowers'
-import { api, useStore } from '@openkumi/client/store'
+import { api, useStore, useSuperpowers } from '@openkumi/client/store'
 import { Markdown } from '../../../../src/Markdown'
 import { ScreenTitle } from '../../../../src/ScreenTitle'
 import { Segments } from '../../../../src/SettingsUi'
@@ -18,6 +18,8 @@ export default function SkillFile() {
   const insets = useSafeAreaInsets()
   const scale = useTextScale()
   const { id, path } = useLocalSearchParams<{ botId: string; id: string; path: string }>()
+  // Fetched if it is not held yet (this screen can be the first shown, from a link).
+  useSuperpowers()
   const power = useStore((s) => s.superpowers.find((p) => p.id === id))
   const [text, setText] = useState<string | null>(null)
   const [error, setError] = useState('')

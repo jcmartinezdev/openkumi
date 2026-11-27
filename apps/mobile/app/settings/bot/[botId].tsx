@@ -8,7 +8,7 @@ import type { Bot } from '@openkumi/shared'
 import { windowCount } from '@openkumi/client/browser'
 import { useVoiceChoices } from '@openkumi/client/calls'
 import { useBotId } from '@openkumi/client/bots'
-import { api, useFiles, useStore } from '@openkumi/client/store'
+import { api, useFiles, useStore, useSuperpowers } from '@openkumi/client/store'
 import { triggerLabel } from '@openkumi/client/automations'
 import { inShort, summarize } from '@openkumi/client/workspace'
 import { NEW_LOGIN, NEW_SECRET, howLogins, loginsOf, plainSecretsOf, siteName, useSecrets } from '@openkumi/client/secrets'
@@ -30,7 +30,8 @@ export default function BotSettings() {
   const stored = useStore((s) => s.bots.find((b) => b.id === botId))
   const main = useStore((s) => s.bots[0]?.id === botId && s.bots.length > 1)
   const browser = useStore((s) => s.browsers[botId])
-  const powers = useStore((s) => s.superpowers)
+  // Fetched as the screen opens, for the names and icons of the ones the bot has.
+  const { superpowers: powers } = useSuperpowers()
   const zone = useStore((s) => s.about.timeZone)
   const statuses = useStatuses(botId)
   const { entries } = useFiles(botId)

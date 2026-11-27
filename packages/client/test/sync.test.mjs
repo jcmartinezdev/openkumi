@@ -75,3 +75,7 @@ test('a copy kept on the device is shown before the server answers and while it 
   await start()
   await run('copies', 'third', home, String(PORT), shelf)
 })
+
+test('a connection that dies without closing is noticed, by itself or when the app comes back to the front, and the store connects again', () => run('heartbeat', home, String(PORT)))
+
+test('the superpower catalog is not sent with the state: a view that shows it has it fetched, and fetched again when it changes', () => run('catalog', home, String(PORT)))

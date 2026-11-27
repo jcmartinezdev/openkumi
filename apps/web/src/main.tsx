@@ -7,7 +7,7 @@ import { watchAttention } from './attention'
 import { desktop, desktopState, inDesktopApp, onDesktopState } from './desktop'
 import { shelf } from './shelf'
 import { passSignIn } from './Superpowers'
-import { follow, onLearn, recheck } from './store'
+import { checkConnection, follow, onLearn, recheck } from './store'
 import './styles.css'
 
 const root = document.getElementById('root')!
@@ -28,6 +28,9 @@ if (!inDesktopApp) {
   // home may answer again, or the one in use may be gone.
   addEventListener('online', recheck)
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && recheck())
+  // A window that stayed in view while another app was in front is not shown again, only focused:
+  // its connection is asked whether it is still there (a network that changed meanwhile).
+  addEventListener('focus', checkConnection)
   // A copy of what each environment on another computer sent is kept, to show at once next time and
   // while it cannot be reached. It is written now when the window is hidden or goes, rather than
   // within the next few seconds; a removed environment's copy goes with it.

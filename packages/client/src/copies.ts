@@ -64,8 +64,11 @@ function inTurn<T>(job: () => Promise<T>): Promise<T> {
   return next
 }
 
-/** The parts of the state that are kept; the live state of the bots' browsers is not. */
-const KEPT = ['bots', 'threads', 'automations', 'hooks', 'providers', 'superpowers', 'superpowerCategories', 'superpowerStatus', 'home', 'settings', 'defaults', 'about'] as const
+/**
+ * The parts of the state that are kept. The live state of the bots' browsers is not, nor the
+ * superpower catalog, which is fetched by the views that show it (and can do nothing offline).
+ */
+const KEPT = ['bots', 'threads', 'automations', 'hooks', 'providers', 'superpowerStatus', 'home', 'settings', 'defaults', 'about'] as const
 
 const stateKey = (environment: string) => `${environment}/state`
 const threadKey = (environment: string, id: string) => `${environment}/thread/${id}`
@@ -150,7 +153,9 @@ async function restore(link: Link): Promise<globalThis.Partial<State> | null> {
   }
   // The chats themselves are read when they are opened.
   saved = { environment: link.id, database: copy.database, items: {}, recent: copy.recent, sizes: new Map(Object.entries(copy.sizes ?? {})) }
-  return { ...copy.state, browsers: {}, database: copy.database, seq: copy.seq, items: {}, older: {}, partial: {} }
+  // Only what is kept now: a copy from an older app has more in it (the superpower catalog).
+  const kept = Object.fromEntries(KEPT.filter((k) => k in copy.state).map((k) => [k, copy.state[k]]))
+  return { ...kept, browsers: {}, database: copy.database, seq: copy.seq, items: {}, older: {}, partial: {} }
 }
 
 /** Reads the copy kept of one chat. */
