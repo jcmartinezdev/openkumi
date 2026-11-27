@@ -49,8 +49,8 @@ the desktop app or the iPhone app. Most often that means, in this order:
 3. a setting, a menu item or a shortcut.
 
 Two pull requests that make one feature share one section. A feature that is in the code but
-switched off in the release (CarPlay, until Apple allows it) goes last, and its heading says it
-is not on yet.
+switched off in the release (as CarPlay was until Apple allowed it) goes last, and its heading
+says it is not on yet.
 
 ## The summary
 

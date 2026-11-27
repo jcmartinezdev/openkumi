@@ -6,6 +6,8 @@ To try it:
 3. On the iPhone, on the same Wi-Fi: tap "Pair with your computer" on the welcome screen and scan the QR code.
 The list of bots then appears. You can chat with a bot, send it photos, dictate, call it, and watch its browser.
 
+CarPlay: the app is a voice-based conversational app (entitlement com.apple.developer.carplay-voice-based-conversation, granted to our team). Once the phone is paired, OpenKumi in CarPlay lists the bots; a tap on one starts a voice call with it, shown on CarPlay's voice control screen with Mute and End. The app holds the audio session only during that call. If the microphone has not been allowed yet, CarPlay shows an alert asking to make one call from the phone first.
+
 Permissions: Local Network (to reach the person's computer), Camera (to scan the pairing code and take photos to send), Microphone (dictation, which is written down on the iPhone itself, and calls with a bot), Photos (to choose photos to send). Background audio keeps a call going while the screen is locked.
 
 Usage and error reports are only sent if the person agrees, and the computer sends them, not the phone. The app is an alpha and says so on its welcome screen; it is meant for TestFlight now and the App Store later.

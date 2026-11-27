@@ -57,7 +57,8 @@
           "microphonePermission": "OpenKumi listens while you dictate a message to a bot, and while you are on a call with one. Dictation is written down on this iPhone and never leaves it as sound; on a call, your voice goes to the speech model that answers you."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "./modules/car/plugin"
     ],
     "extra": {
       "eas": {
