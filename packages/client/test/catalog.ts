@@ -37,7 +37,14 @@ const catalogAsks = () => asked.filter((url) => url === '/api/superpowers/catalo
 let now: State
 onState((s) => (now = s))
 const link = { id: 'catalog', name: 'catalog', addresses: [base], token, local: true } as any
-useTransport(createConnection(receive, () => {}))
+// Counts the server's word that the catalog changed, as it reaches the store.
+let changes = 0
+useTransport(
+  createConnection((report) => {
+    if (report.type === 'events') changes += report.events.filter((e) => e.type === 'superpowers.changed').length
+    receive(report)
+  }, () => {}),
+)
 follow(link)
 
 async function until(check: () => unknown, ms = 20_000) {
@@ -83,7 +90,9 @@ assert.equal(catalogAsks(), 3)
 hide()
 hideSecond()
 hideSecond()
+const told = changes
 await turn(false)
+await until(() => changes > told)
 await settle()
 assert.equal(catalogAsks(), 3, 'not fetched while nothing shows it')
 assert.ok(weather()?.onFor.includes(bot.id), 'so what is held is as it was')

@@ -35,6 +35,18 @@ await new Promise<void>((resolve) => relay.listen(0, '127.0.0.1', resolve))
 const freeze = () => open.forEach((pair) => (pair.frozen = true))
 const base = `http://127.0.0.1:${(relay.address() as net.AddressInfo).port}`
 
+// The pings each socket reads, which the store's connection does not pass on: the last socket's.
+let latest = { pings: 0 }
+const Native = globalThis.WebSocket
+globalThis.WebSocket = class extends Native {
+  constructor(...args: ConstructorParameters<typeof Native>) {
+    super(...args)
+    const mine = { pings: 0 }
+    latest = mine
+    this.addEventListener('message', (e) => typeof e.data === 'string' && JSON.parse(e.data).type === 'ping' && mine.pings++)
+  }
+} as typeof WebSocket
+
 let now: State
 const seen: State[] = []
 onState((s) => ((now = s), seen.push(s)))
@@ -54,13 +66,15 @@ async function until(check: () => unknown, ms = 20_000) {
 const dropped = (from: number) => seen.slice(from).some((s) => !s.connected)
 
 await until(() => now?.connected)
-// Waited on by itself, so that the pings the server sends as the connection opens have come.
-await new Promise((r) => setTimeout(r, 300))
+// The ping the server sends as the connection opens: only a server that sent one is asked.
+await until(() => latest.pings > 0)
 
 // 1. A connection that is there stays: asked when the app comes back to the front, it answers.
 let mark = seen.length
+const before = latest.pings
 recheck()
-await new Promise((r) => setTimeout(r, 1500))
+await until(() => latest.pings > before)
+await new Promise((r) => setTimeout(r, 1000))
 assert.ok(!dropped(mark), 'a connection that answers is kept')
 
 // 2. It dies without closing while something happens. With nothing else to go on, the store notices
@@ -72,7 +86,7 @@ await until(() => dropped(mark), QUIET + 5000)
 await until(() => now.connected && now.bots.some((b) => b.id === bot.id), 10_000)
 
 // 3. The same, but the app comes back to the front: it asks at once rather than wait for the quiet.
-await new Promise((r) => setTimeout(r, 300))
+await until(() => latest.pings > 0)
 mark = seen.length
 freeze()
 const asked = Date.now()

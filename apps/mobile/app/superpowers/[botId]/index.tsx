@@ -150,7 +150,8 @@ export default function Catalog() {
             ))}
           </Section>
         ))}
-        {searching && !groups[0][1].length && (
+        {/* Not while the catalog is on its way: nothing is there to match yet. */}
+        {searching && loaded && !groups[0][1].length && (
           <View style={styles.empty}>
             <Text style={[styles.emptyTitle, { color: theme.text }]}>No superpowers match “{query.trim()}”</Text>
             <Text style={[styles.emptyText, { color: theme.muted }]}>Search looks in names, what each is for, groups and what it can do.</Text>
