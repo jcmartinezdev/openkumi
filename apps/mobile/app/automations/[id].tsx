@@ -11,7 +11,7 @@ import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from 'expo-r
 import DateTimePicker from '@react-native-community/datetimepicker'
 import * as Haptics from 'expo-haptics'
 import type { Schedule, Automation, RunsOn } from '@openkumi/shared'
-import { api, useStore } from '@openkumi/client/store'
+import { api, useStore, useSuperpowers } from '@openkumi/client/store'
 import { runsOnLabel, useModelLists } from '@openkumi/client/models'
 import { DAY_LETTERS, DAY_NAMES, STATUS_LABEL, WEEK, localZone, lookLabel, madeBy, moment, nextRun, runStatus, runTime, trouble, useRuns, watchEvery, watchLabel } from '@openkumi/client/automations'
 import { useHandoff } from '../../src/handoff'
@@ -110,6 +110,8 @@ export default function AutomationPage() {
   useEffect(() => void (leaving && !unsaved && router.back()), [leaving])
 
   // Deleted, here or elsewhere, while open.
+  // Before anything returns: a hook after it would not run every time. The catalog names what an app calls about.
+  useSuperpowers()
   if (id !== 'new' && !automation) return null
 
   // Only what was changed is sent, so that an automation's schedule is not started over by renaming it, and a watch stays as it is.

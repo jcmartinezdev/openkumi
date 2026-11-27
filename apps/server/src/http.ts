@@ -152,10 +152,15 @@ function count(url: URL, name: string): number | undefined {
   return Number.isSafeInteger(n) && n >= 0 ? n : fail(400, `${name} must be a whole number`)
 }
 
+/** Whether the app asked to be sent something apart (`without=superpowers`): it fetches that itself, when it shows it. */
+const without = (url: URL, what: string) => url.searchParams.getAll('without').some((value) => value.split(',').includes(what))
+
 route('GET', '/api/state', (_, __, { url }): AppState => {
   // An app that holds the threads up to a change of this database is sent only what came after it.
   const since = url.searchParams.get('db') === db.DATABASE_ID ? count(url, 'since') : undefined
   const changes = since === undefined ? null : db.changesSince(since)
+  // The catalog is the largest part, and only its own pages show it: an app that fetches it there is not sent it each time it connects.
+  const catalog = without(url, 'superpowers') ? {} : { superpowers: listSuperpowers(), superpowerCategories: superpowerCategories() }
   return {
     bots: listBots(),
     // Not every thread: the ones the apps list. Any other is fetched when it is opened.
@@ -170,8 +175,7 @@ route('GET', '/api/state', (_, __, { url }): AppState => {
     calls: callsInfo(),
     call: calls.currentCall(),
     browsers: browserStates(),
-    superpowers: listSuperpowers(),
-    superpowerCategories: superpowerCategories(),
+    ...catalog,
     superpowerStatus: mcp.superpowerStatuses(),
     home: HOME_LABEL,
     settings: settings(),
@@ -265,6 +269,8 @@ route('DELETE', '/api/bots/:id', async ([id]) => {
 
 // ---- superpowers: what a bot can do beyond its own tools. Only the owner switches one on, for one bot at a time.
 route('GET', '/api/superpowers', () => listSuperpowers())
+// The catalog as an app's pages show it: every superpower, and the groups in their order.
+route('GET', '/api/superpowers/catalog', () => ({ superpowers: listSuperpowers(), categories: superpowerCategories() }))
 // What a superpower gives a bot to read, which its owner can read too (and never change).
 route('GET', '/api/superpowers/:id/file', ([id], _, { url }) => {
   try {
@@ -659,19 +665,21 @@ function createServer() {
   const wss = new WebSocketServer({ noServer: true })
   /** Who opened each connection: "owner", or a paired computer's id. */
   const owners = new WeakMap<WebSocket, string>()
+  /** The connections of apps that fetch the superpower catalog themselves: they are told it changed, not sent it. */
+  const lean = new WeakSet<WebSocket>()
   server.on('upgrade', (req, socket, head) => {
     const url = addressOf(req)
     const who = url?.pathname === '/ws' ? whoIs(req, url) : null
     if (!who) return socket.destroy()
     wss.handleUpgrade(req, socket, head, (ws) => {
       owners.set(ws, who)
+      if (without(url!, 'superpowers')) lean.add(ws)
       // An app says which app it is as it connects, to be counted (telemetry.ts).
       telemetry.appConnected(who, { app: url!.searchParams.get('app'), version: url!.searchParams.get('appVersion'), os: url!.searchParams.get('os') }, who === 'owner')
       wss.emit('connection', ws)
     })
   })
 
-  const send = (ws: WebSocket, event: ServerEvent) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(event))
   /**
    * A picture of a bot's browser, sent as bytes rather than as text inside an event, so that the
    * app can hand it to a worker without reading it: one byte saying what this is (1, a picture),
@@ -689,9 +697,41 @@ function createServer() {
     head.writeUInt16BE(name.length, 5)
     ws.send(Buffer.concat([head, name, Buffer.from(frame.data, 'base64')]), { binary: true })
   }
-  onEvent((event) => wss.clients.forEach((ws) => send(ws, event)))
+  onEvent((event) => {
+    // Written out once for every connection, not once for each.
+    const text = JSON.stringify(event)
+    const short = event.type === 'superpowers' ? JSON.stringify({ type: 'superpowers.changed' } satisfies ServerEvent) : text
+    wss.clients.forEach((ws) => ws.readyState === ws.OPEN && ws.send(lean.has(ws) ? short : text))
+  })
+
+  // ---- the heartbeat
+  // A connection can die without closing: a phone put away, a computer that slept, a network that
+  // changed. Every 20 seconds each one is sent a ping the app can read, so an app that hears nothing
+  // for a while knows to ask, and one at the protocol's level, which the app's socket answers by
+  // itself. A connection that has not answered two in a row is ended: what would be sent to it
+  // would only pile up here.
+  const PING = JSON.stringify({ type: 'ping' } satisfies ServerEvent)
+  /** How many of the last protocol pings each connection has left unanswered. */
+  const unanswered = new WeakMap<WebSocket, number>()
+  const beat = setInterval(() => {
+    for (const ws of wss.clients) {
+      if (ws.readyState !== ws.OPEN) continue
+      const missed = unanswered.get(ws) ?? 0
+      if (missed >= 2) {
+        ws.terminate()
+        continue
+      }
+      unanswered.set(ws, missed + 1)
+      ws.ping()
+      ws.send(PING)
+    }
+  }, 20_000)
+  beat.unref()
 
   wss.on('connection', (ws) => {
+    ws.on('pong', () => unanswered.set(ws, 0))
+    // At once, which also tells the app that this server sends them.
+    ws.send(PING)
     // Live browser views this socket is watching, keyed by bot and tab.
     const views = new Map<string, Promise<() => void>>()
     const drop = (key: string) => {
@@ -707,6 +747,7 @@ function createServer() {
       } catch {
         return
       }
+      if (msg.type === 'ping') return void ws.send(PING)
       const browser = browserFor(findBot(msg.botId)?.id ?? msg.botId)
       if (msg.type === 'browser.control') {
         const viewer = String(msg.viewer)
@@ -737,7 +778,7 @@ function createServer() {
     })
   })
 
-  /** Ends every open connection, so the server can stop listening at once. */
+  /** Ends every open connection, so the server can stop listening at once. Also when it only moves to another address: the heartbeat goes on. */
   const hangUpAll = () => {
     wss.clients.forEach((ws) => ws.terminate())
     server.closeAllConnections()

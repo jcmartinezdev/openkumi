@@ -2,12 +2,19 @@
 // the server's events. Shared by the desktop app's window and the phone app; each brings its own
 // connection (see connection.ts) and hands it over with `useTransport`.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { AppInfo, AppState, CallLine, ClientEvent, FileEntry, HistoryEntry, Item, Partial, ServerEvent, Settings, Thread } from '@openkumi/shared'
+import type { AppInfo, AppState, CallLine, ClientEvent, FileEntry, HistoryEntry, Item, Partial, ServerEvent, Settings, Superpower, Thread } from '@openkumi/shared'
 import type { Link } from '@openkumi/shared/desktop'
 import { reach } from './addresses'
 import type { Command, Report } from './connection'
 
 export interface State extends AppState {
+  /**
+   * The superpower catalog. Not sent when the app connects: fetched when a view that shows it asks
+   * (useSuperpowers), and kept while the environment is shown. `superpowersLoaded` says it has come.
+   */
+  superpowers: Superpower[]
+  superpowerCategories: string[]
+  superpowersLoaded: boolean
   /** Items of threads that have been opened, by thread id: the newest pages of each, not all of it. */
   items: Record<string, Item[]>
   /** Whether a thread that has been opened has older items than the ones held, to load with `loadOlder`. */
@@ -57,6 +64,7 @@ const EMPTY: State = {
   browsers: {},
   superpowers: [],
   superpowerCategories: [],
+  superpowersLoaded: false,
   superpowerStatus: {},
   home: '',
   database: '',
@@ -307,7 +315,11 @@ function handle(ev: ServerEvent) {
     case 'update':
       return set({ update: ev.update })
     case 'superpowers':
-      return set({ superpowers: ev.superpowers, superpowerCategories: ev.categories })
+      // From a server that sends the catalog whole (one from before it could be fetched apart).
+      catalogFor = opens
+      return set({ superpowers: ev.superpowers, superpowerCategories: ev.categories, superpowersLoaded: true })
+    case 'superpowers.changed':
+      return staleCatalog()
     case 'superpower.status': {
       const { [ev.id]: _, ...rest } = state.superpowerStatus[ev.botId] ?? {}
       return set({ superpowerStatus: { ...state.superpowerStatus, [ev.botId]: ev.status ? { ...rest, [ev.id]: ev.status } : rest } })
@@ -440,7 +452,8 @@ function connectTo(url: string) {
   at = url
   set({ address: url })
   const who = app ? `&app=${app.app}&appVersion=${encodeURIComponent(app.version)}&os=${app.os}` : ''
-  tell({ type: 'connect', epoch, url: `${url.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(link!.token)}${who}` })
+  // The superpower catalog is fetched apart (useSuperpowers): the server says when it changed rather than send it.
+  tell({ type: 'connect', epoch, url: `${url.replace(/^http/, 'ws')}/ws?token=${encodeURIComponent(link!.token)}&without=superpowers${who}` })
   arrived(url)
 }
 
@@ -497,9 +510,20 @@ async function keep() {
 
 setInterval(() => void keep(), 60_000)
 
+/**
+ * Asks the socket whether it is still there, and has it dropped if it does not answer: it may have
+ * died without saying so (a phone in a pocket, a computer that slept). The window calls it as it
+ * takes the focus.
+ */
+export function checkConnection() {
+  if (state.connected) tell({ type: 'check' })
+}
+
 /** Asks again now: the app calls it when the network changes or the app comes back to the front. */
 export function recheck() {
-  if (!link || link.local) return
+  if (!link) return
+  checkConnection()
+  if (link.local) return
   if (state.connected) void keep()
   else void find()
 }
@@ -540,9 +564,9 @@ async function opened() {
   // from now on. Forgotten at once, before anything is waited for: a page asked for meanwhile must not be given it.
   rewrittenItems.clear()
   // What is held is kept, and only what changed since it is asked for. Without anything held (or
-  // from another database), everything comes.
-  const since = state.database ? `?since=${state.seq}&db=${encodeURIComponent(state.database)}` : ''
-  const snapshot = await api<AppState>('GET', `/api/state${since}`).catch((e: unknown) => (e instanceof ApiError ? e.status : 0))
+  // from another database), everything comes. Except the superpower catalog, which views that show it fetch.
+  const since = state.database ? `&since=${state.seq}&db=${encodeURIComponent(state.database)}` : ''
+  const snapshot = await api<AppState>('GET', `/api/state?without=superpowers${since}`).catch((e: unknown) => (e instanceof ApiError ? e.status : 0))
   if (mine !== opens) return
   if (typeof snapshot === 'number') {
     // A failed snapshot means the connection is not usable; dropping it triggers the normal retry.
@@ -557,11 +581,15 @@ async function opened() {
   const events = waiting ?? []
   waiting = null
   batching = true
-  const { removed, ...fresh } = snapshot
+  const { removed, superpowers, superpowerCategories, ...fresh } = snapshot
   // What was said on a call is not in a snapshot: it is kept only while it is the same call.
   const sameCall = !!fresh.call && fresh.call.id === state.call?.id
+  // A server from before the catalog could be fetched apart sends it anyway. Otherwise the catalog
+  // held stays on screen, and is fetched again below if a view shows it.
+  if (superpowers) catalogFor = mine
+  const catalog = superpowers ? { superpowers, superpowerCategories: superpowerCategories ?? [], superpowersLoaded: true } : {}
   // Nothing is being fetched of any thread now: the ones held catch up as views show them.
-  const live = { connected: true, loaded: true, syncing: false, catchingUp: catchingUpNow(), failures: 0, refused: false, outdated: false, newer: false, ...(sameCall ? {} : { callLines: [], callSaying: EMPTY.callSaying }) }
+  const live = { connected: true, loaded: true, syncing: false, catchingUp: catchingUpNow(), failures: 0, refused: false, outdated: false, newer: false, ...catalog, ...(sameCall ? {} : { callLines: [], callSaying: EMPTY.callSaying }) }
   if (removed) {
     // Only what changed: laid over the threads held. What is held of each chat stays, and the
     // chats catch up on what was said meanwhile as views show them (see openThread).
@@ -576,6 +604,8 @@ async function opened() {
     apply(events)
     for (const id of interrupted) loadThread(id).catch(() => {})
   }
+  // What changed of the catalog while the connection was away was not told: a view that shows it has it fetched again.
+  if (catalogViews) void fetchCatalog()
   // The server says where else it can be reached; the app keeps that, for when this address stops answering.
   const shown = link
   // And whose bots it holds, to show them as that person's while another environment is showing.
@@ -599,7 +629,8 @@ export function receive(data: Report) {
   at = null
   set({ connected: false, syncing: false, address: null, failures: state.connected ? 0 : state.failures + 1 })
   clearTimeout(again)
-  again = setTimeout(find, 1000)
+  // A socket that did not answer was closed here, after waiting for it already: the server is asked for again at once.
+  again = setTimeout(find, data.type === 'close' && data.gone ? 0 : 1000)
 }
 
 /** Joins the server's copy of streaming text with what the socket delivered since, without repeating the overlap. */
@@ -770,6 +801,72 @@ setInterval(() => {
 export function assume(id: string, patch: globalThis.Partial<Thread>) {
   const thread = state.threads.find((t) => t.id === id)
   if (thread) set({ threads: upsert(state.threads, { ...thread, ...patch }) })
+}
+
+// ---- the superpower catalog
+// It is the largest part of what the server could send when the app connects, and only a few views
+// show it (the catalog and each superpower's page, the command palette, an automation that a
+// superpower's app starts), so those fetch it when they are shown. While one is shown, a change
+// the server tells of is fetched at once; otherwise the next one to be shown fetches it.
+
+/** The opening of the connection that the catalog held is up to date for. */
+let catalogFor = -1
+/** The opening a request for the catalog was made on, while it is on its way. */
+let catalogAsked = -1
+/** The catalog changed while a request for it was on its way, which may have been answered before the change. */
+let catalogChanged = false
+/** How many views that show the catalog there are. */
+let catalogViews = 0
+
+/** Fetches the catalog, unless what is held is up to date or it is on its way. */
+async function fetchCatalog(): Promise<void> {
+  if (!state.connected || catalogFor === opens || catalogAsked === opens) return
+  const mine = opens
+  catalogAsked = mine
+  catalogChanged = false
+  try {
+    const got = await api<{ superpowers?: Superpower[]; categories?: string[] }>('GET', '/api/superpowers/catalog')
+    // Another connection, or another environment: what it holds is asked for on that one.
+    if (mine !== opens) return
+    // A request cut off on its way reads as nothing: what is held stays, and it is asked for again.
+    if (!Array.isArray(got.superpowers) || !Array.isArray(got.categories)) throw new Error('No catalog came')
+    if (!catalogChanged) catalogFor = mine
+    set({ superpowers: got.superpowers, superpowerCategories: got.categories, superpowersLoaded: true })
+  } catch {
+    // Not there: asked for again in a moment while a view shows it, or when the connection comes back.
+    if (mine === opens) setTimeout(() => mine === opens && catalogViews && void fetchCatalog(), 5000)
+  } finally {
+    if (catalogAsked === mine) catalogAsked = -1
+  }
+  if (mine === opens && catalogChanged && catalogViews) return fetchCatalog()
+}
+
+/** The server said the catalog changed. */
+function staleCatalog() {
+  catalogFor = -1
+  if (catalogAsked === opens) catalogChanged = true
+  else if (catalogViews) void fetchCatalog()
+}
+
+/**
+ * Says a view shows the catalog, until the function it returns is called. While one does, the
+ * catalog is fetched if what is held is not up to date: now, when the connection comes back, and
+ * whenever the server says it changed.
+ */
+export function showCatalog(): () => void {
+  catalogViews++
+  void fetchCatalog()
+  let shown = true
+  return () => {
+    if (shown) catalogViews--
+    shown = false
+  }
+}
+
+/** The superpower catalog, for a view that shows it (see showCatalog). `loaded` is false until it has come. */
+export function useSuperpowers(): { superpowers: Superpower[]; categories: string[]; loaded: boolean } {
+  useEffect(showCatalog, [])
+  return { superpowers: useStore((s) => s.superpowers), categories: useStore((s) => s.superpowerCategories), loaded: useStore((s) => s.superpowersLoaded) }
 }
 
 /** A bot's conversation with its owner: its one chat that is not archived. There is none until something has been said. */

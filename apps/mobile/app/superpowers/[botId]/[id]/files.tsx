@@ -2,7 +2,7 @@
 // each opening to read. None of them can be changed.
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useBotId } from '@openkumi/client/bots'
-import { useStore } from '@openkumi/client/store'
+import { useStore, useSuperpowers } from '@openkumi/client/store'
 import { ICON_INSET, Row, Section, SettingsPage } from '../../../../src/SettingsUi'
 
 export default function SkillFiles() {
@@ -11,6 +11,8 @@ export default function SkillFiles() {
   // Its id may change while this is open: the screen goes on with the bot.
   const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
+  // Fetched if it is not held yet (this screen can be the first shown, from a link).
+  useSuperpowers()
   const power = useStore((s) => s.superpowers.find((p) => p.id === id))
   if (!bot || !power) return null
   return (

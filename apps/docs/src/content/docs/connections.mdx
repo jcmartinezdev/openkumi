@@ -136,6 +136,11 @@ phone, whenever the app becomes active). Then:
 - when the address in use stops answering, the next one that answers takes over;
 - when something other than the server answers at the address in use, the device leaves it at once.
 
+A connection can also die without closing: on a phone that was put away, or a computer that slept.
+The server pings every connection every 20 seconds, so a device that has heard nothing for 45
+seconds asks whether it is still there, and so does a device that comes back to the front. When no
+answer comes within 5 seconds, it connects again at once and catches up on what it missed.
+
 When no address answers, it tries again every 2 seconds, and every 5 seconds when the server
 answered but refused this device or runs a version this app cannot work with. Nothing is lost in
 between: what you were looking at stays on the screen from the copy the app keeps.

@@ -20,7 +20,7 @@ import { withCommand } from './shortcuts'
 import { BotMark, ago } from './Sidebar'
 import { Tile } from './Superpowers'
 import { Avatar } from './Switcher'
-import { USAGE_ADDRESS, api, mainThread, openAutomations, openSettings, useStore } from './store'
+import { USAGE_ADDRESS, api, mainThread, openAutomations, openSettings, useStore, useSuperpowers } from './store'
 
 /** A level opened from the first: all about one bot, a bot's earlier conversations, or whose bots to show. */
 type Level = { kind: 'bot'; botId: string } | { kind: 'earlier'; botId: string } | { kind: 'people' }
@@ -93,7 +93,8 @@ export function Palette({ close, current, browserOpen, openBrowser, openChat, ne
   const browsers = useStore((s) => s.browsers)
   const queue = useStore((s) => s.queue)
   const automations = useStore((s) => s.automations)
-  const superpowers = useStore((s) => s.superpowers)
+  // Fetched as the palette opens: it is not sent with the rest.
+  const { superpowers } = useSuperpowers()
   const calls = useStore((s) => s.calls)
   const calling = useCalling()
   const app = useDesktop()

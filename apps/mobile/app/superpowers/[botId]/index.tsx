@@ -4,14 +4,14 @@
 // group, as the model picker's search does. Reached from the bot's settings, which list only the
 // ones it has, and from a group on a superpower's page, which opens the catalog on that group.
 import { useEffect, useRef, useState } from 'react'
-import { Keyboard, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, TextInput, type TextInputInstance, View } from 'react-native'
+import { ActivityIndicator, Keyboard, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, TextInput, type TextInputInstance, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Canvas, LinearGradient, Rect, vec } from '@shopify/react-native-skia'
 import type { Superpower } from '@openkumi/shared'
 import { useBotId } from '@openkumi/client/bots'
 import { matches, searchWords } from '@openkumi/client/superpowers'
-import { useStore } from '@openkumi/client/store'
+import { useStore, useSuperpowers } from '@openkumi/client/store'
 import { Glyph } from '../../../src/icons'
 import { PowerRow } from '../../../src/PowerUi'
 import { ScreenTitle } from '../../../src/ScreenTitle'
@@ -27,8 +27,8 @@ export default function Catalog() {
   // Its id may change while this is open: the screen goes on with the bot.
   const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
-  const powers = useStore((s) => s.superpowers)
-  const listed = useStore((s) => s.superpowerCategories)
+  // Fetched as the screen opens: the catalog is not sent with the rest.
+  const { superpowers: powers, categories: listed, loaded } = useSuperpowers()
   const statuses = useStatuses(botId)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(group ?? '')
@@ -85,7 +85,7 @@ export default function Catalog() {
               onChangeText={setQuery}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
-              placeholder={`Search ${powers.length} superpowers`}
+              placeholder={loaded ? `Search ${powers.length} superpowers` : 'Search superpowers'}
               placeholderTextColor={theme.faint}
               autoCapitalize="none"
               autoCorrect={false}
@@ -159,7 +159,8 @@ export default function Catalog() {
             </Pressable>
           </View>
         )}
-        {!powers.length && <Note>There are no superpowers in this version of OpenKumi.</Note>}
+        {!loaded && !powers.length && <ActivityIndicator style={styles.loading} color={theme.faint} accessibilityLabel="Loading superpowers" />}
+        {loaded && !powers.length && <Note>There are no superpowers in this version of OpenKumi.</Note>}
       </ScrollView>
     </>
   )
@@ -178,6 +179,7 @@ function Fade({ color }: { color: string }) {
 
 const styles = StyleSheet.create({
   top: { paddingTop: 2, borderBottomWidth: StyleSheet.hairlineWidth },
+  loading: { marginTop: 32 },
   searchLine: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingBottom: 10 },
   search: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 38, paddingHorizontal: 10, borderRadius: 11 },
   searchInput: { flex: 1, height: 38, fontSize: 16 },

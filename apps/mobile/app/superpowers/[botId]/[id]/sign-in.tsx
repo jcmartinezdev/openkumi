@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useBotId } from '@openkumi/client/bots'
-import { useStore } from '@openkumi/client/store'
+import { useStore, useSuperpowers } from '@openkumi/client/store'
 import { Glyph, type GlyphName, SuperpowerIcon } from '../../../../src/icons'
 import { failed, signIn } from '../../../../src/superpowers'
 import { useTheme } from '../../../../src/theme'
@@ -18,6 +18,8 @@ export default function SignInSheet() {
   // Its id may change while this is open: the screen goes on with the bot.
   const botId = useBotId(given)
   const bot = useStore((s) => s.bots.find((b) => b.id === botId))
+  // Fetched if it is not held yet (this screen can be the first shown, from a link).
+  useSuperpowers()
   const power = useStore((s) => s.superpowers.find((p) => p.id === id))
   const [starting, setStarting] = useState<'app' | 'bot' | null>(null)
   const [error, setError] = useState('')

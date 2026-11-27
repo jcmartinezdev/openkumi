@@ -17,7 +17,7 @@ import { Markdown } from './Markdown'
 import { Icon } from './Icon'
 import { Dialog } from './Modals'
 import { CopyButton, Field, Page, Row, Section } from './settingsUi'
-import { api, saveSettings, useStore } from './store'
+import { api, saveSettings, useStore, useSuperpowers } from './store'
 import { BotHead } from './Mascot'
 
 /** A superpower's app icon, or its first letter when it has none. Drawn as a picture, so nothing in it can run. */
@@ -41,8 +41,7 @@ const lastLook = { query: '', category: '' }
  * one bot, active means for that bot, and each opens on a page that activates it for that bot.
  */
 export function SuperpowerCatalog({ bot }: { bot?: Bot }) {
-  const powers = useStore((s) => s.superpowers)
-  const listed = useStore((s) => s.superpowerCategories)
+  const { superpowers: powers, categories: listed, loaded } = useSuperpowers()
   const bots = useStore((s) => s.bots.length)
   const statuses = useStore((s) => (bot ? s.superpowerStatus[bot.id] : undefined))
   const [query, setQuery] = useState(lastLook.query)
@@ -115,7 +114,7 @@ export function SuperpowerCatalog({ bot }: { bot?: Bot }) {
         </section>
       ))}
       {powers.length > 0 && !found.length && <p className="set-intro">No superpowers match{query ? ` “${query.trim()}”` : ''}{shown ? ` in ${shown}` : ''}.</p>}
-      {!powers.length && <p className="set-intro">There are no superpowers in this version of OpenKumi.</p>}
+      {loaded && !powers.length && <p className="set-intro">There are no superpowers in this version of OpenKumi.</p>}
     </Page>
   )
 }
@@ -507,6 +506,7 @@ function HookRow({ power, bot, base }: { power: Superpower; bot: Bot; base: stri
 
 /** A superpower's page. Opened from a bot's settings, it is about that bot alone, whose buttons are by its name. */
 export function SuperpowerPage({ id, bot }: { id: string; bot?: Bot }) {
+  const { loaded } = useSuperpowers()
   const power = useStore((s) => s.superpowers.find((p) => p.id === id))
   const bots = useStore((s) => s.bots)
   const [error, setError] = useState('')
@@ -514,7 +514,8 @@ export function SuperpowerPage({ id, bot }: { id: string; bot?: Bot }) {
 
   const all = bot ? `#/settings/bots/${encodeURIComponent(bot.id)}/superpowers` : '#/settings/superpowers'
   const active = (bot ? [bot] : bots).filter((b) => power && b.superpowers.includes(power.id))
-  if (!power) return <Page><p className="set-intro">There is no such superpower. <a href={all}>See all superpowers.</a></p></Page>
+  // Until the catalog has come, nothing is said about it.
+  if (!power) return <Page>{loaded && <p className="set-intro">There is no such superpower. <a href={all}>See all superpowers.</a></p>}</Page>
   return (
     <Page>
       <header className="power-head">
