@@ -1,6 +1,6 @@
 {
   "name": "@openkumi/shared",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "The types the OpenKumi server, interface and desktop app agree on.",
   "private": true,
   "type": "module",
